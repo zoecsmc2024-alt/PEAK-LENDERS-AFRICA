@@ -109,26 +109,23 @@ def render_portfolio(tenant_id):
         "🛡️ Collateral Vault"
     ])
 
-    # --- BORROWERS ---
+    # --- TAB 1: BORROWERS ---
     with tab1:
         col_form, col_list = st.columns([1, 2])
 
-        # FORM
+        # ADD BORROWER FORM
         with col_form:
-            section_card("➕ Add Borrower")
+            with st.container(border=True):
+                section_card("➕ Add Borrower")
+                with st.form("borrower_form", clear_on_submit=True):
+                    name = st.text_input("Full Name")
+                    phone = st.text_input("Phone Number")
+                    nin = st.text_input("National ID")
 
-            with st.form("borrower_form", clear_on_submit=True):
-                name = st.text_input("Full Name")
-                phone = st.text_input("Phone Number")
-                nin = st.text_input("National ID")
-
-                submitted = st.form_submit_button("Save Borrower", type="primary")
-
-                if submitted:
-                    if not name or not phone:
-                        st.error("Name and phone are required.")
-                    else:
-                        with st.spinner("Saving borrower..."):
+                    if st.form_submit_button("Save Borrower", type="primary", use_container_width=True):
+                        if not name or not phone:
+                            st.error("Name and phone are required.")
+                        else:
                             try:
                                 conn.table("borrowers").insert({
                                     "tenant_id": tenant_id,
@@ -136,44 +133,55 @@ def render_portfolio(tenant_id):
                                     "phone": phone,
                                     "national_id": nin
                                 }).execute()
-
-                                st.success(f"{name} added successfully")
+                                st.success(f"{name} added!")
                                 st.rerun()
+                            except Exception:
+                                st.error("Failed to save.")
 
-                            except Exception as e:
-                                st.error("Failed to save borrower.")
-
-        # LIST
+        # BORROWER LIST
         with col_list:
-            section_card("📋 Borrower List")
-
-            with st.spinner("Loading borrowers..."):
+            with st.container(border=True):
+                section_card("📋 Borrower List")
+                
+                # Fetch Data
                 try:
-                    res = (
-                        conn.table("borrowers")
-                        .select("name, phone, national_id")
-                        .eq("tenant_id", tenant_id)
-                        .execute()
-                    )
-
+                    res = conn.table("borrowers").select("*").eq("tenant_id", tenant_id).execute()
+                    
                     if res.data:
                         df = pd.DataFrame(res.data)
-                        st.dataframe(df, use_container_width=True)
+                        
+                        # Search Utility
+                        search = st.text_input("🔍 Search by name or ID", placeholder="Type to filter...")
+                        if search:
+                            df = df[df['name'].str.contains(search, case=False) | df['national_id'].str.contains(search, case=False)]
+                        
+                        # Display
+                        st.dataframe(
+                            df[["name", "phone", "national_id"]], 
+                            use_container_width=True, 
+                            hide_index=True,
+                            column_config={
+                                "name": "Full Name",
+                                "phone": "Contact",
+                                "national_id": "ID Number"
+                            }
+                        )
                     else:
-                        show_empty("No borrowers yet.")
+                        show_empty("No borrowers found in the database.")
+                except Exception:
+                    st.error("Connection error.")
 
-                except Exception as e:
-                    st.error("Failed to load borrowers.")
-
-    # --- LOANS ---
+    # --- TAB 2: LOANS ---
     with tab2:
-        section_card("📑 Loan Book")
-        show_empty("Loan engine coming next.")
+        with st.container(border=True):
+            section_card("📑 Active Loans")
+            show_empty("Loan ledger and repayment tracking coming next.")
 
-    # --- COLLATERAL ---
+    # --- TAB 3: COLLATERAL ---
     with tab3:
-        section_card("🛡️ Collateral Vault")
-        show_empty("Collateral tracking coming soon.")
+        with st.container(border=True):
+            section_card("🛡️ Collateral Vault")
+            show_empty("Asset registry coming soon.")
 # --- TREASURY ---
 def render_treasury():
     st.title("💰 Treasury & Cashflow")
@@ -235,6 +243,7 @@ def render_settings(tenant):
 
                 except Exception as e:
                     st.error("Failed to update settings.")
+# --- 5. DASHBOARD MODULE ---
 def render_dashboard(tenant):
     company = tenant.get("company_name", "LendFlow")
     currency = tenant.get("currency", "UGX")
@@ -276,6 +285,7 @@ def render_dashboard(tenant):
     with left_col:
         with st.container(border=True):
             st.markdown("### 📅 Recent Disbursements")
+            # Replace this mock data with a real query later
             mock_data = pd.DataFrame({
                 "Borrower": ["John Doe", "Mary Jane", "Alpha Ltd", "Sarah K."],
                 "Amount": [500000, 1200000, 5000000, 300000],
