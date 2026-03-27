@@ -127,16 +127,60 @@ def main_interface():
     elif selected == "Admin": render_admin()
     elif selected == "Settings": render_settings(tenant)
 
-# --- 5. EXECUTION ---
+# --- 5. THE PROFESSIONAL GATEKEEPER ---
+def login_screen():
+    # Large centered branding
+    st.markdown("<h1 style='text-align: center; color: #2B3F87;'>🚀 LendFlow Africa</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center; color: #666;'>The Operating System for Modern Lenders</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    
+    with col2:
+        tab_log, tab_reg = st.tabs(["🔐 Staff Login", "🏢 Register Business"])
+        
+        with tab_log:
+            with st.container(border=True):
+                email_in = st.text_input("Work Email", placeholder="name@company.com")
+                pass_in = st.text_input("Password", type="password") # Added password field back
+                
+                col_btn, col_forgot = st.columns([1, 1])
+                with col_btn:
+                    if st.button("Enter Workspace", type="primary", use_container_width=True):
+                        # Verify against profiles table
+                        user = conn.table("profiles").select("tenant_id").eq("email", email_in).execute()
+                        if user.data:
+                            st.session_state.logged_in = True
+                            st.session_state.tenant_id = user.data[0]['tenant_id']
+                            st.rerun()
+                        else:
+                            st.error("Invalid email or unauthorized access.")
+                with col_forgot:
+                    st.button("Forgot Password?", use_container_width=True, disabled=True)
+
+        with tab_reg:
+            with st.form("register_new_biz", clear_on_submit=True):
+                st.markdown("##### 🏢 Create your Workspace")
+                new_biz = st.text_input("Business Name")
+                admin_email = st.text_input("Admin Email")
+                new_pass = st.text_input("Choose Password", type="password")
+                
+                if st.form_submit_button("Start 14-Day Free Trial", type="primary", use_container_width=True):
+                    if new_biz and admin_email:
+                        # 1. Create Tenant
+                        t_res = conn.table("tenants").insert({"company_name": new_biz}).execute()
+                        t_id = t_res.data[0]['id']
+                        # 2. Create Profile
+                        conn.table("profiles").insert({
+                            "tenant_id": t_id, 
+                            "email": admin_email, 
+                            "role": "Admin"
+                        }).execute()
+                        st.success(f"✅ {new_biz} registered! Please log in above.")
+                    else:
+                        st.warning("Please fill in all fields.")
+
+# --- 6. MAIN APP FLOW ---
 if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    # Minimal login for development - add your login screen here
-    st.title("🔐 LendFlow Login")
-    email_in = st.text_input("Email")
-    if st.button("Enter Workspace"):
-        profile = conn.table("profiles").select("tenant_id").eq("email", email_in).execute()
-        if profile.data:
-            st.session_state.logged_in = True
-            st.session_state.tenant_id = profile.data[0]['tenant_id']
-            st.rerun()
+    login_screen()
 else:
     main_interface()
