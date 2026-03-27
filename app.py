@@ -196,7 +196,7 @@ def render_settings(tenant):
                 except Exception as e:
                     st.error("Failed to update settings.")
 
-# --- 6. MAIN INTERFACE ---
+# --- 6. MAIN INTERFACE (SIDEBAR VERSION) ---
 def main_interface():
     if "tenant_id" not in st.session_state:
         st.error("Session expired. Please log in again.")
@@ -211,46 +211,29 @@ def main_interface():
     brand_color = tenant.get("theme_color", "#2B3F87")
     company = tenant.get("company_name", "LendFlow")
 
-    # --- STYLING ---
-    st.markdown(f"""
-        <style>
-        .company-title {{
-            color: {brand_color};
-            font-weight: 600;
-            font-size: 20px;
-        }}
-        .nav-link {{
-            font-size: 14px !important;
-        }}
-        </style>
-    """, unsafe_allow_html=True)
-
-    # --- TOP BAR ---
-    col1, col2, col3 = st.columns([1.5, 4, 1])
-
-    with col1:
-        st.markdown(f"<div class='company-title'>🚀 {company}</div>", unsafe_allow_html=True)
-
-    with col2:
+    # --- SIDEBAR NAVIGATION ---
+    with st.sidebar:
+        st.markdown(f"<div style='font-size: 24px; font-weight: 700; color: {brand_color}; margin-bottom: 20px;'>🚀 {company}</div>", unsafe_allow_html=True)
+        
         selected = option_menu(
-            menu_title=None,
+            menu_title="Main Menu",
             options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
             icons=["speedometer2", "briefcase", "cash-stack", "person-badge", "gear"],
-            orientation="horizontal",
+            menu_icon="cast",
+            default_index=0,
             styles={
                 "nav-link-selected": {"background-color": brand_color},
-                "container": {"padding": "0!important", "background-color": "transparent"}
             }
         )
-
-    with col3:
+        
+        st.divider()
+        
         if st.button("Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
-    st.divider()
-
     # --- ROUTING ---
+    # The main area now just displays the content based on sidebar selection
     if selected == "Dashboard":
         render_dashboard(tenant)
     elif selected == "Portfolio":
