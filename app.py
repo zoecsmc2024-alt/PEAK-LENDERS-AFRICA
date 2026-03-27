@@ -86,36 +86,55 @@ def main_interface():
         st.rerun()
 
     # --- SIDEBAR NAVIGATION ---
-    with st.sidebar:
-        st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
-        st.markdown("---")
-        
-        selected = option_menu(
-            menu_title=None,
-            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
-            icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
-            menu_icon="cast",
-            default_index=0,
-            styles={
-                "container": {"padding": "0!important", "background-color": "transparent"},
-                "icon": {"color": "#a2a3b7", "font-size": "18px"}, 
-                "nav-link": {
-                    "font-size": "16px", 
-                    "text-align": "left", 
-                    "margin":"5px", 
-                    "color": "#a2a3b7",
-                    "--hover-color": "#2c2c3d"
-                },
-                "nav-link-selected": {"background-color": tenant.get("theme_color", "#2B3F87")},
-            }
-        )
-        
-        st.spacer = st.container() # Just for spacing
-        st.write("")
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
+with st.sidebar:
+    # Use a nice div for the logo/title
+    st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
+    st.markdown("---")
+    
+    selected = option_menu(
+        menu_title=None,
+        options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
+        icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
+        menu_icon="cast",
+        default_index=0,
+        styles={
+            "container": {"padding": "0!important", "background-color": "transparent"},
+            "icon": {"color": "#a2a3b7", "font-size": "18px"}, 
+            "nav-link": {
+                "font-size": "16px", 
+                "text-align": "left", 
+                "margin":"5px", 
+                "color": "#ffffff", # Changed to white for better visibility
+                "--hover-color": "#2c2c3d"
+            },
+            # This makes the selected item match your brand color
+            "nav-link-selected": {"background-color": tenant.get("theme_color", "#2B3F87")},
+        }
+    )
+    
+    # Pushes the logout button to the bottom
+    st.markdown("<br>" * 10, unsafe_allow_html=True) 
+    
+    # Custom CSS to make the logout button look like a subtle menu item
+    st.markdown("""
+        <style>
+        div.stButton > button:first-child {
+            background-color: transparent;
+            color: #ff4b4b; /* Reddish logout color */
+            border: 1px solid #3d3d4d;
+            transition: all 0.3s;
+        }
+        div.stButton > button:first-child:hover {
+            background-color: #ff4b4b;
+            color: white;
+            border: 1px solid #ff4b4b;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
+    if st.button("🚪 Logout", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
     # --- ROUTING ---
     if selected == "Dashboard":
         render_dashboard(tenant)
