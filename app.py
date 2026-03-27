@@ -235,6 +235,60 @@ def render_settings(tenant):
 
                 except Exception as e:
                     st.error("Failed to update settings.")
+def render_dashboard(tenant):
+    company = tenant.get("company_name", "LendFlow")
+    currency = tenant.get("currency", "UGX")
+    
+    st.title(f"📊 {company} Overview")
+    
+    # --- TOP ROW: KPI CARDS ---
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        with st.container(border=True):
+            st.caption("TOTAL LOAN BOOK")
+            st.subheader(f"{currency} 125.4M")
+            st.write("📈 +12% this month")
+
+    with col2:
+        with st.container(border=True):
+            st.caption("ACTIVE BORROWERS")
+            st.subheader("1,240")
+            st.write("👥 +48 new this week")
+
+    with col3:
+        with st.container(border=True):
+            st.caption("REVENUE")
+            st.subheader(f"{currency} 12.8M")
+            st.write("💰 On track")
+
+    with col4:
+        with st.container(border=True):
+            st.caption("PAR @ 30 DAYS")
+            st.subheader("2.4%")
+            st.write("📉 Improving")
+
+    st.divider()
+
+    # --- BOTTOM ROW: DATA & ALERTS ---
+    left_col, right_col = st.columns([2, 1])
+
+    with left_col:
+        with st.container(border=True):
+            st.markdown("### 📅 Recent Disbursements")
+            mock_data = pd.DataFrame({
+                "Borrower": ["John Doe", "Mary Jane", "Alpha Ltd", "Sarah K."],
+                "Amount": [500000, 1200000, 5000000, 300000],
+                "Status": ["Approved", "Pending", "Approved", "Approved"]
+            })
+            st.dataframe(mock_data, use_container_width=True, hide_index=True)
+
+    with right_col:
+        with st.container(border=True):
+            st.markdown("### 🔔 Alerts")
+            st.warning("5 Loans overdue")
+            st.info("3 Collateral checks due")
+            st.success("NSSF Returns ready")
 
 # --- 6. MAIN INTERFACE (SIDEBAR VERSION) ---
 def main_interface():
