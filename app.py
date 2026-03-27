@@ -46,8 +46,41 @@ def login_screen():
                     st.session_state.user_email = email
                     st.rerun()
         with tab_reg:
-            st.write("Start your lending journey.")
-            # Registration form goes here
+            st.markdown("##### 🏢 Create your Lending Workspace")
+            with st.form("register_form", clear_on_submit=True):
+                new_biz = st.text_input("Business Name (e.g., Zoe Consults)")
+                new_email = st.text_input("Admin Email")
+                new_pwd = st.text_input("Password", type="password")
+                
+                agree = st.checkbox("I agree to the Privacy Policy & Terms")
+                
+                if st.form_submit_button("Start My Journey", type="primary"):
+                    if not agree:
+                        st.error("Please agree to the terms.")
+                    elif not new_biz or not new_email or not new_pwd:
+                        st.warning("All fields are required.")
+                    else:
+                        try:
+                            # 1. CREATE THE BUSINESS (TENANT)
+                            t_res = conn.table("tenants").insert({
+                                "company_name": new_biz,
+                                "theme_color": "#2B3F87"
+                            }).execute()
+                            t_id = t_res.data[0]['id']
+                            
+                            # 2. CREATE THE STAFF PROFILE (ADMIN)
+                            # Note: We'll link this to Supabase Auth properly next, 
+                            # but for now, we'll just save the profile.
+                            conn.table("profiles").insert({
+                                "tenant_id": t_id,
+                                "email": new_email,
+                                "full_name": "Business Owner",
+                                "role": "Admin"
+                            }).execute()
+                            
+                            st.success(f"🚀 {new_biz} is ready! Switch to 'Staff Login' to enter.")
+                        except Exception as e:
+                            st.error(f"Registration error: {e}")
 
 # --- 4. THE 5-PILLAR ROUTER ---
 def main_interface():
