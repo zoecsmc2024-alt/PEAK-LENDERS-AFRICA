@@ -51,7 +51,7 @@ def main_app():
 if st.session_state.logged_in:
     tenant = get_tenant_data(st.session_state.tenant_id)
     
-    if tenant:
+    
         # --- CLEAN DASHBOARD UI ---
 def render_dashboard(tenant):
     company = tenant.get("company_name", "LendFlow")
