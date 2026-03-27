@@ -157,14 +157,14 @@ def render_dashboard(tenant):
         elif selected == "Settings":
             render_settings(tenant)
         # Add other elifs for Portfolio, Treasury, etc.
-    else:
-        st.error("Could not load tenant data.")
-    # 3. Page Routing
-    if selected == "Dashboard":
-        render_dashboard(tenant)
-    else:
-        st.title(f"🛠️ {selected}")
-        st.info(f"The {selected} module is coming soon.")
+else:
+st.error("Could not load tenant data.")
+# 3. Page Routing
+if selected == "Dashboard":
+    render_dashboard(tenant)
+else:
+    st.title(f"🛠️ {selected}")
+    st.info(f"The {selected} module is coming soon.")
 
 # --- 7. LOGIN SCREEN ---
 def login_screen():
