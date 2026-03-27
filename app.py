@@ -47,42 +47,99 @@ def main_app():
             st.rerun()
         return
 
-    # 2. Sidebar Navigation
-    with st.sidebar:
-        st.markdown(f"## 🚀 {tenant.get('company_name', 'LendFlow')}")
-        st.markdown("---")
-        
-        selected = option_menu(
-            menu_title=None,
-            options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
-            icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
-            default_index=0,
-            styles={
-                "container": {"padding": "0!important", "background-color": "transparent"},
-                "icon": {"color": "#a2a3b7", "font-size": "18px"}, 
-                "nav-link": {
-                    "font-size": "16px", "text-align": "left", "margin":"5px", 
-                    "color": "#ffffff", "--hover-color": "#2c2c3d"
-                },
-                "nav-link-selected": {"background-color": tenant.get("theme_color", "#2B3F87")},
-            }
-        )
-        
-        # Logout styling & button
-        st.markdown("<br>" * 10, unsafe_allow_html=True)
-        st.markdown("""<style>
-            div.stButton > button:first-child {
-                background-color: transparent; color: #ff4b4b; border: 1px solid #3d3d4d;
-            }
-            div.stButton > button:first-child:hover {
-                background-color: #ff4b4b; color: white; border: 1px solid #ff4b4b;
-            }
-        </style>""", unsafe_allow_html=True)
+    # --- MAIN APP ENTRY ---
+if st.session_state.logged_in:
+    tenant = get_tenant_data(st.session_state.tenant_id)
+    
+    if tenant:
+        # --- 2. SIDEBAR NAVIGATION (PROFESSIONAL) ---
+        with st.sidebar:
+            brand_color = tenant.get("theme_color", "#2B3F87")
+            company = tenant.get("company_name", "LendFlow")
 
-        if st.button("🚪 Logout", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
+            # --- CUSTOM SIDEBAR STYLING ---
+            st.markdown(f"""
+                <style>
+                    section[data-testid="stSidebar"] {{
+                        background-color: #0E1117;
+                        padding-top: 1rem;
+                    }}
+                    .sidebar-header {{
+                        font-size: 20px;
+                        font-weight: 600;
+                        color: white;
+                        margin-bottom: 0.2rem;
+                    }}
+                    .sidebar-sub {{
+                        font-size: 12px;
+                        color: #a2a3b7;
+                        margin-bottom: 1rem;
+                    }}
+                    /* Target the logout button specifically */
+                    div.stButton > button:first-child {{
+                        border-radius: 8px;
+                        border: 1px solid #3d3d4d;
+                        color: #ff4b4b;
+                        background-color: transparent;
+                        transition: all 0.2s ease;
+                    }}
+                    div.stButton > button:first-child:hover {{
+                        background-color: #ff4b4b !important;
+                        color: white !important;
+                        border: 1px solid #ff4b4b;
+                    }}
+                </style>
+            """, unsafe_allow_html=True)
 
+            # --- BRANDING ---
+            st.markdown(f"<div class='sidebar-header'>🚀 {company}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='sidebar-sub'>Workspace</div>", unsafe_allow_html=True)
+
+            st.divider()
+
+            # --- NAVIGATION ---
+            selected = option_menu(
+                menu_title=None,
+                options=["Dashboard", "Portfolio", "Treasury", "Admin", "Settings"],
+                icons=["grid-fill", "people-fill", "cash-coin", "shield-lock", "gear-wide-connected"],
+                default_index=0,
+                styles={
+                    "container": {"padding": "0!important", "background-color": "transparent"},
+                    "icon": {"color": "#a2a3b7", "font-size": "18px"},
+                    "nav-link": {
+                        "font-size": "15px",
+                        "text-align": "left",
+                        "margin": "4px 0px",
+                        "padding": "10px",
+                        "color": "#ffffff",
+                        "--hover-color": "#1c1f2b",
+                    },
+                    "nav-link-selected": {
+                        "background-color": brand_color,
+                        "font-weight": "600",
+                    },
+                }
+            )
+
+            st.divider()
+
+            # --- USER INFO ---
+            st.markdown("#### 👤 Account")
+            st.caption(st.session_state.get("user_email", "Logged in"))
+
+            # --- LOGOUT ---
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state.clear()
+                st.rerun()
+
+        # --- ROUTING LOGIC ---
+        if selected == "Dashboard":
+            render_dashboard(tenant)
+        elif selected == "Settings":
+            render_settings(tenant)
+        # Add other elifs for Portfolio, Treasury, etc.
+    else:
+        st.error("Could not load tenant data.")
     # 3. Page Routing
     if selected == "Dashboard":
         render_dashboard(tenant)
