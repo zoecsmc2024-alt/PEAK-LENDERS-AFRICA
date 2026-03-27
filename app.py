@@ -160,17 +160,19 @@ def render_settings(tenant):
                         "theme_color": new_color
                     }
 
-                    # If a new file is uploaded, push to Supabase Storage
                     if uploaded_file:
+                        import time
                         file_ext = uploaded_file.name.split(".")[-1]
-                        file_path = f"{tenant['id']}/logo.{file_ext}"
+                        # Adding a timestamp makes the filename unique to avoid "File already exists" errors
+                        t_stamp = int(time.time())
+                        file_path = f"{tenant['id']}/logo_{t_stamp}.{file_ext}"
                         
-                        # Upload to 'logos' bucket
-                        conn.upload("logos", file_path, uploaded_file, upsert=True)
+                        # Fix: Removed 'upsert' argument
+                        conn.upload("logos", file_path, uploaded_file)
                         
-                        # Get Public URL (Replace 'YOUR_PROJECT_ID' with your actual Supabase project ID)
-                        # Standard Supabase URL format:
-                        project_id = "your-project-id" # Tip: You can grab this from your secrets
+                        # Project ID replacement logic
+                        # You can find your Project ID in your Supabase URL: https://[PROJECT_ID].supabase.co
+                        project_id = "your-project-id" 
                         public_url = f"https://{project_id}.supabase.co/storage/v1/object/public/logos/{file_path}"
                         update_data["logo_url"] = public_url
 
@@ -178,7 +180,7 @@ def render_settings(tenant):
                     conn.table("tenants").update(update_data).eq("id", tenant["id"]).execute()
                     
                     st.cache_data.clear()
-                    st.success("Settings updated! Refreshing...")
+                    st.success("Settings updated!")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Update failed: {e}")
