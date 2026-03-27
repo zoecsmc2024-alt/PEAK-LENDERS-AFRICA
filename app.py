@@ -124,7 +124,8 @@ def render_portfolio(tenant_id):
 
                 except Exception as e:
                     st.error("Failed to load borrowers.")
-    # --- LOANS ---
+
+    # --- LOANS ---
     with tab2:
         section_card("📑 Loan Book")
         show_empty("Loan engine coming next.")
@@ -133,7 +134,6 @@ def render_portfolio(tenant_id):
     with tab3:
         section_card("🛡️ Collateral Vault")
         show_empty("Collateral tracking coming soon.")
-
 # --- TREASURY ---
 def render_treasury():
     st.title("💰 Treasury & Cashflow")
