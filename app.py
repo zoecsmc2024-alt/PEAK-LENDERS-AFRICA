@@ -339,11 +339,11 @@ def login_screen():
 
 
 # --- 8. APP ENTRY ---
-# Initialize session state keys if they don't exist
+# This must be at the very bottom of your file, outside of any functions.
+
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# Route to the correct screen
 if st.session_state.logged_in:
     main_interface()
 else:
