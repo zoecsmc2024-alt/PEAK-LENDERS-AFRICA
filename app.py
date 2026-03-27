@@ -219,7 +219,6 @@ def main_interface():
             font-weight: 600;
             font-size: 20px;
         }}
-        /* Make the horizontal menu look cleaner */
         .nav-link {{
             font-size: 14px !important;
         }}
@@ -254,22 +253,14 @@ def main_interface():
     # --- ROUTING ---
     if selected == "Dashboard":
         render_dashboard(tenant)
-
     elif selected == "Portfolio":
         render_portfolio(st.session_state.tenant_id)
-
     elif selected == "Treasury":
         render_treasury()
-
     elif selected == "Admin":
         render_admin()
-
     elif selected == "Settings":
         render_settings(tenant)
-
-# --- 7. EXECUTION ---
-if __name__ == "__main__":
-    main_interface()
 
 
 # --- 7. LOGIN SYSTEM ---
@@ -303,7 +294,6 @@ def login_screen():
                             st.rerun()
                         else:
                             st.error("Invalid credentials.")
-
                     except Exception as e:
                         st.error("Login failed.")
 
@@ -318,29 +308,18 @@ def login_screen():
                         st.warning("All fields required.")
                     else:
                         try:
-                            # 1. Create the Tenant
-                            tenant_res = conn.table("tenants").insert({
-                                "company_name": biz
-                            }).execute()
-
+                            tenant_res = conn.table("tenants").insert({"company_name": biz}).execute()
                             t_id = tenant_res.data[0]["id"]
-
-                            # 2. Create the Admin Profile linked to that Tenant
                             conn.table("profiles").insert({
                                 "tenant_id": t_id,
                                 "email": reg_email,
                                 "role": "Admin"
                             }).execute()
-
                             st.success("Workspace created. Please log in.")
-
                         except Exception as e:
                             st.error("Registration failed.")
 
-
 # --- 8. APP ENTRY ---
-# This must be at the very bottom of your file, outside of any functions.
-
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
