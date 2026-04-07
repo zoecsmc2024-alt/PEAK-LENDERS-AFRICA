@@ -1445,26 +1445,25 @@ elif page == "⚙️ Settings":
         # We start with the color change
         updated_data = {"brand_color": new_color}
         
-        # Handle logo upload to Supabase Storage if a new file was selected
+        # Handle logo upload to Supabase Storage
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                # Path: folders/company_id_logo.png
+                # Clean the path
                 file_path = f"logos/{active_company['id']}_logo.png"
                 
-                # Upload bytes directly
+                # --- THE FIX: ADD CONTENT-TYPE ---
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
-                    file_options={"x-upsert": "true"}
+                    file_options={
+                        "x-upsert": "true",
+                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
+                    }
                 )
                 
-                # Retrieve the public URL
-                # Note: public_url is usually a direct string or in a specific key depending on lib version
-                res = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                
-                # If the result is a dictionary, grab the URL; otherwise use it directly
-                logo_url = res if isinstance(res, str) else res.get('publicURL', res)
+                # Retrieve public URL
+                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
                 updated_data["logo_url"] = logo_url
                 
             except Exception as e:
