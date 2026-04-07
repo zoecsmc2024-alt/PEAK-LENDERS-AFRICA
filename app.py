@@ -142,54 +142,46 @@ def get_dashboard_metrics(company_id):
 companies_res = supabase.table("companies").select("id, name, brand_color, logo_url").execute()
 company_list = {c['name']: c for c in companies_res.data}
 
-# Sidebar Setup
+# Initialize session state BEFORE the UI elements
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "📈 Overview"
+
 with st.sidebar:
     # Sidebar Header
     st.title("🌍 Peak-Lenders Africa")
     st.write("---")
     
     # --- STEP 1: Company Selection ---
-    # Python now "sees" the company before it tries to find the logo
     active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
     active_company = company_list[active_company_name]
     
-    # Apply custom theme for active company
+    # Apply theme
     apply_custom_theme(active_company['brand_color'])
 
-    # Display company logo if available
+    # Display company logo (Safe from NameError!)
     if active_company.get('logo_url'):
         st.image(active_company['logo_url'], use_container_width=True)
     
-    # Display company mode info
     st.info(f"📍 Mode: {active_company['name']}")
     st.write("---")
 
-    # --- STEP 2: Sidebar Navigation Sections ---
-    st.caption("STRATEGY & GROWTH")
-    page_main = st.radio("Strategic", ["📈 Overview", "🧾 Reports"], label_visibility="collapsed")
+    # --- STEP 2: Single List Navigation ---
+    menu_options = [
+        "📈 Overview", "🧾 Reports", "👥 Clients", 
+        "💵 Loans", "💰 Payments", "🚨 Overdue", 
+        "🛡️ Collateral", "📂 Expenses", "📄 Payroll", 
+        "📄 Ledger", "⚙️ Settings"
+    ]
+    
+    # We use .get() to avoid key errors and .index() to keep the radio synced
+    default_index = menu_options.index(st.session_state.current_page)
+    
+    page = st.radio("Navigation Menu", menu_options, index=default_index)
 
-    st.caption("LOAN OPERATIONS")
-    page_ops = st.radio("Ops", ["👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral"], label_visibility="collapsed")
-
-    st.caption("BACK OFFICE")
-    page_admin = st.radio("Admin", ["📂 Expenses", "📄 Payroll", "📄 Ledger", "⚙️ Settings"], label_visibility="collapsed")
-
-    # --- STEP 3: SMART PAGE SWITCHER LOGIC ---
-    # We initialize session state so the app doesn't reset your page on every click
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = "📈 Overview"
-
-    # Detect which radio button was actually interacted with
-    # This logic bridges the 3 separate radio buttons into one 'page' variable
-    if page_main != st.session_state.current_page and page_main in ["📈 Overview", "🧾 Reports"]:
-        st.session_state.current_page = page_main
-    elif page_ops != st.session_state.current_page and page_ops in ["👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral"]:
-        st.session_state.current_page = page_ops
-    elif page_admin != st.session_state.current_page and page_admin in ["📂 Expenses", "📄 Payroll", "📄 Ledger", "⚙️ Settings"]:
-        st.session_state.current_page = page_admin
-
-    # Final variable for the switchboard to consume
-    page = st.session_state.current_page
+    # --- STEP 3: State Sync ---
+    if page != st.session_state.current_page:
+        st.session_state.current_page = page
+        st.rerun() # Forces a clean switch between pages
 if page == "📈 Overview":
     st.title(f"📈 {active_company['name']} | AI Executive Command Center")
 
