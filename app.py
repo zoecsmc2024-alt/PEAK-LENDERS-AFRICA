@@ -143,16 +143,41 @@ companies_res = supabase.table("companies").select("id, name, brand_color").exec
 company_list = {c['name']: c for c in companies_res.data}
 
 with st.sidebar:
-    st.title("🌍 Peak-Lenders Africa")
+    # 1. DYNAMIC LOGO DISPLAY
+    # This looks for the 'logo_url' we added to your 'companies' table
+    if active_company.get('logo_url'):
+        st.image(active_company['logo_url'], use_container_width=True)
+    else:
+        st.title("🌍 Peak-Lenders") # Fallback if no logo
+    
     st.write("---")
-    active_company_name = st.selectbox("Log in as:", list(company_list.keys()))
-    active_company = company_list[active_company_name]
-    apply_custom_theme(active_company['brand_color'])
-    st.success(f"Mode: {active_company['name']}")
-    st.write("---")
-    page = st.radio("Navigation Menu", ["📈 Overview", "👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral", "📂 Expenses", "📄 Payroll", "📄 Ledger", "🧾 Reports"])
 
-# --- 5. THE SWITCHBOARD ---
+    # 2. MULTI-TENANT PORTAL SWITCHER
+    active_company_name = st.selectbox("Switch Business Portal:", list(company_list.keys()))
+    active_company = company_list[active_company_name]
+    
+    # Apply theme based on the selected company
+    apply_custom_theme(active_company['brand_color'])
+    
+    st.info(f"📍 Active: {active_company['name']}")
+    st.write("---")
+
+    # 3. CATEGORIZED NAVIGATION
+    # We use a single radio but add visual headers to "group" them
+    st.caption("MAIN MENU")
+    page = st.radio("Navigation", [
+        "📈 Overview", 
+        "👥 Clients", 
+        "💵 Loans", 
+        "💰 Payments", 
+        "🚨 Overdue", 
+        "🛡️ Collateral", 
+        "📂 Expenses", 
+        "📄 Payroll", 
+        "📄 Ledger", 
+        "🧾 Reports",
+        "⚙️ Settings" # Added a Settings page for the Logo Upload!
+    ], label_visibility="collapsed")
 
 if page == "📈 Overview":
     st.title(f"📈 {active_company['name']} | AI Executive Command Center")
