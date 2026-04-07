@@ -1,7 +1,7 @@
-🚀 LendFlow Africa (SaaS)
+PEAK-LENDERS AFRICA (SaaS)
 The Digital Operating System for Modern Tier-4 Lenders.
 
-LendFlow Africa is a multi-tenant FinTech platform designed to digitize the lending lifecycle for microfinance institutions. Built for scale, security, and speed.
+Peak-Lenders Africa is a multi-tenant FinTech platform designed to digitize the lending lifecycle for microfinance institutions. Built for scale, security, and speed.
 
 🏗️ Core Pillars
 Dashboard: Real-time CEO analytics and portfolio health.
