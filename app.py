@@ -148,7 +148,7 @@ if 'current_page' not in st.session_state:
 
 with st.sidebar:
     # --- STEP 0: DEFINE THE COMPANY FIRST (CRITICAL) ---
-    # This must be the very first thing inside the sidebar block
+    # This ensures active_company exists before anything else tries to use it.
     active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
     active_company = company_list[active_company_name]
     
@@ -159,21 +159,32 @@ with st.sidebar:
     st.markdown(
         """
         <style>
+            /* Centers the entire sidebar content area */
             [data-testid="stSidebarNav"] { text-align: center; }
             [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
+            
+            /* Targets the radio group container */
             div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
+            
+            /* Centers the text within each radio button label */
             div.row-widget.stRadio > div[role="radiogroup"] > label { 
                 justify-content: center; 
                 width: 100%; 
                 text-align: center; 
             }
+            
+            /* Ensures the top-level label is also centered */
             [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
+            
+            /* Optional: Hide the radio circles to make it look like a clean menu */
+            [data-testid="stMarkdownContainer"] p { font-weight: 500; }
         </style>
         """, 
         unsafe_allow_html=True
     )
 
-    # --- 2. CENTERED LOGO (Now Python knows what active_company is!) ---
+    # --- 2. CENTERED LOGO ---
+    # The columns trick [1, 2, 1] forces the middle column to the center
     _, col_mid, _ = st.columns([1, 2, 1])
     with col_mid:
         if active_company.get('logo_url'):
@@ -202,10 +213,11 @@ with st.sidebar:
         "📄 Ledger", "⚙️ Settings"
     ]
     
-    # Keeping the selection synced with session state
+    # Check session state before rendering the radio
     if 'current_page' not in st.session_state:
         st.session_state.current_page = "📈 Overview"
 
+    # Radio button for navigation
     page = st.radio(
         "Navigation", 
         menu_options, 
@@ -213,6 +225,7 @@ with st.sidebar:
         label_visibility="collapsed"
     )
 
+    # If the user clicks a new page, update state and rerun
     if page != st.session_state.current_page:
         st.session_state.current_page = page
         st.rerun()
