@@ -147,12 +147,18 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = "📈 Overview"
 
 with st.sidebar:
+    # --- STEP 0: DEFINE THE COMPANY FIRST (CRITICAL) ---
+    # This must be the very first thing inside the sidebar block
+    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
+    active_company = company_list[active_company_name]
+    
+    # Apply theme based on the selection
+    apply_custom_theme(active_company['brand_color'])
+
     # --- 1. CSS INJECTION FOR CENTERING ---
-    # This targets the radio button labels and the sidebar container
     st.markdown(
         """
         <style>
-            /* Center the Radio Button text and items */
             [data-testid="stSidebarNav"] { text-align: center; }
             [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
             div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
@@ -161,15 +167,13 @@ with st.sidebar:
                 width: 100%; 
                 text-align: center; 
             }
-            /* Make the radio circles invisible or centered */
             [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
         </style>
         """, 
         unsafe_allow_html=True
     )
 
-    # --- 2. CENTERED LOGO ---
-    # Using columns for horizontal centering
+    # --- 2. CENTERED LOGO (Now Python knows what active_company is!) ---
     _, col_mid, _ = st.columns([1, 2, 1])
     with col_mid:
         if active_company.get('logo_url'):
@@ -191,8 +195,6 @@ with st.sidebar:
     st.write("---")
 
     # --- 4. CENTERED NAVIGATION ---
-    st.caption("NAVIGATION MENU")
-    
     menu_options = [
         "📈 Overview", "🧾 Reports", "👥 Clients", 
         "💵 Loans", "💰 Payments", "🚨 Overdue", 
@@ -200,16 +202,18 @@ with st.sidebar:
         "📄 Ledger", "⚙️ Settings"
     ]
     
-    # The CSS above will handle the centering of these radio items
+    # Keeping the selection synced with session state
+    if 'current_page' not in st.session_state:
+        st.session_state.current_page = "📈 Overview"
+
     page = st.radio(
-        "Select Page", 
+        "Navigation", 
         menu_options, 
-        index=menu_options.index(st.session_state.get("current_page", "📈 Overview")),
+        index=menu_options.index(st.session_state.current_page),
         label_visibility="collapsed"
     )
 
-    # Update session state
-    if page != st.session_state.get("current_page"):
+    if page != st.session_state.current_page:
         st.session_state.current_page = page
         st.rerun()
 if page == "📈 Overview":
