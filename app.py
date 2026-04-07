@@ -13,11 +13,34 @@ if 'theme_color' not in st.session_state:
 def apply_custom_theme(color):
     st.markdown(f"""
         <style>
-        .main {{ background-color: #f8f9fa; }}
-        .stButton>button {{ background-color: {color}; color: white; border-radius: 8px; border: none; font-weight: bold; width: 100%; }}
-        .stMetric {{ background-color: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); border-left: 5px solid {color}; }}
-        h1, h2, h3, h4 {{ color: {color}; }}
-        [data-testid="stSidebar"] {{ background-color: #ffffff; border-right: 1px solid #eee; }}
+        /* This targets the sidebar background */
+        [data-testid="stSidebar"] {{
+            background-color: {color} !important;
+        }}
+        
+        /* This makes all sidebar text white so it's readable on the dark blue */
+        [data-testid="stSidebar"] {{
+            color: white !important;
+        }}
+
+        /* This targets the navigation labels specifically */
+        [data-testid="stSidebarNav"] span {{
+            color: white !important;
+        }}
+
+        /* This styles the metrics cards on the dashboard */
+        div[data-testid="stMetric"] {{
+            background-color: white;
+            padding: 15px;
+            border-radius: 10px;
+            border-left: 5px solid {color};
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }}
+        
+        /* Title color */
+        h1, h2, h3 {{
+            color: {color};
+        }}
         </style>
     """, unsafe_allow_html=True)
 
