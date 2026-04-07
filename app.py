@@ -94,7 +94,7 @@ with st.sidebar:
     active_company = company_list[active_company_name]
     
     # APPLY BRANDING DYNAMICALLY
-    apply_company_theme(active_company['brand_color'])
+    apply_custom_theme(active_company['brand_color'])
     st.success(f"Viewing: {active_company['name']}")
 
 # --- 2. THE CLIENT REGISTRY PAGE ---
