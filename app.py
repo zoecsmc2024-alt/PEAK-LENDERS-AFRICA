@@ -143,41 +143,48 @@ companies_res = supabase.table("companies").select("id, name, brand_color").exec
 company_list = {c['name']: c for c in companies_res.data}
 
 with st.sidebar:
-    # 1. DYNAMIC LOGO DISPLAY
-    # This looks for the 'logo_url' we added to your 'companies' table
+    # 1. THE LOGO (Dynamic)
     if active_company.get('logo_url'):
         st.image(active_company['logo_url'], use_container_width=True)
     else:
-        st.title("🌍 Peak-Lenders") # Fallback if no logo
+        st.title("🌍 Peak-Lenders")
     
     st.write("---")
 
-    # 2. MULTI-TENANT PORTAL SWITCHER
-    active_company_name = st.selectbox("Switch Business Portal:", list(company_list.keys()))
+    # 2. PORTAL SWITCHER
+    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
     active_company = company_list[active_company_name]
-    
-    # Apply theme based on the selected company
     apply_custom_theme(active_company['brand_color'])
     
-    st.info(f"📍 Active: {active_company['name']}")
+    st.info(f"📍 Mode: {active_company['name']}")
     st.write("---")
 
-    # 3. CATEGORIZED NAVIGATION
-    # We use a single radio but add visual headers to "group" them
-    st.caption("MAIN MENU")
-    page = st.radio("Navigation", [
-        "📈 Overview", 
-        "👥 Clients", 
-        "💵 Loans", 
-        "💰 Payments", 
-        "🚨 Overdue", 
-        "🛡️ Collateral", 
-        "📂 Expenses", 
-        "📄 Payroll", 
-        "📄 Ledger", 
-        "🧾 Reports",
-        "⚙️ Settings" # Added a Settings page for the Logo Upload!
-    ], label_visibility="collapsed")
+    # 3. ORGANIZED NAVIGATION
+    # We use headers to create "Sections" in the menu
+    st.caption("STRATEGY & GROWTH")
+    page_main = st.radio("Strategic", ["📈 Overview", "🧾 Reports"], label_visibility="collapsed")
+    
+    st.write("") # Tiny spacer
+    st.caption("LOAN OPERATIONS")
+    page_ops = st.radio("Ops", ["👥 Clients", "💵 Loans", "💰 Payments", "🚨 Overdue", "🛡️ Collateral"], label_visibility="collapsed")
+    
+    st.write("") 
+    st.caption("BACK OFFICE")
+    page_admin = st.radio("Admin", ["📂 Expenses", "📄 Payroll", "📄 Ledger", "⚙️ Settings"], label_visibility="collapsed")
+
+    # --- THE MAGIC MERGE ---
+    # This logic detects which section you last clicked
+    # We use session state to remember the last choice
+    if 'last_page' not in st.session_state:
+        st.session_state.last_page = "📈 Overview"
+
+    # Identify which radio was changed
+    current_pages = [page_main, page_ops, page_admin]
+    for p in current_pages:
+        if p != st.session_state.last_page and p in current_pages:
+            st.session_state.last_page = p
+    
+    page = st.session_state.last_page
 
 if page == "📈 Overview":
     st.title(f"📈 {active_company['name']} | AI Executive Command Center")
