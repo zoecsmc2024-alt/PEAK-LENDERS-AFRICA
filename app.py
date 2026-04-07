@@ -158,12 +158,26 @@ with st.sidebar:
     # Apply theme
     apply_custom_theme(active_company['brand_color'])
 
-    # Display company logo as a small sleek icon
-    if active_company.get('logo_url'):
-        # We use width=80 (or 100) to keep it subtle and professional
-        st.image(active_company['logo_url'], width=80) 
+    # --- CENTERED LOGO & INFO ---
+    # We use columns to create a "centering" effect
+    col_left, col_mid, col_right = st.columns([1, 2, 1])
     
-    st.info(f"📍 Mode: {active_company['name']}")
+    with col_mid:
+        if active_company.get('logo_url'):
+            st.image(active_company['logo_url'], width=80)
+            
+    # Centering the text info box using a bit of HTML
+    st.markdown(
+        f"""
+        <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
+                    padding: 10px; border-radius: 10px; margin-bottom: 20px;">
+            <span style="font-size: 14px;">📍 Mode: <b>{active_company['name']}</b></span>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    st.write("---")
     # --- STEP 2: Single List Navigation ---
     menu_options = [
         "📈 Overview", "🧾 Reports", "👥 Clients", 
