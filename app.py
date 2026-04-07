@@ -147,38 +147,52 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = "📈 Overview"
 
 with st.sidebar:
-    # Sidebar Header
-    st.title("🌍 Peak-Lenders Africa")
-    st.write("---")
-    
-    # --- STEP 1: Company Selection ---
-    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
-    active_company = company_list[active_company_name]
-    
-    # Apply theme
-    apply_custom_theme(active_company['brand_color'])
+    # --- 1. CSS INJECTION FOR CENTERING ---
+    # This targets the radio button labels and the sidebar container
+    st.markdown(
+        """
+        <style>
+            /* Center the Radio Button text and items */
+            [data-testid="stSidebarNav"] { text-align: center; }
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
+            div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
+            div.row-widget.stRadio > div[role="radiogroup"] > label { 
+                justify-content: center; 
+                width: 100%; 
+                text-align: center; 
+            }
+            /* Make the radio circles invisible or centered */
+            [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
+        </style>
+        """, 
+        unsafe_allow_html=True
+    )
 
-    # --- CENTERED LOGO & INFO ---
-    # We use columns to create a "centering" effect
-    col_left, col_mid, col_right = st.columns([1, 2, 1])
-    
+    # --- 2. CENTERED LOGO ---
+    # Using columns for horizontal centering
+    _, col_mid, _ = st.columns([1, 2, 1])
     with col_mid:
         if active_company.get('logo_url'):
             st.image(active_company['logo_url'], width=80)
-            
-    # Centering the text info box using a bit of HTML
+        else:
+            st.write("🌍")
+
+    # --- 3. CENTERED INFO BOX ---
     st.markdown(
         f"""
-        <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
-                    padding: 10px; border-radius: 10px; margin-bottom: 20px;">
-            <span style="font-size: 14px;">📍 Mode: <b>{active_company['name']}</b></span>
+        <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
+                    padding: 10px; border-radius: 10px; margin-top: 10px;">
+            <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company['name']}</b></span>
         </div>
         """, 
         unsafe_allow_html=True
     )
     
     st.write("---")
-    # --- STEP 2: Single List Navigation ---
+
+    # --- 4. CENTERED NAVIGATION ---
+    st.caption("NAVIGATION MENU")
+    
     menu_options = [
         "📈 Overview", "🧾 Reports", "👥 Clients", 
         "💵 Loans", "💰 Payments", "🚨 Overdue", 
@@ -186,15 +200,18 @@ with st.sidebar:
         "📄 Ledger", "⚙️ Settings"
     ]
     
-    # We use .get() to avoid key errors and .index() to keep the radio synced
-    default_index = menu_options.index(st.session_state.current_page)
-    
-    page = st.radio("Navigation Menu", menu_options, index=default_index)
+    # The CSS above will handle the centering of these radio items
+    page = st.radio(
+        "Select Page", 
+        menu_options, 
+        index=menu_options.index(st.session_state.get("current_page", "📈 Overview")),
+        label_visibility="collapsed"
+    )
 
-    # --- STEP 3: State Sync ---
-    if page != st.session_state.current_page:
+    # Update session state
+    if page != st.session_state.get("current_page"):
         st.session_state.current_page = page
-        st.rerun() # Forces a clean switch between pages
+        st.rerun()
 if page == "📈 Overview":
     st.title(f"📈 {active_company['name']} | AI Executive Command Center")
 
