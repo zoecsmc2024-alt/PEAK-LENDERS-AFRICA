@@ -416,28 +416,35 @@ with tab1:
     with st.form("client_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
 
-        # Variables defined here must match the logic below!
+        # Basic Info - Variables named to match UI
         f_name = col1.text_input("Full Name / Business Name")
-        id_no = col2.text_input("National ID / Passport No.")
+        id_val = col2.text_input("National ID / Passport No.")
 
-        phone = col1.text_input("Phone Number")
-        email = col2.text_input("Email Address")
+        # Contact Info
+        phone_val = col1.text_input("Phone Number")
+        email_val = col2.text_input("Email Address")
+
+        # Location & Next of Kin
+        address_val = col1.text_input("Physical Address / Location")
+        nok_val = col2.text_input("Next of Kin (Name & Phone)")
 
         submit_reg = st.form_submit_button("🙋‍♂️ Register Client")
 
         if submit_reg:
-            # Check if required fields are empty using the variable names above
-            if not f_name or not id_no:
-                st.error("⚠️ Please fill in all required fields (Name and ID)!")
+            # Simple validation
+            if not f_name or not id_val:
+                st.error("⚠️ Name and ID Number are required!")
             else:
                 try:
-                    # Syncing names: "Database Column": Python Variable
+                    # SYNCED: "Supabase Column Name" : Python Variable
                     supabase.table("clients").insert({
                         "company_id": active_company['id'],
-                        "full_name": f_name,   # Matches f_name above
-                        "national_id": id_no,  # Matches id_no above
-                        "phone": phone,
-                        "email": email
+                        "full_name": f_name,
+                        "id_number": id_val,      # FIXED: Matches your screenshot
+                        "phone_number": phone_val, # FIXED: Matches your screenshot
+                        "email": email_val,        # Matches your screenshot
+                        "address": address_val,    # FIXED: Matches your screenshot
+                        "next_of_kin": nok_val     # Add this column in Supabase!
                     }).execute()
                     
                     st.success(f"✅ {f_name} has been successfully registered!")
