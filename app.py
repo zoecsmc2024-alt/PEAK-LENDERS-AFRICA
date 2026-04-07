@@ -23,9 +23,19 @@ def apply_custom_theme(color):
             color: white !important;
         }}
 
-        /* Style the radio button labels specifically */
+        /* Label above the box stays white */
         [data-testid="stWidgetLabel"] p {{
             color: white !important;
+        }}
+
+        /* The text INSIDE the white selection box should be DARK */
+        div[data-baseweb="select"] * {{
+            color: #1E3A8A !important; /* This makes the company name readable */
+        }}
+        
+        /* Ensure the dropdown options are also readable */
+        ul[data-testid="stSelectboxVirtualList"] * {{
+            color: #1E3A8A !important;
         }}
 
         /* Make the "Switch Business Portal" text white */
