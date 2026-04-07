@@ -589,7 +589,7 @@ with tab1:
 # --- THE SWITCHBOARD CONTINUES ---
 # Ensure this ELIF is back at the far left margin
 
-if page == "💵 Loans":
+elif page == "💵 Loans":
     st.title(f"💵 {active_company['name']} | Credit Engine")
 
     # --- 1. INITIALIZE TABS FIRST ---
@@ -631,10 +631,10 @@ if page == "💵 Loans":
             - Monthly Installment: **{monthly:,.0f} UGX**
             """)
 
-            # --- SUBMIT BUTTON (Logic moved inside the button click) ---
+            # --- SUBMIT BUTTON ---
             submit_disburse = st.form_submit_button("💳 Disburse Loan", use_container_width=True)
 
-        # --- CALCULATIONS & RISK (These must run AFTER the form or be part of the flow) ---
+        # --- CALCULATIONS & RISK (MUST STAY INSIDE TAB1) ---
         client_id = c_map[target]
         client_loans = df_loans[df_loans['client_id'] == client_id] if not df_loans.empty else pd.DataFrame()
 
