@@ -6,3 +6,5 @@ streamlit
 supabase
 plotly
 pandas
+reportlab
+fpdf
