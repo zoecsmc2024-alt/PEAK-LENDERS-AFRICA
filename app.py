@@ -555,7 +555,7 @@ with tab1:
                 col2.metric("📥 Paid", f"{t_paid:,.0f}")
                 col3.metric("📉 Balance", f"{t_balance:,.0f}")
 
-                # --- MINI STATEMENT ---
+                # --- MINI STATEMENT (STAY INDENTED!) ---
                 st.write("#### 📑 Recent Transactions")
 
                 if not client_payments_det.empty:
@@ -567,19 +567,20 @@ with tab1:
                         hide_index=True
                     )
                 else:
-            st.info("No transactions found for this borrower.")
+                    st.info("No transactions found for this borrower.")
 
-        # --- RISK ALERT ---
-        if t_balance > 0 and t_paid < t_borrowed * 0.3:
-            st.error("🚨 High Risk Client - Low repayment behavior detected.")
-        elif t_borrowed > 0:
-            st.success("✅ Client is performing well.")
+                # --- RISK ALERT (STAY INDENTED!) ---
+                if t_balance > 0 and t_paid < t_borrowed * 0.3:
+                    st.error("🚨 High Risk Client - Low repayment behavior detected.")
+                elif t_borrowed > 0:
+                    st.success("✅ Client is performing well.")
 
-    else:
-        st.info("No clients found in your database.")
+        else:
+            # Matches the very first 'if clients:'
+            st.info("No clients found in your database.")
 
 # --- THE SWITCHBOARD CONTINUES ---
-# This elif MUST align with the original 'if page ==' at the top of the app
+# Ensure this ELIF is back at the far left margin
 elif page == "💵 Loans":
     st.title(f"💵 {active_company['name']} | Credit Engine")
     # ... rest of your loan code ...
