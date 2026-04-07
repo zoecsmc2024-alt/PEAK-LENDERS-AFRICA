@@ -1406,3 +1406,41 @@ elif page == "🧾 Reports":
         mime="text/plain",
         use_container_width=True
     )
+
+elif page == "⚙️ Settings":
+    st.title("⚙️ Portal Settings & Branding")
+    
+    st.subheader("🏢 Business Identity")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.write("Current Name:", active_company['name'])
+        new_color = st.color_picker("Change Brand Color", active_company['brand_color'])
+    
+    with col2:
+        logo_file = st.file_uploader("Upload New Company Logo", type=["png", "jpg", "jpeg"])
+
+    if st.button("💾 Save Branding Changes", use_container_width=True):
+        updated_data = {"brand_color": new_color}
+        
+        # If a new logo is uploaded, send it to Supabase Storage
+        if logo_file:
+            bucket_name = 'company-logos'
+            file_path = f"logos/{active_company['id']}_logo.png"
+            
+            # Upload with 'upsert' to overwrite old logos
+            supabase.storage.from_(bucket_name).upload(
+                file_path, 
+                logo_file.getvalue(), 
+                {"x-upsert": "true"}
+            )
+            
+            # Get public URL and add to update payload
+            logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+            updated_data["logo_url"] = logo_url
+
+        # Update the database
+        supabase.table("companies").update(updated_data).eq("id", active_company['id']).execute()
+        
+        st.success("Branding updated! The app will now refresh.")
+        st.rerun()
