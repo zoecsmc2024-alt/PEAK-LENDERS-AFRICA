@@ -31,7 +31,7 @@ def apply_custom_theme(color):
         /* Make the "Switch Business Portal" text white */
         .stSelectbox label p {{
             color: white !important;
-        }
+        }}
 
         /* Metric cards on the main dashboard */
         div[data-testid="stMetric"] {{
