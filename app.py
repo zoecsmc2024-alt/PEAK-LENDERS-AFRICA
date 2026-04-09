@@ -127,12 +127,22 @@ def apply_custom_styles():
 # 3. DATA HELPERS (THE NEW SUPABASE ENGINE)
 # ==============================
 
-def create_pdf(html_content):
-    """Generates a PDF from HTML content using pisa."""
-    from xhtml2pdf import pisa 
-    pdf_buffer = io.BytesIO()
-    pisa.CreatePDF(io.StringIO(html_content), dest=pdf_buffer)
-    return pdf_buffer.getvalue()
+from fpdf import FPDF
+
+def create_pdf_report(title, content_list):
+    """
+    SaaS-friendly PDF generator using FPDF2.
+    No system dependencies required.
+    """
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(40, 10, title)
+    pdf.ln(10)
+    pdf.set_font("Arial", '', 12)
+    for line in content_list:
+        pdf.cell(0, 10, str(line), ln=True)
+    return pdf.output(dest='S').encode('latin-1')
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
     try:
