@@ -489,40 +489,6 @@ def login_page(supabase):
 # require_role(["admin", "manager"])
 
 
-# ==========================================
-# 9. APP ROUTING (POST-LOGIN)
-# ==========================================
-# 1. Show the Sidebar and get the current page
-# Make sure you have a function called show_sidebar() defined!
-current_page = show_sidebar() 
-
-# 3. Route to the correct module based on the selection
-if current_page == "📊 Overview":
-    show_overview()
-elif current_page == "💵 Loans":
-    show_loans()
-elif current_page == "👥 Borrowers":
-    show_borrowers()
-elif current_page == "🛡️ Collateral":
-    show_collateral()
-elif current_page == "📅 Calendar":
-    show_calendar()
-elif current_page == "📄 Ledger":
-    show_ledger()
-elif current_page == "🚨 Overdue Tracker":
-    show_overdue_tracker()
-elif current_page == "💰 Payments":
-    show_payments()
-elif current_page == "📁 Expenses":
-    show_expenses()
-elif current_page == "📉 PettyCash":
-    show_petty_cash()
-elif current_page == "🧾 Payroll":
-    show_payroll()
-elif current_page == "📈 Reports":
-    show_reports()
-elif current_page == "⚙️ Settings":
-    show_settings()
 
 
 # ==============================
@@ -746,10 +712,10 @@ def save_logo_to_db(image_file):
         return False
 
 
+
 # ==============================
 # 10. THE SIDEBAR NAVIGATION
 # ==============================
-
 import streamlit as st
 
 # 1. Main Sidebar Function
@@ -824,6 +790,40 @@ def show_sidebar():
     return selection
 
 
+# ==========================================
+# 9. APP ROUTING (POST-LOGIN)
+# ==========================================
+# 1. Show the Sidebar and get the current page
+# Make sure you have a function called show_sidebar() defined!
+current_page = show_sidebar() 
+
+# 3. Route to the correct module based on the selection
+if current_page == "📊 Overview":
+    show_overview()
+elif current_page == "💵 Loans":
+    show_loans()
+elif current_page == "👥 Borrowers":
+    show_borrowers()
+elif current_page == "🛡️ Collateral":
+    show_collateral()
+elif current_page == "📅 Calendar":
+    show_calendar()
+elif current_page == "📄 Ledger":
+    show_ledger()
+elif current_page == "🚨 Overdue Tracker":
+    show_overdue_tracker()
+elif current_page == "💰 Payments":
+    show_payments()
+elif current_page == "📁 Expenses":
+    show_expenses()
+elif current_page == "📉 PettyCash":
+    show_petty_cash()
+elif current_page == "🧾 Payroll":
+    show_payroll()
+elif current_page == "📈 Reports":
+    show_reports()
+elif current_page == "⚙️ Settings":
+    show_settings()
 # ==============================
 # 11. DASHBOARD LOGIC (OVERVIEW)
 # ==============================
@@ -832,34 +832,6 @@ def show_dashboard():
     This function will call the right page logic based on the current selection in the sidebar.
     """
     current_page = show_sidebar()  # Fetch current page from sidebar
-
-    # Routing logic for each page
-    if current_page == "📊 Overview":
-        show_overview()  # Make sure 'show_overview()' is defined elsewhere
-    elif current_page == "💵 Loans":
-        show_loans()  # Make sure 'show_loans()' is defined elsewhere
-    elif current_page == "👥 Borrowers":
-        show_borrowers()  # Make sure 'show_borrowers()' is defined elsewhere
-    elif current_page == "🛡️ Collateral":
-        show_collateral()  # Make sure 'show_collateral()' is defined elsewhere
-    elif current_page == "📅 Calendar":
-        show_calendar()  # Make sure 'show_calendar()' is defined elsewhere
-    elif current_page == "📄 Ledger":
-        show_ledger()  # Make sure 'show_ledger()' is defined elsewhere
-    elif current_page == "🚨 Overdue Tracker":
-        show_overdue_tracker()  # Make sure 'show_overdue_tracker()' is defined elsewhere
-    elif current_page == "💰 Payments":
-        show_payments()  # Make sure 'show_payments()' is defined elsewhere
-    elif current_page == "📁 Expenses":
-        show_expenses()  # Make sure 'show_expenses()' is defined elsewhere
-    elif current_page == "📉 PettyCash":
-        show_petty_cash()  # Make sure 'show_petty_cash()' is defined elsewhere
-    elif current_page == "🧾 Payroll":
-        show_payroll()  # Make sure 'show_payroll()' is defined elsewhere
-    elif current_page == "📈 Reports":
-        show_reports()  # Make sure 'show_reports()' is defined elsewhere
-    elif current_page == "⚙️ Settings":
-        show_settings()  # Make sure 'show_settings()' is defined elsewhere
 
     """
     Main Dashboard view. 
