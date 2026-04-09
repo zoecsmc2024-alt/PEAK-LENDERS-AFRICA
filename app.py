@@ -8,7 +8,6 @@ from supabase import create_client, Client
 import io
 import base64
 import json
-import bcrypt
 import os
 import re 
 from datetime import datetime, timedelta
