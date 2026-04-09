@@ -580,3 +580,119 @@ def sidebar():
         # Clear all session data to ensure the next tenant starts fresh
         st.session_state.clear()
         st.rerun()
+
+
+# ==============================
+# 11. DASHBOARD LOGIC (OVERVIEW)
+# ==============================
+
+def show_overview():
+    """
+    Main Dashboard view. 
+    Maintains exact UI/Logic but powered by Supabase Tenant Data.
+    """
+    st.markdown("## 📊 Financial Dashboard")
+    
+    # 1. LOAD TENANT-SPECIFIC DATA
+    # Our Supabase helper automatically filters these by st.session_state.tenant_id
+    df = get_cached_data("loans")
+    pay_df = get_cached_data("payments")
+    exp_df = get_cached_data("expenses") 
+
+    if df.empty:
+        st.info("No loan records found for your organization.")
+        return
+
+    # 2. TRANSLATE HEADERS (Kept for compatibility with your existing math)
+    df.columns = df.columns.str.strip().str.replace(" ", "_")
+    if not pay_df.empty:
+        pay_df.columns = pay_df.columns.str.strip().str.replace(" ", "_")
+    if not exp_df.empty:
+        exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
+
+    # 3. CLEAN DATA TYPES (Preserved logic)
+    df["Interest"] = pd.to_numeric(df.get("Interest", 0), errors="coerce").fillna(0)
+    df["Amount_Paid"] = pd.to_numeric(df.get("Amount_Paid", 0), errors="coerce").fillna(0)
+    df["Principal"] = pd.to_numeric(df.get("Principal", 0), errors="coerce").fillna(0)
+    df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
+    
+    today = pd.Timestamp.today().normalize()
+    
+    # RECOVERY FILTER
+    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+    active_df = df[df["Status"].isin(active_statuses)].copy()
+
+    # 4. METRICS CALCULATION
+    total_issued = active_df["Principal"].sum() if "Principal" in active_df.columns else 0
+    total_interest_expected = active_df["Interest"].sum()
+    total_collected = df["Amount_Paid"].sum() 
+    
+    overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
+    overdue_count = active_df[overdue_mask].shape[0]
+
+    # 5. METRICS ROW (Zoe Soft Blue Style - INTACT)
+    m1, m2, m3, m4 = st.columns(4)
+    
+    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
+
+    # 6. RECENT ACTIVITY TABLES (Branding preserved)
+    st.write("---")
+    t1, t2 = st.columns(2)
+
+    with t1:
+        st.markdown("<h4 style='color: #4A90E2;'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+        rows_html = ""
+        if not active_df.empty:
+            recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
+            for i, (idx, r) in enumerate(recent_loans.iterrows()):
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                b_name = r.get('Borrower', 'Unknown')
+                p_amt = float(r.get('Principal', 0))
+                b_stat = r.get('Status', 'Active')
+                e_date_raw = r.get('End_Date')
+                e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
+                rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{b_name}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#4A90E2;">{p_amt:,.0f}</td><td style="padding:10px; text-align:center;"><span style="font-size:10px; background:#e1f5fe; padding:2px 5px; border-radius:5px;">{b_stat}</span></td><td style="padding:10px; text-align:center; color:#666;">{e_date}</td></tr>"""
+        
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #4A90E2;"><thead><tr style="background:#4A90E2; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
+
+    with t2:
+        st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
+        pay_rows = ""
+        if not pay_df.empty:
+            recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
+            for i, (idx, r) in enumerate(recent_pay.iterrows()):
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                p_borr = r.get('Borrower', 'Unknown')
+                p_val = float(r.get('Amount', 0))
+                p_date_raw = r.get('Date')
+                p_date = pd.to_datetime(p_date_raw).strftime('%d %b') if pd.notna(p_date_raw) else "-"
+                pay_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{p_borr}</td><td style="padding:10px; text-align:right; font-weight:bold; color:green;">{p_val:,.0f}</td><td style="padding:10px; text-align:center; color:#666;">{p_date}</td></tr>"""
+        
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;"><thead><tr style="background:#2E7D32; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:center;">Date</th></tr></thead><tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
+
+    # 7. DASHBOARD VISUALS (Plotly)
+    st.markdown("---")
+    st.markdown("<h4 style='color: #4A90E2;'>📈 Portfolio Analytics</h4>", unsafe_allow_html=True)
+    c_pie, c_bar = st.columns(2)
+
+    with c_pie:
+        status_counts = df["Status"].value_counts().reset_index()
+        status_counts.columns = ["Status", "Count"]
+        fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
+        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with c_bar:
+        if not pay_df.empty and not exp_df.empty:
+            pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
+            exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
+            inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
+            m_cash.columns = ["Month", "Income", "Expenses"]
+            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
+            st.plotly_chart(fig_bar, use_container_width=True)       
