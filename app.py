@@ -1882,3 +1882,111 @@ def show_payroll():
                     sid = int(sel_opt.split("(ID: ")[1].replace(")", ""))
                     supabase.table("payroll").delete().eq("id", sid).execute()
                     st.warning("Deleted."); st.rerun()
+
+
+
+# ==============================
+# 21. ADVANCED ANALYTICS & REPORTS
+# ==============================
+
+def show_reports():
+    """
+    Consolidates multi-tenant data to provide financial health metrics.
+    Preserves Net Profit logic and Portfolio at Risk (PAR) assessment.
+    """
+    st.markdown("<h2 style='color: #4A90E2;'>📊 Advanced Analytics & Reports</h2>", unsafe_allow_html=True)
+    
+    # 1. FETCH ALL TENANT DATA
+    loans = get_cached_data("loans")
+    payments = get_cached_data("payments")
+    expenses = get_cached_data("expenses")
+    payroll = get_cached_data("payroll")
+    petty = get_cached_data("petty_cash")
+
+    if loans.empty:
+        st.info("📈 Record more data to see your financial analytics.")
+        return
+
+    # 2. PAYROLL SAFETY & TAX TOTALS (Logic Intact)
+    nssf_total, paye_total = 0, 0
+    if not payroll.empty:
+        n5 = pd.to_numeric(payroll.get("nssf_5", 0), errors="coerce").fillna(0).sum()
+        n10 = pd.to_numeric(payroll.get("nssf_10", 0), errors="coerce").fillna(0).sum()
+        nssf_total = n5 + n10
+        paye_total = pd.to_numeric(payroll.get("paye", 0), errors="coerce").fillna(0).sum()
+
+    # 3. OTHER DATA SUMS (Standardized for SaaS)
+    l_amt = pd.to_numeric(loans.get("principal", 0), errors="coerce").fillna(0).sum()
+    l_int = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0).sum()
+    p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if not payments.empty else 0
+    exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if not expenses.empty else 0
+    
+    petty_out = 0
+    if not petty.empty:
+        petty_out = pd.to_numeric(petty[petty["type"]=="Out"].get("amount", 0), errors="coerce").fillna(0).sum()
+    
+    # 💰 FINANCIAL LOGIC (PRESERVED)
+    total_outflow = exp_amt + petty_out + nssf_total + paye_total
+    net_profit = p_amt - total_outflow
+
+    # 4. KPI DASHBOARD (Zoe Branding Preserved)
+    st.subheader("🚀 Financial Performance")
+    k1, k2, k3, k4 = st.columns(4)
+    
+    k1.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">CAPITAL ISSUED</p><h4 style="margin:0;color:#4A90E2;">{l_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
+    k2.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">INTEREST ACCRUED</p><h4 style="margin:0;color:#4A90E2;">{l_int:,.0f}</h4></div>""", unsafe_allow_html=True)
+    k3.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">COLLECTIONS</p><h4 style="margin:0;color:#2E7D32;">{p_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
+    
+    p_color = "#2E7D32" if net_profit >= 0 else "#FF4B4B"
+    k4.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid {p_color};box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">NET PROFIT</p><h4 style="margin:0;color:{p_color};">{net_profit:,.0f}</h4></div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # 5. VISUAL ANALYTICS (Plotly Styles Preserved)
+    st.markdown("---")
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.write("**💰 Income vs. Expenses (Monthly)**")
+        if not payments.empty:
+            payments["date"] = pd.to_datetime(payments["date"], errors='coerce')
+            inc_trend = payments.groupby(payments["date"].dt.strftime('%Y-%m'))["amount"].sum().reset_index()
+            
+            exp_trend = pd.DataFrame(columns=["date", "amount"])
+            if not expenses.empty:
+                expenses["date"] = pd.to_datetime(expenses["date"], errors='coerce')
+                exp_trend = expenses.groupby(expenses["date"].dt.strftime('%Y-%m'))["amount"].sum().reset_index()
+
+            merged = pd.merge(inc_trend, exp_trend, left_on="date", right_on="date", how="outer").fillna(0)
+            merged.columns = ["Month", "Income", "Expenses"]
+            
+            fig_bar = px.bar(merged, x="Month", y=["Income", "Expenses"], barmode="group",
+                             color_discrete_map={"Income": "#00ffcc", "Expenses": "#FF4B4B"})
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    with col_right:
+        st.write("**🛡️ Portfolio Weight (Top 5)**")
+        top_borrowers = loans.groupby("borrower")["principal"].sum().sort_values(ascending=False).head(5).reset_index()
+        fig_pie = px.pie(top_borrowers, names="borrower", values="principal", hole=0.5,
+                         color_discrete_sequence=px.colors.sequential.GnBu_r)
+        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # 6. RISK INDICATOR (PAR % Logic Intact)
+    st.markdown("---")
+    st.subheader("🚨 Risk Assessment")
+    
+    overdue_mask = loans["status"].isin(["Overdue", "Rolled/Overdue"])
+    overdue_val = pd.to_numeric(loans.loc[overdue_mask, "principal"], errors="coerce").fillna(0).sum()
+    risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
+    
+    r1, r2 = st.columns([2, 1])
+    with r1:
+        st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
+        st.progress(min(float(risk_percent) / 100, 1.0))
+        st.write(f"Total Overdue: **{overdue_val:,.0f} UGX**")
+    with r2:
+        if risk_percent < 10: st.success("✅ Healthy Portfolio")
+        elif risk_percent < 25: st.warning("⚠️ Moderate Risk")
+        else: st.error("🆘 Critical Risk Level")
