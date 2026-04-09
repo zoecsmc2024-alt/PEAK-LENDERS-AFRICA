@@ -736,34 +736,27 @@ def sidebar():
         <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
     """, unsafe_allow_html=True)
 
-    # 3. NAVIGATION MENU (Untouched)
+    # --- ADD THIS FUNCTION ABOVE YOUR login_page() FUNCTION ---
+def show_sidebar():
     menu = {
-        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
-        "Calendar": "📅", "Ledger": "📄", "Overdue Tracker": "🚨",
-        "Payments": "💰", "Expenses": "📁", "PettyCash": "📉",
-        "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
+        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
+        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
+        "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
+        "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
     }
     
-    # Restricted Pages for Admin Only
-    restricted = ["Settings", "Reports", "Payroll"]
-
-    for item, icon in menu.items():
-        if role != "Admin" and item in restricted:
-            continue
-
-        # Logic check: highlight active page effect
-        is_active = current_page == item
+    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+    
+    with st.sidebar:
+        st.title(f"🏢 {st.session_state.get('company', 'Zoe Consults')}")
+        selection = st.radio("Main Menu", menu_options)
         
-        if st.sidebar.button(f"{icon} {item}", key=f"nav_{item}", use_container_width=True, type="secondary"):
-            st.session_state.page = item
+        st.divider()
+        if st.button("🚪 Logout", use_container_width=True):
+            logout()
             st.rerun()
-
-    # 4. LOGOUT (Now also wipes tenant_id for security)
-    st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
-    if st.sidebar.button("🚪 Logout", key="logout_btn", use_container_width=True):
-        # Clear all session data to ensure the next tenant starts fresh
-        st.session_state.clear()
-        st.rerun()
+            
+    return selection
 
 
 # ==============================
