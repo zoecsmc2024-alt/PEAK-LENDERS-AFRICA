@@ -1622,4 +1622,132 @@ def show_expenses():
             if st.button("🗑️ Delete Expense Permanently", use_container_width=True):
                 supabase.table("expenses").delete().eq("id", exp_id).execute()
                 st.warning(f"⚠️ Record #{exp_id} deleted."); st.rerun()
+
+
+# ==============================
+# 19. PETTY CASH MANAGEMENT PAGE
+# ==============================
+
+def show_petty_cash():
+    """
+    Manages daily office cash transactions. Tracks inflows/outflows
+    for specific tenants with real-time balance alerts.
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>💵 Petty Cash Management</h2>", unsafe_allow_html=True)
+
+    # 1. FETCH TENANT DATA
+    df = get_cached_data("petty_cash")
+
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "type", "amount", "date", "description"])
+    else:
+        # Standardize for logic
+        df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+
+    # 2. SMART BALANCE METRICS (Logic Intact)
+    inflow = df[df["type"] == "In"]["amount"].sum()
+    outflow = df[df["type"] == "Out"]["amount"].sum()
+    balance = inflow - outflow
+
+    # --- STYLED NEON CARDS (Branding Preserved) ---
+    c1, c2, c3 = st.columns(3)
+    
+    # Inflow Card
+    c1.markdown(f"""
+        <div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #10B981;box-shadow:2px 2px 10px rgba(0,0,0,0.05);">
+            <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">TOTAL CASH IN</p>
+            <h3 style="margin:0;color:#10B981;">{inflow:,.0f} <span style="font-size:14px;">UGX</span></h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Outflow Card
+    c2.markdown(f"""
+        <div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);">
+            <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">TOTAL CASH OUT</p>
+            <h3 style="margin:0;color:#FF4B4B;">{outflow:,.0f} <span style="font-size:14px;">UGX</span></h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Balance Card (Dynamic Color Logic Preserved)
+    bal_color = "#2B3F87" if balance >= 50000 else "#FF4B4B"
+    c3.markdown(f"""
+        <div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid {bal_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);">
+            <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">CURRENT BALANCE</p>
+            <h3 style="margin:0;color:{bal_color};">{balance:,.0f} <span style="font-size:14px;">UGX</span></h3>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ==============================
+    # TABBED INTERFACE
+    # ==============================
+    tab_record, tab_history = st.tabs(["➕ Record Entry", "📜 Transaction History"])
+
+    # --- TAB 1: RECORD ENTRY ---
+    with tab_record:
+        with st.form("petty_cash_form", clear_on_submit=True):
+            col_a, col_b = st.columns(2)
+            ttype = col_a.selectbox("Transaction Type", ["Out", "In"])
+            t_amount = col_b.number_input("Amount (UGX)", min_value=0, step=1000)
+            desc = st.text_input("Purpose / Description", placeholder="e.g., Office Water Refill")
+
+            if st.form_submit_button("💾 Save to Cashbook"):
+                if t_amount > 0 and desc:
+                    new_row = pd.DataFrame([{
+                        "type": ttype,
+                        "amount": float(t_amount),
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "description": desc,
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    
+                    if save_data("petty_cash", new_row):
+                        st.success(f"Successfully recorded {t_amount:,.0f} UGX!")
+                        st.rerun()
+                else:
+                    st.error("Please provide amount and description.")
+
+    # --- TAB 2: HISTORY (Styles & Logic Intact) ---
+    with tab_history:
+        if not df.empty:
+            def color_type(val):
+                return 'color: #10B981;' if val == 'In' else 'color: #FF4B4B;'
+            
+            st.dataframe(
+                df.sort_values("date", ascending=False)
+                .style.map(color_type, subset=['type'])
+                .format({"amount": "{:,.0f}"}),
+                use_container_width=True, hide_index=True
+            )
+
+            # ADMIN ACTIONS: EDIT/DELETE
+            st.markdown("<br>", unsafe_allow_html=True)
+            with st.expander("⚙️ Advanced: Edit or Delete Transaction"):
+                options = [f"ID: {int(row['id'])} | {row['type']} - {row['description']}" for _, row in df.iterrows()]
+                selected_task = st.selectbox("Select Entry to Modify", options)
+                
+                sel_id = int(selected_task.split(" | ")[0].replace("ID: ", ""))
+                item = df[df["id"] == sel_id].iloc[0]
+
+                up_type = st.selectbox("Update Type", ["In", "Out"], index=0 if item["type"] == "In" else 1)
+                up_amt = st.number_input("Update Amount", value=float(item["amount"]), step=1000.0)
+                up_desc = st.text_input("Update Description", value=str(item["description"]))
+
+                c_up, c_del = st.columns(2)
+                if c_up.button("💾 Save Changes", use_container_width=True):
+                    update_entry = pd.DataFrame([{
+                        "id": sel_id,
+                        "type": up_type,
+                        "amount": up_amt,
+                        "description": up_desc,
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    if save_data("petty_cash", update_entry):
+                        st.success("Updated Successfully!")
+                        st.rerun()
+
+                if c_del.button("🗑️ Delete Permanently", use_container_width=True):
+                    supabase.table("petty_cash").delete().eq("id", sel_id).execute()
+                    st.warning("Entry Deleted."); st.rerun()
         
