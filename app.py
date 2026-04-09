@@ -750,6 +750,9 @@ def save_logo_to_db(image_file):
 # 10. THE SIDEBAR NAVIGATION
 # ==============================
 
+import streamlit as st
+
+# 1. Main Sidebar Function
 def sidebar():
     """
     Main Navigation Sidebar for the SaaS platform.
@@ -762,9 +765,9 @@ def sidebar():
     # SaaS addition: Get the dynamic company name
     company_name = st.session_state.get("company_name", "ZOE CONSULTS")
 
-    # 1. THE LOGO LOADER (Now pulling from Supabase via our get_logo helper)
-    logo_base64 = get_logo() 
-    
+    # 2. THE LOGO LOADER (Now pulling from Supabase via our get_logo helper)
+    logo_base64 = get_logo()  # Ensure 'get_logo()' is defined somewhere
+
     if logo_base64:
         img_src = f"data:image/png;base64,{logo_base64}"
         st.sidebar.markdown(f"""
@@ -775,8 +778,8 @@ def sidebar():
                 </div>
             </div>
         """, unsafe_allow_html=True)
-    
-    # 2. BRANDING & USER INFO
+
+    # 3. BRANDING & USER INFO
     st.sidebar.markdown(f"""
         <div style="text-align: center;">
             <h2 style="color: #FFFFFF; margin-bottom: 0;">{company_name.upper()}</h2>
@@ -790,34 +793,74 @@ def sidebar():
         <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
     """, unsafe_allow_html=True)
 
-    # --- ADD THIS FUNCTION ABOVE YOUR login_page() FUNCTION ---
+    # Return the current selected page from the sidebar menu
+    return current_page
+
+
+# 2. Sidebar Menu with Navigation & Logout Logic
 def show_sidebar():
+    """
+    Displays the sidebar navigation menu and handles the logic for logout.
+    """
     menu = {
         "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
         "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
         "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
         "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
     }
-    
+
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-    
+
+    # Render Sidebar in Streamlit
     with st.sidebar:
-        st.title(f"🏢 {st.session_state.get('company', 'Zoe Consults')}")
+        st.title(f"🏢 {st.session_state.get('company_name', 'Zoe Consults')}")
         selection = st.radio("Main Menu", menu_options)
-        
+
         st.divider()
         if st.button("🚪 Logout", use_container_width=True):
-            logout()
+            logout()  # Ensure logout() is defined somewhere else
             st.rerun()
-            
+
     return selection
 
 
 # ==============================
 # 11. DASHBOARD LOGIC (OVERVIEW)
 # ==============================
+def show_dashboard():
+    """
+    This function will call the right page logic based on the current selection in the sidebar.
+    """
+    current_page = show_sidebar()  # Fetch current page from sidebar
 
-def show_overview():
+    # Routing logic for each page
+    if current_page == "📊 Overview":
+        show_overview()  # Make sure 'show_overview()' is defined elsewhere
+    elif current_page == "💵 Loans":
+        show_loans()  # Make sure 'show_loans()' is defined elsewhere
+    elif current_page == "👥 Borrowers":
+        show_borrowers()  # Make sure 'show_borrowers()' is defined elsewhere
+    elif current_page == "🛡️ Collateral":
+        show_collateral()  # Make sure 'show_collateral()' is defined elsewhere
+    elif current_page == "📅 Calendar":
+        show_calendar()  # Make sure 'show_calendar()' is defined elsewhere
+    elif current_page == "📄 Ledger":
+        show_ledger()  # Make sure 'show_ledger()' is defined elsewhere
+    elif current_page == "🚨 Overdue Tracker":
+        show_overdue_tracker()  # Make sure 'show_overdue_tracker()' is defined elsewhere
+    elif current_page == "💰 Payments":
+        show_payments()  # Make sure 'show_payments()' is defined elsewhere
+    elif current_page == "📁 Expenses":
+        show_expenses()  # Make sure 'show_expenses()' is defined elsewhere
+    elif current_page == "📉 PettyCash":
+        show_petty_cash()  # Make sure 'show_petty_cash()' is defined elsewhere
+    elif current_page == "🧾 Payroll":
+        show_payroll()  # Make sure 'show_payroll()' is defined elsewhere
+    elif current_page == "📈 Reports":
+        show_reports()  # Make sure 'show_reports()' is defined elsewhere
+    elif current_page == "⚙️ Settings":
+        show_settings()  # Make sure 'show_settings()' is defined elsewhere
+
     """
     Main Dashboard view. 
     Maintains exact UI/Logic but powered by Supabase Tenant Data.
