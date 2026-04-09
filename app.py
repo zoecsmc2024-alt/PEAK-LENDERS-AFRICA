@@ -512,44 +512,50 @@ def signup_page(supabase):
     with col:
         st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
 
-        company = st.text_input("🏢 Company Code", key="signup_company").strip().lower()
+        company = st.text_input("🏢 Company Code", key="signup_company").strip().upper()
         email = st.text_input("📧 Email", key="signup_email").strip().lower()
         password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
-        # Fixed: Wrapping only the button in the div, not the logic
         st.markdown('<div class="center-btn">', unsafe_allow_html=True)
         signup_clicked = st.button("🚀 Create Account")
         st.markdown('</div>', unsafe_allow_html=True)
 
         if signup_clicked:
             if not all([company, email, password]):
-                st.warning("Fill all fields")
+                st.warning("⚠️ Please fill all fields.")
             else:
                 try:
-                    # Everything inside 'try' must be indented 4 spaces
+                    # 1. First, check if the company exists
+                    # (This prevents the 'relation does not exist' or foreign key crash)
+                    check_comp = supabase.table("companies").select("*").eq("company_code", company).execute()
+                    
+                    if not check_comp.data:
+                        # 2. Create company on the fly so the user can join it
+                        supabase.table("companies").insert({"company_code": company, "company_name": company}).execute()
+                    
+                    # 3. Perform the signup
                     res = supabase.auth.sign_up({
                         "email": email,
                         "password": password,
-                        "options": {
-                            "data": {
-                                "company_code": company,
-                                "role": "Admin" 
-                            }
-                        }
+                        "options": {"data": {"company_code": company, "role": "Admin"}}
                     })
                     
-                    # This check stops the "Database error" if the email is already taken
                     if res.user and not res.user.identities:
                         st.warning("✨ This email is already registered. Please log in instead!")
                     else:
-                        st.success("✅ Account created! Please check your email for a confirmation link.")
+                        st.success("✅ Welcome to Zoe Consults! Account created.")
 
                 except Exception as e:
-                    # Everything inside 'except' must also be indented
-                    if "already registered" in str(e).lower():
+                    error_msg = str(e).lower()
+                    if "already registered" in error_msg:
                         st.warning("📧 Email already in use.")
                     else:
                         st.error(f"❌ Signup failed: {str(e)}")
+
+        # Don't forget your 'Back to Login' button here for a clean UI!
+        if st.button("⬅️ Back to Login", key="signup_back"):
+            st.session_state.view = "login"
+            st.rerun()
         
         # Inside signup_page(supabase)
 st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
