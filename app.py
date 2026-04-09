@@ -507,44 +507,45 @@ def login_page(supabase):
 
 
 def signup_page(supabase):
-    _, col, _ = st.columns([1, 2, 1])
+    st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
+    
+    company = st.text_input("🏢 Company Code", key="signup_company").strip().upper()
+    email = st.text_input("📧 Email", key="signup_email").strip().lower()
+    password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
-    with col:
-        st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
-        company = st.text_input("🏢 Company Code", key="signup_company").strip().upper()
-        email = st.text_input("📧 Email", key="signup_email").strip().lower()
-        password = st.text_input("🔑 Password", type="password", key="signup_pass")
+    if st.button("🚀 Create Account", use_container_width=True):
+        if not all([company, email, password]):
+            st.warning("⚠️ Please fill all fields.")
+        else:
+            try:
+                # 1. Check if company exists
+                check = supabase.table("companies").select("*").eq("company_code", company).execute()
+                
+                if not check.data:
+                    # 2. Create the company on the fly so the user can join it
+                    supabase.table("companies").insert({
+                        "company_code": company, 
+                        "company_name": company.capitalize()
+                    }).execute()
+                
+                # 3. Sign up the user
+                res = supabase.auth.sign_up({
+                    "email": email,
+                    "password": password,
+                    "options": {"data": {"company_code": company, "role": "Admin"}}
+                })
+                
+                if res.user:
+                    st.success("✅ Welcome! Account created. Check your email for a link.")
+                else:
+                    st.error("❌ Signup failed. Please try a different email.")
 
-        if st.button("🚀 Create Account", use_container_width=True):
-            if not all([company, email, password]):
-                st.warning("⚠️ Please fill all fields.")
-            else:
-                try:
-                    # 1. Check if the company exists in the new table
-                    check_comp = supabase.table("companies").select("*").eq("company_code", company).execute()
-                    
-                    if not check_comp.data:
-                        # 2. Create it automatically if it's a new client
-                        supabase.table("companies").insert({"company_code": company, "company_name": company}).execute()
-                    
-                    # 3. Perform the actual signup
-                    res = supabase.auth.sign_up({
-                        "email": email,
-                        "password": password,
-                        "options": {"data": {"company_code": company, "role": "Admin"}}
-                    })
-                    
-                    if res.user and not res.user.identities:
-                        st.warning("✨ This email is already registered. Please log in!")
-                    else:
-                        st.success("✅ Welcome to Zoe Consults! Account created.")
+            except Exception as e:
+                st.error(f"🚨 Database Error: {str(e)}")
 
-                except Exception as e:
-                    st.error(f"❌ Signup failed: {str(e)}")
-
-        if st.button("⬅️ Back to Login", key="signup_back"):
-            st.session_state.view = "login"
-            st.rerun()
+    if st.button("⬅️ Back to Login", key="back_to_login_final"):
+        st.session_state.view = "login"
+        st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 # ==========================================
 # 9. MAIN ROUTER
