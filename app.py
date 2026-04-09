@@ -465,6 +465,8 @@ def login_page(supabase):
         company = st.text_input("🏢 Company Code").strip().lower()
         email = st.text_input("📧 Email").strip().lower()
         password = st.text_input("🔑 Password", type="password")
+        
+        # Missing Feature: Remember Me
         remember = st.checkbox("Remember me")
 
         if st.button("🚀 Login", use_container_width=True):
@@ -483,6 +485,27 @@ def login_page(supabase):
                 log_event(supabase, auth_result["user_id"], "login", "success")
                 st.success(f"Welcome to {auth_result['company']}")
                 st.rerun()
+        
+        # --- NEW SECTION: Missing Toggle & Reset Buttons ---
+        st.markdown("---") # Visual line
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("❓ Forgot Password", use_container_width=True):
+                # Trigger reset UI
+                st.session_state.show_reset = True
+                st.rerun()
+
+        with col2:
+            if st.button("🆕 Sign Up", use_container_width=True):
+                # This changes the view to the signup_page
+                st.session_state.auth_mode = "Sign Up"
+                st.rerun()
+
+    # Handle the Password Reset View
+    if st.session_state.get("show_reset"):
+        reset_password_ui(supabase)
 
 
 def signup_page(supabase):
@@ -517,7 +540,11 @@ def signup_page(supabase):
 
             except Exception as e:
                 st.error(f"Signup failed: {str(e)}")
-
+        
+        # Missing Feature: Back to Login
+        if st.button("⬅️ Back to Login", use_container_width=True):
+            st.session_state.auth_mode = "Login"
+            st.rerun()
 
 # ==========================================
 # 9. MAIN ROUTER
