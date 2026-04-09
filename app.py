@@ -541,12 +541,12 @@ def signup_page(supabase):
                 except Exception as e:
                     st.error(f"Signup failed: {str(e)}")
         
-        # Missing Feature: Back to Login
-        st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
-        if st.button("⬅️ Back to Login"):
-            st.session_state.auth_mode = "Login"
-            st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        # Inside signup_page(supabase)
+st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
+if st.button("⬅️ Back to Login", key="signup_back_btn"):
+    st.session_state.view = "login"  # Updates the state
+    st.rerun()                      # Forces Streamlit to switch immediately
+st.markdown('</div>', unsafe_allow_html=True)
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
