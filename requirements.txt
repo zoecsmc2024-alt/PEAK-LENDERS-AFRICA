@@ -1,10 +1,10 @@
 streamlit
-st-supabase-connection
-streamlit-option_menu
 pandas
-streamlit
-supabase
+numpy
 plotly
-pandas
-reportlab
-fpdf
+supabase
+bcrypt
+twilio
+fpdf2
+streamlit-calendar
+xhtml2pdf
