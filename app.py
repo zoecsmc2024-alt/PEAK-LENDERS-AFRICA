@@ -247,61 +247,196 @@ def check_session_timeout():
     
     st.session_state.last_activity = now
 
-# ==============================
-# 5. THE LOGIN INTERFACE (SUPABASE POWERED)
-# ==============================
-def login_page():  # 👈 Change 'main()' to 'login_page()'
-    # Initialize local page variable for the login UI
-    page = "🔑 Login"
-    # Center the login form using columns
-    _, col, _ = st.columns([1, 2, 1])
-    
-    with col:
-        st.markdown("<h2 style='text-align: center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
-        
-        # --- THE MULTI-TENANT ADDITION ---
-        company_slug = st.text_input("🏢 Company Code", placeholder="e.g., peak-lenders").lower().strip()
-        email = st.text_input("📧 Email Address", placeholder="admin@client.com")
-        password = st.text_input("🔑 Password", type="password")
-        
-        if st.button("🚀 Access Portal", use_container_width=True):
-            if not company_slug or not email or not password:
-                st.warning("Please fill in all fields.")
-            else:
-                try:
-                    # 1. First, verify the Company Code exists
-                    tenant_check = supabase.table("tenants").select("*").eq("name", company_slug).execute()
-                    
-                    if not tenant_check.data:
-                        st.error("Invalid Company Code.")
-                    else:
-                        # 2. Proceed with Supabase Auth
-                        auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
-                        
-                        # 3. Verify user belongs to THIS specific tenant
-                        user_id = auth_response.user.id
-                        user_check = supabase.table("users").select("*").eq("id", user_id).eq("tenant_id", tenant_check.data[0]['id']).execute()
-                        
-                        if user_check.data:
-                            st.session_state.tenant_id = tenant_check.data[0]['id']
-                            st.session_state.logged_in = True
-                            st.success(f"Welcome back to {company_slug} portal!")
-                            st.rerun()
-                        else:
-                            st.error("You do not have access to this organization.")
-                            
-                except Exception as e:
-                    st.error(f"Login failed: {str(e)}")
-# ==============================
-# 6. THE AUTH GATEKEEPER (Main Script Entry)
-# ==============================
+import streamlit as st
+from datetime import datetime, timedelta
 
-if "logged_in" not in st.session_state or not st.session_state.logged_in:
-    login_page() # 👈 This will now work because the name matches!
-    st.stop() 
-else:
-    # --- THIS IS THE "DASHBOARD" SECTION ---
-    check_session_timeout() 
+# ==========================================
+# 1. CONFIGURATION & CONSTANTS
+# ==========================================
+MAX_ATTEMPTS = 5
+LOCKOUT_MINUTES = 10
+
+# ==========================================
+# 2. RATE LIMITING UTILITIES
+# ==========================================
+def check_rate_limit(email):
+    attempts = st.session_state.get("login_attempts", {})
+
+    if email in attempts:
+        count, last_attempt = attempts[email]
+
+        if count >= MAX_ATTEMPTS:
+            if datetime.now() - last_attempt < timedelta(minutes=LOCKOUT_MINUTES):
+                return False
+
+            # Reset after lockout period expires
+            attempts[email] = (0, datetime.now())
+
+    return True
+
+def record_failed_attempt(email):
+    attempts = st.session_state.setdefault("login_attempts", {})
+    count, _ = attempts.get(email, (0, datetime.now()))
+    attempts[email] = (count + 1, datetime.now())
+
+def reset_attempts(email):
+    attempts = st.session_state.get("login_attempts", {})
+    if email in attempts:
+        del attempts[email]
+
+# ==========================================
+# 3. AUDIT LOGGING
+# ==========================================
+def log_event(supabase, user_id, event, status, meta=None):
+    try:
+        supabase.table("audit_logs").insert({
+            "user_id": user_id,
+            "event": event,
+            "status": status,
+            "meta": meta or {},
+            "timestamp": datetime.utcnow().isoformat()
+        }).execute()
+    except Exception:
+        pass  # Silently fail logging to prevent app crashes
+
+# ==========================================
+# 4. CORE AUTHENTICATION LOGIC
+# ==========================================
+def authenticate(supabase, company_slug, email, password):
+    # Rate limit check
+    if not check_rate_limit(email):
+        return {"error": "Too many attempts. Try again later."}
+
+    try:
+        # 1. Tenant lookup
+        tenant_res = (
+            supabase.table("tenants")
+            .select("id, name")
+            .eq("name", company_slug)
+            .limit(1)
+            .execute()
+        )
+
+        if not tenant_res.data:
+            record_failed_attempt(email)
+            return {"error": "Invalid credentials."}
+
+        tenant = tenant_res.data[0]
+
+        # 2. Supabase Auth
+        auth_res = supabase.auth.sign_in_with_password({
+            "email": email,
+            "password": password
+        })
+
+        if not auth_res.user:
+            record_failed_attempt(email)
+            return {"error": "Invalid credentials."}
+
+        user_id = auth_res.user.id
+
+        # 3. Verify user belongs to tenant + get role
+        user_res = (
+            supabase.table("users")
+            .select("id, tenant_id, role")
+            .eq("id", user_id)
+            .eq("tenant_id", tenant["id"])
+            .limit(1)
+            .execute()
+        )
+
+        if not user_res.data:
+            record_failed_attempt(email)
+            return {"error": "Access denied."}
+
+        user = user_res.data[0]
+        reset_attempts(email)
+
+        return {
+            "user_id": user_id,
+            "tenant_id": tenant["id"],
+            "role": user.get("role", "user"),
+            "company": tenant["name"]
+        }
+
+    except Exception:
+        return {"error": "Login failed."}
+
+# ==========================================
+# 5. SESSION & RBAC MANAGEMENT
+# ==========================================
+def create_session(user_data, remember=False):
+    st.session_state.update({
+        "logged_in": True,
+        "user_id": user_data["user_id"],
+        "tenant_id": user_data["tenant_id"],
+        "role": user_data["role"],
+        "company": user_data["company"]
+    })
+    if remember:
+        st.session_state["remember"] = True
+
+def logout():
+    for key in ["logged_in", "user_id", "tenant_id", "role", "company"]:
+        st.session_state.pop(key, None)
+
+def require_role(allowed_roles):
+    """Call this at the top of protected pages"""
+    if "role" not in st.session_state:
+        st.error("Not authenticated")
+        st.stop()
+
+    if st.session_state["role"] not in allowed_roles:
+        st.error("Unauthorized")
+        st.stop()
+
+# ==========================================
+# 6. UI COMPONENTS
+# ==========================================
+def reset_password_ui(supabase):
+    st.subheader("Reset Password")
+    email = st.text_input("Enter your email")
+
+    if st.button("Send Reset Link"):
+        try:
+            supabase.auth.reset_password_email(email)
+            st.success("Check your email for reset link")
+        except Exception:
+            st.error("Failed to send reset email")
+
+def login_page(supabase):
+    _, col, _ = st.columns([1, 2, 1])
+
+    with col:
+        st.markdown("<h2 style='text-align:center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
+
+        company = st.text_input("🏢 Company Code").strip().lower()
+        email = st.text_input("📧 Email").strip().lower()
+        password = st.text_input("🔑 Password", type="password")
+        remember = st.checkbox("Remember me")
+
+        if st.button("🚀 Login", use_container_width=True):
+            if not all([company, email, password]):
+                st.warning("Fill all fields")
+                return
+
+            result = authenticate(supabase, company, email, password)
+
+            if "error" in result:
+                st.error(result["error"])
+                log_event(supabase, None, "login", "failed", {"email": email})
+                return
+
+            create_session(result, remember)
+            log_event(supabase, result["user_id"], "login", "success")
+            st.success(f"Welcome to {result['company']}")
+            st.rerun()
+
+        if st.button("Forgot Password?"):
+            reset_password_ui(supabase)
+
+# Example usage for protected sections:
+# require_role(["admin", "manager"])
     
     # 1. Show the Sidebar and get the current page
     # Make sure you have a function called show_sidebar() defined!
