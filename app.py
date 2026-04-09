@@ -70,6 +70,106 @@ def get_cached_data(table_name):
         return pd.DataFrame()
 
 # ==============================
-# 5. GLOBAL STYLER (UNTOUCHED)
+# 2. GLOBAL STYLER (UNTOUCHED LOGIC)
 # ==============================
-# [Your existing CSS logic continues here...]
+def apply_custom_styles():
+    """
+    Applies the Zoe Consults branding to the Streamlit UI.
+    Maintains navy sidebar and specific button hover logic.
+    """
+    st.markdown(f"""
+        <style>
+            /* Sidebar Background */
+            [data-testid="stSidebar"] {{
+                background-color: {BRANDING['navy']};
+            }}
+            
+            /* Sidebar Text/Icons */
+            [data-testid="stSidebar"] * {{
+                color: white !important;
+            }}
+            
+            /* Active Tab Highlight */
+            .st-bb {{ border-bottom-color: {BRANDING['navy']}; }}
+            .st-at {{ background-color: {BRANDING['baby_blue']}; }}
+            
+            /* Main App Buttons */
+            .stButton>button {{
+                background-color: {BRANDING['navy']};
+                color: white;
+                border-radius: 8px;
+                border: none;
+                padding: 0.5rem 1rem;
+                transition: all 0.3s ease;
+            }}
+            
+            /* Button Hover Effects */
+            .stButton>button:hover {{
+                background-color: #1a285e;
+                color: {BRANDING['baby_blue']};
+                border: none;
+            }}
+
+            /* Card-like containers (Metric Boxes) */
+            div[data-testid="stMetric"] {{
+                background-color: white;
+                border: 1px solid #ddd;
+                padding: 15px;
+                border-radius: 10px;
+                box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+            }}
+        </style>
+    """, unsafe_allow_html=True)
+
+# ==============================
+# 3. DATA HELPERS (THE NEW SUPABASE ENGINE)
+# ==============================
+
+def create_pdf(html_content):
+    """Generates a PDF from HTML content using pisa."""
+    from xhtml2pdf import pisa 
+    pdf_buffer = io.BytesIO()
+    pisa.CreatePDF(io.StringIO(html_content), dest=pdf_buffer)
+    return pdf_buffer.getvalue()
+
+@st.cache_data(ttl=3600)
+def get_logo():
+    """
+    Fetches the tenant's specific logo from the 'settings' table.
+    """
+    try:
+        # We query the 'settings' table specifically for this tenant
+        response = supabase.table("settings")\
+            .select("value")\
+            .eq("tenant_id", st.session_state.tenant_id)\
+            .eq("key", "logo")\
+            .execute()
+        
+        if response.data:
+            return response.data[0]['value']
+    except Exception:
+        pass
+    return None
+
+def save_data(table_name, dataframe):
+    """
+    Saves data to Supabase. 
+    In SaaS mode, we 'upsert' (update or insert) based on tenant_id.
+    """
+    try:
+        # 1. Ensure the dataframe has the tenant_id before saving
+        dataframe['tenant_id'] = st.session_state.tenant_id
+        
+        # 2. Convert dataframe to list of dictionaries for Supabase
+        records = dataframe.to_dict(orient='records')
+        
+        # 3. Perform the Upsert
+        # Note: 'id' or a unique constraint is needed for upsert to work properly
+        supabase.table(table_name).upsert(records).execute()
+        
+        # Clear cache so the next pull is fresh
+        st.cache_data.clear() 
+        return True
+    except Exception as e:
+        st.error(f"❌ Error saving to {table_name}: {e}")
+        return False
