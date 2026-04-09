@@ -251,7 +251,7 @@ def check_session_timeout():
 # 5. THE LOGIN INTERFACE (SUPABASE POWERED)
 # ==============================
 
-elif page == "🔑 Login":
+if page == "🔑 Login":
     # Center the login form using columns
     _, col, _ = st.columns([1, 2, 1])
     
