@@ -518,21 +518,19 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. Check if the tenant already exists
+                # 1. Get or Create Tenant
                 check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
                 
                 if check.data:
-                    # If exists, grab the existing ID
                     tenant_id = check.data[0]['id']
                 else:
-                    # If it's a new company, insert it and grab the new ID
                     new_tenant = supabase.table("tenants").insert({
                         "company_code": tenant_code, 
                         "name": tenant_code.capitalize() 
                     }).execute()
                     tenant_id = new_tenant.data[0]['id']
                 
-                # 2. Sign up the user with the tenant_id in metadata
+                # 2. Sign up in Supabase Auth
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
@@ -544,18 +542,26 @@ def signup_page(supabase):
                     }
                 })
                 
+                # 3. Create the profile in your public.users table
                 if res.user:
-                    st.success("✅ Welcome! Account created. Check your email for a link.")
+                    # WE ADD THIS PART:
+                    user_profile = {
+                        "id": res.user.id, # Link to the Auth ID
+                        "tenant_id": tenant_id,
+                        "role": "Admin",
+                        "full_name": email.split('@')[0].capitalize()
+                    }
+                    
+                    # This is likely where the error was happening:
+                    supabase.table("users").insert(user_profile).execute()
+                    
+                    st.success("✅ Account created! Check your email for a confirmation link.")
                 else:
-                    # This handles cases like 'User already registered' which returns None
-                    st.error("❌ Signup failed. This email may already be in use.")
+                    st.error("❌ Signup failed. Check if the email is already registered.")
 
             except Exception as e:
+                # If it fails here, the error message will be more specific now
                 st.error(f"🚨 Database Error: {str(e)}")
-
-    if st.button("⬅️ Back to Login", key="back_nav"):
-        st.session_state.view = "login"
-        st.rerun()
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
