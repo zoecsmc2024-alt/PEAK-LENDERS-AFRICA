@@ -506,3 +506,77 @@ def save_logo_to_db(image_file):
     except Exception as e:
         st.error(f"❌ Logo Save Error: {e}")
         return False
+
+
+# ==============================
+# 10. THE SIDEBAR NAVIGATION
+# ==============================
+
+def sidebar():
+    """
+    Main Navigation Sidebar for the SaaS platform.
+    Handles tenant branding, user info, and role-based access.
+    """
+    # Safety Check: Ensure session state variables exist
+    role = st.session_state.get("role", "Staff")
+    user = st.session_state.get("user", "Guest")
+    current_page = st.session_state.get("page", "Overview")
+    # SaaS addition: Get the dynamic company name
+    company_name = st.session_state.get("company_name", "ZOE CONSULTS")
+
+    # 1. THE LOGO LOADER (Now pulling from Supabase via our get_logo helper)
+    logo_base64 = get_logo() 
+    
+    if logo_base64:
+        img_src = f"data:image/png;base64,{logo_base64}"
+        st.sidebar.markdown(f"""
+            <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                <div style="width: 85px; height: 85px; border-radius: 50%; overflow: hidden; 
+                            border: 3px solid #F0F8FF; box-shadow: 0px 0px 15px rgba(240, 248, 255, 0.3);">
+                    <img src="{img_src}" style="width: 100%; height: 100%; object-fit: cover;">
+                </div>
+            </div>
+        """, unsafe_allow_html=True)
+    
+    # 2. BRANDING & USER INFO
+    st.sidebar.markdown(f"""
+        <div style="text-align: center;">
+            <h2 style="color: #FFFFFF; margin-bottom: 0;">{company_name.upper()}</h2>
+            <div style="color: #F0F8FF; font-size: 12px; margin-top: 5px;">
+                <span style="height: 8px; width: 8px; background-color: #00ffcc; border-radius: 50%; display: inline-block; margin-right: 5px;"></span> System Online
+            </div>
+            <p style='color:#F0F8FF; font-size:14px; margin-top:10px; opacity: 0.9;'>
+                👤 <b>{user}</b> <span style='font-size: 12px;'>({role})</span>
+            </p>
+        </div>
+        <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
+    """, unsafe_allow_html=True)
+
+    # 3. NAVIGATION MENU (Untouched)
+    menu = {
+        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
+        "Calendar": "📅", "Ledger": "📄", "Overdue Tracker": "🚨",
+        "Payments": "💰", "Expenses": "📁", "PettyCash": "📉",
+        "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
+    }
+    
+    # Restricted Pages for Admin Only
+    restricted = ["Settings", "Reports", "Payroll"]
+
+    for item, icon in menu.items():
+        if role != "Admin" and item in restricted:
+            continue
+
+        # Logic check: highlight active page effect
+        is_active = current_page == item
+        
+        if st.sidebar.button(f"{icon} {item}", key=f"nav_{item}", use_container_width=True, type="secondary"):
+            st.session_state.page = item
+            st.rerun()
+
+    # 4. LOGOUT (Now also wipes tenant_id for security)
+    st.sidebar.markdown("<br><br>", unsafe_allow_html=True)
+    if st.sidebar.button("🚪 Logout", key="logout_btn", use_container_width=True):
+        # Clear all session data to ensure the next tenant starts fresh
+        st.session_state.clear()
+        st.rerun()
