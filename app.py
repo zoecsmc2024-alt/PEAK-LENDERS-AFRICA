@@ -366,12 +366,6 @@ def authenticate(supabase, company_slug, email, password):
         tenant = tenant_res.data[0]
 
         # 2. Supabase Auth
-        mode = st.radio("Select Mode", ["Login", "Sign Up"], horizontal=True)
-
-if mode == "Login":
-    login_page(supabase)
-else:
-    signup_page(supabase)
         auth_res = supabase.auth.sign_in_with_password({
             "email": email,
             "password": password
@@ -426,9 +420,14 @@ def create_session(user_data, remember=False):
         st.session_state["remember"] = True
 
 
+def get_session():
+    return st.session_state.get("user_id", None)
+
+
 def logout():
-    for key in ["logged_in", "user_id", "tenant_id", "role", "company"]:
+    for key in ["logged_in", "user_id", "tenant_id", "role", "company", "remember"]:
         st.session_state.pop(key, None)
+    st.rerun()
 
 
 def require_role(allowed_roles):
@@ -466,8 +465,6 @@ def login_page(supabase):
         company = st.text_input("🏢 Company Code").strip().lower()
         email = st.text_input("📧 Email").strip().lower()
         password = st.text_input("🔑 Password", type="password")
-
-        # Styled checkbox (color handled in CSS above)
         remember = st.checkbox("Remember me")
 
         if st.button("🚀 Login", use_container_width=True):
@@ -475,68 +472,28 @@ def login_page(supabase):
                 st.warning("Fill all fields")
                 return
 
-            if st.button("🚀 Login", use_container_width=True):
-    if not all([company, email, password]):
-        st.warning("Fill all fields")
-        return
+            # Call the auth logic
+            auth_result = authenticate(supabase, company, email, password)
 
-    try:
-        auth = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
-
-        user = auth.user
-
-        # 🔥 Fetch profile from your users table
-        profile = supabase.table("users") \
-            .select("*") \
-            .eq("id", user.id) \
-            .single() \
-            .execute()
-
-        if not profile.data:
-            st.error("User profile not found")
-            return
-
-        profile = profile.data
-
-        # 🔐 Enforce tenant (company_code)
-        if profile["company_code"] != company:
-            st.error("Invalid company code")
-            return
-
-        # ✅ Create session
-        session_data = {
-            "user_id": user.id,
-            "email": user.email,
-            "tenant_id": profile["tenant_id"],
-            "role": profile["role"],
-            "company": profile["company_code"]
-        }
-
-        create_session(session_data, remember)
-
-        log_event(supabase, user.id, "login", "success")
-        st.success(f"Welcome to {profile['company_code']}")
-        st.rerun()
-
-    except Exception as e:
-        st.error("Invalid credentials")
-        log_event(supabase, None, "login", "failed", {"email": email})
+            if "error" in auth_result:
+                st.error(auth_result["error"])
+                log_event(supabase, None, "login", "failed", {"email": email})
+            else:
+                create_session(auth_result, remember)
+                log_event(supabase, auth_result["user_id"], "login", "success")
+                st.success(f"Welcome to {auth_result['company']}")
+                st.rerun()
 
 
-# Example usage for protected sections:
-# require_role(["admin", "manager"])
-        def signup_page(supabase):
+def signup_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
 
     with col:
         st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
 
-        company = st.text_input("🏢 Company Code").strip().lower()
-        email = st.text_input("📧 Email").strip().lower()
-        password = st.text_input("🔑 Password", type="password")
+        company = st.text_input("🏢 Company Code", key="signup_company").strip().lower()
+        email = st.text_input("📧 Email", key="signup_email").strip().lower()
+        password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
         if st.button("🚀 Create Account", use_container_width=True):
             if not all([company, email, password]):
@@ -550,7 +507,7 @@ def login_page(supabase):
                     "options": {
                         "data": {
                             "company_code": company,
-                            "role": "admin"  # first user becomes admin
+                            "role": "Admin"  # first user becomes Admin
                         }
                     }
                 })
@@ -559,35 +516,20 @@ def login_page(supabase):
                 st.info("If email confirmation is ON, check your inbox.")
 
             except Exception as e:
-                st.error("Signup failed")
-
-def create_session(data, remember=False):
-    st.session_state.user = data
-    st.session_state.authenticated = True
-
-    if remember:
-        st.session_state.persist = True
+                st.error(f"Signup failed: {str(e)}")
 
 
-def get_session():
-    return st.session_state.get("user", None)
+# ==========================================
+# 9. MAIN ROUTER
+# ==========================================
+# Place this at the end of your script or in main()
+def run_auth_ui(supabase):
+    mode = st.radio("Select Mode", ["Login", "Sign Up"], horizontal=True)
 
-
-def logout():
-    st.session_state.clear()
-    st.rerun()
-
-def require_role(roles):
-    user = get_session()
-
-    if not user:
-        st.error("Not authenticated")
-        st.stop()
-
-    if user["role"] not in roles:
-        st.error("Access denied")
-        st.stop()
-
+    if mode == "Login":
+        login_page(supabase)
+    else:
+        signup_page(supabase)
 
 
 
