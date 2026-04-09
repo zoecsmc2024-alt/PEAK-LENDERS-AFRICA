@@ -13,6 +13,10 @@ import re
 from datetime import datetime, timedelta
 from fpdf import FPDF
 from streamlit_calendar import calendar
+import bcrypt
+from twilio.rest import Client
+
+
 
 # ==============================
 # 1. SUPABASE CONNECTION (SaaS REPLACEMENT)
