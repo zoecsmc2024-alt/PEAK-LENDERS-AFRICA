@@ -2101,3 +2101,96 @@ def show_ledger():
         </div>"""
         
         st.components.v1.html(html_statement, height=600, scrolling=True)
+
+
+# ==============================
+# 23. SETTINGS & BRANDING PAGE
+# ==============================
+
+def show_settings():
+    """
+    Manages tenant identity and UI branding.
+    Utilizes Supabase Storage for logos and database for brand colors.
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
+    
+    # 1. FETCH CURRENT TENANT INFO
+    # We pull from a 'tenants' table which holds the name, brand_color, and logo_url
+    try:
+        tenant_resp = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).single().execute()
+        active_company = tenant_resp.data
+    except Exception as e:
+        st.error(f"Error loading settings: {e}")
+        return
+
+    # --- BUSINESS IDENTITY SECTION (UI Intact) ---
+    st.subheader("🏢 Business Identity")
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        st.markdown(f"**Current Business Name:** {active_company.get('name', 'My Business')}")
+        
+        # Pre-set the color picker to the company's current color (fallback to Zoe Navy)
+        current_brand_color = active_company.get('brand_color', BRANDING['navy'])
+        new_color = st.color_picker("🎨 Change Brand Color", current_brand_color)
+        
+        st.markdown("**Preview:**")
+        st.markdown(
+            f"<div style='padding:15px; background-color:{new_color}; color:white; border-radius:10px; text-align:center; font-weight:bold;'>"
+            f"Brand Color Preview"
+            f"</div>", 
+            unsafe_allow_html=True
+        )
+    
+    with col2:
+        st.markdown("**Company Logo:**")
+        # Show the current logo as a thumbnail if it exists
+        if active_company.get('logo_url'):
+            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
+        else:
+            st.caption("No logo uploaded yet.")
+            
+        logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
+
+    # --- SAVE BUTTON ---
+    if st.button("💾 Save Branding Changes", use_container_width=True):
+        updated_data = {"brand_color": new_color}
+        
+        # Handle logo upload to Supabase Storage
+        if logo_file:
+            try:
+                # IMPORTANT: Ensure you have created a PUBLIC bucket named 'company-logos' in Supabase
+                bucket_name = 'company-logos'
+                file_path = f"logos/{st.session_state.tenant_id}_logo.png"
+                
+                # UPLOAD TO STORAGE
+                supabase.storage.from_(bucket_name).upload(
+                    path=file_path,
+                    file=logo_file.getvalue(),
+                    file_options={
+                        "x-upsert": "true",
+                        "content-type": "image/png"
+                    }
+                )
+                
+                # Retrieve public URL
+                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                updated_data["logo_url"] = logo_url
+                
+            except Exception as e:
+                st.error(f"❌ Storage Error: {str(e)}")
+                st.stop()
+        
+        # Update the database record for this tenant
+        try:
+            supabase.table("tenants").update(updated_data).eq("id", st.session_state.tenant_id).execute()
+            
+            st.success("✅ Branding updated successfully!")
+            st.info("Applying your new brand identity...")
+            
+            # Clear cache so get_logo() and sidebar() pick up changes immediately
+            st.cache_data.clear()
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Database Error: {str(e)}")
