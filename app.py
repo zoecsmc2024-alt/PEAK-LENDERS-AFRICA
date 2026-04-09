@@ -209,8 +209,43 @@ def save_data(table_name, dataframe):
 # 4. SECURITY & SESSION MANAGEMENT (SaaS Version)
 # ==============================
 
+import streamlit as st
+from datetime import datetime, timedelta
+
 SESSION_TIMEOUT = 15  # Minutes
 
+# ==========================================
+# 🎨 GLOBAL UI STYLING (Buttons + Checkbox)
+# ==========================================
+st.markdown("""
+    <style>
+    /* Login Button */
+    div.stButton > button:first-child {
+        background-color: #4CAF50;
+        color: white;
+        font-weight: bold;
+        border-radius: 8px;
+        height: 3em;
+    }
+
+    /* Hover effect */
+    div.stButton > button:hover {
+        background-color: #45a049;
+        color: white;
+    }
+
+    /* Remember Me Checkbox */
+    div[data-testid="stCheckbox"] > label {
+        color: #1f77b4;
+        font-weight: 600;
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+
+# ==========================================
+# 1. PASSWORD VERIFICATION (LEGACY SUPPORT)
+# ==========================================
 def verify_password(input_password, stored_hash):
     """
     STILL INTACT: Though Supabase Auth usually handles this, 
@@ -221,6 +256,10 @@ def verify_password(input_password, stored_hash):
     except Exception:
         return False
 
+
+# ==========================================
+# 2. SESSION TIMEOUT MANAGEMENT
+# ==========================================
 def check_session_timeout():
     """
     Quietly monitors inactivity. 
@@ -247,17 +286,16 @@ def check_session_timeout():
     
     st.session_state.last_activity = now
 
-import streamlit as st
-from datetime import datetime, timedelta
 
 # ==========================================
-# 1. CONFIGURATION & CONSTANTS
+# 3. CONFIGURATION & CONSTANTS
 # ==========================================
 MAX_ATTEMPTS = 5
 LOCKOUT_MINUTES = 10
 
+
 # ==========================================
-# 2. RATE LIMITING UTILITIES
+# 4. RATE LIMITING UTILITIES
 # ==========================================
 def check_rate_limit(email):
     attempts = st.session_state.get("login_attempts", {})
@@ -274,18 +312,21 @@ def check_rate_limit(email):
 
     return True
 
+
 def record_failed_attempt(email):
     attempts = st.session_state.setdefault("login_attempts", {})
     count, _ = attempts.get(email, (0, datetime.now()))
     attempts[email] = (count + 1, datetime.now())
+
 
 def reset_attempts(email):
     attempts = st.session_state.get("login_attempts", {})
     if email in attempts:
         del attempts[email]
 
+
 # ==========================================
-# 3. AUDIT LOGGING
+# 5. AUDIT LOGGING
 # ==========================================
 def log_event(supabase, user_id, event, status, meta=None):
     try:
@@ -299,8 +340,9 @@ def log_event(supabase, user_id, event, status, meta=None):
     except Exception:
         pass  # Silently fail logging to prevent app crashes
 
+
 # ==========================================
-# 4. CORE AUTHENTICATION LOGIC
+# 6. CORE AUTHENTICATION LOGIC
 # ==========================================
 def authenticate(supabase, company_slug, email, password):
     # Rate limit check
@@ -362,8 +404,9 @@ def authenticate(supabase, company_slug, email, password):
     except Exception:
         return {"error": "Login failed."}
 
+
 # ==========================================
-# 5. SESSION & RBAC MANAGEMENT
+# 7. SESSION & RBAC MANAGEMENT
 # ==========================================
 def create_session(user_data, remember=False):
     st.session_state.update({
@@ -376,9 +419,11 @@ def create_session(user_data, remember=False):
     if remember:
         st.session_state["remember"] = True
 
+
 def logout():
     for key in ["logged_in", "user_id", "tenant_id", "role", "company"]:
         st.session_state.pop(key, None)
+
 
 def require_role(allowed_roles):
     """Call this at the top of protected pages"""
@@ -390,8 +435,9 @@ def require_role(allowed_roles):
         st.error("Unauthorized")
         st.stop()
 
+
 # ==========================================
-# 6. UI COMPONENTS
+# 8. UI COMPONENTS
 # ==========================================
 def reset_password_ui(supabase):
     st.subheader("Reset Password")
@@ -404,6 +450,7 @@ def reset_password_ui(supabase):
         except Exception:
             st.error("Failed to send reset email")
 
+
 def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
 
@@ -413,6 +460,8 @@ def login_page(supabase):
         company = st.text_input("🏢 Company Code").strip().lower()
         email = st.text_input("📧 Email").strip().lower()
         password = st.text_input("🔑 Password", type="password")
+
+        # Styled checkbox (color handled in CSS above)
         remember = st.checkbox("Remember me")
 
         if st.button("🚀 Login", use_container_width=True):
@@ -435,40 +484,45 @@ def login_page(supabase):
         if st.button("Forgot Password?"):
             reset_password_ui(supabase)
 
+
 # Example usage for protected sections:
 # require_role(["admin", "manager"])
-    
-    # 1. Show the Sidebar and get the current page
-    # Make sure you have a function called show_sidebar() defined!
-    current_page = show_sidebar() 
-    
-    # 3. Route to the correct module based on the selection
-    if current_page == "📊 Overview":
-        show_overview()
-    elif current_page == "💵 Loans":
-        show_loans()
-    elif current_page == "👥 Borrowers":
-        show_borrowers()
-    elif current_page == "🛡️ Collateral":
-        show_collateral()
-    elif current_page == "📅 Calendar":
-        show_calendar()
-    elif current_page == "📄 Ledger":
-        show_ledger()
-    elif current_page == "🚨 Overdue Tracker":
-        show_overdue_tracker()
-    elif current_page == "💰 Payments":
-        show_payments()
-    elif current_page == "📁 Expenses":
-        show_expenses()
-    elif current_page == "📉 PettyCash":
-        show_petty_cash()
-    elif current_page == "🧾 Payroll":
-        show_payroll()
-    elif current_page == "📈 Reports":
-        show_reports()
-    elif current_page == "⚙️ Settings":
-        show_settings()
+
+
+# ==========================================
+# 9. APP ROUTING (POST-LOGIN)
+# ==========================================
+# 1. Show the Sidebar and get the current page
+# Make sure you have a function called show_sidebar() defined!
+current_page = show_sidebar() 
+
+# 3. Route to the correct module based on the selection
+if current_page == "📊 Overview":
+    show_overview()
+elif current_page == "💵 Loans":
+    show_loans()
+elif current_page == "👥 Borrowers":
+    show_borrowers()
+elif current_page == "🛡️ Collateral":
+    show_collateral()
+elif current_page == "📅 Calendar":
+    show_calendar()
+elif current_page == "📄 Ledger":
+    show_ledger()
+elif current_page == "🚨 Overdue Tracker":
+    show_overdue_tracker()
+elif current_page == "💰 Payments":
+    show_payments()
+elif current_page == "📁 Expenses":
+    show_expenses()
+elif current_page == "📉 PettyCash":
+    show_petty_cash()
+elif current_page == "🧾 Payroll":
+    show_payroll()
+elif current_page == "📈 Reports":
+    show_reports()
+elif current_page == "⚙️ Settings":
+    show_settings()
 
 
 # ==============================
