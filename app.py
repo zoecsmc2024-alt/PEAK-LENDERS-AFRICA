@@ -518,50 +518,59 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. Get or Create Tenant
-                check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
-                
-                if check.data:
-                    tenant_id = check.data[0]['id']
-                else:
-                    new_tenant = supabase.table("tenants").insert({
-                        "company_code": tenant_code, 
-                        "name": tenant_code.capitalize() 
-                    }).execute()
-                    tenant_id = new_tenant.data[0]['id']
-                
-                # 2. Sign up in Supabase Auth
-                res = supabase.auth.sign_up({
-                    "email": email,
-                    "password": password,
-                    "options": {
-                        "data": {
-                            "tenant_id": str(tenant_id),
-                            "role": "Admin"
-                        }
-                    }
-                })
-                
-                # 3. Create the profile in your public.users table
-                if res.user:
-                    # WE ADD THIS PART:
-                    user_profile = {
-                        "id": res.user.id, # Link to the Auth ID
-                        "tenant_id": tenant_id,
-                        "role": "Admin",
-                        "full_name": email.split('@')[0].capitalize()
-                    }
-                    
-                    # This is likely where the error was happening:
-                    supabase.table("users").insert(user_profile).execute()
-                    
-                    st.success("✅ Account created! Check your email for a confirmation link.")
-                else:
-                    st.error("❌ Signup failed. Check if the email is already registered.")
+    # 1. GET OR CREATE TENANT
+    # We check if company exists; if not, we create it.
+    check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
+    
+    if check.data and len(check.data) > 0:
+        tenant_id = check.data[0]['id']
+    else:
+        # Create new tenant and get the ID back
+        new_tenant = supabase.table("tenants").insert({
+            "company_code": tenant_code, 
+            "name": tenant_code.capitalize() 
+        }).execute()
+        if not new_tenant.data:
+            st.error("Failed to create Company record.")
+            st.stop()
+        tenant_id = new_tenant.data[0]['id']
 
-            except Exception as e:
-                # If it fails here, the error message will be more specific now
-                st.error(f"🚨 Database Error: {str(e)}")
+    # 2. SIGN UP IN SUPABASE AUTH
+    # This creates the user in the internal 'auth.users' table
+    res = supabase.auth.sign_up({
+        "email": email,
+        "password": password,
+        "options": {
+            "data": {
+                "tenant_id": str(tenant_id),
+                "role": "Admin"
+            }
+        }
+    })
+
+    # 3. CREATE PUBLIC PROFILE
+    # This is where your error likely was. We must use the ID from 'res.user'
+    if res.user:
+        user_profile = {
+            "id": res.user.id, # The UUID from Supabase Auth
+            "tenant_id": tenant_id, # The UUID from our Tenants table
+            "role": "Admin",
+            "full_name": email.split('@')[0].capitalize()
+        }
+        
+        # Insert into the public.users table
+        profile_response = supabase.table("users").insert(user_profile).execute()
+        
+        if profile_response.data:
+            st.success("✅ Account created! Please check your email for a confirmation link.")
+        else:
+            st.error("Auth created, but profile failed. Check database RLS.")
+    else:
+        st.error("Signup failed. Email might be taken or password too weak.")
+
+except Exception as e:
+    # This will now tell you exactly which table or column failed
+    st.error(f"🚨 Database Error: {str(e)}")
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
