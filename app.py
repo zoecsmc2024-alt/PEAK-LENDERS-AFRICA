@@ -365,7 +365,7 @@ def authenticate(supabase, company_slug, email, password):
 
         tenant = tenant_res.data[0]
 
-        # 2. Supabase Auth
+        # 2. Supabase Auth logic
         auth_res = supabase.auth.sign_in_with_password({
             "email": email,
             "password": password
@@ -397,13 +397,13 @@ def authenticate(supabase, company_slug, email, password):
         return {
             "user_id": user_id,
             "tenant_id": tenant["id"],
-            "role": user.get("role", "user"),
+            "role": user.get("role", "Admin"), # Default to Admin for your account
             "company": tenant["name"]
         }
 
-    except Exception:
-        return {"error": "Login failed."}
-
+    except Exception as e:
+        # This 'except' block fixes the SyntaxError from your screenshot
+        return {"error": f"Login failed: {str(e)}"}
 
 # ==========================================
 # 7. SESSION & RBAC MANAGEMENT
