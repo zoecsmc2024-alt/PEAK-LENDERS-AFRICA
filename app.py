@@ -365,3 +365,144 @@ def generate_ledger_pdf(loan_data, ledger_df):
         pdf.cell(35, 8, f"{clean_num(row.get('Balance', 0)):,.0f}", 1, 1, 'R')
 
     return pdf.output(dest='S').encode('latin-1')
+
+
+# ==============================
+# 8. SYSTEM & UI CONFIGURATION
+# ==============================
+
+def apply_ui_theme():
+    """
+    Applies the Zoe Consults / SaaS UI theme.
+    Logic and CSS are preserved exactly.
+    """
+    st.markdown("""
+    <style>
+        /* 1. PAGE LAYOUT: FULL WIDTH */
+        .block-container {
+            max-width: 100% !important;
+            padding-top: 2rem !important;
+            padding-bottom: 2rem !important;
+            padding-left: 5rem !important;
+            padding-right: 5rem !important;
+        }
+
+        /* 2. MAIN APP BACKGROUND */
+        .stApp {
+            background-color: #F0F8FF !important; /* Baby Blue Page BG */
+        }
+
+        /* 3. THE DEEP BLUE SIDEBAR */
+        [data-testid="stSidebar"] {
+            background-color: #0A192F !important; /* Deep Midnight Blue */
+            min-width: 260px !important;
+        }
+
+        /* Sidebar Branding Text */
+        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] p, [data-testid="stSidebar"] b {
+            color: #F0F8FF !important;
+        }
+
+        /* 4. REMOVE BUTTON BOXES - TEXT ONLY NAV */
+        section[data-testid="stSidebar"] .stButton > button {
+            background-color: transparent !important;
+            color: #F0F8FF !important; 
+            border: none !important;     
+            box-shadow: none !important; 
+            width: 100% !important;
+            text-align: left !important;
+            padding: 8px 15px !important;
+            margin-bottom: 5px !important;
+            font-size: 16px !important;
+            font-weight: 400 !important;
+            transition: all 0.3s ease !important;
+        }
+
+        /* Hover Effect: Text Glows & Slides Right Slightly */
+        section[data-testid="stSidebar"] .stButton > button:hover {
+            color: #FFFFFF !important; 
+            background-color: rgba(240, 248, 255, 0.1) !important; 
+            padding-left: 25px !important; 
+            text-decoration: none !important;
+        }
+
+        /* Active Page Indicator */
+        section[data-testid="stSidebar"] .stButton > button:focus {
+            color: #FFFFFF !important;
+            font-weight: 700 !important;
+            background-color: transparent !important;
+        }
+
+        /* 5. METRIC CARDS */
+        div[data-testid="stMetric"] {
+            background-color: #FFFFFF !important;
+            border: 1px solid #E0E0E0 !important;
+            border-left: 8px solid #0A192F !important; 
+            border-radius: 12px !important;
+            padding: 20px !important;
+        }
+
+        /* 6. HIDE THE DEFAULT OVERLAY ON HOVER */
+        button:focus:not(:focus-visible) {
+            outline: none !important;
+            box-shadow: none !important;
+        }
+        
+    </style>
+    """, unsafe_allow_html=True)
+
+# Execute the UI theme application
+apply_ui_theme()
+
+# ==============================
+# 9. UTILITY FUNCTIONS (SaaS TRANSFORMED)
+# ==============================
+
+def send_whatsapp(phone, msg):
+    """
+    Sends a WhatsApp message via Twilio.
+    Maintains your exact logic but ensures it pulls from SaaS-wide secrets.
+    """
+    try:
+        # Pulling from st.secrets (Ensure these are in your Streamlit Cloud secrets)
+        client_tw = TwilioClient(st.secrets["TWILIO_SID"], st.secrets["TWILIO_TOKEN"])
+        
+        target_phone = f'whatsapp:{phone}'
+        
+        client_tw.messages.create(
+            from_=st.secrets.get("TWILIO_WHATSAPP_FROM", 'whatsapp:+14155238886'),
+            body=msg,
+            to=target_phone
+        )
+        return True
+    except Exception as e:
+        st.error(f"⚠️ WhatsApp failed to send: {e}")
+        return False
+
+def save_logo_to_db(image_file):
+    """
+    SAAS VERSION: Saves the logo to the Supabase 'settings' table 
+    associated with the specific tenant_id.
+    """
+    try:
+        # Convert image to Base64 string
+        image_file.seek(0)
+        encoded = base64.b64encode(image_file.read()).decode()
+        
+        # Upsert the logo specifically for this tenant
+        # We target the row where key='logo' AND tenant_id is the user's ID
+        data = {
+            "tenant_id": st.session_state.tenant_id,
+            "key": "logo",
+            "value": encoded
+        }
+        
+        # In Supabase, we upsert based on a unique constraint (tenant_id + key)
+        supabase.table("settings").upsert(data, on_conflict="tenant_id, key").execute()
+        
+        # Clear cache so the UI reflects the new logo immediately
+        st.cache_data.clear() 
+        return True
+    except Exception as e:
+        st.error(f"❌ Logo Save Error: {e}")
+        return False
