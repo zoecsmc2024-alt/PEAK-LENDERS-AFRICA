@@ -251,55 +251,46 @@ def check_session_timeout():
 # 5. THE LOGIN INTERFACE (SUPABASE POWERED)
 # ==============================
 
-def login_page():
-    """
-    A clean, centered login page.
-    Transformed to use Supabase Auth for multi-tenancy.
-    """
-    apply_custom_styles()
+elif page == "🔑 Login":
+    # Center the login form using columns
+    _, col, _ = st.columns([1, 2, 1])
     
-    st.markdown("<h2 style='text-align: center; color: #2B3F87;'>🔐 ZOE CONSULTS LOGIN</h2>", unsafe_allow_html=True)
-    
-    with st.container():
-        # We use email for Supabase Auth instead of just 'Username'
-        email_input = st.text_input("Email Address", placeholder="e.g., admin@client.com")
-        p_input = st.text_input("Password", type="password", placeholder="Enter password")
+    with col:
+        st.markdown("<h2 style='text-align: center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
         
-        col1, col2, col3 = st.columns([1, 2, 1])
-        with col2:
-            if st.button("🚀 Access System", use_container_width=True):
+        # --- THE MULTI-TENANT ADDITION ---
+        company_slug = st.text_input("🏢 Company Code", placeholder="e.g., peak-lenders").lower().strip()
+        email = st.text_input("📧 Email Address", placeholder="admin@client.com")
+        password = st.text_input("🔑 Password", type="password")
+        
+        if st.button("🚀 Access Portal", use_container_width=True):
+            if not company_slug or not email or not password:
+                st.warning("Please fill in all fields.")
+            else:
                 try:
-                    # SUPABASE AUTH SIGN IN
-                    auth_response = supabase.auth.sign_in_with_password({
-                        "email": email_input,
-                        "password": p_input
-                    })
+                    # 1. First, verify the Company Code exists
+                    tenant_check = supabase.table("tenants").select("*").eq("name", company_slug).execute()
                     
-                    if auth_response.user:
-                        # 1. Set basic login state
-                        st.session_state.logged_in = True
-                        st.session_state.user = email_input
-                        st.session_state.last_activity = datetime.now()
+                    if not tenant_check.data:
+                        st.error("Invalid Company Code.")
+                    else:
+                        # 2. Proceed with Supabase Auth
+                        auth_response = supabase.auth.sign_in_with_password({"email": email, "password": password})
                         
-                        # 2. Link User to Tenant ID
-                        # We assume your 'users' table links auth.uid to a tenant
-                        user_data = supabase.table("users")\
-                            .select("tenant_id, role")\
-                            .eq("id", auth_response.user.id)\
-                            .single().execute()
+                        # 3. Verify user belongs to THIS specific tenant
+                        user_id = auth_response.user.id
+                        user_check = supabase.table("users").select("*").eq("id", user_id).eq("tenant_id", tenant_check.data[0]['id']).execute()
                         
-                        if user_data.data:
-                            st.session_state.tenant_id = user_data.data['tenant_id']
-                            st.session_state.role = user_data.data['role']
-                            st.success(f"Welcome back! {st.session_state.role} access granted. ✨")
+                        if user_check.data:
+                            st.session_state.tenant_id = tenant_check.data[0]['id']
+                            st.session_state.logged_in = True
+                            st.success(f"Welcome back to {company_slug} portal!")
                             st.rerun()
                         else:
-                            st.error("Account active but no Tenant linked. Contact Zoe Admin.")
-                
+                            st.error("You do not have access to this organization.")
+                            
                 except Exception as e:
-                    # If auth fails, we drop to the error message
-                    st.error("❌ Access Denied. Check credentials.")
-
+                    st.error(f"Login failed: {str(e)}")
 # ==============================
 # 6. THE AUTH GATEKEEPER (Main Script Entry)
 # ==============================
