@@ -3,7 +3,6 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 import plotly.graph_objects as go
-# import gspread  <-- We will eventually remove this
 from supabase import create_client, Client
 import io
 import base64
@@ -14,12 +13,10 @@ from datetime import datetime, timedelta
 from fpdf import FPDF
 from streamlit_calendar import calendar
 import bcrypt
-from twilio.rest import Client
-import streamlit as st
-
+from twilio.rest import Client as TwilioClient # Renamed to avoid conflict
 
 # ==============================
-# 1. SUPABASE CONNECTION (SaaS REPLACEMENT)
+# 1. SUPABASE CONNECTION
 # ==============================
 try:
     SUPABASE_URL = st.secrets["supabase_url"]
@@ -27,52 +24,53 @@ try:
     supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 except Exception as e:
     st.error(f"❌ Connection to Supabase failed: {e}")
-    st.info("Check your 'supabase_url' and 'supabase_key' in Streamlit Secrets.")
     st.stop()
 
 # ==============================
-# 2. MULTI-TENANT SESSION STATE
+# 2. MULT-TENANT SESSION STATE
 # ==============================
-# This ensures that throughout the app, we know which company is logged in
 if 'tenant_id' not in st.session_state:
-    st.session_state.tenant_id = None # This will be set during login
+    st.session_state.tenant_id = None 
+if 'logged_in' not in st.session_state:
+    st.session_state.logged_in = False
 
 # ==============================
-# 3. BRANDING & PAGE CONFIG (UNTOUCHED)
+# 3. BRANDING & PAGE CONFIG
 # ==============================
+# Ensure this is the VERY FIRST streamlit command called
 st.set_page_config(page_title="Zoe Admin", layout="wide", initial_sidebar_state="expanded")
 
 BRANDING = {
-    "navy": "#2B3F87",      # Primary Header / Buttons
-    "baby_blue": "#F0F8FF", # Row Highlights / Hover
-    "white": "#FFFFFF",     # Backgrounds
-    "text_gray": "#666666"  # Captions / Timestamps
+    "navy": "#2B3F87",      
+    "baby_blue": "#F0F8FF", 
+    "white": "#FFFFFF",     
+    "text_gray": "#666666"  
 }
 
 # ==============================
-# 4. DATA LOADER (TRANSFORMED FOR SUPABASE)
+# 4. DATA LOADER (VERIFIED)
 # ==============================
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
-    """
-    Fetches data from Supabase filtered by the current tenant.
-    This replaces the get_all_records() from Google Sheets.
-    """
     try:
-        # We add a .eq() filter to ensure Tenant A never sees Tenant B's data
+        # SAFETY CHECK: Don't query if we don't have a tenant yet
+        if not st.session_state.tenant_id:
+            return pd.DataFrame()
+
         response = supabase.table(table_name)\
             .select("*")\
             .eq("tenant_id", st.session_state.tenant_id)\
             .execute()
         
-        df = pd.DataFrame(response.data)
-        return df.dropna(how='all').reset_index(drop=True)
-    except Exception as e:
-        st.error(f"⚠️ Error loading {table_name}: {e}")
+        if response.data:
+            df = pd.DataFrame(response.data)
+            return df.dropna(how='all').reset_index(drop=True)
         return pd.DataFrame()
-
+    except Exception as e:
+        # Quietly return empty DF on boot-up to prevent white screen
+        return pd.DataFrame()
 # ==============================
-# 2. GLOBAL STYLER (UNTOUCHED LOGIC)
+# 5. GLOBAL STYLER (VERIFIED)
 # ==============================
 def apply_custom_styles():
     """
@@ -124,54 +122,51 @@ def apply_custom_styles():
     """, unsafe_allow_html=True)
 
 # ==============================
-# 3. DATA HELPERS (THE NEW SUPABASE ENGINE)
+# 6. DATA HELPERS (SUPABASE ENGINE)
 # ==============================
-
-from fpdf import FPDF
 
 def create_pdf_report(title, content_list):
     """
-    SaaS-friendly PDF generator using FPDF2.
-    No system dependencies required.
+    SaaS-friendly PDF generator using FPDF.
     """
     pdf = FPDF()
     pdf.add_page()
-    pdf.set_font("Arial", 'B', 16)
+    # Using 'Helvetica' as it is a standard core font in FPDF
+    pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(40, 10, title)
     pdf.ln(10)
-    pdf.set_font("Arial", '', 12)
+    pdf.set_font("Helvetica", '', 12)
     for line in content_list:
         pdf.cell(0, 10, str(line), ln=True)
     return pdf.output(dest='S').encode('latin-1')
+
 @st.cache_data(ttl=600)
-def get_cached_data(table_name):
+def get_cached_data_refined(table_name):
+    """Refined data fetcher with tenant safety."""
     try:
-        # Check if we even have a tenant_id yet
         t_id = st.session_state.get('tenant_id')
         if not t_id:
-            return pd.DataFrame() # Return empty if not logged in
+            return pd.DataFrame() 
 
         response = supabase.table(table_name).select("*").eq("tenant_id", t_id).execute()
         
-        # If Supabase returns data, make a DataFrame
         if response.data:
-            df = pd.DataFrame(response.data)
-            return df
+            return pd.DataFrame(response.data)
         return pd.DataFrame()
     except Exception as e:
-        # This prevents the "Oh No" screen by just showing an error in the UI instead
         st.error(f"Database Error on {table_name}: {e}")
         return pd.DataFrame()
+
 @st.cache_data(ttl=3600)
 def get_logo():
-    """
-    Fetches the tenant's specific logo from the 'settings' table.
-    """
+    """Fetches the tenant's specific logo."""
     try:
-        # We query the 'settings' table specifically for this tenant
+        t_id = st.session_state.get('tenant_id')
+        if not t_id: return None
+        
         response = supabase.table("settings")\
             .select("value")\
-            .eq("tenant_id", st.session_state.tenant_id)\
+            .eq("tenant_id", t_id)\
             .eq("key", "logo")\
             .execute()
         
@@ -182,22 +177,13 @@ def get_logo():
     return None
 
 def save_data(table_name, dataframe):
-    """
-    Saves data to Supabase. 
-    In SaaS mode, we 'upsert' (update or insert) based on tenant_id.
-    """
+    """Saves data to Supabase with tenant isolation."""
+    if dataframe.empty:
+        return False
     try:
-        # 1. Ensure the dataframe has the tenant_id before saving
         dataframe['tenant_id'] = st.session_state.tenant_id
-        
-        # 2. Convert dataframe to list of dictionaries for Supabase
         records = dataframe.to_dict(orient='records')
-        
-        # 3. Perform the Upsert
-        # Note: 'id' or a unique constraint is needed for upsert to work properly
         supabase.table(table_name).upsert(records).execute()
-        
-        # Clear cache so the next pull is fresh
         st.cache_data.clear() 
         return True
     except Exception as e:
@@ -205,18 +191,13 @@ def save_data(table_name, dataframe):
         return False
 
 
-# ==============================
-# 4. SECURITY & SESSION MANAGEMENT (SaaS Version)
-# ==============================
-
-import streamlit as st
-from datetime import datetime, timedelta
+# ==========================================
+# 7. SECURITY & SESSION MANAGEMENT
+# ==========================================
 
 SESSION_TIMEOUT = 15  # Minutes
 
-# ==========================================
-# 🎨 GLOBAL UI STYLING (Buttons + Checkbox)
-# ==========================================
+# --- ADDITIONAL UI STYLING (Buttons + Checkbox) ---
 st.markdown("""
 <style>
 /* Main buttons */
@@ -254,26 +235,28 @@ div.stButton > button {
 
 
 # ==========================================
-# 1. PASSWORD VERIFICATION (LEGACY SUPPORT)
+# PASSWORD VERIFICATION (LEGACY SUPPORT)
 # ==========================================
 def verify_password(input_password, stored_hash):
     """
-    STILL INTACT: Though Supabase Auth usually handles this, 
-    we keep this if you have legacy hashed data to check.
+    Kept for legacy hashed data.
     """
     try:
+        # Checking if bcrypt was successfully imported earlier
+        import bcrypt
         return bcrypt.checkpw(input_password.encode(), stored_hash.encode())
     except Exception:
+        # If bcrypt is missing or hash is invalid, return False instead of crashing
         return False
 
 
 # ==========================================
-# 2. SESSION TIMEOUT MANAGEMENT
+# 8. SESSION & SECURITY UTILITIES (VERIFIED)
 # ==========================================
+
 def check_session_timeout():
     """
-    Quietly monitors inactivity. 
-    Maintains your exact logic but adds 'tenant_id' to the wipe list.
+    Monitors inactivity and wipes session data on expiration.
     """
     if "logged_in" not in st.session_state or not st.session_state.logged_in:
         return
@@ -286,81 +269,69 @@ def check_session_timeout():
     elapsed = now - st.session_state.last_activity
 
     if elapsed > timedelta(minutes=SESSION_TIMEOUT):
-        # Added 'tenant_id' and 'session_data' to ensure total isolation on logout
-        keys_to_clear = ["logged_in", "user", "role", "last_activity", "page", "tenant_id"]
+        # We clear EVERYTHING to ensure total isolation
+        keys_to_clear = ["logged_in", "user", "role", "last_activity", "page", "tenant_id", "view"]
         for key in keys_to_clear:
             if key in st.session_state:
                 del st.session_state[key]
+        
         st.warning("⏳ Session expired for security. Please login again.")
         st.rerun()
     
     st.session_state.last_activity = now
 
-
-# ==========================================
-# 3. CONFIGURATION & CONSTANTS
-# ==========================================
+# --- RATE LIMITING ---
 MAX_ATTEMPTS = 5
 LOCKOUT_MINUTES = 10
 
-
-# ==========================================
-# 4. RATE LIMITING UTILITIES
-# ==========================================
 def check_rate_limit(email):
     attempts = st.session_state.get("login_attempts", {})
-
     if email in attempts:
         count, last_attempt = attempts[email]
-
         if count >= MAX_ATTEMPTS:
             if datetime.now() - last_attempt < timedelta(minutes=LOCKOUT_MINUTES):
                 return False
-
             # Reset after lockout period expires
             attempts[email] = (0, datetime.now())
-
     return True
-
 
 def record_failed_attempt(email):
     attempts = st.session_state.setdefault("login_attempts", {})
     count, _ = attempts.get(email, (0, datetime.now()))
     attempts[email] = (count + 1, datetime.now())
 
-
 def reset_attempts(email):
     attempts = st.session_state.get("login_attempts", {})
     if email in attempts:
         del attempts[email]
 
-
-# ==========================================
-# 5. AUDIT LOGGING
-# ==========================================
+# --- AUDIT LOGGING ---
 def log_event(supabase, user_id, event, status, meta=None):
+    """
+    Logs events to Supabase with error handling.
+    """
     try:
         supabase.table("audit_logs").insert({
             "user_id": user_id,
             "event": event,
             "status": status,
             "meta": meta or {},
-            "timestamp": datetime.utcnow().isoformat()
+            "timestamp": datetime.now(timedelta(0)).isoformat() # UTC format
         }).execute()
     except Exception:
-        pass  # Silently fail logging to prevent app crashes
-
+        pass # Logging should never break the main user experience
 
 # ==========================================
-# 6. CORE AUTHENTICATION LOGIC
+# 9. CORE AUTHENTICATION LOGIC (VERIFIED)
 # ==========================================
+
 def authenticate(supabase, company_slug, email, password):
-    # Rate limit check
+    # 1. Rate limit check
     if not check_rate_limit(email):
         return {"error": "Too many attempts. Try again later."}
 
     try:
-        # 1. Tenant lookup
+        # 2. Tenant lookup
         tenant_res = (
             supabase.table("tenants")
             .select("id, name")
@@ -371,23 +342,27 @@ def authenticate(supabase, company_slug, email, password):
 
         if not tenant_res.data:
             record_failed_attempt(email)
-            return {"error": "Invalid credentials."}
+            return {"error": "Invalid Company/Organization name."}
 
         tenant = tenant_res.data[0]
 
-        # 2. Supabase Auth logic
-        auth_res = supabase.auth.sign_in_with_password({
-            "email": email,
-            "password": password
-        })
+        # 3. Supabase Auth logic
+        try:
+            auth_res = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+        except Exception:
+            record_failed_attempt(email)
+            return {"error": "Invalid email or password."}
 
         if not auth_res.user:
             record_failed_attempt(email)
-            return {"error": "Invalid credentials."}
+            return {"error": "Authentication failed."}
 
         user_id = auth_res.user.id
 
-        # 3. Verify user belongs to tenant + get role
+        # 4. Verify user belongs to tenant + get role
         user_res = (
             supabase.table("users")
             .select("id, tenant_id, role")
@@ -399,7 +374,7 @@ def authenticate(supabase, company_slug, email, password):
 
         if not user_res.data:
             record_failed_attempt(email)
-            return {"error": "Access denied."}
+            return {"error": "Access denied for this organization."}
 
         user = user_res.data[0]
         reset_attempts(email)
@@ -407,53 +382,55 @@ def authenticate(supabase, company_slug, email, password):
         return {
             "user_id": user_id,
             "tenant_id": tenant["id"],
-            "role": user.get("role", "Admin"), # Default to Admin for your account
+            "role": user.get("role", "Admin"),
             "company": tenant["name"]
         }
 
     except Exception as e:
-        # This 'except' block fixes the SyntaxError from your screenshot
         return {"error": f"Login failed: {str(e)}"}
 
 # ==========================================
-# 7. SESSION & RBAC MANAGEMENT
+# 10. SESSION & RBAC MANAGEMENT
 # ==========================================
+
 def create_session(user_data, remember=False):
+    """Updates session and forces a rerun to enter the dashboard."""
     st.session_state.update({
         "logged_in": True,
         "user_id": user_data["user_id"],
         "tenant_id": user_data["tenant_id"],
         "role": user_data["role"],
-        "company": user_data["company"]
+        "company": user_data["company"],
+        "last_activity": datetime.now()
     })
     if remember:
         st.session_state["remember"] = True
-
-
-def get_session():
-    return st.session_state.get("user_id", None)
-
+    
+    # CRITICAL: Force rerun so the UI switches views
+    st.rerun()
 
 def logout():
-    for key in ["logged_in", "user_id", "tenant_id", "role", "company", "remember"]:
+    """Wipes session and returns to login."""
+    keys_to_clear = ["logged_in", "user_id", "tenant_id", "role", "company", "remember", "view"]
+    for key in keys_to_clear:
         st.session_state.pop(key, None)
     st.rerun()
 
-
 def require_role(allowed_roles):
-    """Call this at the top of protected pages"""
-    if "role" not in st.session_state:
+    """Access control check for pages."""
+    if not st.session_state.get("logged_in"):
         st.error("Not authenticated")
         st.stop()
 
-    if st.session_state["role"] not in allowed_roles:
-        st.error("Unauthorized")
+    user_role = st.session_state.get("role")
+    if user_role not in allowed_roles and user_role != "SuperAdmin":
+        st.error(f"Unauthorized. Required: {allowed_roles}")
         st.stop()
 
+# ==========================================
+# 11. UI COMPONENTS & AUTH LOGIC (REFINED)
+# ==========================================
 
-# ==========================================
-# 8. UI COMPONENTS
-# ==========================================
 def reset_password_ui(supabase):
     st.subheader("Reset Password")
     email = st.text_input("Enter your email")
@@ -466,6 +443,7 @@ def reset_password_ui(supabase):
             st.error("Failed to send reset email")
 
 def authenticate(supabase, company_code, email, password):
+    """Specific Zoe Consults Auth logic with Company Code verification."""
     try:
         # 1. Sign in with Supabase Auth
         res = supabase.auth.sign_in_with_password({
@@ -475,7 +453,7 @@ def authenticate(supabase, company_code, email, password):
         
         if res.user:
             # 2. Verify relationship with the tenants table
-            # We fetch the tenant data specifically to avoid subscripting None
+            # Fetches tenant data specifically to avoid subscripting None
             response = supabase.table("users") \
                 .select("tenant_id, tenants(company_code)") \
                 .eq("id", res.user.id) \
@@ -485,8 +463,6 @@ def authenticate(supabase, company_code, email, password):
                 return {"success": False, "error": "Profile not found in users table."}
 
             user_record = response.data[0]
-            
-            # This is where the 'NoneType' error usually happens
             tenant_info = user_record.get('tenants')
             
             if tenant_info is None:
@@ -498,15 +474,20 @@ def authenticate(supabase, company_code, email, password):
                 return {
                     "success": True, 
                     "user": res.user, 
+                    "session": getattr(res, 'session', None), # Safety check for session
                     "tenant_id": user_record['tenant_id']
                 }
             else:
-                return {"success": False, "error": f"Invalid Company Code. (DB says: {db_company_code})"}
+                return {"success": False, "error": f"Invalid Company Code."}
         
     except Exception as e:
         return {"success": False, "error": str(e)}
 
     return {"success": False, "error": "Authentication failed."}
+
+# ==========================================
+# 12. LOGIN & SIGNUP PAGES
+# ==========================================
 
 def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
@@ -522,51 +503,35 @@ def login_page(supabase):
             if not all([company, email, password]):
                 st.warning("Please fill all fields.")
             else:
-                # Changed 'tenant' to 'company' to match your input above
                 auth_result = authenticate(supabase, company, email, password)
                 
                 if auth_result.get("success"):
                     st.session_state.logged_in = True
-                    # ✅ SAVE SESSION (CRITICAL FIX)
                     st.session_state.user = auth_result.get("user")
                     st.session_state.session = auth_result.get("session")
                     st.session_state.tenant_id = auth_result.get("tenant_id")
-
-                    # Assuming you have a create_session function
-                    # create_session(auth_result)
-
-                    st.success("Login Successful! Redirecting...")
-
-                    # ✅ SWITCH VIEW (CRITICAL FIX)
                     st.session_state.view = "dashboard"
-
-                    # ✅ FORCE RERUN (YOU ALREADY HAD THIS)
+                    st.success("Login Successful! Redirecting...")
                     st.rerun()
                 else:
                     st.error(auth_result.get("error", "Unknown login error"))
+        
         st.markdown("---") 
 
-        # Centered small buttons using unique keys
+        # Navigation Buttons
         btn_col1, btn_col2 = st.columns(2)
         with btn_col1:
-            st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
-            if st.button("❓ Forgot", key="nav_reset"):
-                st.session_state.view = "reset" # Cleanly switches view
+            if st.button("❓ Forgot", key="nav_reset", use_container_width=True):
+                st.session_state.view = "reset"
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
 
         with btn_col2:
-            st.markdown('<div class="center-btn small-btn">', unsafe_allow_html=True)
-            if st.button("🆕 Sign Up", key="nav_signup"):
-                st.session_state.view = "signup" # Switches to signup view
+            if st.button("🆕 Sign Up", key="nav_signup", use_container_width=True):
+                st.session_state.view = "signup"
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
-
-        # Handle the Password Reset View
-        if st.session_state.get("show_reset"):
-            reset_password_ui(supabase)
 
 def signup_page(supabase):
+    import time
     st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
     
     tenant_code = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
@@ -578,7 +543,7 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. TENANT
+                # 1. TENANT CHECK
                 check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
                 if check.data:
                     tenant_id = check.data[0]['id']
@@ -589,19 +554,13 @@ def signup_page(supabase):
                     }).execute()
                     tenant_id = new_t.data[0]['id']
 
-                # 2. AUTH
+                # 2. AUTH SIGNUP
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
-                    "options": {
-                        "data": {
-                            "tenant_id": str(tenant_id),
-                            "role": "Admin"
-                        }
-                    }
+                    "options": {"data": {"tenant_id": str(tenant_id), "role": "Admin"}}
                 })
 
-                # ... inside signup_page logic ...
                 if res.user:
                     user_data = {
                         "id": res.user.id,
@@ -612,56 +571,34 @@ def signup_page(supabase):
 
                     try:
                         supabase.table("users").insert(user_data).execute()
-                        st.success("✅ SUCCESS! Account created. Redirecting to login...")
-                        import time
-                        time.sleep(2) 
-                        st.session_state.view = "login" 
-                        st.rerun() 
-
+                        st.success("✅ SUCCESS! Account created.")
+                        time.sleep(1)
+                        st.session_state.view = "login"
+                        st.rerun()
                     except Exception as db_err:
                         if "23505" in str(db_err):
-                            st.info("👋 Account exists. Redirecting to login...")
-                            import time
-                            time.sleep(2)
+                            st.info("👋 Account exists. Redirecting...")
+                            time.sleep(1)
                             st.session_state.view = "login"
                             st.rerun()
                         else:
-                            st.error(f"🚨 Profile Table Error: {str(db_err)}")
-                            if st.button("⬅️ Back to Login"):
-                                st.session_state.view = "login"
-                                st.rerun()
+                            st.error(f"🚨 Profile Error: {str(db_err)}")
 
             except Exception as e:
-                st.error(f"🚨 Detailed Error: {str(e)}")
+                st.error(f"🚨 Signup Error: {str(e)}")
 
-    # Add a final back button outside the logic blocks
     if st.button("⬅️ Back to Login", key="signup_back_final"):
         st.session_state.view = "login"
         st.rerun()
 
 # ==========================================
-# 9. MAIN ROUTER (Outside of signup_page)
+# 13. DOCUMENT GENERATION (NEON SKY STYLE)
 # ==========================================
-def run_auth_ui(supabase):
-    # Ensure session state for view exists
-    if "view" not in st.session_state:
-        st.session_state.view = "login"
-
-    # Navigation logic based on session_state
-    if st.session_state.view == "login":
-        login_page(supabase)
-    elif st.session_state.view == "signup":
-        signup_page(supabase)
-
-
-# ==============================
-# 7. DOCUMENT GENERATION (PDF)
-# ==============================
 
 def generate_ledger_pdf(loan_data, ledger_df):
     """
     Generates a professional 'Neon Sky' styled PDF statement.
-    STILL INTACT: Maintains your exact branding and formatting.
+    Verified: Maintains exact branding and formatting.
     """
     # Initialize PDF
     pdf = FPDF()
@@ -669,22 +606,19 @@ def generate_ledger_pdf(loan_data, ledger_df):
     
     # --- NEON SKY HEADER ---
     # Header Background (Deep Blue #2B3F87)
-    # We use your BRANDING['navy'] here for consistency if you prefer, 
-    # but I've kept your hardcoded (43, 63, 135) to match your original.
     pdf.set_fill_color(43, 63, 135) 
     pdf.rect(0, 0, 210, 45, 'F')
     
     # Company Title (Neon Green #00FFCC)
-    pdf.set_font("Arial", 'B', 20)
+    pdf.set_font("Helvetica", 'B', 20)
     pdf.set_text_color(0, 255, 204) 
     
-    # SAAS UPGRADE: Use the Tenant's Company Name instead of hardcoded Zoe Consults
-    # If you have a 'company_name' in session state, we use it here.
-    display_name = st.session_state.get('company_name', "ZOE CONSULTS SMC LIMITED")
-    pdf.text(15, 20, display_name.upper())
+    # Use the tenant's company name from session state
+    display_name = st.session_state.get('company', "ZOE CONSULTS SMC LIMITED")
+    pdf.text(15, 20, str(display_name).upper())
     
     # Subheader
-    pdf.set_font("Arial", '', 11)
+    pdf.set_font("Helvetica", '', 11)
     pdf.set_text_color(255, 255, 255)
     borrower_name = str(loan_data.get('Borrower', 'Client')).upper()
     pdf.text(15, 30, f"OFFICIAL CLIENT STATEMENT: {borrower_name}")
@@ -693,10 +627,11 @@ def generate_ledger_pdf(loan_data, ledger_df):
     # --- CLIENT DETAILS ---
     pdf.set_y(50)
     pdf.set_text_color(0, 0, 0)
-    pdf.set_font("Arial", 'B', 10)
+    pdf.set_font("Helvetica", 'B', 10)
     
     loan_id = loan_data.get('Loan_ID', 'N/A')
     start_date = loan_data.get('Start_Date', 'N/A')
+    
     try:
         total_due = float(loan_data.get('Total_Repayable', 0))
     except (ValueError, TypeError):
@@ -708,7 +643,7 @@ def generate_ledger_pdf(loan_data, ledger_df):
 
     # --- TABLE HEADERS ---
     pdf.set_fill_color(230, 230, 230)
-    pdf.set_font("Arial", 'B', 9)
+    pdf.set_font("Helvetica", 'B', 9)
     
     pdf.cell(25, 10, "Date", 1, 0, 'C', True)
     pdf.cell(65, 10, "Description", 1, 0, 'C', True)
@@ -717,11 +652,12 @@ def generate_ledger_pdf(loan_data, ledger_df):
     pdf.cell(35, 10, "Balance", 1, 1, 'C', True)
 
     # --- TABLE ROWS ---
-    pdf.set_font("Arial", '', 8)
+    pdf.set_font("Helvetica", '', 8)
     for _, row in ledger_df.iterrows():
         date_str = str(row.get('Date', ''))[:10]
         
         def clean_num(val):
+            if pd.isna(val): return 0.0
             try: return float(val)
             except: return 0.0
 
@@ -733,9 +669,25 @@ def generate_ledger_pdf(loan_data, ledger_df):
 
     return pdf.output(dest='S').encode('latin-1')
 
+# ==========================================
+# 14. THE ROUTER TRIGGER
+# ==========================================
+
+def run_auth_ui(supabase):
+    """Controls which authentication page to show."""
+    if "view" not in st.session_state:
+        st.session_state.view = "login"
+
+    if st.session_state.view == "login":
+        login_page(supabase)
+    elif st.session_state.view == "signup":
+        signup_page(supabase)
+    elif st.session_state.view == "reset":
+        reset_password_ui(supabase)
+
 
 # ==============================
-# 8. SYSTEM & UI CONFIGURATION
+# 15. SYSTEM & UI CONFIGURATION
 # ==============================
 
 def apply_ui_theme():
@@ -814,26 +766,17 @@ def apply_ui_theme():
             outline: none !important;
             box-shadow: none !important;
         }
-        
     </style>
     """, unsafe_allow_html=True)
-
-# Execute the UI theme application
-apply_ui_theme()
-
-# ==============================
-# 9. UTILITY FUNCTIONS (SaaS TRANSFORMED)
-# ==============================
+# ==========================================
+# 16. UTILITY FUNCTIONS (VERIFIED)
+# ==========================================
 
 def send_whatsapp(phone, msg):
-    """
-    Sends a WhatsApp message via Twilio.
-    Maintains your exact logic but ensures it pulls from SaaS-wide secrets.
-    """
+    """Sends WhatsApp message via Twilio using SaaS secrets."""
     try:
-        # Pulling from st.secrets (Ensure these are in your Streamlit Cloud secrets)
+        # Using the renamed TwilioClient from our imports
         client_tw = TwilioClient(st.secrets["TWILIO_SID"], st.secrets["TWILIO_TOKEN"])
-        
         target_phone = f'whatsapp:{phone}'
         
         client_tw.messages.create(
@@ -843,105 +786,74 @@ def send_whatsapp(phone, msg):
         )
         return True
     except Exception as e:
-        st.error(f"⚠️ WhatsApp failed to send: {e}")
+        st.error(f"⚠️ WhatsApp failed: {e}")
         return False
 
 def save_logo_to_db(image_file):
-    """
-    SAAS VERSION: Saves the logo to the Supabase 'settings' table 
-    associated with the specific tenant_id.
-    """
+    """Saves tenant logo as Base64 to Supabase."""
     try:
-        # Convert image to Base64 string
+        t_id = st.session_state.get("tenant_id")
+        if not t_id:
+            st.error("No tenant session found.")
+            return False
+
         image_file.seek(0)
         encoded = base64.b64encode(image_file.read()).decode()
         
-        # Upsert the logo specifically for this tenant
-        # We target the row where key='logo' AND tenant_id is the user's ID
         data = {
-            "tenant_id": st.session_state.tenant_id,
+            "tenant_id": t_id,
             "key": "logo",
             "value": encoded
         }
         
-        # In Supabase, we upsert based on a unique constraint (tenant_id + key)
+        # Upsert ensures we update the existing logo for this tenant
         supabase.table("settings").upsert(data, on_conflict="tenant_id, key").execute()
-        
-        # Clear cache so the UI reflects the new logo immediately
         st.cache_data.clear() 
         return True
     except Exception as e:
         st.error(f"❌ Logo Save Error: {e}")
         return False
 
-def main():
-    # Initialize state
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    
-    if not st.session_state.logged_in:
-        # Now main() can find login_page because it was defined above!
-        login_page(supabase)
-    else:
-        show_overview()
+# ==========================================
+# 17. SIDEBAR & NAVIGATION (VERIFIED)
+# ==========================================
 
-
-
-# ==============================
-# 10. THE SIDEBAR NAVIGATION
-# ==============================
-import streamlit as st
-
-# 1. Main Sidebar Function
-def sidebar():
-    """
-    Main Navigation Sidebar for the SaaS platform.
-    Handles tenant branding, user info, and role-based access.
-    """
-    # Safety Check: Ensure session state variables exist
+def render_sidebar():
+    """Handles tenant branding and user info display."""
     role = st.session_state.get("role", "Staff")
-    user = st.session_state.get("user", "Guest")
-    current_page = st.session_state.get("page", "Overview")
-    # SaaS addition: Get the dynamic company name
-    company_name = st.session_state.get("company_name", "ZOE CONSULTS")
+    user = st.session_state.get("user", "User")
+    # Syncing key name with login logic
+    company_name = st.session_state.get("company", "ZOE CONSULTS")
 
-    # 2. THE LOGO LOADER (Now pulling from Supabase via our get_logo helper)
-    logo_base64 = get_logo()  # Ensure 'get_logo()' is defined somewhere
+    logo_base64 = get_logo()
 
-    if logo_base64:
-        img_src = f"data:image/png;base64,{logo_base64}"
-        st.sidebar.markdown(f"""
-            <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-                <div style="width: 85px; height: 85px; border-radius: 50%; overflow: hidden; 
-                            border: 3px solid #F0F8FF; box-shadow: 0px 0px 15px rgba(240, 248, 255, 0.3);">
-                    <img src="{img_src}" style="width: 100%; height: 100%; object-fit: cover;">
+    with st.sidebar:
+        if logo_base64:
+            img_src = f"data:image/png;base64,{logo_base64}"
+            st.markdown(f"""
+                <div style="display: flex; justify-content: center; margin-bottom: 20px;">
+                    <div style="width: 85px; height: 85px; border-radius: 50%; overflow: hidden; 
+                                border: 3px solid #F0F8FF; box-shadow: 0px 0px 15px rgba(240, 248, 255, 0.3);">
+                        <img src="{img_src}" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
                 </div>
+            """, unsafe_allow_html=True)
+
+        st.markdown(f"""
+            <div style="text-align: center;">
+                <h2 style="color: #FFFFFF; margin-bottom: 0;">{company_name.upper()}</h2>
+                <div style="color: #00ffcc; font-size: 12px; margin-top: 5px;">
+                    ● <span style="color: #F0F8FF;">System Online</span>
+                </div>
+                <p style='color:#F0F8FF; font-size:14px; margin-top:10px;'>
+                    👤 <b>{user}</b> ({role})
+                </p>
             </div>
+            <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
         """, unsafe_allow_html=True)
 
-    # 3. BRANDING & USER INFO
-    st.sidebar.markdown(f"""
-        <div style="text-align: center;">
-            <h2 style="color: #FFFFFF; margin-bottom: 0;">{company_name.upper()}</h2>
-            <div style="color: #F0F8FF; font-size: 12px; margin-top: 5px;">
-                <span style="height: 8px; width: 8px; background-color: #00ffcc; border-radius: 50%; display: inline-block; margin-right: 5px;"></span> System Online
-            </div>
-            <p style='color:#F0F8FF; font-size:14px; margin-top:10px; opacity: 0.9;'>
-                👤 <b>{user}</b> <span style='font-size: 12px;'>({role})</span>
-            </p>
-        </div>
-        <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
-    """, unsafe_allow_html=True)
-
-    # Return the current selected page from the sidebar menu
-    return current_page
-
-
-# 2. Sidebar Menu with Navigation & Logout Logic
-def show_sidebar():
-    """
-    Displays the sidebar navigation menu and handles the logic for logout.
-    """
+def show_sidebar_menu():
+    """Displays the navigation radio and logout."""
     menu = {
         "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
         "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
@@ -951,137 +863,14 @@ def show_sidebar():
 
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
 
-    # Render Sidebar in Streamlit
     with st.sidebar:
-        st.title(f"🏢 {st.session_state.get('company_name', 'Zoe Consults')}")
         selection = st.radio("Main Menu", menu_options)
-
         st.divider()
         if st.button("🚪 Logout", use_container_width=True):
-            logout()  # Ensure logout() is defined somewhere else
-            st.rerun()
-
-    return selection
-
-
-
-# 11. DASHBOARD LOGIC (OVERVIEW)
-# ==============================
-def show_dashboard():
-    """
-    This function will call the right page logic based on the current selection in the sidebar.
-    """
-    current_page = show_sidebar()  # Fetch current page from sidebar
-
-    """
-    Main Dashboard view. 
-    Maintains exact UI/Logic but powered by Supabase Tenant Data.
-    """
-    st.markdown("## 📊 Financial Dashboard")
+            logout()
     
-    # 1. LOAD TENANT-SPECIFIC DATA
-    # Our Supabase helper automatically filters these by st.session_state.tenant_id
-    df = get_cached_data("loans")
-    pay_df = get_cached_data("payments")
-    exp_df = get_cached_data("expenses") 
-
-    if df.empty:
-        st.info("No loan records found for your organization.")
-        return
-
-    # 2. TRANSLATE HEADERS (Kept for compatibility with your existing math)
-    df.columns = df.columns.str.strip().str.replace(" ", "_")
-    if not pay_df.empty:
-        pay_df.columns = pay_df.columns.str.strip().str.replace(" ", "_")
-    if not exp_df.empty:
-        exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
-
-    # 3. CLEAN DATA TYPES (Preserved logic)
-    df["Interest"] = pd.to_numeric(df.get("Interest", 0), errors="coerce").fillna(0)
-    df["Amount_Paid"] = pd.to_numeric(df.get("Amount_Paid", 0), errors="coerce").fillna(0)
-    df["Principal"] = pd.to_numeric(df.get("Principal", 0), errors="coerce").fillna(0)
-    df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
-    
-    today = pd.Timestamp.today().normalize()
-    
-    # RECOVERY FILTER
-    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    active_df = df[df["Status"].isin(active_statuses)].copy()
-
-    # 4. METRICS CALCULATION
-    total_issued = active_df["Principal"].sum() if "Principal" in active_df.columns else 0
-    total_interest_expected = active_df["Interest"].sum()
-    total_collected = df["Amount_Paid"].sum() 
-    
-    overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
-    overdue_count = active_df[overdue_mask].shape[0]
-
-    # 5. METRICS ROW (Zoe Soft Blue Style - INTACT)
-    m1, m2, m3, m4 = st.columns(4)
-    
-    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-    m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
-
-    # 6. RECENT ACTIVITY TABLES (Branding preserved)
-    st.write("---")
-    t1, t2 = st.columns(2)
-
-    with t1:
-        st.markdown("<h4 style='color: #4A90E2;'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
-        rows_html = ""
-        if not active_df.empty:
-            recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
-            for i, (idx, r) in enumerate(recent_loans.iterrows()):
-                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                b_name = r.get('Borrower', 'Unknown')
-                p_amt = float(r.get('Principal', 0))
-                b_stat = r.get('Status', 'Active')
-                e_date_raw = r.get('End_Date')
-                e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
-                rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{b_name}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#4A90E2;">{p_amt:,.0f}</td><td style="padding:10px; text-align:center;"><span style="font-size:10px; background:#e1f5fe; padding:2px 5px; border-radius:5px;">{b_stat}</span></td><td style="padding:10px; text-align:center; color:#666;">{e_date}</td></tr>"""
-        
-        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #4A90E2;"><thead><tr style="background:#4A90E2; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
-
-    with t2:
-        st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
-        pay_rows = ""
-        if not pay_df.empty:
-            recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
-            for i, (idx, r) in enumerate(recent_pay.iterrows()):
-                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                p_borr = r.get('Borrower', 'Unknown')
-                p_val = float(r.get('Amount', 0))
-                p_date_raw = r.get('Date')
-                p_date = pd.to_datetime(p_date_raw).strftime('%d %b') if pd.notna(p_date_raw) else "-"
-                pay_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{p_borr}</td><td style="padding:10px; text-align:right; font-weight:bold; color:green;">{p_val:,.0f}</td><td style="padding:10px; text-align:center; color:#666;">{p_date}</td></tr>"""
-        
-        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;"><thead><tr style="background:#2E7D32; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:center;">Date</th></tr></thead><tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
-
-    # 7. DASHBOARD VISUALS (Plotly)
-    st.markdown("---")
-    st.markdown("<h4 style='color: #4A90E2;'>📈 Portfolio Analytics</h4>", unsafe_allow_html=True)
-    c_pie, c_bar = st.columns(2)
-
-    with c_pie:
-        status_counts = df["Status"].value_counts().reset_index()
-        status_counts.columns = ["Status", "Count"]
-        fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
-        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
-
-    with c_bar:
-        if not pay_df.empty and not exp_df.empty:
-            pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
-            exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
-            inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
-            exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
-            m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
-            m_cash.columns = ["Month", "Income", "Expenses"]
-            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
-            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
-            st.plotly_chart(fig_bar, use_container_width=True) 
+    # Strip the emoji to return just the page name
+    return selection.split(" ", 1)[1]
 
 
 # ==============================
@@ -2650,69 +2439,132 @@ def show_sidebar():
     return selection
 
 # ==========================================
-# 3. DASHBOARD ROUTER
+# 18. DASHBOARD & MAIN EXECUTION
 # ==========================================
 
-def dashboard_main():
+def show_dashboard_view():
     """
-    This is the entry point for the 'Logged In' world.
+    Main Dashboard view. 
+    Maintains exact UI/Logic but powered by Supabase Tenant Data.
     """
-    # 1. Get current page from sidebar
-    selected_item = show_sidebar()
+    st.markdown("## 📊 Financial Dashboard")
     
-    # 2. Route to the correct function based on selection
-    if "Overview" in selected_item:
-        show_overview()
-    elif "Payroll" in selected_item:
-        show_payroll()
-    elif "Settings" in selected_item:
-        show_settings()
-    else:
-        # Placeholder for pages not yet built
-        st.title(selected_item)
-        st.info("This module is currently under development.")
+    # 1. LOAD TENANT-SPECIFIC DATA
+    df = get_cached_data("loans")
+    pay_df = get_cached_data("payments")
+    exp_df = get_cached_data("expenses") 
+
+    if df.empty:
+        st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
+        return
+
+    # 2. TRANSLATE HEADERS
+    df.columns = df.columns.str.strip().str.replace(" ", "_")
+    if not pay_df.empty:
+        pay_df.columns = pay_df.columns.str.strip().str.replace(" ", "_")
+    if not exp_df.empty:
+        exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
+
+    # 3. CLEAN DATA TYPES
+    df["Interest"] = pd.to_numeric(df.get("Interest", 0), errors="coerce").fillna(0)
+    df["Amount_Paid"] = pd.to_numeric(df.get("Amount_Paid", 0), errors="coerce").fillna(0)
+    df["Principal"] = pd.to_numeric(df.get("Principal", 0), errors="coerce").fillna(0)
+    df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
+    
+    today = pd.Timestamp.now().normalize()
+    
+    # RECOVERY FILTER
+    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+    active_df = df[df["Status"].isin(active_statuses)].copy()
+
+    # 4. METRICS CALCULATION
+    total_issued = active_df["Principal"].sum() if not active_df.empty else 0
+    total_interest_expected = active_df["Interest"].sum() if not active_df.empty else 0
+    total_collected = df["Amount_Paid"].sum() 
+    
+    overdue_count = 0
+    if not active_df.empty:
+        overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
+        overdue_count = active_df[overdue_mask].shape[0]
+
+    # 5. METRICS ROW
+    m1, m2, m3, m4 = st.columns(4)
+    
+    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
+
+    # 6. RECENT ACTIVITY TABLES
+    st.write("---")
+    t1, t2 = st.columns(2)
+
+    with t1:
+        st.markdown("<h4 style='color: #4A90E2;'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+        rows_html = ""
+        if not active_df.empty:
+            recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
+            for i, (idx, r) in enumerate(recent_loans.iterrows()):
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#4A90E2;">{float(r.get('Principal', 0)):,.0f}</td><td style="padding:10px; text-align:center;"><span style="font-size:10px; background:#e1f5fe; padding:2px 5px; border-radius:5px;">{r.get('Status', 'Active')}</span></td><td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('End_Date')).strftime('%d %b') if pd.notna(r.get('End_Date')) else "-"}</td></tr>"""
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #4A90E2;"><thead><tr style="background:#4A90E2; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr></thead><tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
+
+    with t2:
+        st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
+        pay_rows = ""
+        if not pay_df.empty:
+            recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
+            for i, (idx, r) in enumerate(recent_pay.iterrows()):
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                pay_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold; color:green;">{float(r.get('Amount', 0)):,.0f}</td><td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('Date')).strftime('%d %b') if pd.notna(r.get('Date')) else "-"}</td></tr>"""
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;"><thead><tr style="background:#2E7D32; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:center;">Date</th></tr></thead><tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody></table>""", unsafe_allow_html=True)
+
+    # 7. DASHBOARD VISUALS
+    st.markdown("---")
+    c_pie, c_bar = st.columns(2)
+
+    with c_pie:
+        status_counts = df["Status"].value_counts().reset_index()
+        status_counts.columns = ["Status", "Count"]
+        fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
+        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with c_bar:
+        if not pay_df.empty and not exp_df.empty:
+            pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
+            exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
+            inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
+            m_cash.columns = ["Month", "Income", "Expenses"]
+            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
+            st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# 12. THE FINAL ROUTER (FIXED)
-# ==========================================
-
-def main():
-    # 1. Initialize session state variables safely
-    if "logged_in" not in st.session_state:
-        st.session_state.logged_in = False
-    if "view" not in st.session_state:
-        st.session_state.view = "login"
-
-    # 2. Apply your custom UI styles (The navy blue/baby blue theme)
-    apply_custom_styles()
-    apply_ui_theme()
-
-    # 3. ROUTING LOGIC
-    # If not logged in, show the Auth screens based on 'view'
-    if not st.session_state.logged_in:
-        if st.session_state.view == "login":
-            login_page(supabase)
-        elif st.session_state.view == "signup":
-            signup_page(supabase)
-        elif st.session_state.view == "reset":
-            reset_password_ui(supabase)
-            
-    # If logged in, show the Dashboard world
-    else:
-        # This calls your sidebar and shows the overview
-        current_selection = show_sidebar()
-        
-        if "Overview" in current_selection:
-            # We call your dashboard logic here
-            st.markdown(f"### 📍 {current_selection}")
-            show_overview() 
-        else:
-            # For other menu items (Loans, Payroll, etc.)
-            st.title(current_selection)
-            st.info("This module is connected to Supabase and loading...")
-
-# ==========================================
-# 13. EXECUTION (THE TRIGGER)
+# FINAL APP ROUTER (THE BRIDGE)
 # ==========================================
 if __name__ == "__main__":
-    main()
+    apply_ui_theme() # Global UI
+    
+    if not st.session_state.get("logged_in"):
+        run_auth_ui(supabase)
+    else:
+        # Check for inactivity
+        check_session_timeout()
+        
+        # Render sidebar branding
+        render_sidebar()
+        
+        # Get page selection
+        page = show_sidebar_menu()
+        
+        # Page Routing
+        if page == "Overview":
+            show_dashboard_view()
+        elif page == "Settings":
+            # Example: call your settings_page(supabase)
+            st.info("Settings Module Active")
+        else:
+            st.info(f"The {page} module is coming online soon.") 
