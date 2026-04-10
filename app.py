@@ -2425,16 +2425,14 @@ def show_settings():
     try:
         tenant_id = st.session_state.get("tenant_id")
         
-        # Ensure we have a tenant_id to work with
         if not tenant_id:
             st.warning("⚠️ No active tenant detected. Please log in.")
             return
 
-        # Fetch from database
+        # Fetch fresh data from database
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         
         if not tenant_resp.data:
-            # Initialize new tenant if they don't exist in the branding table
             new_tenant = {
                 "id": tenant_id,
                 "name": "Zoe Consults Client",
@@ -2457,7 +2455,6 @@ def show_settings():
     
     with col1:
         st.markdown(f"**Current Business Name:** {active_company['name']}")
-        # Pre-set the color picker to the company's current color
         new_color = st.color_picker("🎨 Change Brand Color", active_company['brand_color'])
         
         st.markdown("**Preview:**")
@@ -2470,13 +2467,29 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        # Show the current logo as a thumbnail if it exists
-        if active_company.get('logo_url'):
-            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
+        
+        # LOGO DISPLAY LOGIC
+        logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
+        
+        if logo_file:
+            # INSTANT PREVIEW (Fixes your failure icons)
+            st.image(logo_file, width=150, caption="Preview of Uploaded Logo")
+        elif active_company.get('logo_url'):
+            # Fetch public URL construction
+            # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase reference
+            proj_id = "YOUR_PROJECT_ID"
+            db_logo = active_company['logo_url']
+            
+            # Check if it's already a full URL or just a path
+            if db_logo.startswith("http"):
+                full_url = db_logo
+            else:
+                full_url = f"https://{proj_id}.supabase.co/storage/v1/object/public/company-logos/{db_logo}"
+            
+            import time
+            st.image(f"{full_url}?t={int(time.time())}", width=150, caption="Current Logo")
         else:
             st.caption("No logo uploaded yet.")
-            
-        logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
@@ -2486,40 +2499,46 @@ def show_settings():
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                file_path = f"logos/{active_company['id']}_logo.png"
+                # Clean filename to avoid double extensions like .png.jpeg
+                file_ext = logo_file.name.split('.')[-1]
+                clean_path = f"logos/{tenant_id}_logo.{file_ext}"
                 
+                # UPLOAD / UPSERT
                 supabase.storage.from_(bucket_name).upload(
-                    path=file_path,
+                    path=clean_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": "image/png"
+                        "content-type": f"image/{file_ext}"
                     }
                 )
                 
-                # Retrieve public URL
-                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                updated_data["logo_url"] = logo_url
+                # Store only the relative path/filename in the DB for flexibility
+                updated_data["logo_url"] = clean_path
                 
             except Exception as e:
-                st.error(f"❌ Storage Error: {str(e)}")
-                st.stop()
+                # Fallback for update if upload fails on duplicate
+                try:
+                    supabase.storage.from_(bucket_name).update(
+                        path=clean_path,
+                        file=logo_file.getvalue()
+                    )
+                    updated_data["logo_url"] = clean_path
+                except Exception as e2:
+                    st.error(f"❌ Storage Error: {str(e2)}")
+                    st.stop()
         
-        # 2. Update Database & UPDATE SESSION STATE (The Missing Link)
+        # 2. Update Database & Sync Session
         try:
             supabase.table("tenants").update(updated_data).eq("id", tenant_id).execute()
             
-            # --- THE REFRESH FIX ---
-            # We manually update the session state so the sidebar sees it NOW
+            # Sync session state for immediate UI feedback
             st.session_state['theme_color'] = new_color
-            
-            # If a new logo was uploaded, we clear any cached logo URL
-            if logo_file:
+            if "logo_url" in updated_data:
                 st.session_state['logo_url'] = updated_data["logo_url"]
             
             st.success("✅ Branding updated successfully!")
             
-            # Use a small delay so the user sees the success message, then rerun
             import time
             time.sleep(1)
             st.rerun()
