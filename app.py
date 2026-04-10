@@ -48,9 +48,13 @@ def get_logo():
     tenant_id = st.session_state.get('tenant_id')
     if tenant_id:
         try:
-            res = supabase.storage.from_('company-logos').get_public_url(f"{tenant_id}_logo.png")
+            # Added 'logos/' prefix to match your upload path
+            file_path = f"logos/{tenant_id}_logo.png"
+            res = supabase.storage.from_('company-logos').get_public_url(file_path)
+            
+            # The cache-buster is perfect, keep that!
             return f"{res}?t={int(time.time())}"
-        except:
+        except Exception as e:
             return None
     return None
 # ==========================================
