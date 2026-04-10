@@ -883,37 +883,26 @@ def render_sidebar():
         tenant_map = {}
 
     # 3. Handle Active Tenant Selection
-    # If a tenant is already selected in session state, we use that as the default
     current_tenant_id = st.session_state.get('tenant_id')
     
     # 4. REACTIVITY ENGINE: Determine which color to paint the UI
-    # Priority: Session State (instant updates) > Database > Default Navy
     brand_color = st.session_state.get('theme_color', '#1E3A8A')
 
     # 5. Apply the Dynamic CSS
     st.markdown(f"""
         <style>
-            /* Sidebar background */
             [data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            
-            /* White text for sidebar elements */
             [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
                 color: white !important;
             }}
-
             /* Center the Navigation Radio Buttons */
             [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
                 flex-direction: column; align-items: center; 
             }}
-            [data-testid="stSidebar"] div.row-widget.stRadio > div[role="radiogroup"] > label {{ 
-                justify-content: center; text-align: center; width: 100%; 
-            }}
-
             /* Main Page Branding */
             h1, h2, h3 {{ color: {brand_color} !important; }}
-            
             /* Metric Card Glow-up */
             div[data-testid="stMetric"] {{
                 background-color: white; padding: 15px; border-radius: 10px;
@@ -923,68 +912,62 @@ def render_sidebar():
         </style>
     """, unsafe_allow_html=True)
 
-    # --- THE SIDEBAR RENDER ---
-with st.sidebar:
-    # --- 1. TENANT SELECTION ---
-    if tenant_map:
-        options = list(tenant_map.keys())
-        default_index = 0
-        if current_tenant_id:
-            for i, (name, data) in enumerate(tenant_map.items()):
-                if data['id'] == current_tenant_id:
-                    default_index = i
-                    break
-        
-        active_company_name = st.selectbox("Business Portal:", options, index=default_index)
-        active_company = tenant_map[active_company_name]
-        
-        if st.session_state.get('tenant_id') != active_company['id']:
-            st.session_state['tenant_id'] = active_company['id']
-            st.session_state['theme_color'] = active_company['brand_color']
-            st.rerun()
-    else:
-        st.warning("No tenants available.")
-        # Fallback to stop execution if no tenant data exists
-        st.stop() 
-
-    # --- 2. CENTERED LOGO (FIXED PATHING) ---
-    _, col_mid, _ = st.columns([1, 2, 1])
-    with col_mid:
-        logo_data = active_company.get('logo_url')
-        
-        if logo_data:
-            # 1. Handle Full URLs vs Relative Paths
-            if logo_data.startswith("http"):
-                final_logo_url = logo_data
-            else:
-                # 2. CRITICAL: Update 'YOUR_PROJECT_ID' with your actual Supabase Project Ref
-                # You can find this in your Supabase Dashboard -> Project Settings -> Reference ID
-                project_ref = "YOUR_PROJECT_ID" 
-                
-                # 3. Handle folder prefixing logic
-                # Ensure we don't double up on 'logos/' if it's already in the database string
-                clean_path = logo_data if logo_data.startswith("logos/") else f"logos/{logo_data}"
-                
-                final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
+    # --- THE SIDEBAR RENDER (Now properly indented inside the function) ---
+    with st.sidebar:
+        # --- 1. TENANT SELECTION ---
+        if tenant_map:
+            options = list(tenant_map.keys())
+            default_index = 0
+            if current_tenant_id:
+                for i, name in enumerate(options):
+                    if tenant_map[name]['id'] == current_tenant_id:
+                        default_index = i
+                        break
             
-            # 4. Use cache-busting timestamp to force browser refresh from storage
-            import time
-            st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+            active_company_name = st.selectbox("Business Portal:", options, index=default_index)
+            active_company = tenant_map[active_company_name]
+            
+            # Sync the session state if the user changes the dropdown
+            if st.session_state.get('tenant_id') != active_company['id']:
+                st.session_state['tenant_id'] = active_company['id']
+                st.session_state['theme_color'] = active_company['brand_color']
+                st.rerun()
         else:
-            # Fallback globe if logo_url is None or empty
-            st.write("🌍")
-    
-    # --- 3. CENTERED INFO BOX ---
-    user_email = st.session_state.get('user_email', 'User')
-    st.markdown(f"""
-        <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
-            <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
-            <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.write("") 
-    st.divider()
+            st.warning("No tenants available.")
+            st.stop() 
+
+        # --- 2. CENTERED LOGO (FIXED PATHING) ---
+        _, col_mid, _ = st.columns([1, 2, 1])
+        with col_mid:
+            logo_data = active_company.get('logo_url')
+            
+            if logo_data:
+                if logo_data.startswith("http"):
+                    final_logo_url = logo_data
+                else:
+                    # Replace with your actual project ID from Supabase
+                    project_ref = "YOUR_PROJECT_ID" 
+                    # Ensure folder prefix is included
+                    clean_path = logo_data if logo_data.startswith("logos/") else f"logos/{logo_data}"
+                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
+                
+                import time
+                # Cache busting prevents the broken "0" icon
+                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+            else:
+                st.write("🌍")
+        
+        # --- 3. CENTERED INFO BOX ---
+        user_email = st.session_state.get('user_email', 'User')
+        st.markdown(f"""
+            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
+                <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.write("") 
+        st.divider()
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
