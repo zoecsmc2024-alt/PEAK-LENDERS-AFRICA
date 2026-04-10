@@ -518,54 +518,38 @@ def signup_page(supabase):
             st.warning("⚠️ Please fill all fields.")
         else:
             try:
-                # 1. GET OR CREATE TENANT
+                # 1. TENANT LOGIC
                 check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
-                
-                if check.data and len(check.data) > 0:
+                if check.data:
                     tenant_id = check.data[0]['id']
                 else:
-                    new_tenant = supabase.table("tenants").insert({
-                        "company_code": tenant_code, 
-                        "name": tenant_code.capitalize() 
-                    }).execute()
-                    
-                    if not new_tenant.data:
-                        st.error("Failed to create Company record.")
-                        st.stop()
-                    tenant_id = new_tenant.data[0]['id']
+                    new_t = supabase.table("tenants").insert({"company_code": tenant_code, "name": tenant_code.capitalize()}).execute()
+                    tenant_id = new_t.data[0]['id']
 
-                # 2. SIGN UP IN SUPABASE AUTH
+                # 2. AUTH LOGIC
                 res = supabase.auth.sign_up({
                     "email": email,
                     "password": password,
-                    "options": {
-                        "data": {
-                            "tenant_id": str(tenant_id),
-                            "role": "Admin"
-                        }
-                    }
+                    "options": {"data": {"tenant_id": str(tenant_id), "role": "Admin"}}
                 })
 
-                # 3. CREATE PUBLIC PROFILE
+                # 3. PUBLIC PROFILE LOGIC
                 if res.user:
-                    try:
-                        user_profile = {
-                            "id": res.user.id,
-                            "tenant_id": tenant_id,
-                            "role": "Admin",
-                            "full_name": email.split('@')[0].capitalize()
-                        }
-                        
-                        supabase.table("users").insert(user_profile).execute()
-                        st.success("✅ WE ARE IN! Account created. Check your email to confirm.")
-                        
-                    except Exception as profile_err:
-                        st.error(f"🚨 Profile Save Error: {profile_err}")
+                    user_data = {
+                        "id": res.user.id,
+                        "tenant_id": tenant_id,
+                        "role": "Admin",
+                        "full_name": email.split('@')[0].capitalize()
+                    }
+                    # We use 'execute()' to send it to the DB
+                    supabase.table("users").insert(user_data).execute()
+                    st.success("✅ SUCCESS! Account created. Check your email to confirm.")
                 else:
-                    st.error("Signup failed: Check if email is already taken or password too weak.")
+                    st.error("Auth failed: User object not returned.")
 
             except Exception as e:
-                st.error(f"🚨 Database Error: {str(e)}")
+                # This will now print the EXACT error from Postgres
+                st.error(f"🚨 Detailed Error: {str(e)}")
 
     if st.button("⬅️ Back to Login"):
         st.session_state.view = "login"
