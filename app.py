@@ -866,35 +866,59 @@ def render_sidebar():
     brand_color = theme_data.get('brand_color', '#2B3F87')
     company_name = theme_data.get('name', 'Zoe Consults')
 
-    # INJECT DYNAMIC THEME CSS (STRONGER + TARGET CORRECT ELEMENTS)
-st.markdown(f"""
-    <style>
-        /* Main sidebar container */
-        section[data-testid="stSidebar"] {{
-            background-color: {brand_color} !important;
-        }}
+    # --- INJECT DYNAMIC THEME CSS (MUST BE INDENTED) ---
+    st.markdown(f"""
+        <style>
+            /* Main sidebar container */
+            section[data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
 
-        /* Inner sidebar content */
-        section[data-testid="stSidebar"] > div {{
-            background-color: {brand_color} !important;
-        }}
+            /* Inner sidebar content */
+            section[data-testid="stSidebar"] > div {{
+                background-color: {brand_color} !important;
+            }}
 
-        /* Text inside sidebar */
-        section[data-testid="stSidebar"] * {{
-            color: white !important;
-        }}
+            /* Text inside sidebar */
+            section[data-testid="stSidebar"] * {{
+                color: white !important;
+            }}
 
-        /* Divider lines */
-        section[data-testid="stSidebar"] hr {{
-            border-color: rgba(255,255,255,0.2) !important;
-        }}
+            /* Divider lines */
+            section[data-testid="stSidebar"] hr {{
+                border-color: rgba(255,255,255,0.2) !important;
+            }}
 
-        /* Fix buttons + labels */
-        section[data-testid="stSidebar"] button {{
-            color: white !important;
-        }}
-    </style>
-""", unsafe_allow_html=True)
+            /* Fix buttons + labels */
+            section[data-testid="stSidebar"] button {{
+                color: white !important;
+            }}
+        </style>
+    """, unsafe_allow_html=True)
+
+    # --- RENDER SIDEBAR CONTENT ---
+    with st.sidebar:
+        # LOGO SECTION
+        _, col_mid, _ = st.columns([1, 2, 1])
+        with col_mid:
+            logo_data = get_logo()
+            if logo_data:
+                st.image(logo_data, width=80)
+            else:
+                st.write("🌍")
+
+        # INFO BOX
+        st.markdown(
+            f"""
+            <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
+                        padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 14px; color: white;">📍 <b>{company_name}</b></span><br>
+                <small style="color: rgba(255,255,255,0.8);">{st.session_state.get('user_email', 'User')} ({role})</small>
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
+        st.write("---")
 
     # USER DISPLAY LOGIC
     display_name = user_obj.email if hasattr(user_obj, 'email') else "Member"
