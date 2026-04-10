@@ -2402,39 +2402,24 @@ def show_overview():
 # 2. SIDEBAR & NAVIGATION
 # ==========================================
 
-def show_sidebar():
-    """
-    Displays the sidebar navigation menu and handles logout logic.
-    """
+def show_sidebar_menu():
+    """Displays the navigation radio and logout."""
     menu = {
         "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
         "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
         "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
         "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
     }
-
     menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
 
     with st.sidebar:
-        # Branding Header
-        st.title(f"🏢 {st.session_state.get('company_code', 'Zoe Consults')}")
-        st.write(f"👤 **{st.session_state.get('user_email', 'User')}**")
-        
-        st.divider()
-        
-        # Navigation Radio
-        selection = st.radio("Main Menu", menu_options, key="navigation_radio")
-
+        selection = st.radio("Main Menu", menu_options)
         st.divider()
         if st.button("🚪 Logout", use_container_width=True):
-            # Clear session state
-            st.session_state.logged_in = False
-            st.session_state.view = "login"
-            st.success("Logging out...")
-            time.sleep(1)
-            st.rerun()
+            logout()
+    
+    return selection.split(" ", 1)[1]
 
-    return selection
 
 # ==========================================
 # 18. DASHBOARD & MAIN EXECUTION
