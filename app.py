@@ -873,11 +873,20 @@ def render_sidebar():
     theme_data = {}
     company_name = "Super admin"
     
-    # 2. Fetch Branding - Priority: Database
+    # 2. Fetch All Tenants (Fixes NameError: company_list is not defined)
+    try:
+        # Fetching fresh tenant list for the selectbox
+        tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
+        # Create a dictionary: { "Company Name": {data_row} }
+        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
+    except Exception as e:
+        st.error(f"Error fetching tenants: {e}")
+        tenant_map = {}
+
+    # 3. Fetch Branding for the current session tenant
     tenant_id = st.session_state.get('tenant_id')
     if tenant_id:
         try:
-            # We fetch fresh every time to ensure the sidebar stays in sync
             res = supabase.table("tenants").select("brand_color, name").eq("id", tenant_id).single().execute()
             if res.data:
                 theme_data = res.data
@@ -885,58 +894,43 @@ def render_sidebar():
         except Exception:
             pass
 
-    # 3. REACTIVITY ENGINE: Priority to Session State
+    # 4. REACTIVITY ENGINE
     brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#1E3A8A'))
     
-    # 4. Apply the CSS
+    # 5. Apply the CSS
     st.markdown(f"""
         <style>
-            /* Sidebar background */
-            [data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
+            [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
             
-            /* Sidebar text and icons */
-            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
-                color: white !important;
-            }}
-
-            /* Centering the Radio Buttons */
+            /* Center Radio Buttons */
             [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
-                flex-direction: column; 
-                align-items: center; 
-            }}
-            [data-testid="stSidebar"] div.row-widget.stRadio > div[role="radiogroup"] > label {{ 
-                justify-content: center; 
-                text-align: center; 
-                width: 100%; 
-            }}
-
-            /* The Metric Card Glow-up */
-            div[data-testid="stMetric"] {{
-                background-color: white; 
-                padding: 15px; 
-                border-radius: 10px;
-                border-left: 5px solid {brand_color}; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                flex-direction: column; align-items: center; 
             }}
             
-            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{
-                color: #31333F !important;
+            /* Metric Card Styling */
+            div[data-testid="stMetric"] {{
+                background-color: white; padding: 15px; border-radius: 10px;
+                border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }}
+            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{ color: #31333F !important; }}
 
             h1, h2, h3 {{ color: {brand_color} !important; }}
             .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
         </style>
     """, unsafe_allow_html=True)
 
-    # --- THE SIDEBAR RENDER (FIXED INDENTATION HERE) ---
+    # --- THE SIDEBAR RENDER ---
     with st.sidebar:
         # --- 1. PROJECT SELECTION ---
-        # Note: Make sure 'company_list' is defined globally or passed to this function
-        active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
-        active_company = company_list[active_company_name]
-        
+        if tenant_map:
+            # Replaces the broken company_list.keys()
+            active_company_name = st.selectbox("Business Portal:", list(tenant_map.keys()))
+            active_company = tenant_map[active_company_name]
+        else:
+            st.warning("No tenants available.")
+            return
+
         # --- 2. CENTERED LOGO ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
@@ -946,9 +940,9 @@ def render_sidebar():
                 if logo_data.startswith("http"):
                     final_logo_url = logo_data
                 else:
-                    # Replace with your actual project ID from Supabase
-                    project_ref = "YOUR_PROJECT_ID_HERE" 
-                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/logos/{logo_data}"
+                    # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase reference
+                    project_ref = "YOUR_PROJECT_ID" 
+                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{logo_data}"
                 
                 import time
                 st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
@@ -968,7 +962,7 @@ def render_sidebar():
         st.divider()
         
         # --- 4. NAVIGATION MENU ---
-        # Don't forget to put your st.radio() here so it shows up in the sidebar!
+        # Add your st.radio navigation here
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
