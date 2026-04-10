@@ -2554,28 +2554,59 @@ def show_dashboard_view():
             st.plotly_chart(fig_bar, use_container_width=True)
 
 # ==========================================
-# FINAL APP ROUTER (THE BRIDGE)
+# FINAL APP ROUTER (ALL MODULES MAPPED)
 # ==========================================
 if __name__ == "__main__":
-    apply_ui_theme() # Global UI
+    apply_ui_theme() 
     
     if not st.session_state.get("logged_in"):
         run_auth_ui(supabase)
     else:
-        # Check for inactivity
         check_session_timeout()
-        
-        # Render sidebar branding
         render_sidebar()
         
-        # Get page selection
+        # This captures the exact string from your radio menu
         page = show_sidebar_menu()
         
-        # Page Routing
+        # --- ROUTING TABLE ---
         if page == "Overview":
             show_dashboard_view()
+            
+        elif page == "Loans":
+            show_loans_page() 
+            
+        elif page == "Borrowers":
+            show_borrowers_page()
+
+        elif page == "Collateral":
+            show_collateral_page()
+
+        elif page == "Calendar":
+            show_calendar_page()
+
+        elif page == "Ledger":
+            show_ledger_page()
+
+        elif page == "Overdue Tracker":
+            show_overdue_tracker_page()
+
+        elif page == "Payments":
+            show_payments_page()
+            
+        elif page == "Expenses":
+            show_expenses_page()
+            
+        elif page == "PettyCash":
+            show_petty_cash_page()
+            
+        elif page == "Payroll":
+            show_payroll_page()
+
+        elif page == "Reports":
+            show_reports_page()
+            
         elif page == "Settings":
-            # Example: call your settings_page(supabase)
-            st.info("Settings Module Active")
+            show_settings_page()
+            
         else:
-            st.info(f"The {page} module is coming online soon.") 
+            st.warning(f"Module '{page}' is defined in the menu but the function call is missing in the router.")
