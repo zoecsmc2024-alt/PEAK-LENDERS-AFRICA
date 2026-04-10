@@ -599,33 +599,26 @@ def signup_page(supabase):
                     }
 
                     try:
-                        # Attempt the insert
-                        insert_res = supabase.table("users").insert(user_data).execute()
-                        print("INSERT RESPONSE:", insert_res)
-                        st.success("✅ SUCCESS! Account created. Check your email to confirm.")
+                        supabase.table("users").insert(user_data).execute()
+                        st.success("✅ SUCCESS! Account created. Redirecting to login...")
                         
-                        # Optional: Automatically move them to login after 3 seconds
-                        # time.sleep(3)
-                        # st.session_state.view = "login"
-                        # st.rerun()
+                        # FORCE THE MOVE TO LOGIN
+                        import time
+                        time.sleep(2) # Give them a moment to read the success message
+                        st.session_state.view = "login" # Update navigation state
+                        st.rerun() 
 
                     except Exception as db_err:
-                        # Check if this is just a duplicate error
                         if "23505" in str(db_err):
-                            st.info("👋 This account already exists in the profile table. Try logging in!")
+                            st.info("👋 Account exists. Redirecting to login...")
+                            time.sleep(2)
+                            st.session_state.view = "login"
+                            st.rerun()
                         else:
                             st.error(f"🚨 Profile Table Error: {str(db_err)}")
-
-                else:
-                    st.error("Auth failed: User object not returned.")
-
-            except Exception as e:
-                # This catches errors from Tenant creation or Auth signup
-                st.error(f"🚨 Detailed Error: {str(e)}")
-
-    if st.button("⬅️ Back to Login"):
-        st.session_state.view = "login"
-        st.rerun()
+                            if st.button("⬅️ Back to Login"):
+                                st.session_state.view = "login"
+                                st.rerun()
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
