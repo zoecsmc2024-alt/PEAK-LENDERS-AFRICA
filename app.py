@@ -474,33 +474,39 @@ def authenticate(supabase, company_code, email, password):
         })
         
         if res.user:
-            # 2. Verify they belong to the correct company (tenant)
+            # 2. Verify relationship with the tenants table
+            # We fetch the tenant data specifically to avoid subscripting None
             response = supabase.table("users") \
                 .select("tenant_id, tenants(company_code)") \
                 .eq("id", res.user.id) \
                 .execute()
             
-            # Check if we actually got data back
-            if response.data and len(response.data) > 0:
-                user_record = response.data[0] # Get the first result
-                db_company_code = user_record['tenants']['company_code']
-                
-                if db_company_code.upper() == company_code.upper():
-                    return {
-                        "success": True, 
-                        "user": res.user, 
-                        "tenant_id": user_record['tenant_id']
-                    }
-                else:
-                    return {"success": False, "error": "Invalid Company Code for this account."}
-            else:
-                return {"success": False, "error": "No profile linked to this login."}
-        
-        return {"success": False, "error": "Login failed."}
+            if not response.data or len(response.data) == 0:
+                return {"success": False, "error": "Profile not found in users table."}
 
+            user_record = response.data[0]
+            
+            # This is where the 'NoneType' error usually happens
+            tenant_info = user_record.get('tenants')
+            
+            if tenant_info is None:
+                return {"success": False, "error": "System Error: User exists but is not linked to a valid Company."}
+
+            db_company_code = tenant_info.get('company_code', '').upper()
+            
+            if db_company_code == company_code.upper():
+                return {
+                    "success": True, 
+                    "user": res.user, 
+                    "tenant_id": user_record['tenant_id']
+                }
+            else:
+                return {"success": False, "error": f"Invalid Company Code. (DB says: {db_company_code})"}
+        
     except Exception as e:
-        # THIS IS THE PART THAT WAS MISSING
         return {"success": False, "error": str(e)}
+
+    return {"success": False, "error": "Authentication failed."}
 
 def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
