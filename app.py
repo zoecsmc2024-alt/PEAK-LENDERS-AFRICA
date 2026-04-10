@@ -45,21 +45,25 @@ def apply_custom_theme(color):
 # 2. DEFINE THE SYNC FUNCTION
 def sync_tenant_ui():
     """Applies branding globally based on the logged-in tenant."""
-    if 'tenant_id' in st.session_state:
-        try:
-            res = supabase.table("tenants").select("brand_color").eq("id", st.session_state.tenant_id).execute()
-            if res.data:
-                branding = res.data[0]
-                # Use session state for instant updates, fallback to DB
-                color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
-                apply_custom_theme(color) # Now this function is defined!
-                return branding
-        except Exception:
-            pass
-    return None
+    # Guard: Don't run this if the user isn't logged in yet
+    tenant_id = st.session_state.get('tenant_id')
+    if not tenant_id:
+        return None
 
-# 3. CALL THE SYNC (Line 289)
-active_branding = sync_tenant_ui()
+    try:
+        # Fetch branding from DB
+        res = supabase.table("tenants").select("brand_color, logo_url").eq("id", tenant_id).execute()
+        
+        if res.data:
+            branding = res.data[0]
+            # Priority: 1. Instant session change, 2. Database value, 3. Default blue
+            color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
+            apply_custom_theme(color)
+            return branding
+    except Exception as e:
+        # Silently fail if DB is unreachable during initial load
+        print(f"Sync error: {e}")
+    return None
 # ==========================================
 # 1. SUPABASE CONNECTION
 # ==========================================
@@ -873,14 +877,23 @@ def get_logo():
 # ==========================================
 
 def render_sidebar():
-    # 1. Get the latest branding info
-    theme_data = get_current_theme()
+    # 1. Initialize variables with fallbacks to prevent NameErrors
+    theme_data = {}
+    company_name = "Super admin"
     
-    # Check session state first (instant feedback), then theme_data, then default
+    # 2. Safely fetch branding info
+    try:
+        # Assumes get_current_theme() handles the 'if tenant_id' check internally
+        theme_data = get_current_theme() or {}
+        company_name = theme_data.get('name', 'Super admin')
+    except Exception as e:
+        # Fallback if DB query fails on initial load
+        pass
+    
+    # Priority: Session State (Instant) > Database > Default
     brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#2B3F87'))
-    company_name = theme_data.get('name', 'Super admin')
     
-    # 2. Apply the CSS
+    # 3. Apply the CSS
     st.markdown(f"""
         <style>
             section[data-testid="stSidebar"] {{
@@ -889,29 +902,34 @@ def render_sidebar():
             section[data-testid="stSidebar"] * {{
                 color: white !important;
             }}
-            /* Safety: Keep main page inputs dark */
+            /* Keep main page inputs readable */
             .main [data-testid="stWidgetLabel"] p {{ color: #002D62 !important; }}
         </style>
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        # Render Logo
-        logo_url = get_logo()
-        if logo_url:
-            st.image(logo_url, width=100)
-        else:
+        # 4. Render Logo with Cache-Buster Communication
+        try:
+            logo_url = get_logo()
+            if logo_url:
+                # The get_logo function should return: url + "?t=" + str(time.time())
+                st.image(logo_url, width=100)
+            else:
+                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
+        except:
             st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
-        # Tenant Info
+        # 5. Tenant Info Section
+        user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
             <div style="text-align: center; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 8px;">
-                <b>{company_name}</b><br>
-                <small>{st.session_state.get('user_email', '')}</small>
+                <span style="font-size: 14px;">📍 <b>{company_name}</b></span><br>
+                <small style="opacity: 0.8;">{user_email}</small>
             </div>
         """, unsafe_allow_html=True)
-        st.divider()
         
-        st.write("---")
+        st.divider()
+        # Navigation logic continues here...
 
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
