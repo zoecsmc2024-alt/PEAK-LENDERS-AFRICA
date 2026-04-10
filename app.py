@@ -26,15 +26,16 @@ import pandas as pd
 import streamlit as st
 import time
 
-# 1. DEFINE THE THEME FUNCTION FIRST
 def apply_custom_theme(color):
-    """Injects custom CSS to update the sidebar and UI color."""
+    """Injects custom CSS to update the sidebar and UI color globally."""
     st.markdown(f"""
         <style>
-            [data-testid="stSidebar"] {{
+            section[data-testid="stSidebar"] {{
                 background-color: {color} !important;
             }}
-            /* Add any other custom CSS targeting buttons or headers here */
+            section[data-testid="stSidebar"] * {{
+                color: white !important;
+            }}
             .stButton>button {{
                 border-color: {color};
                 color: {color};
@@ -42,27 +43,15 @@ def apply_custom_theme(color):
         </style>
     """, unsafe_allow_html=True)
 
-# 2. DEFINE THE SYNC FUNCTION
-def sync_tenant_ui():
-    """Applies branding globally based on the logged-in tenant."""
-    # Guard: Don't run this if the user isn't logged in yet
+def get_logo():
+    """Fetches the logo URL with a cache-buster to ensure the bucket 'talks' to the UI."""
     tenant_id = st.session_state.get('tenant_id')
-    if not tenant_id:
-        return None
-
-    try:
-        # Fetch branding from DB
-        res = supabase.table("tenants").select("brand_color, logo_url").eq("id", tenant_id).execute()
-        
-        if res.data:
-            branding = res.data[0]
-            # Priority: 1. Instant session change, 2. Database value, 3. Default blue
-            color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
-            apply_custom_theme(color)
-            return branding
-    except Exception as e:
-        # Silently fail if DB is unreachable during initial load
-        print(f"Sync error: {e}")
+    if tenant_id:
+        try:
+            res = supabase.storage.from_('company-logos').get_public_url(f"{tenant_id}_logo.png")
+            return f"{res}?t={int(time.time())}"
+        except:
+            return None
     return None
 # ==========================================
 # 1. SUPABASE CONNECTION
@@ -283,24 +272,23 @@ SESSION_TIMEOUT = 15  # Minutes
 
 # --- GLOBAL UI SYNC ---
 def sync_tenant_ui():
-    """Applies branding globally based on the logged-in tenant."""
-    if 'tenant_id' in st.session_state:
-        # Fetch fresh branding from the database
-        res = supabase.table("tenants").select("brand_color, logo_url").eq("id", st.session_state.tenant_id).execute()
-        
+    """Applies branding safely only if a tenant is logged in."""
+    tenant_id = st.session_state.get('tenant_id')
+    if not tenant_id:
+        return None
+
+    try:
+        res = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         if res.data:
             branding = res.data[0]
-            # Priority 1: Session state (instant feedback during Save)
-            # Priority 2: Database (saved preference)
+            # Priority: 1. Instant session state, 2. Database, 3. Default blue
             color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
-            
-            # Use your original theme function
             apply_custom_theme(color)
             return branding
+    except Exception as e:
+        # Prevents the app from crashing during the login transition
+        print(f"Sync error: {e}")
     return None
-
-# Call this at the start of your main script execution
-active_branding = sync_tenant_ui()
 # ==========================================
 # PASSWORD VERIFICATION (LEGACY SUPPORT)
 # ==========================================
@@ -544,7 +532,7 @@ def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
 
     with col:
-        st.markdown("<h2 style='text-align:center;'>🔐 Member Access</h2>", unsafe_allow_html=True)
+        st.markdown("<h2 style='text-align:center;'>🔐 LOGIN</h2>", unsafe_allow_html=True)
 
         company = st.text_input("🏢 Company Code", key="login_comp_unique").strip().upper()
         email = st.text_input("📧 Email", key="login_email").strip().lower()
@@ -908,17 +896,12 @@ def render_sidebar():
     """, unsafe_allow_html=True)
 
     with st.sidebar:
-        # 4. Render Logo with Cache-Buster Communication
-        try:
-            logo_url = get_logo()
-            if logo_url:
-                # The get_logo function should return: url + "?t=" + str(time.time())
-                st.image(logo_url, width=100)
-            else:
-                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
-        except:
+        # Render Logo with a fallback to a generic icon if the bucket fails
+        logo_url = get_logo()
+        if logo_url:
+            st.image(logo_url, width=100)
+        else:
             st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
-
         # 5. Tenant Info Section
         user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
