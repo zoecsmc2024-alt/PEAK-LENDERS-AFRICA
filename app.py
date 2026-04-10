@@ -2387,15 +2387,9 @@ def show_settings():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        biz_name = active_company.get('name', 'My Business')
-        biz_code = active_company.get('company_code', 'N/A')
-        
-        st.markdown(f"**Current Business Name:** {biz_name}")
-        st.markdown(f"**Company Code:** `{biz_code}`")
-        
-        # Use session state for current_brand_color so the picker updates instantly
-        current_brand_color = st.session_state.get('theme_color', active_company.get('brand_color', '#2B3F87'))
-        new_color = st.color_picker("🎨 Change Brand Color", current_brand_color)
+        st.markdown(f"**Current Business Name:** {active_company['name']}")
+        # Pre-set the color picker to the company's current color
+        new_color = st.color_picker("🎨 Change Brand Color", active_company['brand_color'])
         
         st.markdown("**Preview:**")
         st.markdown(
@@ -2407,74 +2401,52 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        
-        try:
-            # --- CACHE-BUSTING LOGO FETCH ---
-            # Ensures the UI 'talks' to the bucket immediately after change
-            res = supabase.storage.from_('company-logos').get_public_url(f"{tenant_id}_logo.png")
-            logo_data = f"{res}?t={int(time.time())}"
-            
-            if logo_data:
-                st.image(logo_data, use_container_width=True, caption="Current Logo")
-            else:
-                st.caption("No logo uploaded yet.")
-        except Exception:
-            st.caption("No logo found in storage.")
+        # Show the current logo as a thumbnail if it exists
+        if active_company.get('logo_url'):
+            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
+        else:
+            st.caption("No logo uploaded yet.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-    st.write("---")
-
-    # --- SAVE BUTTON SECTION ---
+    # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
+        # We start with the color change
         updated_data = {"brand_color": new_color}
         
-        # 1. Handle logo upload to Supabase Bucket
+        # Handle logo upload to Supabase Storage
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                file_ext = logo_file.name.split('.')[-1].lower()
-                file_path = f"{tenant_id}_logo.{file_ext}"
+                # Clean the path
+                file_path = f"logos/{active_company['id']}_logo.png"
                 
-                # UPLOAD TO STORAGE
+                # --- THE FIX: ADD CONTENT-TYPE ---
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": f"image/{file_ext}"
+                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
                     }
                 )
-                updated_data["logo_url"] = file_path
                 
-            except Exception as upload_error:
-                # Fallback: if primary upload fails, try direct update
-                try:
-                    supabase.storage.from_(bucket_name).update(
-                        path=file_path,
-                        file=logo_file.getvalue()
-                    )
-                    updated_data["logo_url"] = file_path
-                except Exception as e:
-                    st.error(f"❌ Storage Error: {str(upload_error)}")
-                    st.stop()
-
-        # 2. UPDATE DATABASE TABLE
+                # Retrieve public URL
+                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                updated_data["logo_url"] = logo_url
+                
+            except Exception as e:
+                st.error(f"❌ Storage Error: {str(e)}")
+                st.stop()
+        
+        # Update the database record for this company
         try:
-            supabase.table("tenants")\
-                .update(updated_data)\
-                .eq("id", tenant_id)\
-                .execute()
+            supabase.table("companies").update(updated_data).eq("id", active_company['id']).execute()
             
-            # 3. THE THEME HANDSHAKE
-            # Update session state so the global apply_custom_theme() picks it up instantly
-            st.session_state.theme_color = new_color
-            
-            # 4. REFRESH UI
-            st.cache_data.clear() 
-            st.success("🎉 Branding saved successfully! Syncing UI...")
-            time.sleep(1) 
-            st.rerun() 
+            st.success("✅ Branding updated successfully!")
+            st.info("Applying your new brand identity...")
+            # Use st.rerun() to refresh the sidebar and theme instantly
+            st.rerun()
             
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
