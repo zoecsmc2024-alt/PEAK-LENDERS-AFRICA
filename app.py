@@ -869,10 +869,7 @@ def get_logo():
 # ==========================================
 
 def render_sidebar():
-    # 1. Initialize variables
-    theme_data = {}
-    
-    # 2. Fetch All Tenants
+    # 1. Fetch All Tenants
     try:
         tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
         tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
@@ -883,12 +880,11 @@ def render_sidebar():
     current_tenant_id = st.session_state.get('tenant_id')
     brand_color = st.session_state.get('theme_color', '#1E3A8A')
 
-    # 3. Apply Dynamic CSS
+    # 2. Apply Dynamic CSS (Injecting once globally)
     st.markdown(f"""
         <style>
             [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
             [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-            [data-testid="stSidebarContent"] {{ padding-top: 1rem; }}
             h1, h2, h3 {{ color: {brand_color} !important; }}
             div[data-testid="stMetric"] {{
                 background-color: white; padding: 15px; border-radius: 10px;
@@ -900,7 +896,7 @@ def render_sidebar():
 
     # --- THE SIDEBAR RENDER ---
     with st.sidebar:
-        # 4. TENANT SELECTION (Fixed Indentation)
+        # 3. TENANT SELECTION
         if tenant_map:
             options = list(tenant_map.keys())
             default_index = 0
@@ -910,6 +906,7 @@ def render_sidebar():
                         default_index = i
                         break
             
+            # The selectbox MUST be inside the 'with st.sidebar' block
             active_company_name = st.selectbox("Business Portal:", options, index=default_index)
             active_company = tenant_map[active_company_name]
             
@@ -921,66 +918,43 @@ def render_sidebar():
             st.warning("No tenants available.")
             st.stop() 
 
-        # 5. CENTERED LOGO & INFO (Fixed Indentation)
-        col_1, col_2, col_3 = st.columns([1, 2, 1])
-        with col_2:
+        # 4. LOGO DISPLAY
+        col_left, col_mid, col_right = st.columns([1, 2, 1])
+        with col_mid:
             logo_path = active_company.get('logo_url')
             if logo_path:
-                if str(logo_path).startswith("http"):
-                    final_logo_url = logo_path
-                else:
-                    # REPLACE 'YOUR_PROJECT_ID' with your real Supabase ID
-                    project_ref = "YOUR_PROJECT_ID" 
-                    clean_path = logo_path if str(logo_path).startswith("logos/") else f"logos/{logo_path}"
-                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
-                
                 import time
-                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+                # Use absolute URL if possible; otherwise construct it
+                final_url = logo_path if str(logo_path).startswith("http") else f"https://YOUR_PROJECT_ID.supabase.co/storage/v1/object/public/company-logos/{logo_path}"
+                st.image(f"{final_url}?t={int(time.time())}", width=80)
             else:
-                st.markdown("<h1 style='text-align: center;'>🌍</h1>", unsafe_allow_html=True)
+                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
-        user_email = st.session_state.get('user_email', 'User')
         st.markdown(f"""
-            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin: 10px 0; border: 1px solid rgba(255,255,255,0.2);">
-                <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
-                <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
+            <div style="text-align: center; margin-bottom: 20px;">
+                <small style="color: rgba(255,255,255,0.8);">{st.session_state.get('user_email', 'User')}</small>
             </div>
         """, unsafe_allow_html=True)
         
         st.divider()
+
+        # 5. NAVIGATION MENU (Restoring all items)
+        menu = {
+            "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
+            "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
+            "Payroll": "💳", "Expenses": "📉", "Petty Cash": "🪙", 
+            "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
+        }
+        menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         
-        # 6. Call the menu inside the sidebar context
-        return show_sidebar_menu()
-
-def show_sidebar_menu():
-    """Displays the updated navigation menu."""
-    # Restored Payroll, Expenses, Petty Cash, etc.
-    menu = {
-        "Overview": "📈", 
-        "Loans": "💵", 
-        "Borrowers": "👥", 
-        "Collateral": "🛡️", 
-        "Calendar": "📅", 
-        "Ledger": "📄", 
-        "Payroll": "💳", 
-        "Expenses": "📉", 
-        "Petty Cash": "🪙", 
-        "Overdue Tracker": "🚨", 
-        "Payments": "💰", 
-        "Settings": "⚙️"
-    }
-    
-    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-
-    # Navigation Selection
-    selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
-    
-    st.divider()
-    if st.button("🚪 Logout", use_container_width=True):
-        st.session_state.clear()
-        st.rerun()
-    
-    # Return the clean text (e.g. "Overview")
+        selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
+        
+        st.divider()
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+            
+    # Return clean selection text (e.g., "Overview")
     return selection.split(" ", 1)[1] if " " in selection else selection
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
@@ -2654,7 +2628,6 @@ def show_dashboard_view():
 
 if __name__ == "__main__":
     # 1. Load the Theme FIRST
-    # Ensure this function uses st.session_state.get('theme_color')
     apply_ui_theme() 
     
     if not st.session_state.get("logged_in"):
@@ -2663,18 +2636,15 @@ if __name__ == "__main__":
         # Check if the user is still active
         check_session_timeout()
         
-        # Draw the sidebar (Logo + Branding)
-        render_sidebar()
-        
-        # Get the current selection from the radio menu
-        page = show_sidebar_menu()
+        # Draw the sidebar and get the current selection 
+        # Integration Fix: render_sidebar now returns the 'page'
+        page = render_sidebar()
         
         # Save the current page to session state 
-        # This helps Streamlit remember where you are after a rerun
         st.session_state['current_page'] = page
 
         try:
-            # Create a main container so the page content stays separate from the sidebar
+            # Main workboard area
             main_container = st.container()
             
             with main_container:
@@ -2708,7 +2678,7 @@ if __name__ == "__main__":
                 elif page == "Expenses":
                     show_expenses()
                     
-                elif page == "PettyCash":
+                elif page == "Petty Cash": # Fixed spacing to match menu
                     show_petty_cash()
                     
                 elif page == "Payroll":
@@ -2723,6 +2693,5 @@ if __name__ == "__main__":
         except NameError as e:
             st.error("🚨 **Mapping Error!**")
             st.warning(f"Python can't find the function: {e}")
-            st.info("Check if you used 'def show_loans():' or just 'show_loans():'")
         except Exception as e:
             st.error(f"Something went wrong: {e}")
