@@ -14,7 +14,43 @@ from fpdf import FPDF
 from streamlit_calendar import calendar
 import bcrypt
 from twilio.rest import Client as TwilioClient # Renamed to avoid conflict
+import streamlit as st
+import pandas as pd
+import base64
+from datetime import datetime
+from supabase import create_client
 
+# --- 6. DATA HELPERS ---
+
+def get_logo():
+    """Downloads logo from Supabase 'company-logos' bucket and converts to Base64."""
+    try:
+        tenant_id = st.session_state.get("tenant_id")
+        if not tenant_id: return None
+            
+        res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
+        
+        if res.data and res.data[0].get("logo_url"):
+            file_path = res.data[0]["logo_url"]
+            # Download directly from bucket
+            file_data = supabase.storage.from_('company-logos').download(file_path)
+            b64 = base64.b64encode(file_data).decode()
+            return f"data:image/png;base64,{b64}"
+    except Exception:
+        return None # Fallback to globe icon
+    return None
+
+@st.cache_data(ttl=600)
+def get_cached_data_refined(table_name):
+    """Fetches data with tenant isolation."""
+    try:
+        t_id = st.session_state.get('tenant_id')
+        if not t_id: return pd.DataFrame()
+        response = supabase.table(table_name).select("*").eq("tenant_id", t_id).execute()
+        return pd.DataFrame(response.data) if response.data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+        return pd.DataFrame()
 # ==============================
 # 1. SUPABASE CONNECTION
 # ==============================
@@ -808,9 +844,7 @@ def save_logo_to_db(image_file):
         st.error(f"❌ Logo Save Error: {e}")
         return False
 
-# ==========================================
-# 17. SIDEBAR & NAVIGATION (THEME SYNCED)
-# ==========================================
+# --- 17. SIDEBAR & NAVIGATION ---
 
 def render_sidebar():
     """Handles tenant branding and user info display with dynamic CSS."""
@@ -818,15 +852,12 @@ def render_sidebar():
     tenant_id = st.session_state.get("tenant_id")
     user_obj = st.session_state.get("user")
     
-    # 1. FETCH TENANT DATA
+    # 1. FETCH BRANDING DATA
     try:
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         if tenant_resp.data:
             active_company = tenant_resp.data[0]
-            # Ensure we get a valid hex code or default to Zoe Blue
-            brand_color = active_company.get('brand_color')
-            if not brand_color or len(brand_color) < 4:
-                brand_color = '#2B3F87'
+            brand_color = active_company.get('brand_color', '#2B3F87')
         else:
             active_company = {"name": "Zoe Consults"}
             brand_color = '#2B3F87'
@@ -834,71 +865,62 @@ def render_sidebar():
         active_company = {"name": "Zoe Consults"}
         brand_color = '#2B3F87'
 
-    # 2. DYNAMIC THEME INJECTION
-    # This specifically targets the sidebar background and all text elements
+    # 2. INJECT DYNAMIC THEME CSS
+    # This targets the sidebar background and forces text to white
     st.markdown(f"""
         <style>
-            /* The main sidebar container */
-            section[data-testid="stSidebar"] {{
+            [data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            
-            /* Target all text elements within the sidebar */
-            section[data-testid="stSidebar"] .stText, 
-            section[data-testid="stSidebar"] span, 
-            section[data-testid="stSidebar"] p, 
-            section[data-testid="stSidebar"] label {{
+            [data-testid="stSidebar"] *, [data-testid="stWidgetLabel"] p {{
                 color: white !important;
             }}
-
-            /* Fixes the radio button unselected state text */
-            section[data-testid="stSidebar"] .st-eb {{
-                color: white !important;
-            }}
-
-            /* Fixes the divider/horizontal rule */
-            section[data-testid="stSidebar"] hr {{
-                border-color: rgba(255, 255, 255, 0.3) !important;
+            [data-testid="stSidebar"] hr {{
+                border-color: rgba(255,255,255,0.2) !important;
             }}
         </style>
     """, unsafe_allow_html=True)
 
-    # 3. DYNAMIC USER EXTRACTION
-    if hasattr(user_obj, 'email'):
-        display_name = user_obj.email
-    elif isinstance(user_obj, dict):
-        display_name = user_obj.get('email', 'User')
-    else:
-        display_name = "Member"
-
+    # 3. SIDEBAR CONTENT
     with st.sidebar:
-        # --- LOGO SECTION ---
+        # LOGO
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            try:
-                logo_data = get_logo() # Calls helper in Section 6
-                if logo_data:
-                    st.image(logo_data, width=80)
-                else:
-                    st.write("🌍")
-            except NameError:
-                st.warning("get_logo() missing")
+            logo_data = get_logo()
+            if logo_data:
+                st.image(logo_data, width=80)
+            else:
+                st.write("🌍")
 
-        # --- INFO BOX ---
+        # TENANT INFO BOX
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
-                        padding: 10px; border-radius: 10px; margin-top: 10px; 
-                        border: 1px solid rgba(255, 255, 255, 0.2);">
-                <span style="font-size: 14px; color: white;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
-                <small style="color: rgba(255, 255, 255, 0.8);">{display_name} ({role})</small>
+                        padding: 10px; border-radius: 10px; margin-top: 10px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 14px;">📍 <b>{active_company.get('name', 'Zoe Consults')}</b></span><br>
+                <small style="opacity: 0.8;">{st.session_state.get('user_email', 'User')} ({role})</small>
             </div>
-            """, 
-            unsafe_allow_html=True
+            """, unsafe_allow_html=True
         )
         st.write("---")
-        
-        st.write("---")
+
+def show_sidebar_menu():
+    """Displays the navigation radio and returns selection."""
+    menu = {
+        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
+        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
+        "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
+    }
+    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+
+    with st.sidebar:
+        selection = st.radio("Main Menu", menu_options)
+        st.divider()
+        if st.button("🚪 Logout", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+    
+    return selection.split(" ", 1)[1]
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
