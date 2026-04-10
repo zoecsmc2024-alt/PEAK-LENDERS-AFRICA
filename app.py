@@ -869,33 +869,38 @@ def render_sidebar():
     brand_color = theme_data.get('brand_color', '#2B3F87')
     
     st.markdown(f"""
-        <style>
-            /* 1. Target ONLY the sidebar container */
-            section[data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
+    <style>
+        /* 1. SIDEBAR: Force everything to be white */
+        section[data-testid="stSidebar"] {{
+            background-color: {brand_color} !important;
+        }}
+        
+        section[data-testid="stSidebar"] * {{
+            color: white !important;
+        }}
 
-            /* 2. Target ONLY text and labels INSIDE the sidebar */
-            /* This prevents the "Invisible Login Text" bug */
-            section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
-            section[data-testid="stSidebar"] .stMarkdown p,
-            section[data-testid="stSidebar"] h1,
-            section[data-testid="stSidebar"] h2,
-            section[data-testid="stSidebar"] span {{
-                color: white !important;
-            }}
+        /* 2. MAIN BODY: Force all Inputs and Labels to be DARK */
+        /* This targets the login form specifically */
+        [data-testid="stAppViewContainer"] section.main [data-testid="stWidgetLabel"] p {{
+            color: #31333F !important;
+        }}
 
-            /* 3. Ensure the login inputs (outside sidebar) stay dark */
-            input {{
-                color: #31333F !important;
-            }}
-            
-            /* 4. Fix dropdown visibility inside sidebar */
-            section[data-testid="stSidebar"] div[data-baseweb="select"] * {{
-                color: #31333F !important;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
+        [data-testid="stAppViewContainer"] section.main input {{
+            color: #31333F !important;
+            -webkit-text-fill-color: #31333F !important; /* Fix for some browsers */
+        }}
+
+        /* 3. BUTTONS: Ensure login button text is visible */
+        [data-testid="stAppViewContainer"] section.main button p {{
+            color: #31333F !important;
+        }}
+
+        /* 4. FIX FOR LIGHT BACKGROUND */
+        .stApp {{
+            background-color: #F0F8FF !important;
+        }}
+    </style>
+""", unsafe_allow_html=True)
 
     # 3. RENDER SIDEBAR CONTENT
     with st.sidebar:
