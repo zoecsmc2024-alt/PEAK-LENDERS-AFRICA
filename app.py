@@ -880,7 +880,7 @@ def render_sidebar():
     current_tenant_id = st.session_state.get('tenant_id')
     brand_color = st.session_state.get('theme_color', '#1E3A8A')
 
-    # 2. Apply Dynamic CSS (Injecting once globally)
+    # 2. Apply Dynamic CSS
     st.markdown(f"""
         <style>
             [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
@@ -917,7 +917,7 @@ def render_sidebar():
             st.warning("No tenants available.")
             st.stop() 
 
-        # 4. LOGO DISPLAY (Fixed Indentation)
+        # 4. LOGO DISPLAY
         col_left, col_mid, col_right = st.columns([1, 2, 1])
         with col_mid:
             logo_path = active_company.get('logo_url')
@@ -931,12 +931,11 @@ def render_sidebar():
                     bucket = "company-logos"
                     final_url = f"https://{project_id}.supabase.co/storage/v1/object/public/{bucket}/{logo_path}"
                 
-                # Cache-buster ensures the "Zoe" logo refreshes correctly
                 st.image(f"{final_url}?t={int(time.time())}", width=80)
             else:
                 st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
-        # 5. USER INFO & DIVIDER (Fixed Indentation)
+        # 5. USER INFO
         st.markdown(f"""
             <div style="text-align: center; margin-bottom: 20px;">
                 <small style="color: rgba(255,255,255,0.8);">{st.session_state.get('user_email', 'User')}</small>
@@ -945,10 +944,7 @@ def render_sidebar():
         
         st.divider()
 
-
-    # Return clean selection to the Router
-    return selection.split(" ", 1)[1] if " " in selection else selection
-        # 5. NAVIGATION MENU (Restoring all items)
+        # 6. NAVIGATION MENU (Inside Sidebar Block)
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
             "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
@@ -957,14 +953,21 @@ def render_sidebar():
         }
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         
-        selection = st.radio("Navigation", menu_options, label_visibility="collapsed")
+        # Helper to find current index
+        current_p = st.session_state.get('current_page', "Overview")
+        try:
+            default_ix = list(menu.keys()).index(current_p)
+        except:
+            default_ix = 0
+
+        selection = st.radio("Navigation", menu_options, index=default_ix, label_visibility="collapsed")
         
         st.divider()
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
             
-    # Return clean selection text (e.g., "Overview")
+    # Final Return (Outside the 'with' block)
     return selection.split(" ", 1)[1] if " " in selection else selection
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
