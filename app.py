@@ -2418,36 +2418,58 @@ def show_settings():
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-        updated_data = {"brand_color": new_color}
-        
-        # Update session state immediately for the current run
-        st.session_state.theme_color = new_color
-        
-        # Handle logo upload to Supabase Storage
-        if logo_file:
+    updated_data = {"brand_color": new_color}
+    
+    # 1. Update session state immediately so the sidebar color changes on rerun
+    st.session_state.theme_color = new_color
+    
+    # 2. Handle logo upload
+    if logo_file:
+        try:
+            bucket_name = 'company-logos'
+            file_ext = logo_file.name.split('.')[-1].lower()
+            file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
+            
+            # UPLOAD TO STORAGE
+            # Note: Using content_type as a direct argument is often more reliable
+            supabase.storage.from_(bucket_name).upload(
+                path=file_path,
+                file=logo_file.getvalue(),
+                file_options={
+                    "x-upsert": "true", # Supabase API often looks for the x-prefix
+                    "content-type": f"image/{file_ext}"
+                }
+            )
+            
+            # Store path for database update
+            updated_data["logo_url"] = file_path
+            
+        except Exception as e:
+            # If upload fails because it exists and upsert failed, try 'update'
             try:
-                bucket_name = 'company-logos'
-                file_ext = logo_file.name.split('.')[-1].lower()
-                # Unique filename based on tenant ID
-                file_path = f"{st.session_state.tenant_id}_logo.{file_ext}"
-                
-                # UPLOAD TO STORAGE
-                supabase.storage.from_(bucket_name).upload(
+                supabase.storage.from_(bucket_name).update(
                     path=file_path,
-                    file=logo_file.getvalue(),
-                    file_options={
-                        "upsert": "true", # Corrected key for overwriting
-                        "content-type": f"image/{file_ext}"
-                    }
+                    file=logo_file.getvalue()
                 )
-                
-                # Save the PATH to the database
                 updated_data["logo_url"] = file_path
-                
-            except Exception as e:
+            except:
                 st.error(f"❌ Storage Error: {str(e)}")
-                st.info("Check if 'company-logos' bucket exists and RLS allows uploads.")
-                return 
+                return
+
+    # 3. UPDATE DATABASE (The missing link)
+    try:
+        supabase.table("tenants")\
+            .update(updated_data)\
+            .eq("id", st.session_state.tenant_id)\
+            .execute()
+        
+        st.success("🎉 Branding saved successfully!")
+        
+        # 4. THE MOST IMPORTANT PART: Force a rerun to show the new colors/logo
+        st.rerun()
+        
+    except Exception as e:
+        st.error(f"❌ Database Error: {str(e)}")
         
         # Update the database record
         try:
