@@ -145,10 +145,12 @@ div.stButton > button {
 }
 </style>
 """, unsafe_allow_html=True)
-# THE MISSING LINK: Call the function immediately so the theme applies on load
-# Check if the function exists and if the key is in session state
-if "theme_color" in st.session_state:
-    apply_ui_theme()
+# Initialize session state theme color if not present
+if 'theme_color' not in st.session_state:
+    st.session_state.theme_color = "#2B3F87"
+
+# Apply the theme globally
+apply_custom_theme(st.session_state.theme_color)
 
 # ==========================================
 # 5. DATA LOADERS (VERIFIED)
