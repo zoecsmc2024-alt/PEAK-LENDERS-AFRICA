@@ -2289,21 +2289,55 @@ def show_ledger():
         st.components.v1.html(html_statement, height=600, scrolling=True)
 
 
-# ==============================
-# 23. SETTINGS & BRANDING PAGE
-# ==============================
+# ==========================================
+# 23. SETTINGS & BRANDING PAGE (FULLY SYNCED)
+# ==========================================
 
 def show_settings():
+    """
+    Manages tenant identity and UI branding.
+    Synchronized with 'tenants' table columns: id, company_code, name, brand_color, logo_url
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
     
-    
+    # 1. FETCH OR INITIALIZE TENANT INFO
+    try:
+        # We use .execute() and check data to prevent the 'single()' empty result crash
+        tenant_resp = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).execute()
+        
+        if not tenant_resp.data:
+            # If no record exists in your table yet, we create one so the page isn't blank
+            new_tenant = {
+                "id": st.session_state.tenant_id,
+                "name": "Zoe Consults Client",
+                "company_code": "NEW_USER",
+                "brand_color": "#2B3F87",
+                "logo_url": None
+            }
+            supabase.table("tenants").insert(new_tenant).execute()
+            active_company = new_tenant
+        else:
+            active_company = tenant_resp.data[0]
+
+    except Exception as e:
+        st.error(f"❌ Connection Error: {e}")
+        return
+
     # --- BUSINESS IDENTITY SECTION ---
     st.subheader("🏢 Business Identity")
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown(f"**Current Business Name:** {active_company['name']}")
-        # Pre-set the color picker to the company's current color
-        new_color = st.color_picker("🎨 Change Brand Color", active_company['brand_color'])
+        # Use .get() fallbacks to prevent KeyErrors
+        biz_name = active_company.get('name', 'My Business')
+        biz_code = active_company.get('company_code', 'N/A')
+        
+        st.markdown(f"**Current Business Name:** {biz_name}")
+        st.markdown(f"**Company Code:** `{biz_code}`")
+        
+        # Color Picker logic
+        current_brand_color = active_company.get('brand_color', '#2B3F87')
+        new_color = st.color_picker("🎨 Change Brand Color", current_brand_color)
         
         st.markdown("**Preview:**")
         st.markdown(
@@ -2315,9 +2349,10 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        # Show the current logo as a thumbnail if it exists
-        if active_company.get('logo_url'):
-            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
+        current_logo = active_company.get('logo_url')
+        
+        if current_logo:
+            st.image(current_logo, use_container_width=True, caption="Current Logo")
         else:
             st.caption("No logo uploaded yet.")
             
@@ -2325,23 +2360,23 @@ def show_settings():
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
-        # We start with the color change
+        # We prepare the update dictionary
         updated_data = {"brand_color": new_color}
         
         # Handle logo upload to Supabase Storage
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                # Clean the path
-                file_path = f"logos/{active_company['id']}_logo.png"
+                # Path: logos/USER_ID_logo.png
+                file_path = f"logos/{st.session_state.tenant_id}_logo.png"
                 
-                # --- THE FIX: ADD CONTENT-TYPE ---
+                # UPLOAD TO STORAGE
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
+                        "content-type": "image/png"
                     }
                 )
                 
@@ -2351,15 +2386,15 @@ def show_settings():
                 
             except Exception as e:
                 st.error(f"❌ Storage Error: {str(e)}")
-                st.stop()
+                st.info("Check if your 'company-logos' bucket is created and set to Public!")
+                return
         
-        # Update the database record for this company
+        # Update the database record
         try:
-            supabase.table("companies").update(updated_data).eq("id", active_company['id']).execute()
+            supabase.table("tenants").update(updated_data).eq("id", st.session_state.tenant_id).execute()
             
             st.success("✅ Branding updated successfully!")
-            st.info("Applying your new brand identity...")
-            # Use st.rerun() to refresh the sidebar and theme instantly
+            st.cache_data.clear()
             st.rerun()
             
         except Exception as e:
