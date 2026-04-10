@@ -2618,56 +2618,54 @@ def show_settings():
             st.error(f"❌ Database Error: {str(e)}")
 
 
-# ==========================================
-# 7. UNIFIED APP ROUTER
-# ==========================================
+def main():
+    # 1. Initialize session state variables
+    if "logged_in" not in st.session_state:
+        st.session_state.logged_in = False
+    if "view" not in st.session_state:
+        st.session_state.view = "login"
 
-# 1. Initialize view state if not present
-if "view" not in st.session_state:
-    st.session_state.view = "login"
+    # 2. THE MASTER ROUTER
+    # If NOT logged in, show the Auth screens
+    if not st.session_state.logged_in:
+        if st.session_state.view == "login":
+            login_page(supabase)
+        elif st.session_state.view == "signup":
+            signup_page(supabase)
+        elif st.session_state.view == "reset":
+            reset_password_ui(supabase)
+    
+    # If LOGGED IN, show the Dashboard
+    else:
+        # --- 1. SIDEBAR NAVIGATION ---
+        with st.sidebar:
+            st.header("🛠️ Navigation")
+            menu = {"Overview": "📊", "Settings": "⚙️", "Logout": "🚪"}
+            menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
+            
+            # Use a key to prevent duplicate element errors
+            current_page = st.radio("Go to:", menu_options, key="main_nav")
+            
+            if "Logout" in current_page:
+                st.session_state.logged_in = False
+                st.session_state.view = "login" # Reset to login view for next time
+                st.rerun()
 
-# 2. Check Login Status
-if not st.session_state.get("logged_in", False):
-    # ONLY one of these screens can be active at a time
-    if st.session_state.view == "login":
-        login_page(supabase)
-    elif st.session_state.view == "signup":
-        signup_page(supabase)
-    elif st.session_state.view == "reset":
-        reset_password_ui(supabase)
-        if st.button("⬅️ Back to Login"):
-            st.session_state.view = "login"
-            st.rerun()
-else:
-    # --- DASHBOARD NAVIGATION (Only shows if logged_in is True) ---
-    menu = {
-        "Overview": "📊", "Loans": "💵", "Borrowers": "👥", 
-        "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
-        "Overdue Tracker": "🚨", "Payments": "💰", "Expenses": "📁", 
-        "PettyCash": "📉", "Payroll": "🧾", "Reports": "📈", "Settings": "⚙️"
-    }
-    
-    menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-    
-    with st.sidebar:
-        st.title(f"🏢 {st.session_state.get('company', 'Zoe Consults')}")
-        current_page = st.radio("Main Menu", menu_options)
+        # --- 2. MAIN CONTENT AREA ---
+        st.write(f"### 📍 {current_page}") 
         
-        st.divider()
-        if st.button("🚪 Logout", use_container_width=True):
-            logout() # Ensure your logout function sets logged_in to False
-            st.rerun()
-
-    # --- PAGE ROUTING ---
-    if "Overview" in current_page:
-        show_overview()
-    elif "Payroll" in current_page:
-        require_role(["admin", "manager"])
-        show_payroll()
-    elif "Settings" in current_page:
-        require_role(["admin"])
-        show_settings()
-
+        try:
+            if "Overview" in current_page:
+                if 'show_overview' in globals():
+                    show_overview()
+                else:
+                    st.warning("⚠️ 'show_overview' function not found in code.")
+            
+            elif "Settings" in current_page:
+                st.info("Settings Page Coming Soon")
+                
+        except Exception as e:
+            st.error(f"🚨 Dashboard Error: {e}")
 
 # IMPORTANT: Ensure this is at the very bottom of your file
 if __name__ == "__main__":
