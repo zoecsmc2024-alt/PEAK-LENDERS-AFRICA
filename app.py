@@ -809,35 +809,30 @@ def render_sidebar():
         display_name = "Member"
         
     company_name = st.session_state.get("company", "ZOE CONSULTS")
-    logo_base64 = get_logo()
+    
 
     with st.sidebar:
-        # 1. LOGO DISPLAY
-        if logo_base64:
-            img_src = f"data:image/png;base64,{logo_base64}"
-            st.markdown(f"""
-                <div style="display: flex; justify-content: center; margin-bottom: 20px;">
-                    <div style="width: 85px; height: 85px; border-radius: 50%; overflow: hidden; 
-                                border: 3px solid #F0F8FF; box-shadow: 0px 0px 15px rgba(240, 248, 255, 0.3);">
-                        <img src="{img_src}" style="width: 100%; height: 100%; object-fit: cover;">
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+        # --- 2. CENTERED LOGO ---
+    # The columns trick [1, 2, 1] forces the middle column to the center
+    _, col_mid, _ = st.columns([1, 2, 1])
+    with col_mid:
+        if active_company.get('logo_url'):
+            st.image(active_company['logo_url'], width=80)
+        else:
+            st.write("🌍")
 
-        # 2. BRANDING & USER INFO
-        # FIXED: Using {display_name} here to match the variable above
-        st.markdown(f"""
-            <div style="text-align: center;">
-                <h2 style="color: #FFFFFF; margin-bottom: 0;">{company_name.upper()}</h2>
-                <div style="color: #00ffcc; font-size: 12px; margin-top: 5px;">
-                    ● <span style="color: #F0F8FF;">System Online</span>
-                </div>
-                <p style='color:#F0F8FF; font-size:14px; margin-top:10px;'>
-                    👤 <b>{display_name}</b> ({role})
-                </p>
-            </div>
-            <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
-        """, unsafe_allow_html=True)
+    # --- 3. CENTERED INFO BOX ---
+    st.markdown(
+        f"""
+        <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
+                    padding: 10px; border-radius: 10px; margin-top: 10px;">
+            <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company['name']}</b></span>
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+    
+    st.write("---")
 
 def show_sidebar_menu():
     """Displays the navigation radio and logout."""
