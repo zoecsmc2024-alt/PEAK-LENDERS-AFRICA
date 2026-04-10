@@ -55,44 +55,56 @@ BRANDING = {
 }
 
 # ==========================================
-# 4. GLOBAL STYLER (FIXED)
+# 7. SECURITY & SESSION MANAGEMENT (LABEL FIX)
 # ==========================================
-def apply_custom_theme(color):
-    """Applies the brand color to the sidebar and UI elements globally."""
-    st.session_state.theme_color = color
-    st.markdown(f"""
-        <style>
-        /* Target the sidebar and the inner content container */
-        [data-testid="stSidebar"], 
-        [data-testid="stSidebarContent"],
-        [data-testid="stSidebar"] > div:first-child {{
-            background-color: {color} !important;
-        }}
-        /* Sidebar text and navigation icons */
-        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
-            color: white !important;
-        }}
-        /* Widget labels (Radio, Selectbox) in sidebar */
-        [data-testid="stWidgetLabel"] p {{
-            color: white !important;
-        }}
-        /* Fix visibility for dropdown text */
-        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
-        ul[data-testid="stSelectboxVirtualList"] * {{ color: #1E3A8A !important; }}
-        .stSelectbox label p {{ color: white !important; }}
-        
-        /* Metric Card Styling */
-        div[data-testid="stMetric"] {{
-            background-color: white; 
-            padding: 15px; 
-            border-radius: 10px;
-            border-left: 5px solid {color}; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-        }}
-        h1, h2, h3 {{ color: {color}; }}
-        </style>
-    """, unsafe_allow_html=True)
+from datetime import datetime, timedelta
 
+SESSION_TIMEOUT = 15 
+
+st.markdown("""
+<style>
+/* 1. FORCE LABELS TO BE VISIBLE */
+/* This specifically targets the text above the input boxes */
+[data-testid="stWidgetLabel"] p {
+    color: #002D62 !important; /* Deep Navy Blue */
+    font-weight: 600 !important;
+    font-size: 14px !important;
+}
+
+/* 2. FORCE INPUT TEXT TO BE BLACK */
+/* This ensures the words you type are visible */
+input {
+    color: #000000 !important;
+    -webkit-text-fill-color: #000000 !important;
+}
+
+/* 3. BUTTON STYLING */
+div.stButton > button {
+    height: 42px;
+    padding: 0 18px;
+    font-size: 14px;
+    border-radius: 8px;
+    color: #002D62 !important;
+}
+
+/* 4. BACKGROUND & SPACING */
+.stApp {
+    background-color: #F0F8FF !important;
+}
+
+.block-container {
+    padding-top: 2rem;
+}
+
+/* 5. SMALL BUTTONS */
+.small-btn button {
+    height: 32px !important;
+    font-size: 12px !important;
+    background-color: #f0f2f6;
+    color: #333 !important;
+}
+</style>
+""", unsafe_allow_html=True)
 # THE MISSING LINK: Call the function immediately so the theme applies on load
 apply_custom_theme(st.session_state.theme_color)
 
