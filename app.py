@@ -526,9 +526,20 @@ def login_page(supabase):
                 auth_result = authenticate(supabase, company, email, password)
                 
                 if auth_result.get("success"):
+                    # ✅ SAVE SESSION (CRITICAL FIX)
+                    st.session_state.user = auth_result.get("user")
+                    st.session_state.session = auth_result.get("session")
+                    st.session_state.tenant_id = auth_result.get("tenant_id")
+
                     # Assuming you have a create_session function
                     # create_session(auth_result)
+
                     st.success("Login Successful! Redirecting...")
+
+                    # ✅ SWITCH VIEW (CRITICAL FIX)
+                    st.session_state.view = "dashboard"
+
+                    # ✅ FORCE RERUN (YOU ALREADY HAD THIS)
                     st.rerun()
                 else:
                     st.error(auth_result.get("error", "Unknown login error"))
@@ -549,10 +560,10 @@ def login_page(supabase):
                 st.session_state.view = "signup" # Switches to signup view
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
+
         # Handle the Password Reset View
         if st.session_state.get("show_reset"):
             reset_password_ui(supabase)
-
 
 def signup_page(supabase):
     st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
