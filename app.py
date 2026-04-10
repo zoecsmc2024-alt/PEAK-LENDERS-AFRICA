@@ -47,6 +47,9 @@ BRANDING = {
     "text_gray": "#666666"  
 }
 
+
+
+
 # ==============================
 # 4. DATA LOADER (VERIFIED)
 # ==============================
@@ -69,60 +72,33 @@ def get_cached_data(table_name):
     except Exception as e:
         # Quietly return empty DF on boot-up to prevent white screen
         return pd.DataFrame()
+
+
 # ==============================
 # 2. GLOBAL STYLER
 # ==============================
-def apply_custom_styles():
-    """
-    Applies the Zoe Consults branding to the Streamlit UI.
-    Maintains navy sidebar and specific button hover logic.
-    """
+def apply_custom_theme(color):
+    st.session_state.theme_color = color
     st.markdown(f"""
         <style>
-            /* Sidebar Background */
-            [data-testid="stSidebar"] {{
-                background-color: {BRANDING['navy']};
-            }}
-            
-            /* Sidebar Text/Icons */
-            [data-testid="stSidebar"] * {{
-                color: white !important;
-            }}
-            
-            /* Active Tab Highlight */
-            .st-bb {{ border-bottom-color: {BRANDING['navy']}; }}
-            .st-at {{ background-color: {BRANDING['baby_blue']}; }}
-            
-            /* Main App Buttons */
-            .stButton>button {{
-                background-color: {BRANDING['navy']};
-                color: white;
-                border-radius: 8px;
-                border: none;
-                padding: 0.5rem 1rem;
-                transition: all 0.3s ease;
-            }}
-            
-            /* Button Hover Effects */
-            .stButton>button:hover {{
-                background-color: #1a285e;
-                color: {BRANDING['baby_blue']};
-                border: none;
-            }}
-
-            /* Card-like containers (Metric Boxes) */
-            div[data-testid="stMetric"] {{
-                background-color: white;
-                border: 1px solid #ddd;
-                padding: 15px;
-                border-radius: 10px;
-                box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
-            }}
+        [data-testid="stSidebar"] {{ background-color: {color} !important; }}
+        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
+        [data-testid="stWidgetLabel"] p {{ color: white !important; }}
+        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
+        ul[data-testid="stSelectboxVirtualList"] * {{ color: #1E3A8A !important; }}
+        .stSelectbox label p {{ color: white !important; }}
+        div[data-testid="stMetric"] {{
+            background-color: white; padding: 15px; border-radius: 10px;
+            border-left: 5px solid {color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }}
+        h1, h2, h3 {{ color: {color}; }}
         </style>
     """, unsafe_allow_html=True)
 # ==============================
 # 6. DATA HELPERS (SUPABASE ENGINE)
 # ==============================
+
+
 
 def create_pdf_report(title, content_list):
     """
@@ -157,23 +133,25 @@ def get_cached_data_refined(table_name):
         return pd.DataFrame()
 
 @st.cache_data(ttl=3600)
-def get_logo():
-    """Fetches the tenant's specific logo."""
+import base64
+
+# --- HELPER FUNCTIONS (Place these at the top of your app.py) ---
+
+def upload_image(file):
+    """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
-        t_id = st.session_state.get('tenant_id')
-        if not t_id: return None
+        bucket_name = 'collateral-photos'
+        file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
         
-        response = supabase.table("settings")\
-            .select("value")\
-            .eq("tenant_id", t_id)\
-            .eq("key", "logo")\
-            .execute()
+        # Upload the file
+        supabase.storage.from_(bucket_name).upload(file_name, file.getvalue())
         
-        if response.data:
-            return response.data[0]['value']
-    except Exception:
-        pass
-    return None
+        # Get public URL
+        res = supabase.storage.from_(bucket_name).get_public_url(file_name)
+        return res
+    except Exception as e:
+        st.error(f"Image upload failed: {str(e)}")
+        return None
 
 def save_data(table_name, dataframe):
     """Saves data to Supabase with tenant isolation."""
@@ -2364,28 +2342,25 @@ def show_settings():
         updated_data = {"brand_color": new_color}
         
         # Handle logo upload to Supabase Storage
-        if logo_file:
-            try:
-                bucket_name = 'company-logos'
-                # Path: logos/USER_ID_logo.png
-                file_path = f"logos/{st.session_state.tenant_id}_logo.png"
-                
-                # UPLOAD TO STORAGE
-                supabase.storage.from_(bucket_name).upload(
-                    path=file_path,
-                    file=logo_file.getvalue(),
-                    file_options={
-                        "x-upsert": "true",
-                        "content-type": "image/png"
-                    }
-                )
-                
-                # Retrieve public URL
-                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                updated_data["logo_url"] = logo_url
-                
-            except Exception as e:
-                st.error(f"❌ Storage Error: {str(e)}")
+        # Inside show_settings() under the Save Button:
+if logo_file:
+    try:
+        bucket_name = 'company-logos'
+        # We name the file using the ID so every boss has their own unique file
+        file_path = f"{st.session_state.tenant_id}_logo.png"
+        
+        # Upload to Supabase Storage (upsert=True replaces the old one)
+        supabase.storage.from_(bucket_name).upload(
+            path=file_path,
+            file=logo_file.getvalue(),
+            file_options={"x-upsert": "true", "content-type": "image/png"}
+        )
+        
+        # Save only the PATH (the filename) to the database
+        updated_data["logo_url"] = file_path 
+        
+    except Exception as e:
+        st.error(f"Storage Error: {e}")
                 st.info("Check if your 'company-logos' bucket is created and set to Public!")
                 return
         
