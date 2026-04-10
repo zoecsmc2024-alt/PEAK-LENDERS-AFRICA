@@ -2294,31 +2294,16 @@ def show_ledger():
 # ==============================
 
 def show_settings():
-    """
-    Manages tenant identity and UI branding.
-    Utilizes Supabase Storage for logos and database for brand colors.
-    """
-    st.markdown("<h2 style='color: #2B3F87;'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
     
-    # 1. FETCH CURRENT TENANT INFO
-    # We pull from a 'tenants' table which holds the name, brand_color, and logo_url
-    try:
-        tenant_resp = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).single().execute()
-        active_company = tenant_resp.data
-    except Exception as e:
-        st.error(f"Error loading settings: {e}")
-        return
-
-    # --- BUSINESS IDENTITY SECTION (UI Intact) ---
+    
+    # --- BUSINESS IDENTITY SECTION ---
     st.subheader("🏢 Business Identity")
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        st.markdown(f"**Current Business Name:** {active_company.get('name', 'My Business')}")
-        
-        # Pre-set the color picker to the company's current color (fallback to Zoe Navy)
-        current_brand_color = active_company.get('brand_color', BRANDING['navy'])
-        new_color = st.color_picker("🎨 Change Brand Color", current_brand_color)
+        st.markdown(f"**Current Business Name:** {active_company['name']}")
+        # Pre-set the color picker to the company's current color
+        new_color = st.color_picker("🎨 Change Brand Color", active_company['brand_color'])
         
         st.markdown("**Preview:**")
         st.markdown(
@@ -2340,22 +2325,23 @@ def show_settings():
 
     # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
+        # We start with the color change
         updated_data = {"brand_color": new_color}
         
         # Handle logo upload to Supabase Storage
         if logo_file:
             try:
-                # IMPORTANT: Ensure you have created a PUBLIC bucket named 'company-logos' in Supabase
                 bucket_name = 'company-logos'
-                file_path = f"logos/{st.session_state.tenant_id}_logo.png"
+                # Clean the path
+                file_path = f"logos/{active_company['id']}_logo.png"
                 
-                # UPLOAD TO STORAGE
+                # --- THE FIX: ADD CONTENT-TYPE ---
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": "image/png"
+                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
                     }
                 )
                 
@@ -2367,26 +2353,17 @@ def show_settings():
                 st.error(f"❌ Storage Error: {str(e)}")
                 st.stop()
         
-        # 1. FETCH CURRENT TENANT INFO (Updated for your specific table)
-    try:
-        tenant_resp = supabase.table("tenants").select("*").eq("id", st.session_state.tenant_id).execute()
-        
-        if not tenant_resp.data:
-            # If the row doesn't exist, create it so the page isn't blank!
-            new_tenant = {
-                "id": st.session_state.tenant_id,
-                "name": "New Business",
-                "company_code": "DEFAULT", # Matching your screenshot
-                "brand_color": "#2B3F87"
-            }
-            supabase.table("tenants").insert(new_tenant).execute()
-            active_company = new_tenant
-        else:
-            active_company = tenant_resp.data[0]
+        # Update the database record for this company
+        try:
+            supabase.table("companies").update(updated_data).eq("id", active_company['id']).execute()
             
-    except Exception as e:
-        st.error(f"Error loading settings: {e}")
-        return
+            st.success("✅ Branding updated successfully!")
+            st.info("Applying your new brand identity...")
+            # Use st.rerun() to refresh the sidebar and theme instantly
+            st.rerun()
+            
+        except Exception as e:
+            st.error(f"❌ Database Error: {str(e)}")
 import streamlit as st
 import time
 
