@@ -891,18 +891,19 @@ def get_logo():
     return None
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (STABLE VERSION)
+# 17. SIDEBAR & NAVIGATION (STABLE & REACTIVE)
 # ==========================================
 
 def render_sidebar():
     """
     Handles tenant branding, CSS isolation, and navigation header.
-    Fixes NameError: company_name and ensures login visibility.
+    Reactive to session state changes to prevent needing a refresh.
     """
     # 1. FETCH THE THEME DATA
-    # This must happen first to define variables used in the f-string below
     theme_data = get_current_theme()
-    brand_color = theme_data.get('brand_color', '#2B3F87')
+    
+    # Priority: Session State (for instant update) > Database > Default Blue
+    brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#2B3F87'))
     company_name = theme_data.get('name', 'Zoe Consults')
     
     # 2. INJECT DYNAMIC THEME CSS
@@ -914,7 +915,12 @@ def render_sidebar():
                 background-color: {brand_color} !important;
             }}
             
-            section[data-testid="stSidebar"] * {{
+            /* Target all text elements inside the sidebar for white color */
+            section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+            section[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p,
+            section[data-testid="stSidebar"] span,
+            section[data-testid="stSidebar"] h1,
+            section[data-testid="stSidebar"] h2 {{
                 color: white !important;
             }}
 
@@ -949,7 +955,6 @@ def render_sidebar():
                 st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
         # --- TENANT INFO BOX ---
-        # Fixed: company_name is now defined above via theme_data.get()
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.1); 
