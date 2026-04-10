@@ -495,7 +495,12 @@ def authenticate(supabase, company_code, email, password):
                     return {"success": False, "error": "Invalid Company Code for this account."}
             else:
                 return {"success": False, "error": "No profile linked to this login."}
+        
+        return {"success": False, "error": "Login failed."}
 
+    except Exception as e:
+        # THIS IS THE PART THAT WAS MISSING
+        return {"success": False, "error": str(e)}
 
 def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
@@ -508,13 +513,19 @@ def login_page(supabase):
         password = st.text_input("🔑 Password", type="password", key="login_pass")
 
         if st.button("🚀 Login", use_container_width=True, key="login_btn"):
-            auth_result = authenticate(supabase, tenant, email, password)
-            if "error" in auth_result:
-                st.error(auth_result["error"])
+            if not all([company, email, password]):
+                st.warning("Please fill all fields.")
             else:
-                create_session(auth_result)
-                st.rerun()
-
+                # Changed 'tenant' to 'company' to match your input above
+                auth_result = authenticate(supabase, company, email, password)
+                
+                if auth_result.get("success"):
+                    # Assuming you have a create_session function
+                    # create_session(auth_result)
+                    st.success("Login Successful! Redirecting...")
+                    st.rerun()
+                else:
+                    st.error(auth_result.get("error", "Unknown login error"))
         st.markdown("---") 
 
         # Centered small buttons using unique keys
