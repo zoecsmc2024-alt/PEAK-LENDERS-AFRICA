@@ -936,26 +936,33 @@ def render_sidebar():
             st.warning("No tenants available.")
             st.stop() 
 
-        # --- 2. CENTERED LOGO (FIXED PATHING) ---
-        _, col_mid, _ = st.columns([1, 2, 1])
-        with col_mid:
-            logo_data = active_company.get('logo_url')
-            
-            if logo_data:
-                if logo_data.startswith("http"):
-                    final_logo_url = logo_data
-                else:
-                    # Replace with your actual project ID from Supabase
-                    project_ref = "YOUR_PROJECT_ID" 
-                    # Ensure folder prefix is included
-                    clean_path = logo_data if logo_data.startswith("logos/") else f"logos/{logo_data}"
-                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
-                
-                import time
-                # Cache busting prevents the broken "0" icon
-                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+        # --- 2. CENTERED LOGO (FIXED) ---
+    _, col_mid, _ = st.columns([1, 2, 1])
+    with col_mid:
+        # Get the path from the database
+        logo_path = active_company.get('logo_url')
+        
+        if logo_path:
+            # 1. If it's already a full working URL (like your old code), use it directly
+            if str(logo_path).startswith("http"):
+                final_logo_url = logo_path
             else:
-                st.write("🌍")
+                # 2. If it's a relative path, construct the Supabase URL
+                # IMPORTANT: Replace 'YOUR_PROJECT_ID' with your actual Supabase reference
+                project_ref = "YOUR_PROJECT_ID" 
+                
+                # Ensure we have the 'logos/' folder prefix
+                clean_path = logo_path if str(logo_path).startswith("logos/") else f"logos/{logo_path}"
+                
+                final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/{clean_path}"
+            
+            # 3. Render the image with a cache-buster (?t=) 
+            # This forces the sidebar to stop showing the broken icon
+            import time
+            st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+        else:
+            # Default fallback
+            st.write("🌍")
         
         # --- 3. CENTERED INFO BOX ---
         user_email = st.session_state.get('user_email', 'User')
