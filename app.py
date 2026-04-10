@@ -2334,8 +2334,6 @@ def show_ledger():
         st.components.v1.html(html_statement, height=600, scrolling=True)
 
 
-import streamlit as st
-import time
 
 import streamlit as st
 import time
@@ -2354,14 +2352,17 @@ def show_settings():
     # 1. FETCH OR INITIALIZE TENANT INFO
     try:
         tenant_id = st.session_state.get("tenant_id")
+        
         # Ensure we have a tenant_id to work with
         if not tenant_id:
             st.warning("⚠️ No active tenant detected. Please log in.")
             return
 
+        # Fetch from database
         tenant_resp = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         
         if not tenant_resp.data:
+            # Initialize new tenant if they don't exist in the branding table
             new_tenant = {
                 "id": tenant_id,
                 "name": "Zoe Consults Client",
@@ -2405,15 +2406,17 @@ def show_settings():
         st.markdown("**Company Logo:**")
         
         try:
-            # Assumes get_logo() exists and uses the cache-busting logic:
-            # f"{public_url}?t={int(time.time())}"
-            logo_data = get_logo()
+            # --- CACHE-BUSTING LOGO FETCH ---
+            # Ensures the UI 'talks' to the bucket immediately after change
+            res = supabase.storage.from_('company-logos').get_public_url(f"{tenant_id}_logo.png")
+            logo_data = f"{res}?t={int(time.time())}"
+            
             if logo_data:
                 st.image(logo_data, use_container_width=True, caption="Current Logo")
             else:
                 st.caption("No logo uploaded yet.")
-        except NameError:
-            st.caption("Logo helper not found.")
+        except Exception:
+            st.caption("No logo found in storage.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
@@ -2423,12 +2426,11 @@ def show_settings():
     if st.button("💾 Save Branding Changes", use_container_width=True):
         updated_data = {"brand_color": new_color}
         
-        # 1. Handle logo upload
+        # 1. Handle logo upload to Supabase Bucket
         if logo_file:
             try:
                 bucket_name = 'company-logos'
                 file_ext = logo_file.name.split('.')[-1].lower()
-                # Force standardized filename for the tenant
                 file_path = f"{tenant_id}_logo.{file_ext}"
                 
                 # UPLOAD TO STORAGE
@@ -2442,33 +2444,34 @@ def show_settings():
                 )
                 updated_data["logo_url"] = file_path
                 
-            except Exception as e:
-                # Fallback: if upload fails, try 'update'
+            except Exception as upload_error:
+                # Fallback: if primary upload fails, try direct update
                 try:
                     supabase.storage.from_(bucket_name).update(
                         path=file_path,
                         file=logo_file.getvalue()
                     )
                     updated_data["logo_url"] = file_path
-                except:
-                    st.error(f"❌ Storage Error: {str(e)}")
+                except Exception as e:
+                    st.error(f"❌ Storage Error: {str(upload_error)}")
                     st.stop()
 
-        # 2. UPDATE DATABASE
+        # 2. UPDATE DATABASE TABLE
         try:
             supabase.table("tenants")\
                 .update(updated_data)\
                 .eq("id", tenant_id)\
                 .execute()
             
-            # 3. THE HANDSHAKE: Update session state immediately
+            # 3. THE THEME HANDSHAKE
+            # Update session state so the global apply_custom_theme() picks it up instantly
             st.session_state.theme_color = new_color
             
             # 4. REFRESH UI
-            st.cache_data.clear() # Clears any cached database queries
+            st.cache_data.clear() 
             st.success("🎉 Branding saved successfully! Syncing UI...")
-            time.sleep(1) # Brief pause so the user sees the success message
-            st.rerun() # Triggers global theme application in app.py
+            time.sleep(1) 
+            st.rerun() 
             
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
