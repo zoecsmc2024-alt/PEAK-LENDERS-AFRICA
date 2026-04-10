@@ -97,8 +97,34 @@ def apply_custom_theme(color):
 # ==============================
 # 6. DATA HELPERS (SUPABASE ENGINE)
 # ==============================
+import base64 # Necessary for the logo conversion
 
-
+def get_logo():
+    """
+    Downloads the logo bytes from Supabase bucket and converts to Base64.
+    Matches your 'tenants' table and 'company-logos' bucket.
+    """
+    try:
+        tenant_id = st.session_state.get("tenant_id")
+        if not tenant_id:
+            return None
+            
+        # 1. Fetch the file path from the tenants table
+        res = supabase.table("tenants").select("logo_url").eq("id", tenant_id).execute()
+        
+        if res.data and res.data[0].get("logo_url"):
+            file_path = res.data[0]["logo_url"]
+            
+            # 2. Download directly from your 'company-logos' bucket
+            file_data = supabase.storage.from_('company-logos').download(file_path)
+            
+            # 3. Convert to Base64 for the sidebar HTML
+            b64 = base64.b64encode(file_data).decode()
+            return f"data:image/png;base64,{b64}"
+    except Exception:
+        # If bucket is empty or file missing, return None to show the fallback emoji
+        return None
+    return None
 
 def create_pdf_report(title, content_list):
     """
@@ -106,7 +132,6 @@ def create_pdf_report(title, content_list):
     """
     pdf = FPDF()
     pdf.add_page()
-    # Using 'Helvetica' as it is a standard core font in FPDF
     pdf.set_font("Helvetica", 'B', 16)
     pdf.cell(40, 10, title)
     pdf.ln(10)
@@ -132,24 +157,18 @@ def get_cached_data_refined(table_name):
         st.error(f"Database Error on {table_name}: {e}")
         return pd.DataFrame()
 
-
-# --- HELPER FUNCTIONS (Place these at the top of your app.py) ---
-
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
         bucket_name = 'collateral-photos'
         file_name = f"collateral_{datetime.now().strftime('%Y%m%d%H%M%S')}_{file.name}"
-        
-        # Upload the file
         supabase.storage.from_(bucket_name).upload(file_name, file.getvalue())
-        
-        # Get public URL
         res = supabase.storage.from_(bucket_name).get_public_url(file_name)
         return res
     except Exception as e:
         st.error(f"Image upload failed: {str(e)}")
         return None
+
 @st.cache_data(ttl=3600)
 def save_data(table_name, dataframe):
     """Saves data to Supabase with tenant isolation."""
