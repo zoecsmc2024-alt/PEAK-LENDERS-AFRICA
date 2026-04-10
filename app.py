@@ -589,7 +589,7 @@ def signup_page(supabase):
                     }
                 })
 
-                # 3. PROFILE INSERT
+                # ... inside signup_page logic ...
                 if res.user:
                     user_data = {
                         "id": res.user.id,
@@ -601,16 +601,15 @@ def signup_page(supabase):
                     try:
                         supabase.table("users").insert(user_data).execute()
                         st.success("✅ SUCCESS! Account created. Redirecting to login...")
-                        
-                        # FORCE THE MOVE TO LOGIN
                         import time
-                        time.sleep(2) # Give them a moment to read the success message
-                        st.session_state.view = "login" # Update navigation state
+                        time.sleep(2) 
+                        st.session_state.view = "login" 
                         st.rerun() 
 
                     except Exception as db_err:
                         if "23505" in str(db_err):
                             st.info("👋 Account exists. Redirecting to login...")
+                            import time
                             time.sleep(2)
                             st.session_state.view = "login"
                             st.rerun()
@@ -619,16 +618,27 @@ def signup_page(supabase):
                             if st.button("⬅️ Back to Login"):
                                 st.session_state.view = "login"
                                 st.rerun()
+
+            except Exception as e:
+                st.error(f"🚨 Detailed Error: {str(e)}")
+
+    # Add a final back button outside the logic blocks
+    if st.button("⬅️ Back to Login", key="signup_back_final"):
+        st.session_state.view = "login"
+        st.rerun()
+
 # ==========================================
-# 9. MAIN ROUTER
+# 9. MAIN ROUTER (Outside of signup_page)
 # ==========================================
 def run_auth_ui(supabase):
-    # This creates a simple toggle at the top of your sidebar or main page
-    mode = st.radio("Select Mode", ["Login", "Sign Up"], horizontal=True, label_visibility="collapsed")
+    # Ensure session state for view exists
+    if "view" not in st.session_state:
+        st.session_state.view = "login"
 
-    if mode == "Login":
+    # Navigation logic based on session_state
+    if st.session_state.view == "login":
         login_page(supabase)
-    else:
+    elif st.session_state.view == "signup":
         signup_page(supabase)
 
 
