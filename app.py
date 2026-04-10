@@ -106,7 +106,9 @@ div.stButton > button {
 </style>
 """, unsafe_allow_html=True)
 # THE MISSING LINK: Call the function immediately so the theme applies on load
-apply_custom_theme(st.session_state.theme_color)
+# Check if the function exists and if the key is in session state
+if "theme_color" in st.session_state:
+    apply_ui_theme()
 
 # ==========================================
 # 5. DATA LOADERS (VERIFIED)
@@ -244,48 +246,46 @@ from datetime import datetime, timedelta
 
 SESSION_TIMEOUT = 15  # Minutes
 
-# --- ADDITIONAL UI STYLING (Fixed for visibility) ---
-st.markdown("""
-<style>
-/* 1. FORCE GLOBAL TEXT VISIBILITY ON MAIN PAGE */
-/* This ensures that even if other styles turn things white, the main app stays dark */
-[data-testid="stAppViewContainer"] {
-    color: #1E3A8A !important;
-}
+# ==========================================
+# UI CONFIGURATION (BULLETPROOF VERSION)
+# ==========================================
 
-/* 2. FIX INPUT BOXES (Login Fields) */
-/* This is the most important fix for your "Invisible Words" */
-input {
-    color: #000000 !important;
-    -webkit-text-fill-color: #000000 !important;
-}
+def apply_ui_theme():
+    """
+    Applies the UI theme and FORCES visibility of login labels.
+    """
+    # Fallback to a default color if session_state isn't ready
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    
+    st.markdown(f"""
+    <style>
+        /* 1. THE SIDEBAR (Isolated) */
+        [data-testid="stSidebar"] {{
+            background-color: {brand_color} !important;
+        }}
+        [data-testid="stSidebar"] * {{
+            color: white !important;
+        }}
 
-/* 3. BUTTON STYLING */
-div.stButton > button {
-    height: 42px;
-    padding: 0 18px;
-    font-size: 14px;
-    border-radius: 8px;
-    color: #1E3A8A !important; /* Ensure button text isn't white */
-}
+        /* 2. THE MAIN CONTENT (FORCED DARK TEXT) */
+        /* Targets labels and inputs specifically on the login/main screen */
+        .main [data-testid="stWidgetLabel"] p {{
+            color: #002D62 !important; 
+            font-weight: bold !important;
+            opacity: 1 !important;
+        }}
+        
+        .main input {{
+            color: #000000 !important;
+            -webkit-text-fill-color: #000000 !important;
+        }}
 
-/* Small secondary buttons */
-.small-btn button {
-    height: 32px !important;
-    font-size: 12px !important;
-    padding: 0 12px !important;
-    border-radius: 6px !important;
-    background-color: #f0f2f6;
-    color: #333 !important;
-    border: 1px solid #ddd;
-}
-
-/* 4. LAYOUT SPACING */
-.block-container {
-    padding-top: 2rem;
-}
-</style>
-""", unsafe_allow_html=True)
+        /* 3. APP BACKGROUND */
+        .stApp {{
+            background-color: #F0F8FF !important;
+        }}
+    </style>
+    """, unsafe_allow_html=True)
 
 # ==========================================
 # PASSWORD VERIFICATION (LEGACY SUPPORT)
