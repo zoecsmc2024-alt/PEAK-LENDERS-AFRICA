@@ -886,10 +886,9 @@ def render_sidebar():
             pass
 
     # 3. REACTIVITY ENGINE: Priority to Session State
-    # If the user just picked a new color in Settings, this uses it INSTANTLY
     brand_color = st.session_state.get('theme_color', theme_data.get('brand_color', '#1E3A8A'))
     
-    # 4. Apply the CSS (Borrowed and fixed for specificity)
+    # 4. Apply the CSS
     st.markdown(f"""
         <style>
             /* Sidebar background */
@@ -922,56 +921,54 @@ def render_sidebar():
                 box-shadow: 0 4px 6px rgba(0,0,0,0.1);
             }}
             
-            /* Metric text colors (so they are readable on white) */
             div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{
                 color: #31333F !important;
             }}
 
-            /* Main Page Headings */
             h1, h2, h3 {{ color: {brand_color} !important; }}
-            
-            /* Main Page Labels */
             .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
         </style>
     """, unsafe_allow_html=True)
 
+    # --- THE SIDEBAR RENDER (FIXED INDENTATION HERE) ---
     with st.sidebar:
-    # --- 1. PROJECT SELECTION (Must be first to define active_company) ---
-    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
-    active_company = company_list[active_company_name]
-    apply_custom_theme(active_company['brand_color'])
-
-    # --- 2. CENTERED LOGO ---
-    # This is now correctly inside the sidebar block
-    _, col_mid, _ = st.columns([1, 2, 1])
-    with col_mid:
-        logo_data = active_company.get('logo_url')
+        # --- 1. PROJECT SELECTION ---
+        # Note: Make sure 'company_list' is defined globally or passed to this function
+        active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
+        active_company = company_list[active_company_name]
         
-        if logo_data:
-            if logo_data.startswith("http"):
-                final_logo_url = logo_data
-            else:
-                # Replace with your actual project ID from Supabase
-                project_ref = "YOUR_PROJECT_ID_HERE" 
-                final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/logos/{logo_data}"
+        # --- 2. CENTERED LOGO ---
+        _, col_mid, _ = st.columns([1, 2, 1])
+        with col_mid:
+            logo_data = active_company.get('logo_url')
             
-            import time
-            st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
-        else:
-            st.write("🌍")
+            if logo_data:
+                if logo_data.startswith("http"):
+                    final_logo_url = logo_data
+                else:
+                    # Replace with your actual project ID from Supabase
+                    project_ref = "YOUR_PROJECT_ID_HERE" 
+                    final_logo_url = f"https://{project_ref}.supabase.co/storage/v1/object/public/company-logos/logos/{logo_data}"
+                
+                import time
+                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+            else:
+                st.write("🌍")
 
-    # --- 3. CENTERED INFO BOX ---
-    # Still inside the 'with st.sidebar:' block
-    user_email = st.session_state.get('user_email', 'User')
-    st.markdown(f"""
-        <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
-            <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
-            <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
-        </div>
-    """, unsafe_allow_html=True)
-    
-    st.write("") 
-    st.divider()
+        # --- 3. CENTERED INFO BOX ---
+        user_email = st.session_state.get('user_email', 'User')
+        st.markdown(f"""
+            <div style="text-align: center; background: rgba(255,255,255,0.15); padding: 10px; border-radius: 10px; margin-top: 5px; border: 1px solid rgba(255,255,255,0.2);">
+                <span style="font-size: 14px; font-weight: bold; color: white;">📍 {active_company_name}</span><br>
+                <small style="color: rgba(255,255,255,0.8);">{user_email}</small>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        st.write("") 
+        st.divider()
+        
+        # --- 4. NAVIGATION MENU ---
+        # Don't forget to put your st.radio() here so it shows up in the sidebar!
 def show_sidebar_menu():
     """Displays the navigation radio and returns selection."""
     menu = {
