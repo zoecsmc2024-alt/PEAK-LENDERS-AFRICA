@@ -70,7 +70,7 @@ def get_cached_data(table_name):
         # Quietly return empty DF on boot-up to prevent white screen
         return pd.DataFrame()
 # ==============================
-# 5. GLOBAL STYLER (VERIFIED)
+# 2. GLOBAL STYLER
 # ==============================
 def apply_custom_styles():
     """
@@ -120,7 +120,6 @@ def apply_custom_styles():
             }}
         </style>
     """, unsafe_allow_html=True)
-
 # ==============================
 # 6. DATA HELPERS (SUPABASE ENGINE)
 # ==============================
