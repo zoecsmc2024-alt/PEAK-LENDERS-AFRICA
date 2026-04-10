@@ -861,39 +861,38 @@ def get_logo():
     return None
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (FULLY SYNCED)
+# 17. SIDEBAR & NAVIGATION (FIXED SELECTORS)
 # ==========================================
 
 def render_sidebar():
-    """
-    Handles tenant branding, CSS theme injection, and navigation menu.
-    This consolidated version prevents NameErrors and UI drops.
-    """
-    # 1. FETCH THE THEME DATA
     theme_data = get_current_theme()
     brand_color = theme_data.get('brand_color', '#2B3F87')
-    company_name = theme_data.get('name', 'Zoe Consults')
     
-    # 2. INJECT DYNAMIC THEME CSS
     st.markdown(f"""
         <style>
-            /* Main sidebar background and content area */
-            section[data-testid="stSidebar"], 
-            [data-testid="stSidebarContent"],
-            section[data-testid="stSidebar"] > div:first-child {{
+            /* 1. Target ONLY the sidebar container */
+            section[data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            /* Ensure all text and icons are white for readability */
-            section[data-testid="stSidebar"] * {{
+
+            /* 2. Target ONLY text and labels INSIDE the sidebar */
+            /* This prevents the "Invisible Login Text" bug */
+            section[data-testid="stSidebar"] [data-testid="stWidgetLabel"] p,
+            section[data-testid="stSidebar"] .stMarkdown p,
+            section[data-testid="stSidebar"] h1,
+            section[data-testid="stSidebar"] h2,
+            section[data-testid="stSidebar"] span {{
                 color: white !important;
             }}
-            /* Fix radio button labels specifically */
-            section[data-testid="stWidgetLabel"] p {{
-                color: white !important;
+
+            /* 3. Ensure the login inputs (outside sidebar) stay dark */
+            input {{
+                color: #31333F !important;
             }}
-            /* Style the horizontal divider in sidebar */
-            hr {{
-                border-color: rgba(255, 255, 255, 0.2) !important;
+            
+            /* 4. Fix dropdown visibility inside sidebar */
+            section[data-testid="stSidebar"] div[data-baseweb="select"] * {{
+                color: #31333F !important;
             }}
         </style>
     """, unsafe_allow_html=True)
