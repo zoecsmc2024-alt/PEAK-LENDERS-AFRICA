@@ -547,46 +547,45 @@ def signup_page(supabase):
                 })
 
                 # 3. CREATE PUBLIC PROFILE
-                # Inside your signup_page function, under 'if res.user:'
-if res.user:
-    try:
-        # We define the data clearly
-        user_profile = {
-            "id": res.user.id,
-            "tenant_id": tenant_id,
-            "role": "Admin",
-            "full_name": email.split('@')[0].capitalize()
-        }
-        
-        # Try to insert
-        profile_response = supabase.table("users").insert(user_profile).execute()
-        
-        if profile_response.data:
-            st.success("✅ WE ARE IN! Account created. Check your email to confirm.")
+        if res.user:
+            try:
+                # We define the data clearly
+                user_profile = {
+                    "id": res.user.id,
+                    "tenant_id": tenant_id,
+                    "role": "Admin",
+                    "full_name": email.split('@')[0].capitalize()
+                }
+                
+                # Try to insert into the public.users table
+                profile_response = supabase.table("users").insert(user_profile).execute()
+                
+                if profile_response.data:
+                    st.success("✅ WE ARE IN! Account created. Check your email to confirm.")
+                else:
+                    st.error("Auth worked, but the profile row didn't save. Checking permissions...")
+                    
+            except Exception as profile_err:
+                # Catching Foreign Key or Missing Column errors
+                error_msg = str(profile_err)
+                if "foreign key" in error_msg.lower():
+                    st.error("🚨 Database Timing Error: Auth isn't ready yet. Try clicking again in 2 seconds.")
+                else:
+                    st.error(f"🚨 Profile Error: {error_msg}")
         else:
-            st.error("Auth worked, but the profile row didn't save. Checking permissions...")
-            
-    except Exception as profile_err:
-        # This will tell us if it's a 'Foreign Key' error or a 'Missing Column' error
-        error_msg = str(profile_err)
-        if "foreign key" in error_msg.lower():
-            st.error("🚨 Database Timing Error: Auth isn't ready yet. Try clicking again in 2 seconds.")
-        else:
-            st.error(f"🚨 Profile Error: {error_msg}")
-else:
-    st.error("Signup failed: Supabase Auth did not return a user.")
+            st.error("Signup failed: Supabase Auth did not return a user.")
+
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
-# Place this at the end of your script or in main()
 def run_auth_ui(supabase):
-    mode = st.radio("Select Mode", ["Login", "Sign Up"], horizontal=True)
+    # This creates a simple toggle at the top of your sidebar or main page
+    mode = st.radio("Select Mode", ["Login", "Sign Up"], horizontal=True, label_visibility="collapsed")
 
     if mode == "Login":
         login_page(supabase)
     else:
         signup_page(supabase)
-
 
 
 # ==============================
