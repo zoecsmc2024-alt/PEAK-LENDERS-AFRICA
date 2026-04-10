@@ -2359,8 +2359,8 @@ if logo_file:
         
     except Exception as e:
         st.error(f"Storage Error: {e}")
-                st.info("Check if your 'company-logos' bucket is created and set to Public!")
-                return
+          st.info("Check if your 'company-logos' bucket is created and set to Public!")
+            return
         
         # Update the database record
         try:
