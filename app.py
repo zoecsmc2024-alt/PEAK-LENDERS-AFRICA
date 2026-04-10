@@ -547,30 +547,34 @@ def signup_page(supabase):
                 })
 
                 # 3. CREATE PUBLIC PROFILE
-                if res.user:
-                    try:
-                        user_profile = {
-                            "id": res.user.id,
-                            "tenant_id": tenant_id,
-                            "role": "Admin",
-                            "full_name": email.split('@')[0].capitalize()
-                        }
-                        
-                        profile_response = supabase.table("users").insert(user_profile).execute()
-                        st.success("✅ Account created! Please check your email.")
-                        
-                    except Exception as profile_err:
-                        print(f"DEBUG ERROR: {profile_err}")
-                        st.error(f"Profile Sync Error: {profile_err}")
-                else:
-                    st.error("Signup failed at the Auth stage. Check if email is already taken.")
-
-            except Exception as e:
-                st.error(f"🚨 Database Error: {str(e)}")
-
-    if st.button("⬅️ Back to Login", key="back_nav"):
-        st.session_state.view = "login"
-        st.rerun()
+                # Inside your signup_page function, under 'if res.user:'
+if res.user:
+    try:
+        # We define the data clearly
+        user_profile = {
+            "id": res.user.id,
+            "tenant_id": tenant_id,
+            "role": "Admin",
+            "full_name": email.split('@')[0].capitalize()
+        }
+        
+        # Try to insert
+        profile_response = supabase.table("users").insert(user_profile).execute()
+        
+        if profile_response.data:
+            st.success("✅ WE ARE IN! Account created. Check your email to confirm.")
+        else:
+            st.error("Auth worked, but the profile row didn't save. Checking permissions...")
+            
+    except Exception as profile_err:
+        # This will tell us if it's a 'Foreign Key' error or a 'Missing Column' error
+        error_msg = str(profile_err)
+        if "foreign key" in error_msg.lower():
+            st.error("🚨 Database Timing Error: Auth isn't ready yet. Try clicking again in 2 seconds.")
+        else:
+            st.error(f"🚨 Profile Error: {error_msg}")
+else:
+    st.error("Signup failed: Supabase Auth did not return a user.")
 # ==========================================
 # 9. MAIN ROUTER
 # ==========================================
