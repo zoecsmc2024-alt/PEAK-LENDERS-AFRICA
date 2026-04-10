@@ -23,35 +23,43 @@ import streamlit as st
 import pandas as pd
 # ... (all your other imports)
 
-# ==========================================
-# 1. THEME DEFINITION (MUST BE AT THE TOP)
-# ==========================================
-def apply_ui_theme():
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
+import streamlit as st
+import time
+
+# 1. DEFINE THE THEME FUNCTION FIRST
+def apply_custom_theme(color):
+    """Injects custom CSS to update the sidebar and UI color."""
     st.markdown(f"""
-    <style>
-        /* Sidebar styling */
-        [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
-        [data-testid="stSidebar"] * {{ color: white !important; }}
-
-        /* FORCING LOGIN LABELS TO BE DARK BLUE */
-        .main [data-testid="stWidgetLabel"] p {{
-            color: #002D62 !important; 
-            font-weight: bold !important;
-            opacity: 1 !important;
-        }}
-        
-        /* FORCING INPUT TEXT TO BE BLACK */
-        .main input {{
-            color: #000000 !important;
-            -webkit-text-fill-color: #000000 !important;
-        }}
-
-        .stApp {{ background-color: #F0F8FF !important; }}
-    </style>
+        <style>
+            [data-testid="stSidebar"] {{
+                background-color: {color} !important;
+            }}
+            /* Add any other custom CSS targeting buttons or headers here */
+            .stButton>button {{
+                border-color: {color};
+                color: {color};
+            }}
+        </style>
     """, unsafe_allow_html=True)
 
-# NOW your script can safely continue...
+# 2. DEFINE THE SYNC FUNCTION
+def sync_tenant_ui():
+    """Applies branding globally based on the logged-in tenant."""
+    if 'tenant_id' in st.session_state:
+        try:
+            res = supabase.table("tenants").select("brand_color").eq("id", st.session_state.tenant_id).execute()
+            if res.data:
+                branding = res.data[0]
+                # Use session state for instant updates, fallback to DB
+                color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
+                apply_custom_theme(color) # Now this function is defined!
+                return branding
+        except Exception:
+            pass
+    return None
+
+# 3. CALL THE SYNC (Line 289)
+active_branding = sync_tenant_ui()
 # ==========================================
 # 1. SUPABASE CONNECTION
 # ==========================================
