@@ -815,29 +815,29 @@ def save_logo_to_db(image_file):
         return False
 
 # ==========================================
-# 17. SIDEBAR & NAVIGATION (VERIFIED)
+# 17. SIDEBAR & NAVIGATION (VERIFIED & FIXED)
 # ==========================================
 
 def render_sidebar():
     """Handles tenant branding and user info display."""
     role = st.session_state.get("role", "Staff")
     
-    # --- FIX STARTS HERE ---
+    # --- DYNAMIC USER EXTRACTION ---
     user_obj = st.session_state.get("user")
     
-    # If it's a Supabase User object, get the email. Otherwise, use a default.
+    # Safely extract the email to avoid the "Supabase Object Dump"
     if hasattr(user_obj, 'email'):
         display_name = user_obj.email
     elif isinstance(user_obj, dict):
         display_name = user_obj.get('email', 'User')
     else:
-        display_name = str(user_obj) if user_obj else "Member"
-    # --- FIX ENDS HERE ---
+        display_name = "Member"
+        
     company_name = st.session_state.get("company", "ZOE CONSULTS")
-
     logo_base64 = get_logo()
 
     with st.sidebar:
+        # 1. LOGO DISPLAY
         if logo_base64:
             img_src = f"data:image/png;base64,{logo_base64}"
             st.markdown(f"""
@@ -849,6 +849,8 @@ def render_sidebar():
                 </div>
             """, unsafe_allow_html=True)
 
+        # 2. BRANDING & USER INFO
+        # FIXED: Using {display_name} here to match the variable above
         st.markdown(f"""
             <div style="text-align: center;">
                 <h2 style="color: #FFFFFF; margin-bottom: 0;">{company_name.upper()}</h2>
@@ -856,7 +858,7 @@ def render_sidebar():
                     ● <span style="color: #F0F8FF;">System Online</span>
                 </div>
                 <p style='color:#F0F8FF; font-size:14px; margin-top:10px;'>
-                    👤 <b>{user}</b> ({role})
+                    👤 <b>{display_name}</b> ({role})
                 </p>
             </div>
             <hr style='border-top: 1px solid rgba(255,255,255,0.2); margin: 20px 0;'>
