@@ -1496,8 +1496,61 @@ def show_collateral():
     # Dynamic Column Detection for Loans Table
     loan_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
     loan_bor_col = next((c for c in loans_df.columns if 'borrower' in c), "borrower")
+    loan_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
 
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
+
+    # --- TAB 1: REGISTER ASSET (Short ID Logic) ---
+    with tab_reg:
+        if loans_df.empty:
+            st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+        else:
+            # Filter for active loans
+            active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+            available_loans = loans_df[loans_df[loan_stat_col].astype(str).str.title().isin(active_statuses)].copy()
+
+            if available_loans.empty:
+                st.info("✅ All current loans are cleared. No assets need to be held.")
+            else:
+                with st.form("collateral_form", clear_on_submit=True):
+                    st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
+                    c1, c2 = st.columns(2)
+                    
+                    # Short ID Mapping for a cleaner UI
+                    loan_map = {
+                        f"{str(row[loan_id_col])[:8]} | {row[loan_bor_col]}": row[loan_id_col] 
+                        for _, row in available_loans.iterrows()
+                    }
+                    
+                    selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                    asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
+                    desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
+                    est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
+
+                    submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+
+                if submit:
+                    if desc and est_value > 0:
+                        full_loan_id = loan_map[selected_label]
+                        # Retrieve correct borrower name from the dataframe
+                        sel_borrower = available_loans[available_loans[loan_id_col] == full_loan_id][loan_bor_col].iloc[0]
+                        
+                        new_asset = pd.DataFrame([{
+                            "borrower": sel_borrower,
+                            "loan_id": full_loan_id,
+                            "type": asset_type,
+                            "description": desc,
+                            "value": float(est_value),
+                            "status": "Held",
+                            "date_added": datetime.now().strftime("%Y-%m-%d"),
+                            "tenant_id": st.session_state.get('tenant_id')
+                        }])
+                        
+                        if save_data("collateral", new_asset):
+                            st.success(f"✅ Asset registered for {sel_borrower}!")
+                            st.rerun()
+                    else:
+                        st.error("⚠️ Provide both a description and value.")
 
     # --- TAB 2: VIEW & UPDATE ---
     with tab_view:
@@ -1505,20 +1558,20 @@ def show_collateral():
             # 1. Numeric Conversion
             collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors='coerce').fillna(0)
             
-            # 2. Dynamic Column Detection (Safety)
+            # 2. Dynamic Column Detection
             c_bor_col = next((c for c in collateral_df.columns if 'borrower' in c), "borrower")
             c_stat_col = next((c for c in collateral_df.columns if 'status' in c), "status")
             c_id_col = next((c for c in collateral_df.columns if 'id' in c), "id")
 
             # 3. Metrics Calculation
             total_val = collateral_df[collateral_df[c_stat_col] != "Released"]["value"].sum()
-            in_custody = collateral_df[collateral_df[c_stat_col].isin(["In Custody", "Held"])].shape[0]
+            in_custody = collateral_df[collateral_df[c_stat_col].isin(["In Custody", "Held", "held"])].shape[0]
             
             m1, m2 = st.columns(2)
             m1.markdown(f"""<div style="background-color: #F0F8FF; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">TOTAL ASSET SECURITY</p><h2 style="margin:0; color:{brand_color};">{total_val:,.0f} <span style="font-size:14px;">UGX</span></h2></div>""", unsafe_allow_html=True)
             m2.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid {brand_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">ACTIVE ASSETS</p><h2 style="margin:0; color:{brand_color};">{in_custody}</h2></div>""", unsafe_allow_html=True)
 
-            # 4. Table Generation (Logic remains same, just ensuring variables match)
+            # 4. Table Generation
             rows_html = ""
             for i, r in collateral_df.reset_index().iterrows():
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
@@ -1535,10 +1588,9 @@ def show_collateral():
 
             st.markdown(f"""<div style="border:2px solid {brand_color}; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><thead><tr style="background:{brand_color}; color:white; text-align:left;"><th style="padding:12px;">ID</th><th style="padding:12px;">Borrower</th><th style="padding:12px;">Type</th><th style="padding:12px;">Description</th><th style="padding:12px; text-align:right;">Value</th><th style="padding:12px; text-align:center;">Status</th><th style="padding:12px; text-align:right;">Date</th></tr></thead><tbody>{rows_html}</tbody></table></div>""", unsafe_allow_html=True)
 
-            # --- DELETE & EDIT SECTION (Now correctly inside the 'not empty' block) ---
+            # 5. Manage Records
             st.markdown("---")
             with st.expander("⚙️ Manage Collateral Records"):
-                # FIX: Use the detected column names to build the list
                 manage_list = collateral_df.apply(lambda x: f"ID: {x[c_id_col]} | {x[c_bor_col]} - {x.get('description', '')}", axis=1).tolist()
                 selected_col = st.selectbox("Select Asset to Modify", manage_list)
                 
@@ -1550,7 +1602,7 @@ def show_collateral():
                 upd_val = ce1.number_input("Edit Value (UGX)", value=float(c_row.get("value", 0)))
                 
                 status_opts = ["In Custody", "Released", "Disposed", "Held"]
-                current_stat = str(c_row.get(c_stat_col, "Held"))
+                current_stat = str(c_row.get(c_stat_col, "Held")).title()
                 upd_stat = ce2.selectbox("Update Status", status_opts, index=status_opts.index(current_stat) if current_stat in status_opts else 0)
                 
                 if st.button("💾 Save Asset Changes", use_container_width=True):
@@ -1566,12 +1618,10 @@ def show_collateral():
                         st.rerun()
 
                 if st.button("🗑️ Delete Asset Record", use_container_width=True):
-                    # Direct call to delete by ID
                     supabase.table("collateral").delete().eq("id", c_id).execute()
                     st.warning("⚠️ Asset record deleted.")
                     st.rerun()
         else:
-            # This is the ONLY place the 'No collateral' message should appear
             st.info("💡 No collateral registered yet.")
             
 
