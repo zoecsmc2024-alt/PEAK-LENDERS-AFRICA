@@ -28,39 +28,44 @@ import time
 
 def apply_master_theme():
     """
-    ONE function to rule them all. Call this at the start of every page 
-    or inside your sidebar render.
+    Applies the theme globally. Priority:
+    1. Instant session state (from settings/sidebar selection)
+    2. Fallback to default blue
     """
-    # 1. Priority: Session State (for instant updates) -> DB Selection -> Default Blue
+    # Force a refresh of the color variable from session state
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     
     st.markdown(f"""
     <style>
-        /* MAIN SIDEBAR */
-        [data-testid="stSidebar"] {{
+        /* MAIN SIDEBAR BACKGROUND */
+        [data-testid="stSidebar"], section[data-testid="stSidebar"] {{
             background-color: {brand_color} !important;
+            min-width: 260px !important;
         }}
 
-        /* SIDEBAR TEXT & ICONS */
-        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span, 
-        [data-testid="stWidgetLabel"] p {{
-            color: white !important;
+        /* SIDEBAR TEXT & ICONS - Forced White */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebarNav"] span,
+        [data-testid="stSidebar"] b,
+        [data-testid="stSidebar"] p {{
+            color: #FFFFFF !important;
         }}
 
-        /* SELECTBOX FIX (Ensures dropdown text remains readable) */
-        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
-
-        /* METRIC CARDS */
+        /* METRIC CARDS SYNC */
         div[data-testid="stMetric"] {{
             background-color: #FFFFFF !important;
-            border: 1px solid #E0E0E0 !important;
             border-left: 8px solid {brand_color} !important; 
             border-radius: 12px !important;
-            padding: 20px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
         }}
 
-        /* HEADINGS */
+        /* HEADINGS & BUTTONS SYNC */
         h1, h2, h3 {{ color: {brand_color} !important; }}
+        
+        /* Fix for selectbox text visibility inside sidebar */
+        [data-testid="stSidebar"] div[data-baseweb="select"] * {{
+            color: #1E3A8A !important;
+        }}
     </style>
     """, unsafe_allow_html=True)
 def upload_image(file):
@@ -100,75 +105,9 @@ if 'logged_in' not in st.session_state:
 if 'theme_color' not in st.session_state:
     st.session_state.theme_color = "#2B3F87"
 
-# ==========================================
-# 3. BRANDING & PAGE CONFIG
-# ==========================================
-st.set_page_config(page_title="Zoe Admin", layout="wide", initial_sidebar_state="expanded")
 
-BRANDING = {
-    "navy": "#2B3F87",      
-    "baby_blue": "#F0F8FF", 
-    "white": "#FFFFFF",     
-    "text_gray": "#666666"  
-}
 
-# ==========================================
-# 7. SECURITY & SESSION MANAGEMENT (LABEL FIX)
-# ==========================================
-from datetime import datetime, timedelta
 
-SESSION_TIMEOUT = 15 
-
-st.markdown("""
-<style>
-/* 1. FORCE LABELS TO BE VISIBLE */
-/* This specifically targets the text above the input boxes */
-[data-testid="stWidgetLabel"] p {
-    color: #002D62 !important; /* Deep Navy Blue */
-    font-weight: 600 !important;
-    font-size: 14px !important;
-}
-
-/* 2. FORCE INPUT TEXT TO BE BLACK */
-/* This ensures the words you type are visible */
-input {
-    color: #000000 !important;
-    -webkit-text-fill-color: #000000 !important;
-}
-
-/* 3. BUTTON STYLING */
-div.stButton > button {
-    height: 42px;
-    padding: 0 18px;
-    font-size: 14px;
-    border-radius: 8px;
-    color: #002D62 !important;
-}
-
-/* 4. BACKGROUND & SPACING */
-.stApp {
-    background-color: #F0F8FF !important;
-}
-
-.block-container {
-    padding-top: 2rem;
-}
-
-/* 5. SMALL BUTTONS */
-.small-btn button {
-    height: 32px !important;
-    font-size: 12px !important;
-    background-color: #f0f2f6;
-    color: #333 !important;
-}
-</style>
-""", unsafe_allow_html=True)
-# Initialize session state theme color if not present
-if 'theme_color' not in st.session_state:
-    st.session_state.theme_color = "#2B3F87"
-
-# Apply the theme globally
-apply_custom_theme(st.session_state.theme_color)
 
 # ==========================================
 # 5. DATA LOADERS (VERIFIED)
@@ -752,75 +691,6 @@ def run_auth_ui(supabase):
         reset_password_ui(supabase)
 
 
-# ==============================
-# 15. SYSTEM & UI CONFIGURATION
-# ==============================
-
-def apply_ui_theme():
-    """
-    Applies the dynamic theme based on session state.
-    """
-    # Use the color from session state, fallback to default if not set
-    color = st.session_state.get("theme_color", "#0A192F")
-    
-    st.markdown(f"""
-    <style>
-        /* 1. PAGE LAYOUT */
-        .block-container {{
-            max-width: 100% !important;
-            padding-top: 2rem !important;
-            padding-bottom: 2rem !important;
-            padding-left: 5rem !important;
-            padding-right: 5rem !important;
-        }}
-
-        /* 2. MAIN APP BACKGROUND */
-        .stApp {{
-            background-color: #F0F8FF !important; 
-        }}
-
-        /* 3. DYNAMIC SIDEBAR - Fixed to use {color} variable */
-        [data-testid="stSidebar"] {{
-            background-color: {color} !important; 
-            min-width: 260px !important;
-        }}
-
-        /* Sidebar Branding Text */
-        [data-testid="stSidebar"] h2, [data-testid="stSidebar"] p, [data-testid="stSidebar"] b {{
-            color: #F0F8FF !important;
-        }}
-
-        /* 4. TEXT ONLY NAV */
-        section[data-testid="stSidebar"] .stButton > button {{
-            background-color: transparent !important;
-            color: #F0F8FF !important; 
-            border: none !important;     
-            box-shadow: none !important; 
-            width: 100% !important;
-            text-align: left !important;
-            padding: 8px 15px !important;
-            margin-bottom: 5px !important;
-            font-size: 16px !important;
-            font-weight: 400 !important;
-            transition: all 0.3s ease !important;
-        }}
-
-        section[data-testid="stSidebar"] .stButton > button:hover {{
-            color: #FFFFFF !important; 
-            background-color: rgba(240, 248, 255, 0.1) !important; 
-            padding-left: 25px !important; 
-        }}
-
-        /* 5. METRIC CARDS */
-        div[data-testid="stMetric"] {{
-            background-color: #FFFFFF !important;
-            border: 1px solid #E0E0E0 !important;
-            border-left: 8px solid {color} !important; 
-            border-radius: 12px !important;
-            padding: 20px !important;
-        }}
-    </style>
-    """, unsafe_allow_html=True)
 
 # ==========================================
 # 16. UTILITY FUNCTIONS (SYNCED)
