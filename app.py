@@ -2209,7 +2209,9 @@ def show_settings():
     Manages tenant identity and UI branding.
     Synchronized with 'tenants' table columns: id, company_code, name, brand_color, logo_url
     """
-    st.markdown("<h2 style='color: #2B3F87;'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
+    # Use the session state color for the header to maintain visual sync
+    header_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"<h2 style='color: {header_color};'>⚙️ Portal Settings & Branding</h2>", unsafe_allow_html=True)
     
     # 1. FETCH OR INITIALIZE TENANT INFO
     try:
@@ -2239,14 +2241,19 @@ def show_settings():
         st.error(f"❌ Connection Error: {e}")
         return
 
-# --- BUSINESS IDENTITY SECTION ---
+    # --- BUSINESS IDENTITY SECTION ---
     st.subheader("🏢 Business Identity")
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.markdown(f"**Current Business Name:** {active_company['name']}")
-        # Pre-set the color picker to the company's current color
-        new_color = st.color_picker("🎨 Change Brand Color", active_company['brand_color'])
+        
+        # Consistent variable naming to prevent NameErrors
+        new_color = st.color_picker(
+            "🎨 Change Brand Color", 
+            active_company.get('brand_color', '#2B3F87'),
+            key="settings_color_picker"
+        )
         
         st.markdown("**Preview:**")
         st.markdown(
@@ -2258,46 +2265,62 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        # Show the current logo as a thumbnail if it exists
+        # Show current logo with cache-busting timestamp to fix MediaFileStorageError
         if active_company.get('logo_url'):
-            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
+            import time
+            logo_display_url = f"{active_company['logo_url']}?t={int(time.time())}"
+            st.image(logo_display_url, use_container_width=True, caption="Current Logo")
         else:
             st.caption("No logo uploaded yet.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-    # --- INSIDE YOUR SETTINGS FUNCTION ---
-# 1. Define the input variable clearly
-new_color = st.color_picker("Change Brand Color", st.session_state.get('theme_color', '#1E3A8A'))
+    st.divider()
 
-# 2. Save Button
-if st.button("💾 Save Branding Changes"):
-    updated_data = {"brand_color": new_color} # This fixes the NameError for 'new_color'
-    
-    # Handle logo upload (Simplified)
-    if logo_file:
+    # --- SAVE ACTION ---
+    if st.button("💾 Save Branding Changes", use_container_width=True):
+        # 1. Initialize update dictionary with the chosen color
+        updated_data = {"brand_color": new_color} 
+        
+        # 2. Handle logo upload to Supabase Storage if a new file is present
+        if logo_file:
+            try:
+                import time
+                bucket_name = 'company-logos'
+                # Path includes ID to ensure unique storage per tenant
+                file_path = f"logos/{active_company['id']}_logo.png"
+                
+                # Upload with Content-Type to ensure it renders as an image
+                supabase.storage.from_(bucket_name).upload(
+                    path=file_path, 
+                    file=logo_file.getvalue(),
+                    file_options={
+                        "x-upsert": "true", 
+                        "content-type": "image/png"
+                    }
+                )
+                
+                # Get and store the public URL
+                public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                updated_data["logo_url"] = public_url
+                
+            except Exception as e:
+                st.error(f"❌ Storage Error: {str(e)}")
+                return # Stop if upload fails
+
+        # 3. Update Database record for this tenant
         try:
-            file_path = f"logos/{active_company['id']}_logo.png"
-            supabase.storage.from_('company-logos').upload(
-                path=file_path, file=logo_file.getvalue(),
-                file_options={"x-upsert": "true", "content-type": "image/png"}
-            )
-            updated_data["logo_url"] = supabase.storage.from_('company-logos').get_public_url(file_path)
+            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+            
+            # 4. SYNC MASTER SWITCH: Update session state so UI changes immediately
+            st.session_state['theme_color'] = new_color
+            
+            st.success("✅ Branding updated successfully!")
+            time.sleep(1) # Ensure imports match top of script
+            st.rerun() # Forces the router and sidebar to redraw with new styles
+            
         except Exception as e:
-            st.error(f"Storage Error: {e}")
-
-    # Update Database
-    try:
-        supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
-        
-        # Sync the 'Master Switch'
-        st.session_state['theme_color'] = new_color
-        st.success("Branding updated!")
-        
-        time.sleep(1) # Now works because 'time' is imported at the top
-        st.rerun()
-    except Exception as e:
-        st.error(f"Database Error: {e}")
+            st.error(f"❌ Database Error: {str(e)}")
 
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
