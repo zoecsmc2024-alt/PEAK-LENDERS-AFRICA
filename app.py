@@ -872,7 +872,7 @@ def upload_image(file):
 # --- 4. AUTH & SIDEBAR NAVIGATION ---
 
 def render_sidebar():
-    # 1. Fetch All Tenants (Unified)
+    # 1. Fetch Fresh Tenant Data
     try:
         tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
         tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
@@ -887,7 +887,7 @@ def render_sidebar():
     current_tenant_id = st.session_state.get('tenant_id')
 
     with st.sidebar:
-        # --- A. TENANT SELECTION (ONLY ONCE) ---
+        # --- A. TENANT SELECTION ---
         if tenant_map:
             options = list(tenant_map.keys())
             default_index = 0
@@ -897,45 +897,50 @@ def render_sidebar():
                         default_index = i
                         break
             
-            # This is the ONLY selectbox allowed for the portal
-            active_company_name = st.selectbox("Business Portal:", options, index=default_index, key="portal_select")
+            # Use a unique key to prevent DuplicateElementId
+            active_company_name = st.selectbox("Business Portal:", options, index=default_index, key="sidebar_portal_select")
             active_company = tenant_map[active_company_name]
             
-            # Sync state and theme
+            # Sync session state
             if st.session_state.get('tenant_id') != active_company['id']:
                 st.session_state['tenant_id'] = active_company['id']
                 st.session_state['theme_color'] = active_company['brand_color']
                 st.rerun()
         else:
-            st.warning("No tenants available.")
             st.stop()
 
-        # --- B. DYNAMIC CSS ---
-        sidebar_color = active_company['brand_color']
+        # --- B. DYNAMIC BRANDING (Sidebars Sync) ---
+        brand_color = active_company['brand_color']
         st.markdown(f"""
             <style>
-                [data-testid="stSidebar"] {{ background-color: {sidebar_color} !important; }}
+                [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
                 [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
                 
-                /* Metric Card & Headings Sync */
+                /* Metric Card & Heading Sync */
                 div[data-testid="stMetric"] {{
                     background-color: white; padding: 15px; border-radius: 10px;
-                    border-left: 5px solid {sidebar_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                    border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                 }}
-                h1, h2, h3 {{ color: {sidebar_color} !important; }}
+                h1, h2, h3 {{ color: {brand_color} !important; }}
             </style>
         """, unsafe_allow_html=True)
 
-        # --- C. CENTERED LOGO (Fixed for Web URLs) ---
+        # --- C. THE LOGO FIX (Solves MediaFileStorageError) ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
             logo_val = active_company.get('logo_url')
-            if logo_val and logo_val != "0":
+            if logo_val and logo_val not in ["0", "None"]:
                 import time
-                # Ensure it's treated as a URL, not a local file
-                final_logo_url = logo_val if str(logo_val).startswith("http") else f"https://YOUR_PROJECT_ID.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
+                # If it's a raw filename, build the URL. If it's a URL, use it.
+                if str(logo_val).startswith("http"):
+                    final_logo_url = logo_val
+                else:
+                    # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase Project ID
+                    proj_id = "YOUR_PROJECT_ID" 
+                    final_logo_url = f"https://{proj_id}.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
                 
                 try:
+                    # Cache busting with timestamp ?t=
                     st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
                 except:
                     st.markdown("<h1 style='text-align: center;'>🏢</h1>", unsafe_allow_html=True)
