@@ -1095,20 +1095,27 @@ def show_loans():
                 st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
-                    new_loan = pd.DataFrame([{
-                        "borrower_id": selected_id, # FIX: Used correct column name and UUID
-                        "type": l_type,
+                    # 1. Grab the tenant ID with a fallback to avoid NULL errors
+                    t_id = st.session_state.get('tenant_id', 'default-admin')
+
+                    # 2. Build the data (No "type" column until you run the ALTER TABLE SQL)
+                    loan_data = {
+                        "borrower_id": selected_id, 
                         "principal": float(amount), 
-                        "interest": (interest_rate/100)*amount,
+                        "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due), 
                         "amount_paid": 0.0,
                         "status": "Active", 
                         "start_date": str(date_issued), 
                         "end_date": str(date_due),
-                        "tenant_id": st.session_state.tenant_id
-                    }])
+                        "tenant_id": t_id
+                    }
+                    
+                    new_loan = pd.DataFrame([loan_data])
+                    
                     if save_data("loans", new_loan):
-                        st.success("✅ Loan issued!"); st.rerun()
+                        st.success("✅ Loan issued!")
+                        st.rerun()
 
     # ==============================
     # TAB: ACTIONS (The Rollover Engine)
@@ -1127,7 +1134,6 @@ def show_loans():
                 roll_sel = st.selectbox("Select Loan to Roll Over", eligible_loans["id"].unique())
                 loan_to_roll = eligible_loans[eligible_loans["id"] == roll_sel].iloc[0]
                 
-                # Fetching name for display, but keeping ID for DB logic
                 st.warning(f"You are rolling over Loan #{roll_sel}")
                 
                 current_unpaid = loan_to_roll['balance']
@@ -1137,24 +1143,24 @@ def show_loans():
                     # 1. Update old loan to 'Rolled'
                     supabase.table("loans").update({"status": "Rolled"}).eq("id", loan_to_roll['id']).execute()
                     
-                    # 2. Create New Loan Entry
+                    # 2. Create New Loan Entry (The Next Cycle)
+                    t_id = st.session_state.get('tenant_id', 'default-admin')
+
                     new_cycle = pd.DataFrame([{
-                        "borrower_id": loan_to_roll['borrower_id'], # FIX: Used correct column name
-                        "type": loan_to_roll['type'],
-                        "principal": float(current_unpaid),
+                        "borrower_id": loan_to_roll['borrower_id'], 
+                        "principal": float(current_unpaid), 
                         "interest": float(current_unpaid * (new_interest_rate / 100)),
                         "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
                         "amount_paid": 0.0,
                         "status": "Active",
                         "start_date": datetime.now().strftime("%Y-%m-%d"),
                         "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-                        "tenant_id": st.session_state.tenant_id
+                        "tenant_id": t_id 
                     }])
-                    
+
                     if save_data("loans", new_cycle):
                         st.success(f"Loan successfully rolled over! New Principal: {current_unpaid:,.0f} UGX")
                         st.rerun()
-
     # ==============================
     # TAB: MANAGE/EDIT (Direct ID Targeting)
     # ==============================
