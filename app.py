@@ -918,67 +918,76 @@ def show_borrowers():
                     st.error("⚠️ Please fill in Name and Phone Number.")
 
     # --- TAB 3: AUDIT & MANAGE ---
-    with tab_audit:
-        if not df.empty:
-            target_name = st.selectbox("Select Borrower to Audit/Manage", df["name"].tolist(), key="audit_manage_select")
-            b_data = df[df["name"] == target_name].iloc[0]
-            
-            # SHOW LOAN HISTORY
-            u_loans = get_cached_data("loans")
-            
-            if not u_loans.empty:
-                user_loans = u_loans[u_loans["borrower"] == target_name].copy()
-                if not user_loans.empty:
-                    st.metric("Total Loans Found", len(user_loans))
-                    st.table(user_loans[["id", "status", "principal", "end_date"]])
-                else:
-                    st.info("ℹ️ No loans recorded for this borrower yet.")
+        with tab_audit:
+            if not df.empty:
+                target_name = st.selectbox("Select Borrower to Audit/Manage", df["name"].tolist(), key="audit_manage_select")
+                b_data = df[df["name"] == target_name].iloc[0]
+                
+                # SHOW LOAN HISTORY
+                u_loans = get_cached_data("loans")
+                
+                if not u_loans.empty:
+                    user_loans = u_loans[u_loans["borrower"] == target_name].copy()
+                    if not user_loans.empty:
+                        st.metric("Total Loans Found", len(user_loans))
+                        st.table(user_loans[["id", "status", "principal", "end_date"]])
+                    else:
+                        st.info("ℹ️ No loans recorded for this borrower yet.")
 
-            st.markdown("---")
-            st.markdown("### ⚙️ Modify Borrower Details")
-            
-            with st.expander(f"📝 Edit Profile: {target_name}"):
-                with st.form(f"edit_bor_{target_name}"):
-                    c1, c2 = st.columns(2)
-                    e_name = c1.text_input("Full Name", value=str(b_data['name']))
-                    e_phone = c1.text_input("Phone Number", value=str(b_data['phone']))
-                    e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
-                    e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
-                    e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if b_data['status'] == "Active" else 1)
-                    e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
-                    
-                    if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
-                        update_df = pd.DataFrame([{
-                            "id": b_data['id'], # Primary key for upsert logic in save_data
-                            "name": e_name,
-                            "phone": e_phone,
-                            "national_id": e_nid,
-                            "email": e_email,
-                            "status": e_status,
-                            "address": e_addr,
-                            "tenant_id": st.session_state.get('tenant_id')
-                        }])
+                st.markdown("---")
+                st.markdown("### ⚙️ Modify Borrower Details")
+                
+                with st.expander(f"📝 Edit Profile: {target_name}"):
+                    with st.form(f"edit_bor_{target_name}"):
+                        c1, c2 = st.columns(2)
+                        e_name = c1.text_input("Full Name", value=str(b_data['name']))
+                        e_phone = c1.text_input("Phone Number", value=str(b_data['phone']))
+                        e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
+                        e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
+                        e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if b_data['status'] == "Active" else 1)
+                        e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
                         
-                        if save_data("borrowers", update_df):
-                            st.success("✅ Profile updated!")
-                            st.rerun()
+                        if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
+                            update_df = pd.DataFrame([{
+                                "id": b_data['id'], 
+                                "name": e_name,
+                                "phone": e_phone,
+                                "national_id": e_nid,
+                                "email": e_email,
+                                "status": e_status,
+                                "address": e_addr,
+                                "tenant_id": st.session_state.get('tenant_id')
+                            }])
+                            
+                            if save_data("borrowers", update_df):
+                                st.success("✅ Profile updated!")
+                                st.rerun()
 
-            # --- DELETE ACTION ---
-            st.markdown("### ⚠️ Danger Zone")
-            if st.button(f"🗑️ Delete {target_name} Permanently", key=f"del_btn_{target_name}"):
-                has_loans = not u_loans[u_loans["borrower"] == target_name].empty if not u_loans.empty else False
+                # --- DELETE ACTION (Now properly indented) ---
+                st.markdown("### ⚠️ Danger Zone")
+                confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}")
 
-                if has_loans:
-                    st.error("❌ Cannot delete! Borrower has active loan records.")
-                else:
-                    try:
-                        # RLS also applies to DELETE; ensure session_state.tenant_id is active
-                        supabase.table("borrowers").delete().eq("id", b_data['id']).execute()
-                        st.warning(f"⚠️ {target_name} removed.")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-
+                if st.button(f"🗑️ Delete Permanently", disabled=not confirm_delete, type="primary"):
+                    # Check for loans
+                    user_loans = u_loans[u_loans["borrower"] == target_name] if not u_loans.empty else pd.DataFrame()
+                    
+                    if not user_loans.empty:
+                        st.error(f"❌ Cannot delete! This borrower has {len(user_loans)} loan records.")
+                    else:
+                        try:
+                            # The actual database call
+                            response = supabase.table("borrowers").delete().eq("id", b_data['id']).execute()
+                            
+                            # Check if it actually deleted something
+                            if response.data:
+                                st.success(f"Successfully removed {target_name}.")
+                                st.rerun()
+                            else:
+                                st.error("Delete failed. You might not have permission (Check RLS).")
+                        except Exception as e:
+                            st.error(f"Database Error: {e}")
+            else:
+                st.info("No borrowers found to manage.")
 # ==============================
 # 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
 # ==============================
