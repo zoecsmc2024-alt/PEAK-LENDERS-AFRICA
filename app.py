@@ -872,7 +872,7 @@ def upload_image(file):
 # --- 4. AUTH & SIDEBAR NAVIGATION ---
 
 def render_sidebar():
-    # 1. Fetch All Tenants (Unified)
+    # 1. Fetch All Tenants
     try:
         tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
         tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
@@ -880,61 +880,67 @@ def render_sidebar():
         st.error(f"Error fetching tenants: {e}")
         tenant_map = {}
 
-    # 2. Define Theme Variables Early (CRITICAL for CSS below)
-    brand_color = st.session_state.get('theme_color', '#1E3A8A')
+    # 2. Get the current tenant selection first
     current_tenant_id = st.session_state.get('tenant_id')
-
-    # 3. Initialize session state
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = "Overview"
-
-    # 4. SIDEBAR CONTENT
+    
     with st.sidebar:
-        # --- 4a. CSS INJECTION (Now correctly indented inside the sidebar) ---
+        # --- STEP A: IDENTIFY ACTIVE COMPANY ---
+        if tenant_map:
+            options = list(tenant_map.keys())
+            default_index = 0
+            if current_tenant_id:
+                for i, name in enumerate(options):
+                    if tenant_map[name]['id'] == current_tenant_id:
+                        default_index = i
+                        break
+            
+            active_company_name = st.selectbox("Business Portal:", options, index=default_index)
+            active_company = tenant_map[active_company_name]
+            
+            # Update state immediately if selection changed
+            if st.session_state.get('tenant_id') != active_company['id']:
+                st.session_state['tenant_id'] = active_company['id']
+                st.session_state['theme_color'] = active_company['brand_color']
+                st.rerun()
+        else:
+            st.warning("No tenants available.")
+            st.stop()
+
+        # --- STEP B: DYNAMIC CSS (Using active_company['brand_color']) ---
+        # This is the "bridge" that fixes the communication gap
+        sidebar_color = active_company['brand_color']
+        
         st.markdown(f"""
             <style>
-                /* Sidebar background */
-                [data-testid="stSidebar"] {{
-                    background-color: {brand_color} !important;
+                /* Sidebar Background */
+                [data-testid="stSidebar"] {{ 
+                    background-color: {sidebar_color} !important; 
                 }}
                 
-                /* Sidebar text and icons */
-                [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
-                    color: white !important;
+                /* Sidebar Text & Navigation Icons */
+                [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ 
+                    color: white !important; 
                 }}
 
-                /* Centering the Radio Buttons */
-                [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
-                    flex-direction: column; 
-                    align-items: center; 
-                }}
-                [data-testid="stSidebar"] div.row-widget.stRadio > div[role="radiogroup"] > label {{ 
-                    justify-content: center; 
-                    text-align: center; 
-                    width: 100%; 
-                }}
-
-                /* The Metric Card Glow-up */
+                /* Metric Card Styling */
                 div[data-testid="stMetric"] {{
-                    background-color: white; 
-                    padding: 15px; 
-                    border-radius: 10px;
-                    border-left: 5px solid {brand_color}; 
-                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                }}
-                
-                /* Metric text colors */
-                div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{
-                    color: #31333F !important;
+                    background-color: white; padding: 15px; border-radius: 10px;
+                    border-left: 5px solid {sidebar_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
                 }}
 
                 /* Main Page Headings */
-                h1, h2, h3 {{ color: {brand_color} !important; }}
+                h1, h2, h3 {{ color: {sidebar_color} !important; }}
                 
-                /* Main Page Labels */
-                .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
+                /* Center the navigation radio */
+                [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
+                    flex-direction: column; align-items: center; 
+                }}
             </style>
         """, unsafe_allow_html=True)
+
+        # --- STEP C: LOGO & MENU ---
+        # (Keep your existing logo and radio menu code here)
+        # ...
 
         # --- 4b. TENANT SELECTION (Logic moves here) ---
         if tenant_map:
