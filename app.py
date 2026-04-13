@@ -896,6 +896,36 @@ def render_sidebar():
         </style>
     """, unsafe_allow_html=True)
 
+    # ==========================================
+# 17. SIDEBAR & NAVIGATION (STABLE & REACTIVE)
+# ==========================================
+
+def render_sidebar():
+    # 1. Fetch All Tenants
+    try:
+        tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
+        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
+    except Exception as e:
+        st.error(f"Error fetching tenants: {e}")
+        tenant_map = {}
+
+    current_tenant_id = st.session_state.get('tenant_id')
+    brand_color = st.session_state.get('theme_color', '#1E3A8A')
+
+    # 2. Apply Dynamic CSS
+    st.markdown(f"""
+        <style>
+            [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
+            h1, h2, h3 {{ color: {brand_color} !important; }}
+            div[data-testid="stMetric"] {{
+                background-color: white; padding: 15px; border-radius: 10px;
+                border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }}
+            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{ color: #31333F !important; }}
+        </style>
+    """, unsafe_allow_html=True)
+
     # --- THE SIDEBAR RENDER ---
     with st.sidebar:
         # 3. TENANT SELECTION
@@ -919,23 +949,25 @@ def render_sidebar():
             st.warning("No tenants available.")
             st.stop() 
 
-        # --- 2. CENTERED LOGO (Correctly Indented) ---
+        # --- 4. CENTERED LOGO ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
-            if active_company.get('logo_url'):
-                # Added timestamp to force refresh if the logo was recently updated
+            logo_val = active_company.get('logo_url')
+            if logo_val and logo_val != "0":
                 import time
-                logo_url = active_company['logo_url']
-                st.image(f"{logo_url}?t={int(time.time())}", width=80)
+                # Safety check for full URLs vs paths
+                final_logo_url = logo_val if str(logo_val).startswith("http") else f"https://YOUR_PROJECT_ID.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
+                st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
             else:
-                st.write("🌍")
+                st.markdown("<h2 style='text-align: center;'>🌍</h2>", unsafe_allow_html=True)
 
-        # --- 3. CENTERED INFO BOX (Correctly Indented) ---
+        # --- 5. INFO BOX ---
         st.markdown(
             f"""
             <div style="text-align: center; background-color: rgba(255, 255, 255, 0.05); 
                         padding: 10px; border-radius: 10px; margin-top: 10px;">
-                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company['name']}</b></span>
+                <span style="font-size: 14px; color: #ddd;">📍 <b>{active_company['name']}</b></span><br>
+                <small style="color: rgba(255,255,255,0.6);">{st.session_state.get('user_email', 'User')}</small>
             </div>
             """, 
             unsafe_allow_html=True
@@ -943,7 +975,7 @@ def render_sidebar():
         
         st.divider()
 
-        # 6. NAVIGATION MENU (Inside Sidebar Block)
+        # --- 6. NAVIGATION MENU (Restoring Missing Items) ---
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", 
             "Collateral": "🛡️", "Calendar": "📅", "Ledger": "📄", 
@@ -952,7 +984,7 @@ def render_sidebar():
         }
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         
-        # Maintain page selection state
+        # Determine current selection
         current_p = st.session_state.get('current_page', "Overview")
         try:
             default_ix = list(menu.keys()).index(current_p)
@@ -965,8 +997,8 @@ def render_sidebar():
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
-            
-    # Return selection to the Main Router (Outside the 'with' block)
+
+    # 7. Final Return (Outside the 'with' block)
     return selection.split(" ", 1)[1] if " " in selection else selection
         
 # ==============================
