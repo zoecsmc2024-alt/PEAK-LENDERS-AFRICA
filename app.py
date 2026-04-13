@@ -2435,12 +2435,13 @@ def show_settings():
         st.error(f"❌ Connection Error: {e}")
         return
 
-    # --- BUSINESS IDENTITY SECTION ---
+# --- BUSINESS IDENTITY SECTION ---
     st.subheader("🏢 Business Identity")
     col1, col2 = st.columns([2, 1])
     
     with col1:
         st.markdown(f"**Current Business Name:** {active_company['name']}")
+        # Pre-set the color picker to the company's current color
         new_color = st.color_picker("🎨 Change Brand Color", active_company['brand_color'])
         
         st.markdown("**Preview:**")
@@ -2453,62 +2454,51 @@ def show_settings():
     
     with col2:
         st.markdown("**Company Logo:**")
-        # Safety check for logo preview using full URL logic
-        logo_url = active_company.get('logo_url')
-        if logo_url and str(logo_url).startswith("http"):
-            import time
-            st.image(f"{logo_url}?t={int(time.time())}", use_container_width=True, caption="Current Logo")
+        # Show the current logo as a thumbnail if it exists
+        if active_company.get('logo_url'):
+            st.image(active_company['logo_url'], use_container_width=True, caption="Current Logo")
         else:
-            st.info("No logo uploaded yet.")
+            st.caption("No logo uploaded yet.")
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-    # --- SAVE BUTTON (Correctly Indented) ---
+    # --- SAVE BUTTON ---
     if st.button("💾 Save Branding Changes", use_container_width=True):
+        # We start with the color change
         updated_data = {"brand_color": new_color}
         
-        # 1. Handle Storage Upload
+        # Handle logo upload to Supabase Storage
         if logo_file:
             try:
                 bucket_name = 'company-logos'
-                file_path = f"logos/{active_company['id']}.png"
+                # Clean the path
+                file_path = f"logos/{active_company['id']}_logo.png"
                 
-                # Upload to Storage
+                # --- THE FIX: ADD CONTENT-TYPE ---
                 supabase.storage.from_(bucket_name).upload(
                     path=file_path,
                     file=logo_file.getvalue(),
                     file_options={
                         "x-upsert": "true",
-                        "content-type": "image/png" 
+                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
                     }
                 )
                 
-                # Get ACTUAL public URL
-                public_url_res = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                
-                # Standardize the result (Supabase library versions vary)
-                if isinstance(public_url_res, dict):
-                    final_url = public_url_res.get('publicURL')
-                else:
-                    final_url = public_url_res
-                    
-                updated_data["logo_url"] = final_url
+                # Retrieve public URL
+                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+                updated_data["logo_url"] = logo_url
                 
             except Exception as e:
                 st.error(f"❌ Storage Error: {str(e)}")
                 st.stop()
-
-        # 2. Update Database & Session (Now inside the IF block)
+        
+        # Update the database record for this company
         try:
-            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+            supabase.table("companies").update(updated_data).eq("id", active_company['id']).execute()
             
-            # Sync session state for immediate UI feedback
-            st.session_state['theme_color'] = new_color
-            if "logo_url" in updated_data:
-                st.session_state['logo_url'] = updated_data["logo_url"]
-            
-            st.success("✅ Branding updated!")
-            time.sleep(1) # Brief pause so user sees the success message
+            st.success("✅ Branding updated successfully!")
+            st.info("Applying your new brand identity...")
+            # Use st.rerun() to refresh the sidebar and theme instantly
             st.rerun()
             
         except Exception as e:
