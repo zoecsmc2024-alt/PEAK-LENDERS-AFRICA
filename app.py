@@ -21,51 +21,44 @@ from datetime import datetime
 from supabase import create_client
 import streamlit as st
 import pandas as pd
-# ... (all your other imports)
-
-import streamlit as st
+import time  # Fixes local variable 'time' error
 import time
 
 def apply_master_theme():
-    """
-    Applies the theme globally using session state. 
-    This is the only place CSS should be injected for branding.
-    """
-    # Force the color from session state. If missing, use a safe default blue.
+    # Priority: 1. Current Session State, 2. Default Branding Blue
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
     
     st.markdown(f"""
-        <style>
-            /* 1. SIDEBAR BACKGROUND */
-            [data-testid="stSidebar"] {{
-                background-color: {brand_color} !important;
-            }}
-            
-            /* 2. SIDEBAR TEXT - Forced to White */
-            [data-testid="stSidebar"] *, 
-            [data-testid="stSidebarNav"] span,
-            [data-testid="stSidebar"] p,
-            [data-testid="stSidebar"] b {{
-                color: white !important;
-            }}
+    <style>
+        /* Sidebar Background */
+        [data-testid="stSidebar"] {{
+            background-color: {brand_color} !important;
+            min-width: 260px !important;
+        }}
 
-            /* 3. METRIC CARDS - Synced with Brand Color */
-            div[data-testid="stMetric"] {{
-                background-color: white !important; 
-                padding: 15px !important; 
-                border-radius: 10px !important;
-                border-left: 5px solid {brand_color} !important; 
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-            }}
-            
-            /* 4. MAIN PAGE HEADINGS */
-            h1, h2, h3 {{ color: {brand_color} !important; }}
+        /* Sidebar Text & Nav Icons */
+        [data-testid="stSidebar"] *, 
+        [data-testid="stSidebarNav"] span,
+        [data-testid="stSidebar"] p {{
+            color: #FFFFFF !important;
+        }}
 
-            /* 5. SELECTBOX FIX - Ensure dropdown text is readable */
-            [data-testid="stSidebar"] div[data-baseweb="select"] * {{
-                color: #1E3A8A !important;
-            }}
-        </style>
+        /* Metric Cards - Linked to Brand Color */
+        div[data-testid="stMetric"] {{
+            background-color: #FFFFFF !important;
+            border-left: 8px solid {brand_color} !important; 
+            border-radius: 12px !important;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+        }}
+
+        /* Headers and UI Accents */
+        h1, h2, h3 {{ color: {brand_color} !important; }}
+        
+        /* Dropdown text visibility fix */
+        [data-testid="stSidebar"] div[data-baseweb="select"] * {{
+            color: #1E3A8A !important;
+        }}
+    </style>
     """, unsafe_allow_html=True)
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
@@ -732,8 +725,6 @@ def upload_image(file):
 
 
 
-# --- 4. AUTH & SIDEBAR NAVIGATION ---
-
 def render_sidebar():
     # 1. Fetch Fresh Tenant Data
     try:
@@ -743,14 +734,9 @@ def render_sidebar():
         st.error(f"Error fetching tenants: {e}")
         tenant_map = {}
 
-    # Initialize session state 
-    if 'current_page' not in st.session_state:
-        st.session_state.current_page = "Overview"
-    
     current_tenant_id = st.session_state.get('tenant_id')
 
     with st.sidebar:
-        # --- A. TENANT SELECTION ---
         if tenant_map:
             options = list(tenant_map.keys())
             default_index = 0
@@ -760,11 +746,10 @@ def render_sidebar():
                         default_index = i
                         break
             
-            # Use a unique key to prevent DuplicateElementId
             active_company_name = st.selectbox("Business Portal:", options, index=default_index, key="sidebar_portal_select")
             active_company = tenant_map[active_company_name]
             
-            # Sync session state
+            # CRITICAL SYNC: Update the Master Switch
             if st.session_state.get('tenant_id') != active_company['id']:
                 st.session_state['tenant_id'] = active_company['id']
                 st.session_state['theme_color'] = active_company['brand_color']
@@ -772,38 +757,20 @@ def render_sidebar():
         else:
             st.stop()
 
-        # --- B. DYNAMIC BRANDING (Sidebars Sync) ---
-        brand_color = active_company['brand_color']
-        st.markdown(f"""
-            <style>
-                [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
-                [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-                
-                /* Metric Card & Heading Sync */
-                div[data-testid="stMetric"] {{
-                    background-color: white; padding: 15px; border-radius: 10px;
-                    border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-                }}
-                h1, h2, h3 {{ color: {brand_color} !important; }}
-            </style>
-        """, unsafe_allow_html=True)
-
-        # --- C. THE LOGO FIX (Solves MediaFileStorageError) ---
+        # --- LOGO RENDER ---
         _, col_mid, _ = st.columns([1, 2, 1])
         with col_mid:
             logo_val = active_company.get('logo_url')
             if logo_val and logo_val not in ["0", "None"]:
                 import time
-                # If it's a raw filename, build the URL. If it's a URL, use it.
+                # Build proper URL to avoid MediaFileStorageError
                 if str(logo_val).startswith("http"):
                     final_logo_url = logo_val
                 else:
-                    # REPLACE 'YOUR_PROJECT_ID' with your actual Supabase Project ID
-                    proj_id = "YOUR_PROJECT_ID" 
+                    proj_id = "YOUR_PROJECT_ID" # Update this!
                     final_logo_url = f"https://{proj_id}.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
                 
                 try:
-                    # Cache busting with timestamp ?t=
                     st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
                 except:
                     st.markdown("<h1 style='text-align: center;'>🏢</h1>", unsafe_allow_html=True)
@@ -812,7 +779,7 @@ def render_sidebar():
 
         st.divider()
 
-        # --- D. NAVIGATION MENU ---
+        # --- NAVIGATION ---
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️", 
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉", 
@@ -2479,35 +2446,25 @@ def show_dashboard_view():
 # ==========================================
 
 if __name__ == "__main__":
-    # 1. AUTH CHECK
     if not st.session_state.get("logged_in"):
-        # Reset to default for login screen
-        st.session_state['theme_color'] = "#1E3A8A"
-        apply_master_theme() 
+        st.session_state['theme_color'] = "#1E3A8A" # Default login color
+        apply_master_theme()
         run_auth_ui(supabase)
     else:
-        # 2. SESSION TIMEOUT CHECK
-        check_session_timeout()
+        check_session_timeout() # Now works because 'timedelta' is imported
         
-        # 3. RUN SIDEBAR FIRST (The Brain)
-        # This function updates st.session_state['theme_color']
+        # FIRST: Determine which company/color is active
         page = render_sidebar()
         
-        # 4. APPLY THEME SECOND (The Paint)
-        # This now sees the updated color from the sidebar
+        # SECOND: Apply the theme using that active color
         apply_master_theme()
         
-        # 5. SAVE PAGE STATE
-        st.session_state['current_page'] = page
-
-        # 6. ROUTE TO CONTENT
-        try:
-            main_area = st.container()
-            with main_area:
-                if page == "Settings":
-                    show_settings() # Ensure your settings "Save" button calls st.rerun()
-                elif page == "Overview":
-                    show_dashboard_view()
+        # THIRD: Show the content
+        if page == "Settings":
+            show_settings() # Ensure your Save button does st.rerun()
+        elif page == "Overview":
+            show_dashboard_view()
+        # ... other pages ...
                 elif page == "Loans":
                     show_loans()
                 elif page == "Borrowers":
