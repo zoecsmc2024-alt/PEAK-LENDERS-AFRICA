@@ -2267,45 +2267,49 @@ def show_settings():
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
     # --- SAVE BUTTON ---
-    if st.button("💾 Save Branding Changes"):
-        # We start with the color change
-        updated_data = {"brand_color": new_color}
-        
-        # Handle logo upload to Supabase Storage
-        if logo_file:
-            try:
-                bucket_name = 'company-logos'
-                # Clean the path
-                file_path = f"logos/{active_company['id']}_logo.png"
-                
-                # --- THE FIX: ADD CONTENT-TYPE ---
-                supabase.storage.from_(bucket_name).upload(
-                    path=file_path,
-                    file=logo_file.getvalue(),
-                    file_options={
-                        "x-upsert": "true",
-                        "content-type": "image/png"  # 👈 This tells Supabase it's an image
-                    }
-                )
-                
-                # Retrieve public URL
-                logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-                updated_data["logo_url"] = logo_url
-                
-            except Exception as e:
-                st.error(f"❌ Storage Error: {str(e)}")
-                st.stop()
-        
-        # Update the database record for this company
+if st.button("💾 Save Branding Changes"):
+    import time  # Fixes "local variable 'time' not associated" error
+    
+    # ENSURE VARIABLE NAMES MATCH: 
+    # Use whatever variable holds your st.color_picker value (e.g., new_color)
+    updated_data = {"brand_color": new_color}
+    
+    # Handle logo upload to Supabase Storage
+    if logo_file:
         try:
-            supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+            bucket_name = 'company-logos'
+            file_path = f"logos/{active_company['id']}_logo.png"
             
-            st.session_state['theme_color'] = new_color_from_picker 
-            st.success("Branding updated!")
-            st.rerun()
+            supabase.storage.from_(bucket_name).upload(
+                path=file_path,
+                file=logo_file.getvalue(),
+                file_options={
+                    "x-upsert": "true",
+                    "content-type": "image/png"
+                }
+            )
+            
+            # Retrieve public URL
+            logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+            updated_data["logo_url"] = logo_url
             
         except Exception as e:
-            st.error(f"❌ Database Error: {str(e)}")
+            st.error(f"❌ Storage Error: {str(e)}")
+            st.stop()
+    
+    # Update the database record
+    try:
+        supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
+        
+        # FIX: Use 'new_color' here to match the variable used above
+        st.session_state['theme_color'] = new_color
+        
+        st.success("Branding updated!")
+        time.sleep(0.5) # Give the user a moment to see the success message
+        st.rerun() # Forces the sidebar and router to catch the new color
+        
+    except Exception as e:
+        st.error(f"❌ Database Error: {str(e)}")
 
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
