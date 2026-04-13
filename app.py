@@ -2266,50 +2266,38 @@ def show_settings():
             
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
-    # --- SAVE BUTTON ---
+    # --- INSIDE YOUR SETTINGS FUNCTION ---
+# 1. Define the input variable clearly
+new_color = st.color_picker("Change Brand Color", st.session_state.get('theme_color', '#1E3A8A'))
+
+# 2. Save Button
 if st.button("💾 Save Branding Changes"):
-    import time  # Fixes "local variable 'time' not associated" error
+    updated_data = {"brand_color": new_color} # This fixes the NameError for 'new_color'
     
-    # ENSURE VARIABLE NAMES MATCH: 
-    # Use whatever variable holds your st.color_picker value (e.g., new_color)
-    updated_data = {"brand_color": new_color}
-    
-    # Handle logo upload to Supabase Storage
+    # Handle logo upload (Simplified)
     if logo_file:
         try:
-            bucket_name = 'company-logos'
             file_path = f"logos/{active_company['id']}_logo.png"
-            
-            supabase.storage.from_(bucket_name).upload(
-                path=file_path,
-                file=logo_file.getvalue(),
-                file_options={
-                    "x-upsert": "true",
-                    "content-type": "image/png"
-                }
+            supabase.storage.from_('company-logos').upload(
+                path=file_path, file=logo_file.getvalue(),
+                file_options={"x-upsert": "true", "content-type": "image/png"}
             )
-            
-            # Retrieve public URL
-            logo_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
-            updated_data["logo_url"] = logo_url
-            
+            updated_data["logo_url"] = supabase.storage.from_('company-logos').get_public_url(file_path)
         except Exception as e:
-            st.error(f"❌ Storage Error: {str(e)}")
-            st.stop()
-    
-    # Update the database record
+            st.error(f"Storage Error: {e}")
+
+    # Update Database
     try:
         supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
         
-        # FIX: Use 'new_color' here to match the variable used above
+        # Sync the 'Master Switch'
         st.session_state['theme_color'] = new_color
-        
         st.success("Branding updated!")
-        time.sleep(0.5) # Give the user a moment to see the success message
-        st.rerun() # Forces the sidebar and router to catch the new color
         
+        time.sleep(1) # Now works because 'time' is imported at the top
+        st.rerun()
     except Exception as e:
-        st.error(f"❌ Database Error: {str(e)}")
+        st.error(f"Database Error: {e}")
 
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (Branding Aware)
@@ -2440,49 +2428,46 @@ def show_dashboard_view():
 # ==========================================
 
 if __name__ == "__main__":
-    # 1. AUTH CHECK
     if not st.session_state.get("logged_in"):
-        st.session_state['theme_color'] = "#1E3A8A" # Default login color
+        st.session_state['theme_color'] = "#1E3A8A"
         apply_master_theme()
         run_auth_ui(supabase)
     else:
-        # 2. SESSION TIMEOUT CHECK
-        check_session_timeout() 
+        check_session_timeout() # Works because imports are fixed
         
-        # 3. IDENTIFY COMPANY (Updates theme_color in session state)
+        # 1. SIDEBAR FIRST (Fetch color)
         page = render_sidebar()
         
-        # 4. APPLY THEME (Paints the UI)
+        # 2. THEME SECOND (Apply color)
         apply_master_theme()
         
-        # 5. CONTENT ROUTING
-        try:
-            if page == "Settings":
-                show_settings() 
-            elif page == "Overview":
-                show_dashboard_view()
-            elif page == "Loans":
-                show_loans()
-            elif page == "Borrowers":
-                show_borrowers()
-            elif page == "Collateral":
-                show_collateral()
-            elif page == "Calendar":
-                show_calendar()
-            elif page == "Ledger":
-                show_ledger()
-            elif page == "Overdue Tracker":
-                show_overdue_tracker()
-            elif page == "Payments":
-                show_payments()
-            elif page == "Expenses":
-                show_expenses()
-            elif page == "Petty Cash":
-                show_petty_cash()
-            elif page == "Payroll":
-                show_payroll()
-            else:
-                st.info(f"The {page} module is coming online soon.")
+        # 3. CONTENT THIRD
+        if page == "Settings":
+            show_settings()
+        elif page == "Overview":
+            show_dashboard_view()
+        elif page == "Loans":
+            show_loans()
+        elif page == "Borrowers":
+            show_borrowers()
+        elif page == "Collateral":
+            show_collateral()
+        elif page == "Calendar":
+            show_calendar()
+        elif page == "Ledger":
+            show_ledger()
+        elif page == "Overdue Tracker":
+            show_overdue_tracker()
+        elif page == "Payments":
+            show_payments()
+        elif page == "Expenses":
+            show_expenses()
+        elif page == "Petty Cash":
+            show_petty_cash()
+        elif page == "Payroll":
+            show_payroll()
+        else:
+            st.info(f"The {page} module is coming online soon.")
                 
-        except Exception as e:
-            st.error(f"Application Error: {e}")
+    except Exception as e:
+        st.error(f"Application Error: {e}")
