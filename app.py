@@ -998,8 +998,7 @@ with st.sidebar:
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
-
-    # 7. Final Return (Outside the 'with' block)
+            # 7. Final Return (Outside the 'with' block)
     return selection.split(" ", 1)[1] if " " in selection else selection
         
 # ==============================
