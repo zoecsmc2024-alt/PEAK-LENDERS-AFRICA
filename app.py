@@ -26,27 +26,44 @@ import time  # Fixes local variable 'time' error
 SESSION_TIMEOUT = 30
 
 def apply_master_theme():
-    """Applies the dynamic theme based on the current session state."""
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
     
     st.markdown(f"""
         <style>
+            /* 1. Sets Sidebar Background Color */
             [data-testid="stSidebar"] {{
                 background-color: {brand_color} !important;
             }}
-            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span, [data-testid="stSidebar"] p {{
+
+            /* 2. Styles the Radio Button Text */
+            [data-testid="stSidebar"] .stRadio div[role="radiogroup"] label {{
+                color: white !important;
+                font-weight: 500 !important;
+                font-size: 1rem !important;
+                padding: 5px 0px !important;
+            }}
+
+            /* 3. Forces the 'White Circle' for unselected buttons (Pic 1 Style) */
+            [data-testid="stSidebar"] .stRadio div[data-testid="stMarkdownContainer"] p {{
                 color: white !important;
             }}
-            div[data-testid="stMetric"] {{
-                background-color: white !important;
-                padding: 15px !important;
-                border-radius: 10px !important;
-                border-left: 5px solid {brand_color} !important;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
+            
+            /* 4. This targets the outer circle of the radio button */
+            div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] div[data-bv-tabindex] {{
+                background-color: transparent !important;
+                border: 2px solid white !important;
             }}
-            h1, h2, h3 {{ color: {brand_color} !important; }}
-            [data-testid="stSidebar"] div[data-baseweb="select"] * {{
-                color: #1E3A8A !important;
+
+            /* 5. This targets the selected (Active) dot color */
+            div[data-testid="stSidebar"] .stRadio div[role="radiogroup"] div[data-bv-tabindex="0"] > div {{
+                background-color: #FF4B4B !important; /* The red dot in Pic 1 */
+            }}
+
+            /* 6. Fix for Logout Button contrast */
+            [data-testid="stSidebar"] button {{
+                background-color: white !important;
+                color: {brand_color} !important;
+                border-radius: 8px !important;
             }}
         </style>
     """, unsafe_allow_html=True)
@@ -718,6 +735,7 @@ def upload_image(file):
 def render_sidebar():
     # 1. Fetch Fresh Tenant Data
     try:
+        # Fetching necessary columns from Supabase
         tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
         tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
     except Exception as e:
@@ -736,10 +754,11 @@ def render_sidebar():
                         default_index = i
                         break
             
+            # selectbox for switching between business portals
             active_company_name = st.selectbox("Business Portal:", options, index=default_index, key="sidebar_portal_select")
             active_company = tenant_map[active_company_name]
             
-            # CRITICAL SYNC: Update the Master Switch
+            # CRITICAL SYNC: Update the Master Switch and Session State
             if st.session_state.get('tenant_id') != active_company['id']:
                 st.session_state['tenant_id'] = active_company['id']
                 st.session_state['theme_color'] = active_company['brand_color']
@@ -753,14 +772,16 @@ def render_sidebar():
             logo_val = active_company.get('logo_url')
             if logo_val and logo_val not in ["0", "None"]:
                 import time
-                # Build proper URL to avoid MediaFileStorageError
+                # Build URL and append timestamp to avoid MediaFileStorageError
                 if str(logo_val).startswith("http"):
                     final_logo_url = logo_val
                 else:
-                    proj_id = "YOUR_PROJECT_ID" # Update this!
+                    # Replace with your actual project ID
+                    proj_id = "YOUR_PROJECT_ID" 
                     final_logo_url = f"https://{proj_id}.supabase.co/storage/v1/object/public/company-logos/{logo_val}"
                 
                 try:
+                    # Cache-busting with time.time()
                     st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
                 except:
                     st.markdown("<h1 style='text-align: center;'>🏢</h1>", unsafe_allow_html=True)
@@ -769,27 +790,42 @@ def render_sidebar():
 
         st.divider()
 
-        # --- NAVIGATION ---
+        # --- NAVIGATION (FIXED FOR PIC 1 LOOK) ---
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️", 
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉", 
             "Petty Cash": "🪙", "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
         }
+        
+        # We use a clean radio button list to get the selection dot style
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         
         current_p = st.session_state.get('current_page', "Overview")
         try:
+            # Finding current index for persistence
             default_ix = list(menu.keys()).index(current_p)
         except:
             default_ix = 0
 
-        selection = st.radio("Navigation", menu_options, index=default_ix, label_visibility="collapsed")
+        # The radio widget provides the white/red dot indicators seen in Pic 1
+        selection = st.radio(
+            "Navigation", 
+            menu_options, 
+            index=default_ix, 
+            label_visibility="collapsed",
+            key="navigation_radio"
+        )
         
+        st.divider()
+
         if st.button("🚪 Logout", use_container_width=True):
             st.session_state.clear()
             st.rerun()
 
-    return selection.split(" ", 1)[1] if " " in selection else selection
+    # Clean the selection string to return only the page name (e.g., "Settings")
+    final_page = selection.split(" ", 1)[1] if " " in selection else selection
+    st.session_state['current_page'] = final_page
+    return final_page
         
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
