@@ -887,24 +887,51 @@ def render_sidebar():
     current_tenant_id = st.session_state.get('tenant_id')
 
     with st.sidebar:
-        # --- 1. CSS INJECTION FOR CENTERING ---
-        st.markdown(
-            """
-            <style>
-                [data-testid="stSidebarNav"] { text-align: center; }
-                [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
-                div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
-                div.row-widget.stRadio > div[role="radiogroup"] > label { 
-                    justify-content: center; 
-                    width: 100%; 
-                    text-align: center; 
-                }
-                [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
-                [data-testid="stMarkdownContainer"] p { font-weight: 500; }
-            </style>
-            """, 
-            unsafe_allow_html=True
-        )
+        # 4. Apply the CSS (Borrowed and fixed for specificity)
+    st.markdown(f"""
+        <style>
+            /* Sidebar background */
+            [data-testid="stSidebar"] {{
+                background-color: {brand_color} !important;
+            }}
+            
+            /* Sidebar text and icons */
+            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{
+                color: white !important;
+            }}
+
+            /* Centering the Radio Buttons */
+            [data-testid="stSidebar"] div.row-widget.stRadio > div {{ 
+                flex-direction: column; 
+                align-items: center; 
+            }}
+            [data-testid="stSidebar"] div.row-widget.stRadio > div[role="radiogroup"] > label {{ 
+                justify-content: center; 
+                text-align: center; 
+                width: 100%; 
+            }}
+
+            /* The Metric Card Glow-up */
+            div[data-testid="stMetric"] {{
+                background-color: white; 
+                padding: 15px; 
+                border-radius: 10px;
+                border-left: 5px solid {brand_color}; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            }}
+            
+            /* Metric text colors (so they are readable on white) */
+            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{
+                color: #31333F !important;
+            }}
+
+            /* Main Page Headings */
+            h1, h2, h3 {{ color: {brand_color} !important; }}
+            
+            /* Main Page Labels */
+            .main [data-testid="stWidgetLabel"] p {{ color: #31333F !important; }}
+        </style>
+    """, unsafe_allow_html=True)
 
         # --- 2. TENANT SELECTION (STEP 0: DEFINE COMPANY FIRST) ---
         if tenant_map:
