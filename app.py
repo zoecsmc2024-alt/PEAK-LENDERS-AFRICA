@@ -2492,10 +2492,9 @@ def show_overview():
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
     
     col1, col2, col3 = st.columns(3)
-    # Using standard metrics which are now styled by our sidebar CSS
     col1.metric("Total Loans", "0", "+0%")
     col2.metric("Active Borrowers", "0", "0")
-    col3.metric("Revenue", "$0", "$0")
+    col3.metric("Revenue", "0 UGX", "0")
     
     st.info("👋 Welcome! Start by selecting a category from the sidebar.")
 
@@ -2511,59 +2510,70 @@ def show_dashboard_view():
     df = get_cached_data("loans")
     pay_df = get_cached_data("payments")
     exp_df = get_cached_data("expenses") 
-    bor_df = get_cached_data("borrowers") # Loaded to bridge names
+    bor_df = get_cached_data("borrowers")
 
     if df.empty:
         st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
         return
 
-    # 2. TRANSLATE & CLEAN (Fixed 'int' attribute error)
-    df.columns = df.columns.str.strip().str.replace(" ", "_")
-    for d in [pay_df, exp_df, bor_df]:
-        if not d.empty: 
+    # 2. STANDARDIZE COLUMNS (Prevents 'Status' vs 'status' errors)
+    for d in [df, pay_df, exp_df, bor_df]:
+        if not d.empty:
             d.columns = d.columns.str.strip().str.replace(" ", "_")
 
-    # BRIDGE: Fix the "['borrower'] not in index" error by mapping names
+    # 3. BRIDGE: Map borrower names to the loans table
     if not bor_df.empty and 'borrower_id' in df.columns:
         bor_map = dict(zip(bor_df['id'].astype(str), bor_df['name'].astype(str)))
-        df['Borrower'] = df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
-    elif 'Borrower' not in df.columns:
-        df['Borrower'] = "N/A"
+        df['Borrower_Name'] = df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+    else:
+        df['Borrower_Name'] = "Unknown"
 
-    # DATA CONVERSION (Fixed to prevent 'int' object errors)
-    def clean_numeric_col(dataframe, col_name):
-        if col_name in dataframe.columns:
-            return pd.to_numeric(dataframe[col_name], errors="coerce").fillna(0)
+    # 4. CLEAN DATA (Helper function to prevent 'int' object errors)
+    def clean_val(dataframe, col):
+        if col in dataframe.columns:
+            # Explicitly return a Series to allow .fillna()
+            return pd.to_numeric(dataframe[col], errors="coerce").fillna(0)
         return pd.Series(0, index=dataframe.index)
 
-    df["Interest"] = clean_numeric_col(df, "Interest")
-    df["Amount_Paid"] = clean_numeric_col(df, "Amount_Paid")
-    df["Principal"] = clean_numeric_col(df, "Principal")
+    df["Principal"] = clean_val(df, "Principal")
+    df["Interest"] = clean_val(df, "Interest")
+    df["Amount_Paid"] = clean_val(df, "Amount_Paid")
     df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
     
     today = pd.Timestamp.now().normalize()
-    # Normalize status case to ensure filtering works
-    df["Status"] = df["Status"].astype(str).str.capitalize()
-    active_statuses = ["Active", "Overdue", "Rolled/overdue"]
-    active_df = df[df["Status"].isin(active_statuses)].copy()
+    
+    # Fix Status filtering (Standardize to Title Case)
+    if "Status" in df.columns:
+        df["Status_Clean"] = df["Status"].astype(str).str.title()
+    else:
+        df["Status_Clean"] = "Active"
 
-    # 3. METRICS CALCULATION
+    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+    active_df = df[df["Status_Clean"].isin(active_statuses)].copy()
+
+    # 5. METRICS CALCULATION
     total_issued = active_df["Principal"].sum() if not active_df.empty else 0
     total_interest_expected = active_df["Interest"].sum() if not active_df.empty else 0
     total_collected = df["Amount_Paid"].sum() 
-    overdue_count = active_df[(active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")].shape[0] if not active_df.empty else 0
+    
+    overdue_count = 0
+    if not active_df.empty:
+        overdue_count = active_df[(active_df["End_Date"] < today) & (active_df["Status_Clean"] != "Cleared")].shape[0]
 
-    # 4. BRANDED METRICS ROW
+    # 6. BRANDED METRICS ROW
     m1, m2, m3, m4 = st.columns(4)
     metric_style = f"background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
     
     m1.markdown(f"""<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m2.markdown(f"""<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    
+    # Special Colors for Green/Red metrics
     m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
 
-    # 5. BRANDED TABLES
     st.write("---")
+    
+    # 7. BRANDED TABLES
     t1, t2 = st.columns(2)
 
     with t1:
@@ -2574,9 +2584,9 @@ def show_dashboard_view():
             for i, (_, r) in enumerate(recent_loans.iterrows()):
                 bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
                 rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #eee;">
-                    <td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td>
+                    <td style="padding:10px;">{r.get('Borrower_Name', 'Unknown')}</td>
                     <td style="padding:10px; text-align:right; font-weight:bold; color:{brand_color};">{float(r.get('Principal', 0)):,.0f}</td>
-                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r.get('Status', 'Active')}</span></td>
+                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r.get('Status_Clean', 'Active')}</span></td>
                     <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('End_Date')).strftime('%d %b') if pd.notna(r.get('End_Date')) else "-"}</td>
                 </tr>"""
         
@@ -2589,33 +2599,37 @@ def show_dashboard_view():
         st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
         pay_rows = ""
         if not pay_df.empty:
-            # Sync Borrower names for payments if needed
+            # Sync names for payments using the same bridge
             if 'borrower_id' in pay_df.columns and not bor_df.empty:
-                 pay_df['Borrower'] = pay_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
-            
+                 pay_df['Borrower_Name'] = pay_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+            else:
+                 pay_df['Borrower_Name'] = pay_df.get('Borrower', 'Unknown')
+
             recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
             for i, (_, r) in enumerate(recent_pay.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 pay_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;">
-                    <td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td>
+                    <td style="padding:10px;">{r.get('Borrower_Name', 'Unknown')}</td>
                     <td style="padding:10px; text-align:right; font-weight:bold; color:green;">{float(r.get('Amount', 0)):,.0f}</td>
                     <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('Date')).strftime('%d %b') if pd.notna(r.get('Date')) else "-"}</td>
                 </tr>"""
+        
         st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;">
             <thead><tr style="background:#2E7D32; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:center;">Date</th></tr></thead>
             <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
         </table>""", unsafe_allow_html=True)
 
-    # 7. DASHBOARD VISUALS
+    # 8. DASHBOARD VISUALS
     st.markdown("---")
     c_pie, c_bar = st.columns(2)
 
     with c_pie:
-        status_counts = df["Status"].value_counts().reset_index()
-        status_counts.columns = ["Status", "Count"]
-        fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
-        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        if not df.empty:
+            status_counts = df["Status_Clean"].value_counts().reset_index()
+            status_counts.columns = ["Status", "Count"]
+            fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
+            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
+            st.plotly_chart(fig_pie, use_container_width=True)
 
     with c_bar:
         if not pay_df.empty and not exp_df.empty:
