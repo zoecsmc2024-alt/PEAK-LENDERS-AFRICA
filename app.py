@@ -67,6 +67,14 @@ def apply_master_theme():
             }}
         </style>
     """, unsafe_allow_html=True)
+
+# --- TOP OF SCRIPT (Data Loading Section) ---
+loans_df = load_data("loans") # Or however you fetch your data
+
+if not loans_df.empty:
+    # This fixes the "['borrower'] not in index" error for the whole app
+    if 'borrower_id' in loans_df.columns and 'borrower' not in loans_df.columns:
+        loans_df['borrower'] = loans_df['borrower_id']
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
@@ -873,37 +881,41 @@ def show_borrowers():
                 filtered_df = filtered_df[filtered_df["status"] == status_filter]
 
             if not filtered_df.empty:
-                rows_html = ""
-                for i, r in filtered_df.reset_index().iterrows():
-                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                    # We use .get() to avoid "KeyError" if a column is missing
-                    n_id = r.get('national_id', 'N/A')
-                    
-                    rows_html += f"""
-                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
-                        <td style="padding:12px;"><b>{r['name']}</b></td>
-                        <td style="padding:12px;">{r['phone']}</td>
-                        <td style="padding:12px; font-size: 11px; color:#666;">{n_id}</td>
-                        <td style="padding:12px; text-align:center;">
-                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
-                        </td>
-                    </tr>"""
-                
-                table_header = f"""
-                <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
-                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
-                        <thead>
-                            <tr style='background:{brand_color}; color:white; text-align:left;'>
-                                <th style='padding:12px;'>Borrower Name</th>
-                                <th style='padding:12px;'>Phone</th>
-                                <th style='padding:12px;'>National ID</th>
-                                <th style='padding:12px; text-align:center;'>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                </div>"""
-                st.markdown(table_header, unsafe_allow_html=True)
+        rows_html = ""
+        for i, r in filtered_df.reset_index().iterrows():
+            bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+            
+            # Use .get() to safely grab data even if it's missing for old records
+            email_val = r.get('email', 'N/A')
+            nok_val = r.get('next_of_kin', 'N/A')
+            
+            rows_html += f"""
+            <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
+                <td style="padding:12px;"><b>{r['name']}</b></td>
+                <td style="padding:12px;">{r['phone']}</td>
+                <td style="padding:12px;">{email_val}</td>
+                <td style="padding:12px;">{nok_val}</td>
+                <td style="padding:12px; text-align:center;">
+                    <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
+                </td>
+            </tr>"""
+        
+        # Update the header to have 5 columns instead of 4
+        st.markdown(f"""
+        <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
+            <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
+                <thead>
+                    <tr style='background:{brand_color}; color:white; text-align:left;'>
+                        <th style='padding:12px;'>Borrower Name</th>
+                        <th style='padding:12px;'>Phone</th>
+                        <th style='padding:12px;'>Email</th>
+                        <th style='padding:12px;'>Next of Kin</th>
+                        <th style='padding:12px; text-align:center;'>Status</th>
+                    </tr>
+                </thead>
+                <tbody>{rows_html}</tbody>
+            </table>
+        </div>""", unsafe_allow_html=True)
             else:
                 st.info("No borrowers found matching your search.")
         else:
@@ -1102,7 +1114,7 @@ def show_loans():
                 use_container_width=True, hide_index=True
             )
 
-    # ==============================
+# ==============================
     # TAB: NEW LOAN (Supabase Integration)
     # ==============================
     with tab_add:
@@ -1127,7 +1139,7 @@ def show_loans():
                 st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
-                    # --- ALL LOGIC BELOW MUST BE INDENTED ---
+                    # --- ALL LOGIC BELOW IS NOW PROPERLY INDENTED ---
                     t_id = "test-tenant-123"
                     
                     import random
@@ -1146,12 +1158,11 @@ def show_loans():
                         "tenant_id": t_id
                     }
                     
-                    new_loan = pd.DataFrame([loan_data])
+                    new_loan_df = pd.DataFrame([loan_data])
                     
-                    if save_data("loans", new_loan):
+                    if save_data("loans", new_loan_df):
                         st.success(f"✅ Loan {readable_label} issued!")
                         st.rerun()
-
     # ==============================
     # TAB: ACTIONS (The Rollover Engine)
     # ==============================
