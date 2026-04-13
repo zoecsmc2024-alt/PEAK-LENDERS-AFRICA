@@ -68,13 +68,7 @@ def apply_master_theme():
         </style>
     """, unsafe_allow_html=True)
 
-# --- TOP OF SCRIPT (Data Loading Section) ---
-loans_df = fetch_data("loans") # Or however you fetch your data
 
-if not loans_df.empty:
-    # This fixes the "['borrower'] not in index" error for the whole app
-    if 'borrower_id' in loans_df.columns and 'borrower' not in loans_df.columns:
-        loans_df['borrower'] = loans_df['borrower_id']
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
@@ -132,6 +126,15 @@ def get_cached_data_refined(table_name):
         st.error(f"Database Error: {e}")
         return pd.DataFrame()
 
+# --- TOP OF SCRIPT (Data Loading Section) ---
+# CHANGE THIS: fetch_data("loans") 
+# TO THIS:
+loans_df = get_cached_data_refined("loans") 
+
+if not loans_df.empty:
+    # This fixes the "['borrower'] not in index" error seen in Portfolio View
+    if 'borrower_id' in loans_df.columns and 'borrower' not in loans_df.columns:
+        loans_df['borrower'] = loans_df['borrower_id']
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):
     """Legacy helper maintained for backward compatibility."""
