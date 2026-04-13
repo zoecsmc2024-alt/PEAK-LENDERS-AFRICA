@@ -26,24 +26,43 @@ import pandas as pd
 import streamlit as st
 import time
 
-def apply_custom_theme(color):
-    st.session_state.theme_color = color
+def apply_master_theme():
+    """
+    ONE function to rule them all. Call this at the start of every page 
+    or inside your sidebar render.
+    """
+    # 1. Priority: Session State (for instant updates) -> DB Selection -> Default Blue
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    
     st.markdown(f"""
-        <style>
-        [data-testid="stSidebar"] {{ background-color: {color} !important; }}
-        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-        [data-testid="stWidgetLabel"] p {{ color: white !important; }}
-        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
-        ul[data-testid="stSelectboxVirtualList"] * {{ color: #1E3A8A !important; }}
-        .stSelectbox label p {{ color: white !important; }}
-        div[data-testid="stMetric"] {{
-            background-color: white; padding: 15px; border-radius: 10px;
-            border-left: 5px solid {color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    <style>
+        /* MAIN SIDEBAR */
+        [data-testid="stSidebar"] {{
+            background-color: {brand_color} !important;
         }}
-        h1, h2, h3 {{ color: {color}; }}
-        </style>
-    """, unsafe_allow_html=True)
 
+        /* SIDEBAR TEXT & ICONS */
+        [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span, 
+        [data-testid="stWidgetLabel"] p {{
+            color: white !important;
+        }}
+
+        /* SELECTBOX FIX (Ensures dropdown text remains readable) */
+        div[data-baseweb="select"] * {{ color: #1E3A8A !important; }}
+
+        /* METRIC CARDS */
+        div[data-testid="stMetric"] {{
+            background-color: #FFFFFF !important;
+            border: 1px solid #E0E0E0 !important;
+            border-left: 8px solid {brand_color} !important; 
+            border-radius: 12px !important;
+            padding: 20px !important;
+        }}
+
+        /* HEADINGS */
+        h1, h2, h3 {{ color: {brand_color} !important; }}
+    </style>
+    """, unsafe_allow_html=True)
 def upload_image(file):
     """Uploads collateral image to Supabase Storage and returns the public URL."""
     try:
@@ -278,21 +297,23 @@ SESSION_TIMEOUT = 15  # Minutes
 
 # --- GLOBAL UI SYNC ---
 def sync_tenant_ui():
-    """Applies branding safely only if a tenant is logged in."""
     tenant_id = st.session_state.get('tenant_id')
     if not tenant_id:
         return None
 
     try:
+        # Fetch fresh data from DB
         res = supabase.table("tenants").select("*").eq("id", tenant_id).execute()
         if res.data:
             branding = res.data[0]
-            # Priority: 1. Instant session state, 2. Database, 3. Default blue
-            color = st.session_state.get('theme_color', branding.get('brand_color', '#2B3F87'))
-            apply_custom_theme(color)
+            
+            # If we don't have a "live" change in progress, sync from DB
+            if 'theme_color' not in st.session_state:
+                st.session_state['theme_color'] = branding.get('brand_color', '#2B3F87')
+            
+            apply_master_theme()
             return branding
     except Exception as e:
-        # Prevents the app from crashing during the login transition
         print(f"Sync error: {e}")
     return None
 # ==========================================
@@ -2447,7 +2468,7 @@ def show_settings():
         logo_file = st.file_uploader("Upload New Logo (PNG/JPG)", type=["png", "jpg", "jpeg"])
 
     # --- SAVE BUTTON ---
-    if st.button("💾 Save Branding Changes", use_container_width=True):
+    if st.button("💾 Save Branding Changes"):
         # We start with the color change
         updated_data = {"brand_color": new_color}
         
@@ -2480,9 +2501,8 @@ def show_settings():
         try:
             supabase.table("tenants").update(updated_data).eq("id", active_company['id']).execute()
             
-            st.success("✅ Branding updated successfully!")
-            st.info("Applying your new brand identity...")
-            # Use st.rerun() to refresh the sidebar and theme instantly
+            st.session_state['theme_color'] = new_color_from_picker 
+            st.success("Branding updated!")
             st.rerun()
             
         except Exception as e:
