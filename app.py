@@ -1500,56 +1500,69 @@ def show_collateral():
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
     # --- TAB 1: REGISTER COLLATERAL ---
-    with tab_reg:
-        if loans_df.empty:
-            st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+with tab_reg:
+    if loans_df.empty:
+        st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+    else:
+        # 1. Normalize and detect columns
+        loans_df.columns = loans_df.columns.str.lower()
+        l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
+        l_bor_col = next((c for c in loans_df.columns if 'borrower' in c), "borrower")
+        status_col = next((c for c in loans_df.columns if 'status' in c), "status")
+
+        # 2. Filter for active loans
+        active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+        available_loans = loans_df[loans_df[status_col].astype(str).str.title().isin(active_statuses)].copy()
+
+        if available_loans.empty:
+            st.info("✅ All current loans are cleared. No assets need to be held.")
         else:
-            # Filter for active loans requiring security
-            active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-            status_col = next((c for c in loans_df.columns if 'status' in c), "status")
-            available_loans = loans_df[loans_df[status_col].astype(str).str.title().isin(active_statuses)].copy()
+            with st.form("collateral_form", clear_on_submit=True):
+                st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                
+                # --- THE BEAUTIFUL DROPDOWN LOGIC ---
+                # Create a mapping: "Short ID | Name" -> "Full UUID"
+                loan_map = {
+                    f"{str(row[l_id_col])[:8]} | {row[l_bor_col]}": row[l_id_col] 
+                    for _, row in available_loans.iterrows()
+                }
+                # Create a mapping for the borrower names to avoid parsing strings later
+                borrower_map = {
+                    row[l_id_col]: row[l_bor_col] 
+                    for _, row in available_loans.iterrows()
+                }
+                
+                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                
+                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
+                desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
+                est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
 
-            if available_loans.empty:
-                st.info("✅ All current loans are cleared. No assets need to be held.")
-            else:
-                # FORM FIX: Ensure all inputs are INSIDE the form block
-                with st.form("collateral_form", clear_on_submit=True):
-                    st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
+                submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+
+            if submit:
+                if desc and est_value > 0:
+                    # Retrieve the full UUID and the correct borrower name from our maps
+                    full_loan_id = loan_map[selected_label]
+                    correct_borrower = borrower_map[full_loan_id]
                     
-                    # Create labels using detected columns
-                    loan_options = available_loans.apply(lambda x: f"ID: {x[loan_id_col]} - {x[loan_bor_col]}", axis=1).tolist()
-                    selected_loan = c1.selectbox("Link to Active Loan", loan_options)
+                    new_asset = pd.DataFrame([{
+                        "borrower": correct_borrower,
+                        "loan_id": full_loan_id, # This is the full UUID for the database
+                        "type": asset_type,
+                        "description": desc,
+                        "value": float(est_value),
+                        "status": "Held",
+                        "date_added": datetime.now().strftime("%Y-%m-%d"),
+                        "tenant_id": st.session_state.get('tenant_id', 'test-tenant')
+                    }])
                     
-                    asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
-                    desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
-                    est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
-
-                    # SUBMIT BUTTON MUST BE INSIDE THE FORM
-                    submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
-
-                if submit:
-                    if desc and est_value > 0:
-                        sel_id = selected_loan.split(" - ")[0].replace("ID: ", "")
-                        sel_borrower = selected_loan.split(" - ")[1]
-                        
-                        new_asset = pd.DataFrame([{
-                            "borrower": sel_borrower,
-                            "loan_id": sel_id,
-                            "type": asset_type,
-                            "description": desc,
-                            "value": float(est_value),
-                            "status": "Held",
-                            "date_added": datetime.now().strftime("%Y-%m-%d"),
-                            "tenant_id": st.session_state.get('tenant_id', 'test-tenant')
-                        }])
-                        
-                        if save_data("collateral", new_asset):
-                            st.success(f"✅ Asset registered for {sel_borrower}!")
-                            st.rerun()
-                    else:
-                        st.error("⚠️ Provide both a description and value.")
-
+                    if save_data("collateral", new_asset):
+                        st.success(f"✅ Asset registered for {correct_borrower}!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ Provide both a description and value.")
 # --- TAB 2: VIEW & UPDATE ---
     with tab_view:
         if not collateral_df.empty:
