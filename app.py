@@ -901,7 +901,7 @@ def show_borrowers():
                     new_id = str(uuid.uuid4())
                     
                     # FIX: Fallback for tenant_id to prevent RLS violations (Error 42501)
-                    t_id = st.session_state.get('tenant_id', 'default-admin')
+                    t_id = "test-tenant-123"
                     
                     new_entry = pd.DataFrame([{
                         "id": new_id, 
@@ -1097,7 +1097,7 @@ def show_loans():
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     # 1. Grab the tenant ID with a fallback to avoid NULL errors
-                    t_id = st.session_state.get('tenant_id', 'default-admin')
+                    t_id = "test-tenant-123"
                     # 2. Build the data (No "type" column until you run the ALTER TABLE SQL)
                     loan_data = {
                         "borrower_id": selected_id, 
