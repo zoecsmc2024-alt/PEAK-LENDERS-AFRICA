@@ -1528,13 +1528,20 @@ def show_collateral():
                     # FIXED: Form submit button explicitly defined
                     submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
+                # Logic must be indented to stay inside the 'with tab_reg' or function scope
                 if submit:
+                    # 1. Verify the tenant_id is actually loaded in the session
+                    # This resolves the 42501 RLS error by providing the required ID
+                    current_tenant = st.session_state.get('tenant_id')
+                    
                     if not current_tenant:
-                        st.error("❌ Session Error: No Tenant ID found. Please re-login.")
+                        st.error("❌ Session Error: No Tenant ID found. Please log out and back in.")
                     elif desc and est_value > 0:
+                        # Map back to full UUID from the clean UI label
                         full_loan_id = loan_map[selected_label]
                         sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
-                        
+
+                        # 2. Build the data with the tenant_id included
                         new_asset = pd.DataFrame([{
                             "borrower": sel_borrower,
                             "loan_id": full_loan_id,
@@ -1543,9 +1550,10 @@ def show_collateral():
                             "value": float(est_value),
                             "status": "Held",
                             "date_added": datetime.now().strftime("%Y-%m-%d"),
-                            "tenant_id": current_tenant # FIX: Essential for Row-Level Security
+                            "tenant_id": current_tenant  # This MUST match the JWT to pass RLS
                         }])
                         
+                        # 3. Save to database
                         if save_data("collateral", new_asset):
                             st.success(f"✅ Asset registered for {sel_borrower}!")
                             st.rerun()
