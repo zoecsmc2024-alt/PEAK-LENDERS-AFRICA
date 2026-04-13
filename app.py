@@ -868,35 +868,50 @@ def upload_image(file):
 
 
 
-    # ==========================================
-# 17. SIDEBAR & NAVIGATION (STABLE & REACTIVE)
-# ==========================================
+# --- 4. AUTH & SIDEBAR NAVIGATION ---
+companies_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
+company_list = {c['name']: c for c in tenants_res.data}
 
-def render_sidebar():
-    # 1. Fetch All Tenants
-    try:
-        tenants_res = supabase.table("tenants").select("id, name, brand_color, logo_url").execute()
-        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
-    except Exception as e:
-        st.error(f"Error fetching tenants: {e}")
-        tenant_map = {}
+# Initialize session state BEFORE the UI elements
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "📈 Overview"
 
-    current_tenant_id = st.session_state.get('tenant_id')
-    brand_color = st.session_state.get('theme_color', '#1E3A8A')
+with st.sidebar:
+    # --- STEP 0: DEFINE THE COMPANY FIRST (CRITICAL) ---
+    # This ensures active_company exists before anything else tries to use it.
+    active_company_name = st.selectbox("Business Portal:", list(company_list.keys()))
+    active_company = company_list[active_company_name]
+    
+    # Apply theme based on the selection
+    apply_custom_theme(active_company['brand_color'])
 
-    # 2. Apply Dynamic CSS
-    st.markdown(f"""
+    # --- 1. CSS INJECTION FOR CENTERING ---
+    st.markdown(
+        """
         <style>
-            [data-testid="stSidebar"] {{ background-color: {brand_color} !important; }}
-            [data-testid="stSidebar"] *, [data-testid="stSidebarNav"] span {{ color: white !important; }}
-            h1, h2, h3 {{ color: {brand_color} !important; }}
-            div[data-testid="stMetric"] {{
-                background-color: white; padding: 15px; border-radius: 10px;
-                border-left: 5px solid {brand_color}; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            }}
-            div[data-testid="stMetric"] label, div[data-testid="stMetric"] div {{ color: #31333F !important; }}
+            /* Centers the entire sidebar content area */
+            [data-testid="stSidebarNav"] { text-align: center; }
+            [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] { text-align: center; }
+            
+            /* Targets the radio group container */
+            div.row-widget.stRadio > div { flex-direction: column; align-items: center; }
+            
+            /* Centers the text within each radio button label */
+            div.row-widget.stRadio > div[role="radiogroup"] > label { 
+                justify-content: center; 
+                width: 100%; 
+                text-align: center; 
+            }
+            
+            /* Ensures the top-level label is also centered */
+            [data-testid="stWidgetLabel"] { text-align: center; width: 100%; }
+            
+            /* Optional: Hide the radio circles to make it look like a clean menu */
+            [data-testid="stMarkdownContainer"] p { font-weight: 500; }
         </style>
-    """, unsafe_allow_html=True)
+        """, 
+        unsafe_allow_html=True
+    )
 
     # --- THE SIDEBAR RENDER ---
     with st.sidebar:
