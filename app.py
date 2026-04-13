@@ -855,9 +855,6 @@ def show_borrowers():
     if df.empty:
         df = pd.DataFrame(columns=["id", "name", "phone", "address", "national_id", "status", "tenant_id"])
 
-    # --- TABS ---
-    tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
-
     # --- TAB 1: VIEW ALL ---
     with tab_view:
         col1, col2 = st.columns([3, 1]) 
@@ -880,42 +877,43 @@ def show_borrowers():
             if status_filter != "All":
                 filtered_df = filtered_df[filtered_df["status"] == status_filter]
 
+            # --- INDENTATION FIXED BELOW ---
             if not filtered_df.empty:
-        rows_html = ""
-        for i, r in filtered_df.reset_index().iterrows():
-            bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-            
-            # Use .get() to safely grab data even if it's missing for old records
-            email_val = r.get('email', 'N/A')
-            nok_val = r.get('next_of_kin', 'N/A')
-            
-            rows_html += f"""
-            <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
-                <td style="padding:12px;"><b>{r['name']}</b></td>
-                <td style="padding:12px;">{r['phone']}</td>
-                <td style="padding:12px;">{email_val}</td>
-                <td style="padding:12px;">{nok_val}</td>
-                <td style="padding:12px; text-align:center;">
-                    <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
-                </td>
-            </tr>"""
-        
-        # Update the header to have 5 columns instead of 4
-        st.markdown(f"""
-        <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
-            <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
-                <thead>
-                    <tr style='background:{brand_color}; color:white; text-align:left;'>
-                        <th style='padding:12px;'>Borrower Name</th>
-                        <th style='padding:12px;'>Phone</th>
-                        <th style='padding:12px;'>Email</th>
-                        <th style='padding:12px;'>Next of Kin</th>
-                        <th style='padding:12px; text-align:center;'>Status</th>
-                    </tr>
-                </thead>
-                <tbody>{rows_html}</tbody>
-            </table>
-        </div>""", unsafe_allow_html=True)
+                rows_html = ""
+                for i, r in filtered_df.reset_index().iterrows():
+                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                    
+                    # Use .get() to safely grab data even if it's missing for old records
+                    email_val = r.get('email', 'N/A')
+                    nok_val = r.get('next_of_kin', 'N/A')
+                    
+                    rows_html += f"""
+                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
+                        <td style="padding:12px;"><b>{r['name']}</b></td>
+                        <td style="padding:12px;">{r['phone']}</td>
+                        <td style="padding:12px;">{email_val}</td>
+                        <td style="padding:12px;">{nok_val}</td>
+                        <td style="padding:12px; text-align:center;">
+                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">{r['status']}</span>
+                        </td>
+                    </tr>"""
+                
+                # Render the table
+                st.markdown(f"""
+                <div style='border:2px solid {brand_color}; border-radius:10px; overflow:hidden; margin-top:20px;'>
+                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
+                        <thead>
+                            <tr style='background:{brand_color}; color:white; text-align:left;'>
+                                <th style='padding:12px;'>Borrower Name</th>
+                                <th style='padding:12px;'>Phone</th>
+                                <th style='padding:12px;'>Email</th>
+                                <th style='padding:12px;'>Next of Kin</th>
+                                <th style='padding:12px; text-align:center;'>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows_html}</tbody>
+                    </table>
+                </div>""", unsafe_allow_html=True)
             else:
                 st.info("No borrowers found matching your search.")
         else:
