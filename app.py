@@ -1513,7 +1513,7 @@ def show_collateral():
                 est_value = st.number_input("Estimated Value (UGX)", min_value=0)
                 uploaded_photo = st.file_uploader("Upload Asset Photo", type=["jpg", "png", "jpeg"])
                 
-                # The submit button must be inside the 'with st.form' block
+                st.write(f"DEBUG: Sending tenant_id: {current_tenant}")
                 submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
             if submit and desc and est_value > 0:
