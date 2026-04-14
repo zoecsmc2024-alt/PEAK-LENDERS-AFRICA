@@ -1951,61 +1951,67 @@ def show_calendar():
             </div>""", unsafe_allow_html=True)
 
     # 5. OVERDUE FOLLOW-UP
-    from datetime import datetime
+import pandas as pd
+from datetime import datetime
 
-# Define 'today' so the filter can compare dates
-today = datetime.now() 
-
-# Now your existing line will work:
-overdue_df = active_loans[active_loans[l_end_col] < today].copy()             
 st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
 
-# Calculate overdue loans
-overdue_df = active_loans[active_loans[l_end_col] < today].copy()
+# 1. Define 'today'
+today = datetime.now()
 
-if not overdue_df.empty:
-    # Calculate days late
-    overdue_df["days_late"] = (today - overdue_df[l_end_col]).dt.days
+# 2. Safety Check: Ensure the column names are defined
+# If they aren't defined globally, we find them dynamically here
+l_end_col = next((c for c in active_loans.columns if 'end' in c.lower() or 'due' in c.lower()), None)
+l_bor_col = next((c for c in active_loans.columns if 'borrower' in c.lower() or 'name' in c.lower()), "borrower")
+l_id_col = next((c for c in active_loans.columns if 'id' in c.lower()), "id")
+l_stat_col = next((c for c in active_loans.columns if 'status' in c.lower()), "status")
+
+if l_end_col:
+    # 3. Ensure the column is actually datetime format so the comparison works
+    active_loans[l_end_col] = pd.to_datetime(active_loans[l_end_col], errors='coerce')
     
-    od_rows = ""
-    for _, r in overdue_df.iterrows():
-        # Dynamic color: Red for > 1 week late, Orange for recently late
-        late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
+    # 4. Filter for overdue
+    overdue_df = active_loans[active_loans[l_end_col] < today].copy()
+
+    if not overdue_df.empty:
+        overdue_df["days_late"] = (today - overdue_df[l_end_col]).dt.days
         
-        # Build Table Rows
-        od_rows += f"""
-        <tr style="background-color: #FFF5F5; border-bottom: 1px solid #FF4B4B22;">
-            <td style="padding:10px;"><b>#{str(r[l_id_col])[:8]}</b></td>
-            <td style="padding:10px;">{r[l_bor_col]}</td>
-            <td style="padding:10px; color:{late_color}; font-weight:bold; text-align:center;">{r['days_late']} Days</td>
-            <td style="padding:10px; text-align:center;">
-                <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">
-                    {r[l_stat_col]}
-                </span>
-            </td>
-        </tr>
-        """
-    
-    # Render the full table
-    st.markdown(f"""
-    <div style="border: 1px solid #FF4B4B; border-radius: 10px; overflow: hidden;">
-        <table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px;">
-            <thead>
-                <tr style="background: #FF4B4B; color: white; text-align: left;">
-                    <th style="padding:10px;">ID</th>
-                    <th style="padding:10px;">Borrower</th>
-                    <th style="padding:10px; text-align:center;">Late By</th>
-                    <th style="padding:10px; text-align:center;">Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {od_rows}
-            </tbody>
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
+        od_rows = ""
+        for _, r in overdue_df.iterrows():
+            late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
+            
+            od_rows += f"""
+            <tr style="background-color: #FFF5F5; border-bottom: 1px solid #FF4B4B22;">
+                <td style="padding:10px;"><b>#{str(r[l_id_col])[:8]}</b></td>
+                <td style="padding:10px;">{r[l_bor_col]}</td>
+                <td style="padding:10px; color:{late_color}; font-weight:bold; text-align:center;">{r['days_late']} Days</td>
+                <td style="padding:10px; text-align:center;">
+                    <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">
+                        {r[l_stat_col]}
+                    </span>
+                </td>
+            </tr>
+            """
+        
+        st.markdown(f"""
+        <div style="border: 1px solid #FF4B4B; border-radius: 10px; overflow: hidden;">
+            <table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px;">
+                <thead>
+                    <tr style="background: #FF4B4B; color: white; text-align: left;">
+                        <th style="padding:10px;">ID</th>
+                        <th style="padding:10px;">Borrower</th>
+                        <th style="padding:10px; text-align:center;">Late By</th>
+                        <th style="padding:10px; text-align:center;">Status</th>
+                    </tr>
+                </thead>
+                <tbody>{od_rows}</tbody>
+            </table>
+        </div>
+        """, unsafe_allow_html=True)
+    else:
+        st.success("🎉 No overdue accounts. All collections are up to date!")
 else:
-    st.success("🎉 No overdue accounts. All collections are up to date!")                                                                                                                                                                                                                 
+    st.error("Could not find an 'End Date' or 'Due Date' column in the loans data.")                                                                                                                                                                                                         
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE
