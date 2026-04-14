@@ -1041,55 +1041,62 @@ def show_borrowers():
             st.markdown("### ⚙️ Modify Borrower Details")
             
             with st.expander(f"📝 Edit Profile: {target_name}"):
-                with st.form(f"edit_bor_{target_name}"):
-                    c1, c2 = st.columns(2)
-                    e_name = c1.text_input("Full Name", value=str(b_data.get(b_name_col, '')))
-                    e_phone = c1.text_input("Phone Number", value=str(b_data.get('phone', '')))
-                    e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
-                    e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
-                    
-                    current_status = str(b_data.get(b_status_col, 'Active')).title()
-                    e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if current_status == "Active" else 1)
-                    e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
-                    
-                    if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
-                        update_df = pd.DataFrame([{
-                            "id": b_data.get('id'), 
-                            "name": e_name,
-                            "phone": e_phone,
-                            "national_id": e_nid,
-                            "email": e_email,
-                            "status": e_status,
-                            "address": e_addr,
-                            "tenant_id": st.session_state.get('tenant_id')
-                        }])
-                        
-                        if save_data("borrowers", update_df):
-                            st.success("✅ Profile updated!")
-                            st.rerun()
+    with st.form(f"edit_bor_{target_name}"):
+        c1, c2 = st.columns(2)
+        e_name = c1.text_input("Full Name", value=str(b_data.get(b_name_col, '')))
+        e_phone = c1.text_input("Phone Number", value=str(b_data.get('phone', '')))
+        e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
+        e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
+        
+        current_status = str(b_data.get(b_status_col, 'Active')).title()
+        e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if current_status == "Active" else 1)
+        e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
+        
+        if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
+            update_df = pd.DataFrame([{
+                "id": b_data.get('id'), 
+                "name": e_name,
+                "phone": e_phone,
+                "national_id": e_nid,
+                "email": e_email,
+                "status": e_status,
+                "address": e_addr,
+                "tenant_id": st.session_state.get('tenant_id')
+            }])
+            
+            if save_data("borrowers", update_df):
+                st.success("✅ Profile updated!")
+                st.rerun()
 
-                st.markdown("### ⚠️ Danger Zone")
-                confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}", key=f"del_check_{target_name}")
+    # --- Danger Zone (Still inside the Expander) ---
+    st.markdown("### ⚠️ Danger Zone")
+    confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}", key=f"del_check_{target_name}")
 
-                if st.button(f"🗑️ Delete Permanently", disabled=not confirm_delete, type="primary"):
-                    # Check for loans before allowing delete
-                    loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c), "borrower_id")
-                    user_loans = u_loans[u_loans[loan_bor_ref].astype(str) == str(b_data.get('id'))] if not u_loans.empty else pd.DataFrame()
-                    
-                    if not user_loans.empty:
-                        st.error(f"❌ Cannot delete! This borrower has {len(user_loans)} loan records.")
-                    else:
-                        try:
-                            response = supabase.table("borrowers").delete().eq("id", b_data['id']).execute()
-                            if response.data:
-                                st.success(f"Successfully removed {target_name}.")
-                                st.rerun()
-                            else:
-                                st.error("Delete failed. Check RLS permissions.")
-                        except Exception as e:
-                            st.error(f"Database Error: {e}")
+    if st.button("🗑️ Delete Permanently", disabled=not confirm_delete, type="primary"):
+        # 1. Check for loans before allowing delete
+        loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c), "borrower_id")
+        user_loans = u_loans[u_loans[loan_bor_ref].astype(str) == str(b_data.get('id'))] if not u_loans.empty else pd.DataFrame()
+        
+        if not user_loans.empty:
+            st.error(f"❌ Cannot delete! This borrower has {len(user_loans)} active loan records.")
         else:
-            st.info("No borrowers found to manage.")
+            try:
+                # 2. Attempt delete via Supabase
+                res = supabase.table("borrowers").delete().eq("id", b_data.get('id')).execute()
+                
+                if res.data:
+                    st.success(f"✅ Successfully deleted {target_name}")
+                    st.cache_data.clear()
+                    st.rerun()
+                else:
+                    # RLS or permission block
+                    st.error("🚫 Permission Denied: Your account does not have authority to delete this record.")
+            except Exception as e:
+                st.error(f"🌐 System Error: {str(e)}")
+
+# This block should be at the same level as the code that creates the expander
+if df_borrowers.empty:
+    st.info("💡 No borrowers found to manage.")
 # ==============================
 # 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
 # ==============================
