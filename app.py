@@ -1125,8 +1125,13 @@ def show_loans():
     # -------------------------------
     # NORMALIZE STATUS COLUMN
     # -------------------------------
-    if "status" in loans_df.columns:
-        loans_df["status"] = loans_df["status"].apply(normalize_status)
+    VALID_STATUSES = {"ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
+
+def normalize_status(status):
+    if pd.isna(status):
+        return "PENDING"
+    cleaned = str(status).strip().upper().replace(" ", "_")
+    return cleaned if cleaned in VALID_STATUSES else "PENDING"
     
     # 2. AUTO-CALC & DATA CLEANING
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
