@@ -2072,61 +2072,42 @@ def show_expenses():
         else:
             st.info("💡 No expenses recorded for analysis yet.")
 
-    # --- TAB 3: MANAGE / EDIT EXPENSES ---
+    # --- TAB 3: MANAGE / EDIT EXPENSES (NEW LOGIC) ---
     with tab_manage:
         st.markdown("### 🛠️ Manage Outflow Records")
-        if df.empty or "id" not in df.columns:
+        if df.empty:
             st.info("ℹ️ No expenses found to manage.")
         else:
             # Selection for Expenses
             exp_options = [f"ID: {r['id']} | {r['category']} - {float(r['amount']):,.0f} UGX" for _, r in df.iterrows()]
             selected_exp = st.selectbox("🔍 Select Expense to Edit/Delete", exp_options)
 
-            # Extract ID from string selection
-            try:
-                # REMOVED int() wrapper because Supabase uses UUID strings
-                exp_id = selected_exp.split("|")[0].replace("ID:", "").strip()
-                exp_to_edit = df[df["id"] == exp_id].iloc[0]
+            exp_id = int(selected_exp.split("|")[0].replace("ID:", "").strip())
+            exp_to_edit = df[df["id"] == exp_id].iloc[0]
 
-                with st.form("edit_expense_form"):
-                    st.markdown(f"**Editing Record ID #{exp_id}**")
-                    c1, c2 = st.columns(2)
-                    
-                    # Ensure the existing category is handled if it's not in the current list
-                    current_cat = exp_to_edit['category']
-                    cat_idx = EXPENSE_CATS.index(current_cat) if current_cat in EXPENSE_CATS else 0
-                    
-                    up_cat = c1.selectbox("Update Category", EXPENSE_CATS, index=cat_idx)
-                    up_amt = c1.number_input("Update Amount", value=float(exp_to_edit['amount']))
-                    up_desc = c2.text_input("Update Description", value=str(exp_to_edit['description']))
-                    
-                    # Handle date conversion for the date_input widget
-                    orig_pay_date = pd.to_datetime(exp_to_edit['payment_date']) if pd.notna(exp_to_edit['payment_date']) else datetime.now()
-                    up_date = c2.date_input("Update Payment Date", value=orig_pay_date)
+            with st.form("edit_expense_form"):
+                st.markdown(f"**Editing Record ID #{exp_id}**")
+                c1, c2 = st.columns(2)
+                up_cat = c1.selectbox("Update Category", EXPENSE_CATS, index=EXPENSE_CATS.index(exp_to_edit['category']) if exp_to_edit['category'] in EXPENSE_CATS else 0)
+                up_amt = c1.number_input("Update Amount", value=float(exp_to_edit['amount']))
+                up_desc = c2.text_input("Update Description", value=str(exp_to_edit['description']))
+                up_date = c2.date_input("Update Date", value=pd.to_datetime(exp_to_edit['payment_date']))
 
-                    if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                        update_entry = pd.DataFrame([{
-                            "id": exp_id,
-                            "category": up_cat,
-                            "amount": float(up_amt),
-                            "description": up_desc,
-                            "payment_date": up_date.strftime("%Y-%m-%d"),
-                            "tenant_id": current_tenant
-                        }])
-                        if save_data("expenses", update_entry):
-                            st.success("✅ Expense updated successfully!")
-                            st.cache_data.clear()
-                            st.rerun()
+                if st.form_submit_button("💾 Save Changes to Database", use_container_width=True):
+                    update_entry = pd.DataFrame([{
+                        "id": exp_id,
+                        "category": up_cat,
+                        "amount": float(up_amt),
+                        "description": up_desc,
+                        "payment_date": up_date.strftime("%Y-%m-%d"),
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    if save_data("expenses", update_entry):
+                        st.success("✅ Expense updated!"); st.rerun()
 
-                # Separate Delete Action
-                if st.button("🗑️ Delete Expense Permanently", use_container_width=True):
-                    # Direct call to Supabase for deletion
-                    supabase.table("expenses").delete().eq("id", exp_id).execute()
-                    st.warning(f"⚠️ Record #{exp_id} deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-            except Exception as e:
-                st.error(f"Error loading record: {e}")
+            if st.button("🗑️ Delete Expense Permanently", use_container_width=True):
+                supabase.table("expenses").delete().eq("id", exp_id).execute()
+                st.warning(f"⚠️ Record #{exp_id} deleted."); st.rerun()
 # ==============================
 # 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
