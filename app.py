@@ -1950,17 +1950,119 @@ def show_calendar():
                 </table>
             </div>""", unsafe_allow_html=True)
 
-    # 5. OVERDUE FOLLOW-UP (Red/Orange Warning System Intact)
-    st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
-    overdue_df = active_loans[active_loans["end_date"] < today].copy()
-    if not overdue_df.empty:
-        overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
-        od_rows = ""
-        for _, r in overdue_df.iterrows():
-            late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-            od_rows += f"""<tr style="background:#FFF5F5;"><td style="padding:10px;"><b>#{r['id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px;color:{late_color};font-weight:bold;">{r['days_late']} Days</td><td style="padding:10px;text-align:center;"><span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r['status']}</span></td></tr>"""
-        st.markdown(f"""<div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#FF4B4B;color:white;"><th style="padding:10px;">ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:center;">Late By</th><th style="padding:10px;text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
-                                                                                                                                                                                                         
+    # 5. OVERDUE FOLLOW-UP (PRO VERSION)
+import pandas as pd
+from datetime import datetime
+
+st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
+
+# -------------------------------
+# 1. SET TODAY
+# -------------------------------
+today = pd.Timestamp(datetime.now())
+
+# -------------------------------
+# 2. SAFE COPY (NO SIDE EFFECTS)
+# -------------------------------
+if active_loans is None or active_loans.empty:
+    st.info("ℹ️ No active loans found.")
+else:
+    df_loans = active_loans.copy()
+
+    # -------------------------------
+    # 3. SMART COLUMN DETECTION
+    # -------------------------------
+    def find_col(possible_names, df, default=None):
+        for col in df.columns:
+            col_lower = col.lower()
+            if any(name in col_lower for name in possible_names):
+                return col
+        return default
+
+    l_end_col  = find_col(["end", "due", "maturity"], df_loans)
+    l_bor_col  = find_col(["borrower", "name", "client"], df_loans, "borrower")
+    l_id_col   = find_col(["id"], df_loans, "id")
+    l_stat_col = find_col(["status"], df_loans, "status")
+
+    if not l_end_col:
+        st.error("❌ Could not find an 'End Date' or 'Due Date' column in the loans data.")
+    else:
+        # -------------------------------
+        # 4. CLEAN DATE COLUMN
+        # -------------------------------
+        df_loans[l_end_col] = pd.to_datetime(df_loans[l_end_col], errors='coerce')
+
+        # Drop invalid dates
+        df_loans = df_loans.dropna(subset=[l_end_col])
+
+        # -------------------------------
+        # 5. FILTER OVERDUE
+        # -------------------------------
+        overdue_df = df_loans[df_loans[l_end_col] < today].copy()
+
+        if overdue_df.empty:
+            st.success("🎉 No overdue accounts. All collections are up to date!")
+        else:
+            # -------------------------------
+            # 6. COMPUTE DAYS LATE
+            # -------------------------------
+            overdue_df["days_late"] = (today - overdue_df[l_end_col]).dt.days
+
+            # Sort worst first (VERY IMPORTANT for ops)
+            overdue_df = overdue_df.sort_values(by="days_late", ascending=False)
+
+            # Optional: limit rows for performance
+            MAX_ROWS = 100
+            display_df = overdue_df.head(MAX_ROWS)
+
+            # -------------------------------
+            # 7. BUILD HTML TABLE (FAST)
+            # -------------------------------
+            rows_html = []
+
+            for _, r in display_df.iterrows():
+                days_late = int(r["days_late"])
+                late_color = "#FF4B4B" if days_late > 7 else "#FFA500"
+
+                rows_html.append(f"""
+                <tr style="background-color: #FFF5F5; border-bottom: 1px solid #FF4B4B22;">
+                    <td style="padding:10px;"><b>#{str(r[l_id_col])[:8]}</b></td>
+                    <td style="padding:10px;">{r.get(l_bor_col, 'N/A')}</td>
+                    <td style="padding:10px; color:{late_color}; font-weight:bold; text-align:center;">
+                        {days_late} Days
+                    </td>
+                    <td style="padding:10px; text-align:center;">
+                        <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">
+                            {r.get(l_stat_col, 'N/A')}
+                        </span>
+                    </td>
+                </tr>
+                """)
+
+            table_html = f"""
+            <div style="border: 1px solid #FF4B4B; border-radius: 10px; overflow: hidden;">
+                <table style="width:100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px;">
+                    <thead>
+                        <tr style="background: #FF4B4B; color: white; text-align: left;">
+                            <th style="padding:10px;">ID</th>
+                            <th style="padding:10px;">Borrower</th>
+                            <th style="padding:10px; text-align:center;">Late By</th>
+                            <th style="padding:10px; text-align:center;">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {''.join(rows_html)}
+                    </tbody>
+                </table>
+            </div>
+            """
+
+            st.markdown(table_html, unsafe_allow_html=True)
+
+            # -------------------------------
+            # 8. EXTRA INSIGHT (POWER FEATURE)
+            # -------------------------------
+            st.caption(f"Showing {len(display_df)} of {len(overdue_df)} overdue loans")                                                                                                                      
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE
@@ -2072,42 +2174,123 @@ def show_expenses():
         else:
             st.info("💡 No expenses recorded for analysis yet.")
 
-    # --- TAB 3: MANAGE / EDIT EXPENSES (NEW LOGIC) ---
-    with tab_manage:
-        st.markdown("### 🛠️ Manage Outflow Records")
-        if df.empty:
-            st.info("ℹ️ No expenses found to manage.")
-        else:
-            # Selection for Expenses
-            exp_options = [f"ID: {r['id']} | {r['category']} - {float(r['amount']):,.0f} UGX" for _, r in df.iterrows()]
-            selected_exp = st.selectbox("🔍 Select Expense to Edit/Delete", exp_options)
+    # --- TAB 3: MANAGE / EDIT EXPENSES (PRO VERSION) ---
+with tab_manage:
+    st.markdown("### 🛠️ Manage Outflow Records")
 
-            exp_id = int(selected_exp.split("|")[0].replace("ID:", "").strip())
-            exp_to_edit = df[df["id"] == exp_id].iloc[0]
+    if df.empty:
+        st.info("ℹ️ No expenses found to manage.")
+    else:
+        # -------------------------------
+        # 1. BUILD SAFE SELECTION MAP
+        # -------------------------------
+        df = df.copy()
 
-            with st.form("edit_expense_form"):
-                st.markdown(f"**Editing Record ID #{exp_id}**")
-                c1, c2 = st.columns(2)
-                up_cat = c1.selectbox("Update Category", EXPENSE_CATS, index=EXPENSE_CATS.index(exp_to_edit['category']) if exp_to_edit['category'] in EXPENSE_CATS else 0)
-                up_amt = c1.number_input("Update Amount", value=float(exp_to_edit['amount']))
-                up_desc = c2.text_input("Update Description", value=str(exp_to_edit['description']))
-                up_date = c2.date_input("Update Date", value=pd.to_datetime(exp_to_edit['payment_date']))
+        # Ensure correct types
+        df["id"] = df["id"].astype(str)
+        df["amount"] = df["amount"].astype(float)
 
-                if st.form_submit_button("💾 Save Changes to Database", use_container_width=True):
-                    update_entry = pd.DataFrame([{
-                        "id": exp_id,
-                        "category": up_cat,
-                        "amount": float(up_amt),
-                        "description": up_desc,
-                        "payment_date": up_date.strftime("%Y-%m-%d"),
-                        "tenant_id": st.session_state.tenant_id
-                    }])
+        # Create display label
+        df["label"] = df.apply(
+            lambda r: f"{r['category']} - {r['amount']:,.0f} UGX | {str(r['payment_date'])[:10]}",
+            axis=1
+        )
+
+        # Map label → full record
+        exp_map = {row["label"]: row for _, row in df.iterrows()}
+
+        # -------------------------------
+        # 2. SELECT EXPENSE
+        # -------------------------------
+        selected_label = st.selectbox(
+            "🔍 Select Expense to Edit/Delete",
+            list(exp_map.keys())
+        )
+
+        exp_to_edit = exp_map[selected_label]
+        exp_id = exp_to_edit["id"]
+
+        st.markdown(f"**Editing Record ID:** `{exp_id}`")
+
+        # -------------------------------
+        # 3. EDIT FORM
+        # -------------------------------
+        with st.form("edit_expense_form"):
+            c1, c2 = st.columns(2)
+
+            up_cat = c1.selectbox(
+                "Update Category",
+                EXPENSE_CATS,
+                index=EXPENSE_CATS.index(exp_to_edit['category'])
+                if exp_to_edit['category'] in EXPENSE_CATS else 0
+            )
+
+            up_amt = c1.number_input(
+                "Update Amount",
+                value=float(exp_to_edit['amount']),
+                min_value=0.0
+            )
+
+            up_desc = c2.text_input(
+                "Update Description",
+                value=str(exp_to_edit['description'])
+            )
+
+            up_date = c2.date_input(
+                "Update Date",
+                value=pd.to_datetime(exp_to_edit['payment_date'])
+            )
+
+            submitted = st.form_submit_button(
+                "💾 Save Changes to Database",
+                use_container_width=True
+            )
+
+            if submitted:
+                update_entry = pd.DataFrame([{
+                    "id": exp_id,  # UUID stays string
+                    "category": up_cat,
+                    "amount": float(up_amt),
+                    "description": up_desc,
+                    "payment_date": up_date.strftime("%Y-%m-%d"),
+                    "tenant_id": st.session_state.tenant_id
+                }])
+
+                with st.spinner("Updating expense..."):
                     if save_data("expenses", update_entry):
-                        st.success("✅ Expense updated!"); st.rerun()
+                        st.success("✅ Expense updated successfully!")
+                        st.rerun()
+                    else:
+                        st.error("❌ Failed to update expense.")
 
-            if st.button("🗑️ Delete Expense Permanently", use_container_width=True):
-                supabase.table("expenses").delete().eq("id", exp_id).execute()
-                st.warning(f"⚠️ Record #{exp_id} deleted."); st.rerun()
+        # -------------------------------
+        # 4. DELETE SECTION (SAFE)
+        # -------------------------------
+        st.divider()
+
+        col_del1, col_del2 = st.columns([3, 1])
+
+        with col_del2:
+            if st.button("🗑️ Delete", use_container_width=True):
+                st.session_state["confirm_delete_exp"] = True
+
+        if st.session_state.get("confirm_delete_exp", False):
+            st.warning("⚠️ Are you sure you want to permanently delete this expense?")
+
+            conf_c1, conf_c2 = st.columns(2)
+
+            with conf_c1:
+                if st.button("✅ Yes, Delete", use_container_width=True):
+                    with st.spinner("Deleting expense..."):
+                        supabase.table("expenses").delete().eq("id", exp_id).execute()
+                        st.success(f"✅ Record deleted!")
+                        st.session_state["confirm_delete_exp"] = False
+                        st.rerun()
+
+            with conf_c2:
+                if st.button("❌ Cancel", use_container_width=True):
+                    st.session_state["confirm_delete_exp"] = False
+                    st.rerun()
 # ==============================
 # 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
