@@ -1001,23 +1001,21 @@ def show_borrowers():
                     st.error("⚠️ Please fill in Name and Phone Number.")
 
     # --- TAB 3: AUDIT & MANAGE ---
-with tab_audit:
-    if not df.empty:
-        # Dynamically find the name column in the borrowers dataframe
+    with tab_audit:
+        if not df.empty:
+        # 1. SETUP DYNAMIC COLUMN REFERENCES
         b_name_col = next((c for c in df.columns if 'name' in c.lower()), df.columns[0])
         b_status_col = next((c for c in df.columns if 'status' in c.lower()), 'status')
         
         target_name = st.selectbox("Select Borrower to Audit/Manage", df[b_name_col].tolist(), key="audit_manage_select")
         b_data = df[df[b_name_col] == target_name].iloc[0]
         
-        # SHOW LOAN HISTORY
+        # 2. SHOW LOAN HISTORY
         u_loans = get_cached_data("loans")
         
         if not u_loans.empty:
-            # Standardize loans columns
+            # Clean column names for matching logic
             u_loans.columns = u_loans.columns.str.strip().str.lower().str.replace(" ", "_")
-            
-            # Check for various ways a borrower might be linked
             loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c or 'name' in c), None)
             
             if loan_bor_ref:
@@ -1038,6 +1036,7 @@ with tab_audit:
         st.markdown("---")
         st.markdown("### ⚙️ Modify Borrower Details")
         
+        # 3. EDIT PROFILE SECTION
         with st.expander(f"📝 Edit Profile: {target_name}"):
             with st.form(f"edit_bor_{target_name}"):
                 c1, c2 = st.columns(2)
@@ -1051,7 +1050,7 @@ with tab_audit:
                 e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
                 
                 if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
-                    update_df = pd.DataFrame([{
+                    update_payload = {
                         "id": b_data.get('id'), 
                         "name": e_name,
                         "phone": e_phone,
@@ -1060,24 +1059,25 @@ with tab_audit:
                         "status": e_status,
                         "address": e_addr,
                         "tenant_id": st.session_state.get('tenant_id')
-                    }])
+                    }
                     
-                    if save_data("borrowers", update_df):
+                    # Using save_data assuming it handles the update logic correctly
+                    if save_data("borrowers", pd.DataFrame([update_payload])):
                         st.success("✅ Profile updated!")
-                        st.cache_data.clear() # Clear cache to reflect name change
+                        st.cache_data.clear()
                         st.rerun()
 
-            # --- Danger Zone (Inside the Expander) ---
+            # 4. DANGER ZONE (Nested inside expander)
             st.markdown("### ⚠️ Danger Zone")
             confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}", key=f"del_check_{target_name}")
 
             if st.button("🗑️ Delete Permanently", disabled=not confirm_delete, type="primary"):
-                # 1. Double check for loans before final delete
-                loan_bor_ref_del = next((c for c in u_loans.columns if 'borrower' in c), "borrower_id")
-                user_loans_del = u_loans[u_loans[loan_bor_ref_del].astype(str) == str(b_data.get('id'))] if not u_loans.empty else pd.DataFrame()
+                # Safety check for active loans before final deletion
+                loan_ref_check = next((c for c in u_loans.columns if 'borrower' in c), "borrower_id")
+                active_loans = u_loans[u_loans[loan_ref_check].astype(str) == str(b_data.get('id'))] if not u_loans.empty else pd.DataFrame()
                 
-                if not user_loans_del.empty:
-                    st.error(f"❌ Cannot delete! This borrower has {len(user_loans_del)} active loan records.")
+                if not active_loans.empty:
+                    st.error(f"❌ Cannot delete! This borrower has {len(active_loans)} active loan records.")
                 else:
                     try:
                         res = supabase.table("borrowers").delete().eq("id", b_data.get('id')).execute()
@@ -1086,7 +1086,7 @@ with tab_audit:
                             st.cache_data.clear()
                             st.rerun()
                         else:
-                            st.error("🚫 Permission Denied: Your account does not have authority to delete this record.")
+                            st.error("🚫 Permission Denied: Check RLS or dependencies.")
                     except Exception as e:
                         st.error(f"🌐 System Error: {str(e)}")
     else:
