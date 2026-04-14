@@ -1491,10 +1491,11 @@ def show_collateral():
         l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
         l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
 
-    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
+    
 
     # --- TAB 1: REGISTER ASSET ---
-with tab_reg:
+    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])    
+    with tab_reg:
     if loans_df is None or loans_df.empty:
         st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
     else:
