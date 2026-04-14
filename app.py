@@ -1081,12 +1081,20 @@ def show_borrowers():
         else:
             st.info("💡 No borrowers found to manage.")
 # ==============================
-# 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
+# 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition - INDUSTRY STANDARD)
 # ==============================
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import random
+
+# -------------------------------
+# STATUS STANDARDIZER (CRITICAL)
+# -------------------------------
+def normalize_status(status):
+    if pd.isna(status):
+        return "PENDING"
+    return str(status).strip().upper().replace(" ", "_")
 
 def show_loans():
     """
@@ -1102,10 +1110,8 @@ def show_loans():
     
     # Standardize Borrowers
     if borrowers_df is not None and not borrowers_df.empty:
-        # Standardize columns to lowercase for consistency
         borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        active_borrowers = borrowers_df[borrowers_df["status"].astype(str).str.title() == "Active"]
-        # Standardize name column detection
+        active_borrowers = borrowers_df[borrowers_df["status"].astype(str).str.upper() == "ACTIVE"]
         bor_name_col = next((c for c in borrowers_df.columns if 'name' in c), "name")
     else:
         active_borrowers = pd.DataFrame()
@@ -1115,6 +1121,12 @@ def show_loans():
         loans_df = pd.DataFrame(columns=["id", "borrower_id", "loan_id_label", "principal", "interest", "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date"])
     else:
         loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    
+    # -------------------------------
+    # NORMALIZE STATUS COLUMN
+    # -------------------------------
+    if "status" in loans_df.columns:
+        loans_df["status"] = loans_df["status"].apply(normalize_status)
     
     # 2. AUTO-CALC & DATA CLEANING
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
@@ -1126,43 +1138,38 @@ def show_loans():
     if not loans_df.empty:
         loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
         closed_mask = loans_df["balance"] <= 0
-        loans_df.loc[closed_mask, "status"] = "Closed"
+        loans_df.loc[closed_mask, "status"] = "CLOSED"
         loans_df.loc[closed_mask, "balance"] = 0
 
     tab_view, tab_add, tab_manage, tab_actions = st.tabs(["📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"])
 
     # ==============================
-    # TAB: PORTFOLIO VIEW (Luxe Theme)
+    # TAB: PORTFOLIO VIEW
     # ==============================
     with tab_view:
         if not loans_df.empty:
-            # 1. THE BRIDGE: Standardized Mapping
             if not borrowers_df.empty:
                 bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df[bor_name_col]))
                 loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
             else:
                 loans_df['borrower'] = "No Borrower Data"
 
-            # 2. SELECTOR
             loans_df['display_label'] = loans_df['loan_id_label'].astype(str) + " - " + loans_df['borrower'].astype(str)
             
             sel_label = st.selectbox("🔍 Select Loan to Inspect", 
                                      options=loans_df['display_label'].unique(), 
                                      key="inspect_sel_v5")
             
-            # 3. DATA SLICE
             latest_info = loans_df[loans_df["display_label"] == sel_label].iloc[-1]
             
-            # 4. METRICS CALCULATION
             rec_val = float(latest_info.get('amount_paid', 0))
             total_rep = float(latest_info.get('total_repayable', 0))
             out_val = total_rep - rec_val
-            stat_val = str(latest_info.get('status', 'N/A')).upper()
+            stat_val = normalize_status(latest_info.get('status', 'N/A'))
             
             if stat_val == "CLOSED": 
                 out_val = 0
 
-            # --- BRANDED METRIC CARDS ---
             c1, c2, c3 = st.columns(3)
             card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"
             text_style = "margin:0; color:#0A192F;"
@@ -1171,12 +1178,16 @@ def show_loans():
             c2.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">🚨 OUTSTANDING</p><h3 style="{text_style} font-size:18px;">{out_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
             c3.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">📑 STATUS</p><h3 style="{text_style} font-size:18px;">{stat_val}</h3></div>""", unsafe_allow_html=True)
 
-            st.markdown("<br>", unsafe_allow_html=True)
-
-            # --- RENDER THE PEACHY TABLE ---
             def style_loan_table(row):
-                status = str(row["status"])
-                colors = {"Active": "#4A90E2", "Closed": "#2E7D32", "Overdue": "#D32F2F", "BCF": "#FFA500"}
+                status = normalize_status(row["status"])
+                colors = {
+                    "ACTIVE": "#4A90E2",
+                    "CLOSED": "#2E7D32",
+                    "OVERDUE": "#D32F2F",
+                    "BCF": "#FFA500",
+                    "ROLLED_OVER": "#8E44AD",
+                    "PENDING": "#999999"
+                }
                 s_color = colors.get(status, "#666666")
                 styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
                 status_idx = row.index.get_loc("status")
@@ -1197,7 +1208,7 @@ def show_loans():
             st.info("No loans found. Head over to 'New Loan' to get started!")
 
     # ==============================
-    # TAB: NEW LOAN (Supabase Integration)
+    # TAB: NEW LOAN
     # ==============================
     with tab_add:
         if active_borrowers.empty:
@@ -1231,7 +1242,7 @@ def show_loans():
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due), 
                         "amount_paid": 0.0,
-                        "status": "Active", 
+                        "status": "ACTIVE", 
                         "start_date": str(date_issued), 
                         "end_date": str(date_due),
                         "tenant_id": t_id
@@ -1244,7 +1255,7 @@ def show_loans():
                         st.rerun()
 
     # ==============================
-    # TAB: ACTIONS (The Rollover Engine)
+    # TAB: ACTIONS (ROLLOVER ENGINE)
     # ==============================
     with tab_actions:
         st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
@@ -1252,7 +1263,7 @@ def show_loans():
         if loans_df.empty:
             st.info("No active loans to roll over.")
         else:
-            eligible_loans = loans_df[loans_df["status"] != "Closed"]
+            eligible_loans = loans_df[loans_df["status"] != "CLOSED"]
             
             if eligible_loans.empty:
                 st.success("All loans are currently settled! ✨")
@@ -1269,10 +1280,8 @@ def show_loans():
                 new_interest_rate = st.number_input("New Monthly Interest (%)", value=10.0, key="roll_int")
                 
                 if st.button("🔥 Execute Rollover", use_container_width=True):
-                    # 1. Update old loan
-                    supabase.table("loans").update({"status": "Rolled"}).eq("id", loan_to_roll['id']).execute()
+                    supabase.table("loans").update({"status": "ROLLED_OVER"}).eq("id", loan_to_roll['id']).execute()
                     
-                    # 2. Create New Entry
                     t_id = st.session_state.get('tenant_id', 'default-admin')
                     new_label = f"ROLL-{random.randint(1000, 9999)}"
 
@@ -1283,7 +1292,7 @@ def show_loans():
                         "interest": float(current_unpaid * (new_interest_rate / 100)),
                         "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
                         "amount_paid": 0.0,
-                        "status": "Active",
+                        "status": "ACTIVE",
                         "start_date": datetime.now().strftime("%Y-%m-%d"),
                         "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
                         "tenant_id": t_id 
@@ -1294,7 +1303,7 @@ def show_loans():
                         st.rerun()
 
     # ==============================
-    # TAB: MANAGE/EDIT (Direct ID Targeting)
+    # TAB: MANAGE/EDIT
     # ==============================
     with tab_manage:
         if not loans_df.empty:
@@ -1303,18 +1312,17 @@ def show_loans():
 
             with st.form("edit_loan_form"):
                 c1, c2 = st.columns(2)
-                # Map back to Name for display, but we save IDs
                 current_name = bor_map.get(str(loan_to_edit['borrower_id']), "Unknown")
                 st.text(f"Editing Loan for: {current_name}")
                 
                 e_princ = c1.number_input("Principal", value=float(loan_to_edit['principal']))
-                e_stat = c2.selectbox("Status", ["Active", "Pending", "Closed", "Overdue", "BCF"], index=0)
+                e_stat = c2.selectbox("Status", ["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"], index=0)
                 
                 if st.form_submit_button("💾 Save Changes"):
                     update_data = pd.DataFrame([{
                         "id": target_id, 
                         "principal": e_princ, 
-                        "status": e_stat, 
+                        "status": normalize_status(e_stat), 
                         "tenant_id": st.session_state.get('tenant_id')
                     }])
                     if save_data("loans", update_data):
@@ -1325,7 +1333,6 @@ def show_loans():
                 supabase.table("loans").delete().eq("id", target_id).execute()
                 st.warning("Loan Deleted.")
                 st.rerun()
-
 
 
 # ==============================
