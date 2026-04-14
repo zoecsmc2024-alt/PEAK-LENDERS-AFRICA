@@ -1498,70 +1498,72 @@ def show_collateral():
 
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
-    # --- TAB 1: REGISTER ASSET ---
-    with tab_reg:
-        if loans_df.empty:
-            st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+    # --- STEP 1: DEFINE TABS (Prevents NameError) ---
+tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
+
+# --- TAB 1: REGISTER ASSET ---
+with tab_reg:
+    if loans_df.empty:
+        st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+    else:
+        # Filter for active loans
+        active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+        available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
+
+        if available_loans.empty:
+            st.info("✅ All current loans are cleared. No assets need to be held.")
         else:
-            # Filter for active loans
-            active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-            available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
+            with st.form("collateral_form", clear_on_submit=True):
+                st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                
+                # SHORT ID LOGIC: Slices ID to 8 chars for a clean UI dropdown
+                loan_map = {
+                    f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
+                    for _, row in available_loans.iterrows()
+                }
+                
+                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
+                desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
+                est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
 
-            if available_loans.empty:
-                st.info("✅ All current loans are cleared. No assets need to be held.")
-            else:
-                with st.form("collateral_form", clear_on_submit=True):
-                    st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
+                # FIXED: Form submit button explicitly defined
+                submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+
+            # Logic moved INSIDE 'with tab_reg' but OUTSIDE 'with st.form'
+            if submit:
+                # 1. Verify the tenant_id is actually loaded in the session
+                current_tenant = st.session_state.get('tenant_id')
+                
+                if not current_tenant:
+                    st.error("❌ Session Error: No Tenant ID found. Please log out and back in.")
+                elif desc and est_value > 0:
+                    # Map back to full UUID from the clean UI label
+                    full_loan_id = loan_map[selected_label]
+                    sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
+
+                    # 2. Build the data with the tenant_id included
+                    new_asset = pd.DataFrame([{
+                        "borrower": sel_borrower,
+                        "loan_id": full_loan_id,
+                        "type": asset_type,
+                        "description": desc,
+                        "value": float(est_value),
+                        "status": "Held",
+                        "date_added": datetime.now().strftime("%Y-%m-%d"),
+                        "tenant_id": current_tenant  # Passes RLS check
+                    }])
                     
-                    # SHORT ID LOGIC: Slices ID to 8 chars for a clean UI dropdown
-                    loan_map = {
-                        f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
-                        for _, row in available_loans.iterrows()
-                    }
-                    
-                    selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
-                    asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
-                    desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
-                    est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
-
-                    # FIXED: Form submit button explicitly defined
-                    submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
-
-                # Logic must be indented to stay inside the 'with tab_reg' or function scope
-                if submit:
-                    # 1. Verify the tenant_id is actually loaded in the session
-                    # This resolves the 42501 RLS error by providing the required ID
-                    current_tenant = st.session_state.get('tenant_id')
-                    
-                    if not current_tenant:
-                        st.error("❌ Session Error: No Tenant ID found. Please log out and back in.")
-                    elif desc and est_value > 0:
-                        # Map back to full UUID from the clean UI label
-                        full_loan_id = loan_map[selected_label]
-                        sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
-
-                        # 2. Build the data with the tenant_id included
-                        new_asset = pd.DataFrame([{
-                            "borrower": sel_borrower,
-                            "loan_id": full_loan_id,
-                            "type": asset_type,
-                            "description": desc,
-                            "value": float(est_value),
-                            "status": "Held",
-                            "date_added": datetime.now().strftime("%Y-%m-%d"),
-                            "tenant_id": current_tenant  # This MUST match the JWT to pass RLS
-                        }])
-                        
-                        # 3. Save to database
-                        if save_data("collateral", new_asset):
-                            st.success(f"✅ Asset registered for {sel_borrower}!")
-                            st.rerun()
-                    else:
-                        st.error("⚠️ Provide both a description and value.")
-
-    # --- TAB 2: VIEW & UPDATE ---
+                    # 3. Save to database
+                    if save_data("collateral", new_asset):
+                        st.success(f"✅ Asset registered for {sel_borrower}!")
+                        st.rerun()
+                else:
+                    st.error("⚠️ Provide both a description and value.")
+# --- TAB 2: VIEW & UPDATE ---
     with tab_view:
+        st.write("Inventory list goes here...")
         if collateral_df is not None and not collateral_df.empty:
             # 1. Numeric Conversion
             collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors='coerce').fillna(0)
@@ -2587,7 +2589,7 @@ def show_overview():
 def show_dashboard_view():
     """
     Main Dashboard view. 
-    Synchronized with Tenant brand_color and Wide Layout.
+    Fixed: Column standardization and numeric conversion to resolve '0 UGX' display.
     """
     brand_color = get_active_color()
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
@@ -2602,44 +2604,54 @@ def show_dashboard_view():
         st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
         return
 
-    # 2. STANDARDIZE COLUMNS
+    # 2. STANDARDIZE COLUMNS (Case-insensitive check)
     for d in [df, pay_df, exp_df, bor_df]:
         if not d.empty:
-            d.columns = d.columns.str.strip().str.replace(" ", "_")
+            # Strip whitespace and convert to lower to match database schema
+            d.columns = d.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # 3. BRIDGE: Map borrower names
+    # 3. BRIDGE: Map borrower names (Fixes "No Borrower Data")
     bor_map = {}
+    # Use lowercase 'id' and 'name' to match standardized columns
     if not bor_df.empty and 'id' in bor_df.columns:
         bor_map = dict(zip(bor_df['id'].astype(str), bor_df['name'].astype(str)))
         
+    # Check for various possible borrower column names
     if 'borrower_id' in df.columns:
-        df['Borrower_Name'] = df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+        df['borrower_name'] = df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+    elif 'borrower' in df.columns:
+        # If the column already contains names, keep them
+        df['borrower_name'] = df['borrower']
     else:
-        df['Borrower_Name'] = df.get('Borrower', 'Unknown')
+        df['borrower_name'] = "No Borrower Data"
 
-    # 4. CLEAN DATA (Prevents 'int' object errors)
-    def clean_val(dataframe, col):
-        if col in dataframe.columns:
-            return pd.to_numeric(dataframe[col], errors="coerce").fillna(0)
+    # 4. CLEAN DATA (Fixes the '0 UGX' Dashboard issue)
+    def clean_val(dataframe, col_name):
+        # Look for the column name in lowercase
+        target = col_name.lower().replace(" ", "_")
+        if target in dataframe.columns:
+            return pd.to_numeric(dataframe[target], errors="coerce").fillna(0)
         return pd.Series(0, index=dataframe.index)
 
-    df["Principal"] = clean_val(df, "Principal")
-    df["Interest"] = clean_val(df, "Interest")
-    df["Amount_Paid"] = clean_val(df, "Amount_Paid")
-    df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
+    # Convert strings to actual numbers for math
+    df["principal_clean"] = clean_val(df, "principal")
+    df["interest_clean"] = clean_val(df, "interest")
+    df["paid_clean"] = clean_val(df, "amount_paid")
+    df["end_date_dt"] = pd.to_datetime(df.get("end_date"), errors="coerce")
     
     # Status Normalization
-    df["Status_Clean"] = df["Status"].astype(str).str.title() if "Status" in df.columns else "Active"
+    status_col = 'status' if 'status' in df.columns else None
+    df["status_clean"] = df[status_col].astype(str).str.title() if status_col else "Active"
     
     today = pd.Timestamp.now().normalize()
     active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    active_df = df[df["Status_Clean"].isin(active_statuses)].copy()
+    active_df = df[df["status_clean"].isin(active_statuses)].copy()
 
-    # 5. METRICS CALCULATION
-    total_issued = active_df["Principal"].sum() if not active_df.empty else 0
-    total_interest_expected = active_df["Interest"].sum() if not active_df.empty else 0
-    total_collected = df["Amount_Paid"].sum() 
-    overdue_count = active_df[(active_df["End_Date"] < today) & (active_df["Status_Clean"] != "Cleared")].shape[0] if not active_df.empty else 0
+    # 5. METRICS CALCULATION (Using the 'clean' numeric columns)
+    total_issued = active_df["principal_clean"].sum() if not active_df.empty else 0
+    total_interest_expected = active_df["interest_clean"].sum() if not active_df.empty else 0
+    total_collected = df["paid_clean"].sum() 
+    overdue_count = active_df[(active_df["end_date_dt"] < today) & (active_df["status_clean"] != "Cleared")].shape[0] if not active_df.empty else 0
 
     # 6. BRANDED METRICS ROW
     m1, m2, m3, m4 = st.columns(4)
@@ -2652,21 +2664,21 @@ def show_dashboard_view():
 
     st.write("---")
     
-    # 7. BRANDED TABLES (Row HTML Logic Re-added)
+    # 7. BRANDED TABLES (Using fixed borrower names)
     t1, t2 = st.columns(2)
 
     with t1:
         st.markdown(f"<h4 style='color: {brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
         rows_html = ""
         if not active_df.empty:
-            recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
+            recent_loans = active_df.sort_values(by="end_date_dt", ascending=False).head(5)
             for i, (_, r) in enumerate(recent_loans.iterrows()):
                 bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
                 rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #eee;">
-                    <td style="padding:10px;">{r.get('Borrower_Name', 'Unknown')}</td>
-                    <td style="padding:10px; text-align:right; font-weight:bold; color:{brand_color};">{float(r.get('Principal', 0)):,.0f}</td>
-                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r.get('Status_Clean', 'Active')}</span></td>
-                    <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('End_Date')).strftime('%d %b') if pd.notna(r.get('End_Date')) else "-"}</td>
+                    <td style="padding:10px;">{r.get('borrower_name', 'Unknown')}</td>
+                    <td style="padding:10px; text-align:right; font-weight:bold; color:{brand_color};">{float(r.get('principal_clean', 0)):,.0f}</td>
+                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r.get('status_clean', 'Active')}</span></td>
+                    <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('end_date_dt')).strftime('%d %b') if pd.notna(r.get('end_date_dt')) else "-"}</td>
                 </tr>"""
         
         st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid {brand_color}33;">
@@ -2678,16 +2690,20 @@ def show_dashboard_view():
         st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
         pay_rows = ""
         if not pay_df.empty:
+            # Map borrower names to payments too
             if 'borrower_id' in pay_df.columns:
-                 pay_df['Borrower_Name'] = pay_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+                 pay_df['borrower_name'] = pay_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
             
-            recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
+            # Numeric conversion for payment amounts
+            pay_df['amount_clean'] = pd.to_numeric(pay_df.get('amount'), errors='coerce').fillna(0)
+            
+            recent_pay = pay_df.sort_values(by="date", ascending=False).head(5)
             for i, (_, r) in enumerate(recent_pay.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 pay_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;">
-                    <td style="padding:10px;">{r.get('Borrower_Name', 'Unknown')}</td>
-                    <td style="padding:10px; text-align:right; font-weight:bold; color:green;">{float(r.get('Amount', 0)):,.0f}</td>
-                    <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('Date')).strftime('%d %b') if pd.notna(r.get('Date')) else "-"}</td>
+                    <td style="padding:10px;">{r.get('borrower_name', 'Unknown')}</td>
+                    <td style="padding:10px; text-align:right; font-weight:bold; color:green;">{float(r.get('amount_clean', 0)):,.0f}</td>
+                    <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else "-"}</td>
                 </tr>"""
         
         st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;">
@@ -2695,13 +2711,13 @@ def show_dashboard_view():
             <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
         </table>""", unsafe_allow_html=True)
 
-    # 8. DASHBOARD VISUALS (Charts Re-added)
+    # 8. DASHBOARD VISUALS
     st.markdown("---")
     c_pie, c_bar = st.columns(2)
 
     with c_pie:
         if not df.empty:
-            status_counts = df["Status_Clean"].value_counts().reset_index()
+            status_counts = df["status_clean"].value_counts().reset_index()
             status_counts.columns = ["Status", "Count"]
             fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
             fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
@@ -2709,17 +2725,17 @@ def show_dashboard_view():
 
     with c_bar:
         if not pay_df.empty:
-            pay_df["Date"] = pd.to_datetime(pay_df.get("Date"), errors='coerce')
-            inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            pay_df["date"] = pd.to_datetime(pay_df.get("date"), errors='coerce')
+            inc_m = pay_df.groupby(pay_df["date"].dt.strftime('%b %Y'))["amount_clean"].sum().reset_index()
             
-            # Use empty df for expenses if none exist to avoid merge crash
             if not exp_df.empty:
-                exp_df["Date"] = pd.to_datetime(exp_df.get("Date"), errors='coerce')
-                exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+                exp_df["date"] = pd.to_datetime(exp_df.get("date"), errors='coerce')
+                exp_df['amount_clean'] = pd.to_numeric(exp_df.get('amount'), errors='coerce').fillna(0)
+                exp_m = exp_df.groupby(exp_df["date"].dt.strftime('%b %Y'))["amount_clean"].sum().reset_index()
             else:
-                exp_m = pd.DataFrame(columns=["Date", "Amount"])
+                exp_m = pd.DataFrame(columns=["date", "amount_clean"])
 
-            m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
+            m_cash = pd.merge(inc_m, exp_m, on="date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
             m_cash.columns = ["Month", "Income", "Expenses"]
             fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
