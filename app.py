@@ -1466,11 +1466,10 @@ def show_payments():
 # ==============================
 # 15. COLLATERAL MANAGEMENT PAGE
 # ==============================
+import mimetypes
 from datetime import datetime
 import pandas as pd
 import streamlit as st
-
-import mimetypes
 
 def show_collateral():
     brand_color = st.session_state.get("theme_color", "#2B3F87")
@@ -1484,71 +1483,71 @@ def show_collateral():
         st.error("🔐 Session expired. Please log in.")
         st.stop()
 
+    # DETECT COLUMNS (Fixes NameError: l_stat_col)
+    l_id_col, l_bor_col, l_stat_col = "id", "borrower", "status"
+    if loans_df is not None and not loans_df.empty:
+        loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
+        l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
+        l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
+
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
     with tab_reg:
-        # Detect Columns safely
-        loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
-        l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
-        
-        active_loans = loans_df[loans_df['status'].str.title() == "Active"]
+        if loans_df is None or loans_df.empty:
+            st.warning("⚠️ No loans found.")
+        else:
+            active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+            available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
 
-        with st.form("collateral_form", clear_on_submit=True):
-            st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            
-            loan_opts = {f"{str(r[l_id_col])[:8]} | {r[l_bor_col]}": r[l_id_col] for _, r in active_loans.iterrows()}
-            selected_loan = c1.selectbox("Link to Loan", options=list(loan_opts.keys()))
-            asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed"])
-            
-            desc = st.text_input("Description (e.g., Plate No, Title No)")
-            val = st.number_input("Estimated Value (UGX)", min_value=0)
-            
-            # FILE UPLOADER
-            uploaded_file = st.file_uploader("Upload Asset Photo", type=["jpg", "png", "jpeg"])
-            
-            submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+            with st.form("collateral_form", clear_on_submit=True):
+                st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                
+                loan_map = {f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
+                            for _, row in available_loans.iterrows()}
+                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed"])
+                
+                desc = st.text_input("Asset Description")
+                est_value = st.number_input("Estimated Value (UGX)", min_value=0)
+                uploaded_photo = st.file_uploader("Upload Asset Photo", type=["jpg", "png", "jpeg"])
+                
+                # The submit button must be inside the 'with st.form' block
+                submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
-        if submit and desc and val > 0:
-            photo_url = None
-            
-            if uploaded_file:
-                try:
-                    # 1. Prepare file metadata
-                    file_ext = uploaded_file.name.split('.')[-1]
-                    file_path = f"{current_tenant}/{datetime.now().strftime('%Y%m%d_%H%M%S')}.{file_ext}"
-                    mime_type = mimetypes.guess_type(uploaded_file.name)[0] or "application/octet-stream"
-                    
-                    # 2. Upload with explicit content-type to fix the 400 error
-                    file_data = uploaded_file.getvalue()
-                    supabase.storage.from_('collateral-photos').upload(
-                        path=file_path,
-                        file=file_data,
-                        file_options={"content-type": mime_type}
-                    )
-                    
-                    # 3. Get Public URL
-                    photo_url = supabase.storage.from_('collateral-photos').get_public_url(file_path)
-                except Exception as e:
-                    st.error(f"Failed to upload photo: {e}")
+            if submit and desc and est_value > 0:
+                photo_url = None
+                if uploaded_photo:
+                    try:
+                        file_path = f"{current_tenant}/{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uploaded_photo.name}"
+                        mime_type = mimetypes.guess_type(uploaded_photo.name)[0] or "image/jpeg"
+                        
+                        # Upload with explicit content-type to avoid MIME errors
+                        supabase.storage.from_('collateral-photos').upload(
+                            path=file_path,
+                            file=uploaded_photo.getvalue(),
+                            file_options={"content-type": mime_type}
+                        )
+                        photo_url = supabase.storage.from_('collateral-photos').get_public_url(file_path)
+                    except Exception as e:
+                        st.error(f"Upload failed: {e}")
 
-            # 4. SAVE TO DATABASE
-            new_asset = pd.DataFrame([{
-                "borrower": selected_loan.split("|")[1].strip(),
-                "loan_id": loan_opts[selected_loan],
-                "type": asset_type,
-                "description": desc,
-                "value": float(val),
-                "status": "Held",
-                "photo_url": photo_url,
-                "tenant_id": current_tenant,
-                "date_added": datetime.now().strftime("%Y-%m-%d")
-            }])
-            
-            if save_data("collateral", new_asset):
-                st.success("✅ Asset registered successfully!")
-                st.rerun()
+                new_asset = pd.DataFrame([{
+                    "borrower": selected_label.split("|")[1].strip(),
+                    "loan_id": loan_map[selected_label],
+                    "type": asset_type,
+                    "description": desc,
+                    "value": float(est_value),
+                    "status": "Held",
+                    "photo_url": photo_url,
+                    "tenant_id": current_tenant,
+                    "date_added": datetime.now().strftime("%Y-%m-%d")
+                }])
+                
+                if save_data("collateral", new_asset):
+                    st.success("✅ Asset registered!")
+                    st.rerun()
             else:
                 st.error("⚠️ Please provide a description and value.")
 
