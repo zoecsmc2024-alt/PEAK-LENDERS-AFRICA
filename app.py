@@ -2601,89 +2601,88 @@ def show_overview():
 def show_dashboard_view():
     """
     Main Dashboard view. 
-    Fixed: Column standardization and numeric conversion to resolve '0 UGX' display.
+    Fixed: Column standardization and dynamic name mapping to resolve '0 UGX' and 'No Borrower Data'.
     """
     brand_color = get_active_color()
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
     
-    # --- 1. LOAD DATA (Indented inside function) ---
+    # --- 1. LOAD DATA ---
     df = get_cached_data("loans")
     pay_df = get_cached_data("payments")
     exp_df = get_cached_data("expenses") 
     bor_df = get_cached_data("borrowers")
 
-    # Stop early if there is no data to display (Prevents SyntaxError)
     if df is None or df.empty:
         st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
         st.stop() 
 
-    # --- 2. STANDARDIZE COLUMNS ---
-    # This ensures that 'principal_amount' from DB becomes 'Principal' for the UI
-    for d in [df, pay_df, exp_df, bor_df]:
+    # --- 2. STANDARDIZE COLUMNS (Internal Processing) ---
+    # We create a copy to process math without breaking the original dataframe display
+    df_clean = df.copy()
+    for d in [df_clean, pay_df, exp_df, bor_df]:
         if d is not None and not d.empty:
-            # Step A: Match DB style (lowercase/underscores)
             d.columns = d.columns.str.strip().str.lower().str.replace(" ", "_")
-            
-            # Step B: Match Dashboard style (Title Case for metrics)
-            if d is df:
-                # This ensures your metrics find "Principal", "Status", etc.
-                d.columns = [c.title().replace("_", " ") for c in d.columns]
 
-    # --- 3. BRIDGE: Map borrower names (Fixes "No Borrower Data") ---
+    # --- 3. DYNAMIC BORROWER MAPPING (Fixes "No Borrower Data") ---
     bor_map = {}
-    # Use lowercase 'id' and 'name' to match standardized columns
-    if not bor_df.empty and 'id' in bor_df.columns:
-        bor_map = dict(zip(bor_df['id'].astype(str), bor_df['name'].astype(str)))
-        
-    # Check for various possible borrower column names
-    if 'borrower_id' in df.columns:
-        df['borrower_name'] = df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
-    elif 'borrower' in df.columns:
-        # If the column already contains names, keep them
-        df['borrower_name'] = df['borrower']
-    else:
-        df['borrower_name'] = "No Borrower Data"
+    if bor_df is not None and not bor_df.empty:
+        # Detect borrower ID and Name columns in the borrower table
+        b_id = next((c for c in bor_df.columns if 'id' in c), None)
+        b_nm = next((c for c in bor_df.columns if 'name' in c or 'borrower' in c), None)
+        if b_id and b_nm:
+            bor_map = dict(zip(bor_df[b_id].astype(str), bor_df[b_nm].astype(str)))
 
-    # 4. CLEAN DATA (Fixes the '0 UGX' Dashboard issue)
-    def clean_val(dataframe, col_name):
-        # Look for the column name in lowercase
-        target = col_name.lower().replace(" ", "_")
-        if target in dataframe.columns:
-            return pd.to_numeric(dataframe[target], errors="coerce").fillna(0)
+    # Find the link column in the Loans table (e.g., 'borrower_id' or 'id')
+    link_col = next((c for c in df_clean.columns if 'borrower_id' in c or 'borrower' in c), None)
+    
+    if link_col:
+        # If the link_col contains IDs, map them. If it's already names, keep them.
+        df_clean['borrower_name'] = df_clean[link_col].astype(str).map(bor_map).fillna(df_clean[link_col])
+    else:
+        df_clean['borrower_name'] = "Unknown Borrower"
+
+    # --- 4. NUMERIC CONVERSION (Fixes '0 UGX' issue) ---
+    # Dynamically find columns for principal, interest, and payments
+    def get_col_sum(dataframe, keywords):
+        for col in dataframe.columns:
+            if any(key in col for key in keywords):
+                return pd.to_numeric(dataframe[col], errors='coerce').fillna(0)
         return pd.Series(0, index=dataframe.index)
 
-    # Convert strings to actual numbers for math
-    df["principal_clean"] = clean_val(df, "principal")
-    df["interest_clean"] = clean_val(df, "interest")
-    df["paid_clean"] = clean_val(df, "amount_paid")
-    df["end_date_dt"] = pd.to_datetime(df.get("end_date"), errors="coerce")
+    df_clean["principal_clean"] = get_col_sum(df_clean, ["principal"])
+    df_clean["interest_clean"] = get_col_sum(df_clean, ["interest"])
+    df_clean["paid_clean"] = get_col_sum(df_clean, ["paid", "repaid", "amount_paid"])
     
-    # Status Normalization
-    status_col = 'status' if 'status' in df.columns else None
-    df["status_clean"] = df[status_col].astype(str).str.title() if status_col else "Active"
+    # Normalize Status
+    stat_col = next((c for c in df_clean.columns if 'status' in c), None)
+    df_clean["status_clean"] = df_clean[stat_col].astype(str).str.title() if stat_col else "Active"
     
+    # Dates
+    date_col = next((c for c in df_clean.columns if 'end' in c or 'due' in c or 'date' in c), None)
+    df_clean["end_date_dt"] = pd.to_datetime(df_clean[date_col], errors="coerce") if date_col else pd.Timestamp.now()
+
+    # --- 5. METRICS CALCULATION ---
     today = pd.Timestamp.now().normalize()
     active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    active_df = df[df["status_clean"].isin(active_statuses)].copy()
+    active_df = df_clean[df_clean["status_clean"].isin(active_statuses)].copy()
 
-    # 5. METRICS CALCULATION (Using the 'clean' numeric columns)
-    total_issued = active_df["principal_clean"].sum() if not active_df.empty else 0
-    total_interest_expected = active_df["interest_clean"].sum() if not active_df.empty else 0
-    total_collected = df["paid_clean"].sum() 
-    overdue_count = active_df[(active_df["end_date_dt"] < today) & (active_df["status_clean"] != "Cleared")].shape[0] if not active_df.empty else 0
+    total_issued = active_df["principal_clean"].sum()
+    total_interest_expected = active_df["interest_clean"].sum()
+    total_collected = df_clean["paid_clean"].sum()
+    overdue_count = active_df[(active_df["end_date_dt"] < today)].shape[0]
 
-    # 6. BRANDED METRICS ROW
+    # --- 6. DISPLAY METRICS ---
     m1, m2, m3, m4 = st.columns(4)
-    metric_style = f"background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
+    style = f"background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
     
-    m1.markdown(f'<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
-    m2.markdown(f'<div style="{metric_style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
+    m1.markdown(f'<div style="{style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
+    m2.markdown(f'<div style="{style}"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:{brand_color};font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
     m3.markdown(f'<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>', unsafe_allow_html=True)
     m4.markdown(f'<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>', unsafe_allow_html=True)
 
     st.write("---")
     
-    # 7. BRANDED TABLES (Using fixed borrower names)
+    # --- 7. RECENT ACTIVITY TABLES ---
     t1, t2 = st.columns(2)
 
     with t1:
@@ -2694,13 +2693,13 @@ def show_dashboard_view():
             for i, (_, r) in enumerate(recent_loans.iterrows()):
                 bg = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
                 rows_html += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #eee;">
-                    <td style="padding:10px;">{r.get('borrower_name', 'Unknown')}</td>
-                    <td style="padding:10px; text-align:right; font-weight:bold; color:{brand_color};">{float(r.get('principal_clean', 0)):,.0f}</td>
-                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r.get('status_clean', 'Active')}</span></td>
-                    <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('end_date_dt')).strftime('%d %b') if pd.notna(r.get('end_date_dt')) else "-"}</td>
+                    <td style="padding:10px;">{r['borrower_name']}</td>
+                    <td style="padding:10px; text-align:right; font-weight:bold; color:{brand_color};">{r['principal_clean']:,.0f}</td>
+                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:{brand_color}22; color:{brand_color}; padding:2px 5px; border-radius:5px;">{r['status_clean']}</span></td>
+                    <td style="padding:10px; text-align:center; color:#666;">{r['end_date_dt'].strftime('%d %b') if pd.notna(r['end_date_dt']) else "-"}</td>
                 </tr>"""
         
-        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid {brand_color}33;">
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;">
             <thead><tr style="background:{brand_color}; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr></thead>
             <tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody>
         </table>""", unsafe_allow_html=True)
@@ -2708,24 +2707,22 @@ def show_dashboard_view():
     with t2:
         st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
         pay_rows = ""
-        if not pay_df.empty:
-            # Map borrower names to payments too
-            if 'borrower_id' in pay_df.columns:
-                 pay_df['borrower_name'] = pay_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+        if pay_df is not None and not pay_df.empty:
+            p_link = next((c for c in pay_df.columns if 'borrower_id' in c or 'borrower' in c), None)
+            if p_link:
+                pay_df['borrower_name'] = pay_df[p_link].astype(str).map(bor_map).fillna(pay_df[p_link])
             
-            # Numeric conversion for payment amounts
             pay_df['amount_clean'] = pd.to_numeric(pay_df.get('amount'), errors='coerce').fillna(0)
-            
             recent_pay = pay_df.sort_values(by="date", ascending=False).head(5)
             for i, (_, r) in enumerate(recent_pay.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 pay_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;">
                     <td style="padding:10px;">{r.get('borrower_name', 'Unknown')}</td>
-                    <td style="padding:10px; text-align:right; font-weight:bold; color:green;">{float(r.get('amount_clean', 0)):,.0f}</td>
+                    <td style="padding:10px; text-align:right; font-weight:bold; color:green;">{r['amount_clean']:,.0f}</td>
                     <td style="padding:10px; text-align:center; color:#666;">{pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else "-"}</td>
                 </tr>"""
         
-        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;">
+        st.markdown(f"""<table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;">
             <thead><tr style="background:#2E7D32; color:white;"><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:center;">Date</th></tr></thead>
             <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
         </table>""", unsafe_allow_html=True)
