@@ -1495,7 +1495,6 @@ def show_collateral():
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])    
     
     with tab_reg:
-        # All code inside the tab must be indented
         if loans_df is None or loans_df.empty:
             st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
         else:
@@ -1505,32 +1504,63 @@ def show_collateral():
             if available_loans.empty:
                 st.info("✅ All current loans are cleared. No assets need to be held.")
             else:
-                # Build the form
                 with st.form("collateral_form", clear_on_submit=True):
                     st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
                     c1, c2 = st.columns(2)
                     
-                    loan_map = {
-                        f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
-                        for _, row in available_loans.iterrows()
-                    }
+                    # --- THE FIX: Create a readable label but map it to the ID ---
+                    # This creates a list of strings like "JOHN DOE | LN-1234"
+                    loan_options = []
+                    loan_id_lookup = {}
                     
-                    selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                    for _, row in available_loans.iterrows():
+                        # Create a friendly name: "BORROWER NAME (Short-ID)"
+                        display_label = f"{str(row[l_bor_col]).upper()} ({str(row[l_id_col])[:8]})"
+                        loan_options.append(display_label)
+                        # Store the mapping so we can find the real ID later
+                        loan_id_lookup[display_label] = row[l_id_col]
+
+                    selected_label = c1.selectbox("Select Borrower", options=loan_options)
                     asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
+                    
                     desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
                     est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
                     uploaded_photo = st.file_uploader("Upload Asset Photo", type=["jpg", "png", "jpeg"])
                     
                     submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
-                # Handle the submission logic
                 if submit:
-                    if desc and est_value > 0:
-                        # Add your save_data logic here
-                        st.success(f"Processing collateral for {selected_label}...")
+                    # 1. Get the actual UUID using our lookup dictionary
+                    actual_loan_id = loan_id_lookup[selected_label]
+                    
+                    # 2. Extract just the name for the 'borrower' column
+                    # We split by " (" because our label is "NAME (ID)"
+                    clean_borrower_name = selected_label.split(" (")[0]
+                    
+                    current_tenant = str(st.session_state.get('tenant_id', ''))
+                    
+                    if not current_tenant:
+                        st.error("❌ Session Error: No Tenant ID found.")
+                    elif desc and est_value > 0:
+                        try:
+                            new_asset = pd.DataFrame([{
+                                "loan_id": actual_loan_id,
+                                "tenant_id": current_tenant,
+                                "borrower": clean_borrower_name,
+                                "type": asset_type,
+                                "description": desc,
+                                "value": float(est_value),
+                                "status": "Held",
+                                "date_added": datetime.now().strftime("%Y-%m-%d")
+                            }])
+                            
+                            if save_data("collateral", new_asset):
+                                st.success(f"✅ Asset registered for {clean_borrower_name}!")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
                     else:
                         st.error("⚠️ Please provide a description and value.")
-
             # --- PROCESS SUBMISSION (OUTSIDE FORM BLOCK) ---
             if submit:
                 current_tenant = str(st.session_state.get('tenant_id', ''))
