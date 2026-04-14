@@ -1557,7 +1557,7 @@ def show_collateral():
     # --- TAB 2: INVENTORY & STATUS ---
     with tab_view:
         if collateral_df is None or collateral_df.empty:
-            st.info("No collateral assets registered yet.")
+            st.info("💡 No collateral assets registered yet.")
         else:
             # 1. Numeric Conversion
             collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors='coerce').fillna(0)
@@ -1607,6 +1607,7 @@ def show_collateral():
                         <tbody>{rows_html}</tbody>
                     </table>
                 </div>""", unsafe_allow_html=True)
+
             # 5. Manage Records
             st.markdown("---")
             with st.expander("⚙️ Manage Collateral Records"):
@@ -1623,7 +1624,12 @@ def show_collateral():
                 
                 status_opts = ["In Custody", "Released", "Disposed", "Held"]
                 current_stat = str(c_row.get(c_stat_col, "Held")).title()
-                upd_stat = ce2.selectbox("Update Status", status_opts, index=status_opts.index(current_stat) if current_stat in status_opts else 0)
+                
+                # Ensure current_stat exists in status_opts to avoid ValueError
+                if current_stat not in status_opts:
+                    status_opts.append(current_stat)
+                
+                upd_stat = ce2.selectbox("Update Status", status_opts, index=status_opts.index(current_stat))
                 
                 if st.button("💾 Save Asset Changes", use_container_width=True):
                     update_df = pd.DataFrame([{
@@ -1636,8 +1642,6 @@ def show_collateral():
                     if save_data("collateral", update_df):
                         st.success("✅ Asset record updated!")
                         st.rerun()
-        else:
-            st.info("💡 No collateral registered yet.")
             
 
             
