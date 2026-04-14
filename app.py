@@ -2756,12 +2756,27 @@ def show_ledger():
         st.info("💡 Your system is clear! No active loans found.")
         return
 
-    # 2. SELECTION LOGIC
-    # Creating a searchable dropdown for all loans
+    # ==============================
+    # 🔥 FIX ADDED: SAFE BORROWER RESOLUTION (NO LOGIC REMOVED)
+    # ==============================
+    loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+    borrowers_df = get_cached_data("borrowers")
+    bor_map = {}
+
+    if borrowers_df is not None and not borrowers_df.empty:
+        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        bor_name_col = next((c for c in borrowers_df.columns if "name" in c), "name")
+        bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df[bor_name_col]))
+
+    if "borrower" not in loans_df.columns:
+        loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
+
+    # 2. SELECTION LOGIC (UNCHANGED)
     loan_options = [f"ID: {r['id']} - {r['borrower']}" for _, r in loans_df.iterrows()]
     selected_loan = st.selectbox("Select Loan to View Full Statement", loan_options, key="ledger_main_select")
     
-    # Extract ID safely from the selection string
+    # Extract ID safely
     try:
         raw_id = int(selected_loan.split(" - ")[0].replace("ID: ", "").strip())
         loan_info = loans_df[loans_df["id"] == raw_id].iloc[0]
@@ -2769,12 +2784,11 @@ def show_ledger():
         st.error(f"Error locating loan record: {e}")
         return
     
-    # 3. BALANCE CALCULATIONS
+    # 3. BALANCE CALCULATIONS (UNCHANGED)
     current_p = float(loan_info.get("principal", 0))
     interest_amt = float(loan_info.get("interest", 0))
     amount_paid = float(loan_info.get("amount_paid", 0))
     
-    # Dynamic balance calculation (Principal + Interest - Paid)
     display_bal = (current_p + interest_amt) - amount_paid
 
     st.markdown(f"""
@@ -2784,70 +2798,83 @@ def show_ledger():
         </div>
     """, unsafe_allow_html=True)
 
-    # 4. BUILD THE LEDGER TABLE DATA
+    # 4. LEDGER BUILD (UNCHANGED STRUCTURE)
     ledger_data = []
-    
-    # Entry 1: Principal Disbursement
+
     ledger_data.append({
-        "Date": loan_info.get("start_date", "-"), 
-        "Description": "Initial Loan Disbursement", 
-        "Debit": current_p, 
-        "Credit": 0, 
+        "Date": loan_info.get("start_date", "-"),
+        "Description": "Initial Loan Disbursement",
+        "Debit": current_p,
+        "Credit": 0,
         "Balance": current_p
     })
-    
-    # Entry 2: Interest Capitalization
+
     if interest_amt > 0:
         ledger_data.append({
-            "Date": loan_info.get("start_date", "-"), 
-            "Description": "➕ Interest Charged", 
-            "Debit": interest_amt, 
-            "Credit": 0, 
+            "Date": loan_info.get("start_date", "-"),
+            "Description": "➕ Interest Charged",
+            "Debit": interest_amt,
+            "Credit": 0,
             "Balance": current_p + interest_amt
         })
 
-    # Entry 3+: Repayments
+    # ==============================
+    # 🔥 FIX ADDED: SAFE PAYMENTS HANDLING
+    # ==============================
     if payments_df is not None and not payments_df.empty:
-        # Filter payments for this specific loan ID
-        rel_pay = payments_df[payments_df["loan_id"] == raw_id].sort_values("date")
+        payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+        rel_pay = payments_df[payments_df["loan_id"] == raw_id]
+
+        if "date" in rel_pay.columns:
+            rel_pay = rel_pay.sort_values("date")
+
         curr_run_bal = current_p + interest_amt
-        
+
         for _, pay in rel_pay.iterrows():
             p_amt = float(pay.get("amount", 0))
             curr_run_bal -= p_amt
+
             ledger_data.append({
                 "Date": pay.get("date", "-"),
                 "Description": f"✅ Repayment ({pay.get('method', 'Cash')})",
-                "Debit": 0, 
-                "Credit": p_amt, 
+                "Debit": 0,
+                "Credit": p_amt,
                 "Balance": curr_run_bal
             })
 
-    # Render audit table with formatting
+    # Render table (UNCHANGED)
     st.dataframe(
         pd.DataFrame(ledger_data).style.format({
-            "Debit": "{:,.0f}", 
-            "Credit": "{:,.0f}", 
+            "Debit": "{:,.0f}",
+            "Credit": "{:,.0f}",
             "Balance": "{:,.0f}"
-        }), 
-        use_container_width=True, 
+        }),
+        use_container_width=True,
         hide_index=True
     )
 
-    # 5. PRINTABLE STATEMENT GENERATOR
+    # 5. PRINTABLE STATEMENT (UNCHANGED LOGIC)
     st.markdown("---")
+
     if st.button("✨ Preview Consolidated Statement", use_container_width=True):
+
         borrowers_df = get_cached_data("borrowers")
-        current_b_name = loan_info['borrower'] 
-        
-        # Get all loans for this client to show total exposure
-        client_loans = loans_df[loans_df["borrower"] == current_b_name]
-        b_data = borrowers_df[borrowers_df["name"] == current_b_name] if borrowers_df is not None else pd.DataFrame()
-        b_details = b_data.iloc[0] if not b_data.empty else {}
+
+        # ==============================
+        # 🔥 FIX ADDED: SAFE BORROWER ACCESS
+        # ==============================
+        current_b_name = loan_info.get("borrower", loan_info.get("borrower_id", "Unknown"))
+
+        if borrowers_df is not None and not borrowers_df.empty:
+            borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+            b_data = borrowers_df[borrowers_df["id"].astype(str) == str(loan_info.get("borrower_id"))]
+            b_details = b_data.iloc[0] if not b_data.empty else {}
+        else:
+            b_details = {}
 
         navy_blue, baby_blue = "#000080", "#E1F5FE"
-        
-        # Build HTML for preview component
+
         html_statement = f"""
         <div id="printable-area" style="font-family: Arial, sans-serif; padding: 25px; border: 1px solid #eee; background: white; color: #333;">
             <div style="background: {navy_blue}; color: white; padding: 30px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
@@ -2866,12 +2893,22 @@ def show_ledger():
         """
 
         grand_total = 0.0
+
+        # ==============================
+        # 🔥 FIX ADDED: SAFE CLIENT FILTER
+        # ==============================
+        if "borrower" in loans_df.columns:
+            client_loans = loans_df[loans_df["borrower"] == current_b_name]
+        else:
+            client_loans = loans_df[loans_df["borrower_id"].astype(str) == str(loan_info["borrower_id"])]
+
         for _, l_row in client_loans.iterrows():
             l_id = l_row['id']
-            p, i = float(l_row['principal']), float(l_row['interest'])
-            # Sum payments per loan
-            l_pay = payments_df[payments_df["loan_id"] == l_id]["amount"].sum() if payments_df is not None else 0
+            p, i = float(l_row.get('principal', 0)), float(l_row.get('interest', 0))
+
+            l_pay = payments_df[payments_df["loan_id"] == l_id]["amount"].sum() if payments_df is not None and not payments_df.empty else 0
             l_bal = (p + i) - l_pay
+
             grand_total += l_bal
 
             html_statement += f"""
@@ -2880,7 +2917,7 @@ def show_ledger():
                 <span>BALANCE: {l_bal:,.0f} UGX</span>
             </div>
             """
-        
+
         html_statement += f"""
             <div style="margin-top: 40px; padding: 25px; border: 2px solid {navy_blue}; text-align: right; background: #f8faff; border-radius: 8px;">
                 <h2 style="color: {navy_blue}; margin: 0; font-size: 16px;">TOTAL CONSOLIDATED OUTSTANDING</h2>
@@ -2890,8 +2927,7 @@ def show_ledger():
                 Generated by Zoe Finance Core • This is a computer-generated document.
             </div>
         </div>"""
-        
-        # Render the HTML statement
+
         st.components.v1.html(html_statement, height=600, scrolling=True)
 
 
