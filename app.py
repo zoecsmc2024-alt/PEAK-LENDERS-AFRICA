@@ -1472,95 +1472,80 @@ import streamlit as st
 
 def show_collateral():
     """
-    Handles asset security for loans in a multi-tenant environment.
-    Updated to resolve RLS violations and resolve NameErrors by ensuring proper scoping.
+    Handles asset security. 
+    Fixed: RLS Violation 42501 by ensuring tenant_id is strictly passed.
     """
-    # 1. INITIALIZE UI & THEME
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     st.markdown(f"<h2 style='color: {brand_color};'>🛡️ Collateral Management</h2>", unsafe_allow_html=True)
     
-    # 2. FETCH DATA & INITIALIZE VARIABLES
-    # Load data at the start of the function so it's available to all tabs
+    # FETCH DATA
     collateral_df = get_cached_data("collateral")
     loans_df = get_cached_data("loans") 
     current_tenant = st.session_state.get('tenant_id')
 
-    # Pre-define default column names to prevent NameErrors
+    # Security Barrier: Don't allow interaction if session is lost
+    if not current_tenant:
+        st.error("🔐 Security Error: No active session. Please re-login.")
+        st.stop()
+
+    # DETECT COLUMNS
     l_id_col, l_bor_col, l_stat_col = "id", "borrower", "status"
-
-    # 3. STANDARDIZE COLUMNS & DETECT DYNAMIC NAMES
-    for d in [collateral_df, loans_df]:
-        if d is not None and not d.empty:
-            d.columns = d.columns.str.strip().str.lower().str.replace(" ", "_")
-
     if loans_df is not None and not loans_df.empty:
+        loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
         l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
         l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c), "borrower")
         l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
 
-    # 4. DEFINE TABS
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
-    # --- TAB 1: REGISTER ASSET ---
+    # --- TAB 1: REGISTER ---
     with tab_reg:
         if loans_df is None or loans_df.empty:
-            st.warning("⚠️ No loans found. Issue a loan before adding collateral.")
+            st.warning("⚠️ No loans found.")
         else:
-            # Filtering for active loans
             active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
             available_loans = loans_df[loans_df[l_stat_col].astype(str).str.title().isin(active_statuses)].copy()
 
-            if available_loans.empty:
-                st.info("✅ All current loans are cleared. No assets need to be held.")
-            else:
-                with st.form("collateral_form", clear_on_submit=True):
-                    st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
-                    c1, c2 = st.columns(2)
-                    
-                    # Create mapping with truncated IDs for cleaner UI
-                    loan_map = {
-                        f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] 
-                        for _, row in available_loans.iterrows()
-                    }
-                    
-                    selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
-                    asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
-                    desc = st.text_input("Asset Description", placeholder="e.g. Toyota Prado UBA 123X Black")
-                    est_value = st.number_input("Estimated Value (UGX)", min_value=0, step=100000)
-                    submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+            with st.form("collateral_form", clear_on_submit=True):
+                st.markdown(f"<h4 style='color: {brand_color};'>🔒 Secure New Asset</h4>", unsafe_allow_html=True)
+                c1, c2 = st.columns(2)
+                
+                loan_map = {f"{str(row[l_id_col])[:8]} | {str(row[l_bor_col]).upper()}": row[l_id_col] for _, row in available_loans.iterrows()}
+                selected_label = c1.selectbox("Link to Active Loan", options=list(loan_map.keys()))
+                asset_type = c2.selectbox("Asset Type", ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Other"])
+                desc = st.text_input("Asset Description")
+                est_value = st.number_input("Estimated Value (UGX)", min_value=0)
+                submit = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
-                if submit:
-                    if not current_tenant:
-                        st.error("❌ Session Error: No Tenant ID found. Please log out and back in.")
-                    elif desc and est_value > 0:
-                        full_loan_id = loan_map[selected_label]
-                        # Fetch borrower name based on selected ID
-                        sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
+            if submit and desc and est_value > 0:
+                full_loan_id = loan_map[selected_label]
+                sel_borrower = available_loans[available_loans[l_id_col] == full_loan_id][l_bor_col].iloc[0]
 
-                        new_asset = pd.DataFrame([{
-                            "borrower": sel_borrower,
-                            "loan_id": full_loan_id,
-                            "type": asset_type,
-                            "description": desc,
-                            "value": float(est_value),
-                            "status": "Held",
-                            "date_added": datetime.now().strftime("%Y-%m-%d"),
-                            "tenant_id": current_tenant 
-                        }])
-                        
-                        if save_data("collateral", new_asset):
-                            st.success(f"✅ Asset registered for {sel_borrower}!")
-                            st.rerun()
-                    else:
-                        st.error("⚠️ Provide both a description and value.")
+                new_asset = pd.DataFrame([{
+                    "borrower": sel_borrower,
+                    "loan_id": full_loan_id,
+                    "type": asset_type,
+                    "description": desc,
+                    "value": float(est_value),
+                    "status": "Held",
+                    "date_added": datetime.now().strftime("%Y-%m-%d"),
+                    "tenant_id": current_tenant # CRITICAL: Must match DB policy
+                }])
+                
+                if save_data("collateral", new_asset):
+                    st.success("✅ Asset registered!")
+                    st.rerun()
 
-    # --- TAB 2: INVENTORY & STATUS ---
+    # --- TAB 2: INVENTORY ---
     with tab_view:
         if collateral_df is None or collateral_df.empty:
-            st.info("💡 No collateral assets registered yet.")
+            st.info("💡 No assets yet.")
         else:
-            # 1. Numeric Conversion
             collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors='coerce').fillna(0)
+            c_stat_col = next((c for c in collateral_df.columns if 'status' in c), "status")
+            
+            # Simple list view for clean UI
+            st.dataframe(collateral_df, use_container_width=True, hide_index=True)
             
             # 2. Dynamic Detection for Collateral Columns
             c_bor_col = next((c for c in collateral_df.columns if 'borrower' in c), "borrower")
