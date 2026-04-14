@@ -2592,26 +2592,30 @@ def show_dashboard_view():
     brand_color = get_active_color()
     st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
     
-    # 1. LOAD DATA
+    # --- 1. LOAD DATA (Indented inside function) ---
     df = get_cached_data("loans")
-if not df.empty:
-    # This ensures "principal" becomes "Principal" for your metrics logic
-    df.columns = [c.strip().title().replace("_", " ") for c in df.columns]
     pay_df = get_cached_data("payments")
     exp_df = get_cached_data("expenses") 
     bor_df = get_cached_data("borrowers")
 
-    if df.empty:
+    # Stop early if there is no data to display (Prevents SyntaxError)
+    if df is None or df.empty:
         st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
-        return
+        st.stop() 
 
-    # 2. STANDARDIZE COLUMNS (Case-insensitive check)
+    # --- 2. STANDARDIZE COLUMNS ---
+    # This ensures that 'principal_amount' from DB becomes 'Principal' for the UI
     for d in [df, pay_df, exp_df, bor_df]:
-        if not d.empty:
-            # Strip whitespace and convert to lower to match database schema
+        if d is not None and not d.empty:
+            # Step A: Match DB style (lowercase/underscores)
             d.columns = d.columns.str.strip().str.lower().str.replace(" ", "_")
+            
+            # Step B: Match Dashboard style (Title Case for metrics)
+            if d is df:
+                # This ensures your metrics find "Principal", "Status", etc.
+                d.columns = [c.title().replace("_", " ") for c in d.columns]
 
-    # 3. BRIDGE: Map borrower names (Fixes "No Borrower Data")
+    # --- 3. BRIDGE: Map borrower names (Fixes "No Borrower Data") ---
     bor_map = {}
     # Use lowercase 'id' and 'name' to match standardized columns
     if not bor_df.empty and 'id' in bor_df.columns:
