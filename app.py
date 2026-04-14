@@ -1356,6 +1356,35 @@ with tab_actions:
 # 14. PAYMENTS & COLLECTIONS PAGE (SaaS Upgraded)
 # ==============================
 
+# -------------------------------
+# SAFE USER SERIALIZER (CRITICAL FIX)
+# -------------------------------
+def get_user_identity():
+    user = st.session_state.get("user", None)
+
+    if user is None:
+        return "system"
+
+    if hasattr(user, "id"):
+        return str(user.id)
+
+    if hasattr(user, "email"):
+        return str(user.email)
+
+    return str(user)
+
+# -------------------------------
+# STATUS NORMALIZER (DB SAFE)
+# -------------------------------
+VALID_STATUSES = {"ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
+
+def normalize_status(status):
+    if pd.isna(status):
+        return "PENDING"
+    cleaned = str(status).strip().upper().replace(" ", "_")
+    return cleaned if cleaned in VALID_STATUSES else "PENDING"
+
+
 def show_payments():
     """
     Manages cash inflows. Includes payment posting, 
@@ -1375,7 +1404,9 @@ def show_payments():
 
     # Normalize columns
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-    if not payments_df.empty:
+    
+    # 🔥 FIX (SAFE CHECK)
+    if payments_df is not None and not payments_df.empty:
         payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     # Standardize Borrower Name Mapping for the UI
@@ -1397,7 +1428,6 @@ def show_payments():
         if active_loans.empty:
             st.success("🎉 All loans are currently cleared!")
         else:
-            # Selection logic: Standardizing the display name
             active_loans['borrower_display'] = active_loans['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
             
             loan_options = active_loans.apply(
@@ -1407,22 +1437,18 @@ def show_payments():
             
             selected_option = st.selectbox("Select Loan to Credit", loan_options, key="pay_sel")
             
-            # --- TARGETING THE CURRENT CYCLE ---
             try:
-                # Extracting the UUID/Internal ID from the string
                 raw_id_str = selected_option.split(" | ")[0].replace("ID: ", "").strip()
                 loan = active_loans[active_loans["id"].astype(str) == raw_id_str].iloc[0]
             except Exception as e:
                 st.error(f"❌ Error identifying Loan: {e}")
                 st.stop()
 
-            # Financial Calculations
             total_rep = float(loan.get("total_repayable", 0))
             paid_so_far = float(loan.get("amount_paid", 0))
             outstanding = total_rep - paid_so_far
             borrower_name = loan['borrower_display']
 
-            # --- STYLED CARDS (Zoe Branding Preserved) ---
             c1, c2, c3 = st.columns(3)
             status_val = str(loan.get('status', 'Active')).strip()
             status_color = "#2E7D32" if status_val.title() == "Active" else "#D32F2F"
@@ -1433,7 +1459,6 @@ def show_payments():
 
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # --- PAYMENT FORM ---
             with st.form("payment_form", clear_on_submit=True):
                 col_a, col_b, col_c = st.columns(3)
                 pay_amount = col_a.number_input("Amount Received (UGX)", min_value=0, step=10000)
@@ -1443,33 +1468,43 @@ def show_payments():
                 if st.form_submit_button("✅ Post Payment", use_container_width=True):
                     if pay_amount > 0:
                         try:
+                            # 🔥 OVERPAYMENT PROTECTION
+                            if pay_amount > outstanding:
+                                st.warning(f"⚠️ Amount exceeds outstanding balance ({outstanding:,.0f}). Adjusting to allowed max.")
+                                pay_amount = outstanding
+
                             t_id = st.session_state.get('tenant_id', 'test-tenant-123')
-                            # 1. Prepare Payment Entry
+
                             new_payment = pd.DataFrame([{
                                 "loan_id": loan["id"],
-                                "borrower": borrower_name, # Storing name for history
+                                "borrower": borrower_name,
                                 "amount": float(pay_amount),
                                 "date": pay_date.strftime("%Y-%m-%d"),
                                 "method": pay_method,
-                                "recorded_by": st.session_state.get("user", "Staff"),
+                                "recorded_by": get_user_identity(),  # ✅ FIXED
+                                "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                "receipt_no": f"RCPT-{random.randint(10000,99999)}",
                                 "tenant_id": t_id
                             }])
 
-                            # 2. Prepare Loan Update
                             new_total_paid = paid_so_far + float(pay_amount)
-                            # Auto-close logic if balance is cleared
-                            new_status = "Closed" if new_total_paid >= (total_rep - 10) else status_val
-                            
+
+                            new_status = "CLOSED" if new_total_paid >= (total_rep - 10) else normalize_status(status_val)
+
                             loan_update = pd.DataFrame([{
                                 "id": loan["id"],
-                                "amount_paid": new_total_paid,
-                                "status": new_status,
-                                "tenant_id": t_id
+                                "amount_paid": float(new_total_paid),
+                                "status": normalize_status(new_status),
+                                "tenant_id": t_id,
+                                "last_payment_date": pay_date.strftime("%Y-%m-%d")
                             }])
 
-                            # 3. Double Sync Save
                             if save_data("payments", new_payment) and save_data("loans", loan_update):
                                 st.success(f"✅ Payment of {pay_amount:,.0f} posted for {borrower_name}!")
+                                
+                                if new_status == "CLOSED":
+                                    st.balloons()
+
                                 st.cache_data.clear()
                                 st.rerun()
                                 
@@ -1484,6 +1519,7 @@ def show_payments():
     with tab_history:
         if payments_df is not None and not payments_df.empty:
             df_display = payments_df.copy()
+
             def get_color_emoji(amt):
                 if amt >= 5000000: return "🟢 Large"
                 if amt >= 1000000: return "🔵 Medium"
@@ -1491,7 +1527,6 @@ def show_payments():
             
             df_display["level"] = df_display["amount"].apply(get_color_emoji)
             
-            # Formatting for the table
             if 'amount' in df_display.columns:
                 df_display['amount'] = df_display['amount'].apply(lambda x: f"{x:,.0f}")
                 
@@ -1537,7 +1572,6 @@ def show_payments():
                     st.rerun()
                 except Exception as e:
                     st.error(f"Delete failed: {e}")
-
 
 # ==============================
 # 15. COLLATERAL MANAGEMENT PAGE
