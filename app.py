@@ -1951,6 +1951,13 @@ def show_calendar():
             </div>""", unsafe_allow_html=True)
 
     # 5. OVERDUE FOLLOW-UP
+    from datetime import datetime
+
+# Define 'today' so the filter can compare dates
+today = datetime.now() 
+
+# Now your existing line will work:
+overdue_df = active_loans[active_loans[l_end_col] < today].copy()             
 st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
 
 # Calculate overdue loans
