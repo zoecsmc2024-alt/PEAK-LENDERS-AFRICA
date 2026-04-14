@@ -1816,25 +1816,30 @@ def show_calendar():
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- DYNAMIC COLUMN DETECTION (Fixes UUID Display vs Name) ---
-    # Standardize column names to lowercase and underscores
+    # --- DYNAMIC COLUMN DETECTION (Fixes KeyError and UUID Display) ---
+    # Standardize column names
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # Map the most likely column names found in your database
+    # 1. Map the ID column
     l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
     
-    # FIX: Priority search for name-based columns to avoid showing the UUID/ID string
-    l_bor_col = next((c for c in loans_df.columns if 'name' in c or 'customer' in c or 'full' in c), "borrower")
+    # 2. Map the Borrower Name (Priority: Name > Customer > Borrower)
+    # This prevents the app from grabbing the 'borrower' UUID column if a name column exists
+    l_bor_col = next((c for c in loans_df.columns if 'name' in c or 'customer' in c or 'full' in c), None)
     
+    if not l_bor_col:
+        l_bor_col = "borrower" # Fallback if no specific name column is found
+
+    # 3. Map other essential columns
     l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
     l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c or 'expiry' in c), "end_date")
     l_rev_col = next((c for c in loans_df.columns if 'repayable' in c or 'amount' in c), "total_repayable")
 
-    # Standardize types for SaaS logic
+    # Standardize types
     loans_df[l_end_col] = pd.to_datetime(loans_df[l_end_col], errors="coerce")
     loans_df[l_rev_col] = pd.to_numeric(loans_df[l_rev_col], errors="coerce").fillna(0)
     
-    # Ensure the borrower column is treated as a clean string for display
+    # Force borrower display to Uppercase String
     loans_df[l_bor_col] = loans_df[l_bor_col].astype(str).str.upper()
     
     today = pd.Timestamp.today().normalize()
