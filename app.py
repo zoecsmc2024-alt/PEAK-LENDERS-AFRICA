@@ -857,7 +857,7 @@ def render_sidebar():
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE
 # ==============================
-import uuid # CRITICAL: Fixes the UUID NameError
+import uuid 
 import streamlit as st
 import pandas as pd
 
@@ -881,8 +881,7 @@ def show_borrowers():
         # Normalize columns to lowercase to prevent case-sensitive crashes
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # 2. DYNAMIC COLUMN DETECTION (The Fix for the 'borrower' Error)
-    # This looks for the most likely name/phone/status columns
+    # 2. DYNAMIC COLUMN DETECTION
     name_col = next((c for c in df.columns if 'name' in c or 'borrower' in c), "name")
     phone_col = next((c for c in df.columns if 'phone' in c), "phone")
     status_col = next((c for c in df.columns if 'status' in c), "status")
@@ -920,7 +919,7 @@ def show_borrowers():
                 for i, r in filtered_df.reset_index().iterrows():
                     bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                     
-                    # Safely grab values using .get() to prevent 'KeyError' crashes
+                    # Safely grab values using .get()
                     name_val = r.get(name_col, 'Unknown')
                     phone_val = r.get(phone_col, 'N/A')
                     email_val = r.get('email', 'N/A')
@@ -962,18 +961,13 @@ def show_borrowers():
     # --- TAB 2: ADD BORROWER ---
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
-            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
+            st.markdown(f<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             
-            # Row 1
             name = c1.text_input("Full Name*")
             phone = c2.text_input("Phone Number*")
-            
-            # Row 2
             email = c1.text_input("Email Address")
             nid = c2.text_input("National ID / NIN")
-            
-            # Row 3
             addr = c1.text_input("Physical Address")
             nok = c2.text_input("Next of Kin (Name & Contact)")
             
@@ -1003,94 +997,88 @@ def show_borrowers():
     # --- TAB 3: AUDIT & MANAGE ---
     with tab_audit:
         if not df.empty:
-        # 1. SETUP DYNAMIC COLUMN REFERENCES
-        b_name_col = next((c for c in df.columns if 'name' in c.lower()), df.columns[0])
-        b_status_col = next((c for c in df.columns if 'status' in c.lower()), 'status')
-        
-        target_name = st.selectbox("Select Borrower to Audit/Manage", df[b_name_col].tolist(), key="audit_manage_select")
-        b_data = df[df[b_name_col] == target_name].iloc[0]
-        
-        # 2. SHOW LOAN HISTORY
-        u_loans = get_cached_data("loans")
-        
-        if not u_loans.empty:
-            # Clean column names for matching logic
-            u_loans.columns = u_loans.columns.str.strip().str.lower().str.replace(" ", "_")
-            loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c or 'name' in c), None)
+            b_name_col = next((c for c in df.columns if 'name' in c.lower()), df.columns[0])
+            b_status_col = next((c for c in df.columns if 'status' in c.lower()), 'status')
             
-            if loan_bor_ref:
-                user_loans = u_loans[
-                    (u_loans[loan_bor_ref].astype(str) == str(target_name)) | 
-                    (u_loans[loan_bor_ref].astype(str) == str(b_data.get('id')))
-                ].copy()
+            target_name = st.selectbox("Select Borrower to Audit/Manage", df[b_name_col].tolist(), key="audit_manage_select")
+            b_data = df[df[b_name_col] == target_name].iloc[0]
+            
+            # 2. SHOW LOAN HISTORY
+            u_loans = get_cached_data("loans")
+            
+            if not u_loans.empty:
+                u_loans.columns = u_loans.columns.str.strip().str.lower().str.replace(" ", "_")
+                loan_bor_ref = next((c for c in u_loans.columns if 'borrower' in c or 'name' in c), None)
                 
-                if not user_loans.empty:
-                    st.metric("Total Loans Found", len(user_loans))
-                    cols_to_show = [c for c in ["id", "loan_id_label", "status", "principal", "end_date"] if c in user_loans.columns]
-                    st.table(user_loans[cols_to_show])
-                else:
-                    st.info("ℹ️ No loans recorded for this borrower yet.")
-            else:
-                st.warning("Could not find a borrower reference column in the loans table.")
-
-        st.markdown("---")
-        st.markdown("### ⚙️ Modify Borrower Details")
-        
-        # 3. EDIT PROFILE SECTION
-        with st.expander(f"📝 Edit Profile: {target_name}"):
-            with st.form(f"edit_bor_{target_name}"):
-                c1, c2 = st.columns(2)
-                e_name = c1.text_input("Full Name", value=str(b_data.get(b_name_col, '')))
-                e_phone = c1.text_input("Phone Number", value=str(b_data.get('phone', '')))
-                e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
-                e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
-                
-                current_status = str(b_data.get(b_status_col, 'Active')).title()
-                e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if current_status == "Active" else 1)
-                e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
-                
-                if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
-                    update_payload = {
-                        "id": b_data.get('id'), 
-                        "name": e_name,
-                        "phone": e_phone,
-                        "national_id": e_nid,
-                        "email": e_email,
-                        "status": e_status,
-                        "address": e_addr,
-                        "tenant_id": st.session_state.get('tenant_id')
-                    }
+                if loan_bor_ref:
+                    user_loans = u_loans[
+                        (u_loans[loan_bor_ref].astype(str) == str(target_name)) | 
+                        (u_loans[loan_bor_ref].astype(str) == str(b_data.get('id')))
+                    ].copy()
                     
-                    # Using save_data assuming it handles the update logic correctly
-                    if save_data("borrowers", pd.DataFrame([update_payload])):
-                        st.success("✅ Profile updated!")
-                        st.cache_data.clear()
-                        st.rerun()
-
-            # 4. DANGER ZONE (Nested inside expander)
-            st.markdown("### ⚠️ Danger Zone")
-            confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}", key=f"del_check_{target_name}")
-
-            if st.button("🗑️ Delete Permanently", disabled=not confirm_delete, type="primary"):
-                # Safety check for active loans before final deletion
-                loan_ref_check = next((c for c in u_loans.columns if 'borrower' in c), "borrower_id")
-                active_loans = u_loans[u_loans[loan_ref_check].astype(str) == str(b_data.get('id'))] if not u_loans.empty else pd.DataFrame()
-                
-                if not active_loans.empty:
-                    st.error(f"❌ Cannot delete! This borrower has {len(active_loans)} active loan records.")
+                    if not user_loans.empty:
+                        st.metric("Total Loans Found", len(user_loans))
+                        cols_to_show = [c for c in ["id", "loan_id_label", "status", "principal", "end_date"] if c in user_loans.columns]
+                        st.table(user_loans[cols_to_show])
+                    else:
+                        st.info("ℹ️ No loans recorded for this borrower yet.")
                 else:
-                    try:
-                        res = supabase.table("borrowers").delete().eq("id", b_data.get('id')).execute()
-                        if res.data:
-                            st.success(f"✅ Successfully deleted {target_name}")
+                    st.warning("Could not find a borrower reference column in the loans table.")
+
+            st.markdown("---")
+            st.markdown("### ⚙️ Modify Borrower Details")
+            
+            with st.expander(f"📝 Edit Profile: {target_name}"):
+                with st.form(f"edit_bor_{target_name}"):
+                    c1, c2 = st.columns(2)
+                    e_name = c1.text_input("Full Name", value=str(b_data.get(b_name_col, '')))
+                    e_phone = c1.text_input("Phone Number", value=str(b_data.get('phone', '')))
+                    e_nid = c1.text_input("National ID / NIN", value=str(b_data.get('national_id', '')))
+                    e_email = c2.text_input("Email Address", value=str(b_data.get('email', '')))
+                    
+                    current_status = str(b_data.get(b_status_col, 'Active')).title()
+                    e_status = c2.selectbox("Account Status", ["Active", "Inactive"], index=0 if current_status == "Active" else 1)
+                    e_addr = st.text_input("Physical Address", value=str(b_data.get('address', '')))
+                    
+                    if st.form_submit_button("💾 Save Updated Profile", use_container_width=True):
+                        update_payload = {
+                            "id": b_data.get('id'), 
+                            "name": e_name,
+                            "phone": e_phone,
+                            "national_id": e_nid,
+                            "email": e_email,
+                            "status": e_status,
+                            "address": e_addr,
+                            "tenant_id": st.session_state.get('tenant_id')
+                        }
+                        
+                        if save_data("borrowers", pd.DataFrame([update_payload])):
+                            st.success("✅ Profile updated!")
                             st.cache_data.clear()
                             st.rerun()
-                        else:
-                            st.error("🚫 Permission Denied: Check RLS or dependencies.")
-                    except Exception as e:
-                        st.error(f"🌐 System Error: {str(e)}")
-    else:
-        st.info("💡 No borrowers found to manage.")
+
+                st.markdown("### ⚠️ Danger Zone")
+                confirm_delete = st.checkbox(f"I am sure I want to delete {target_name}", key=f"del_check_{target_name}")
+
+                if st.button("🗑️ Delete Permanently", disabled=not confirm_delete, type="primary"):
+                    loan_ref_check = next((c for c in u_loans.columns if 'borrower' in c), "borrower_id")
+                    active_loans = u_loans[u_loans[loan_ref_check].astype(str) == str(b_data.get('id'))] if not u_loans.empty else pd.DataFrame()
+                    
+                    if not active_loans.empty:
+                        st.error(f"❌ Cannot delete! This borrower has {len(active_loans)} active loan records.")
+                    else:
+                        try:
+                            res = supabase.table("borrowers").delete().eq("id", b_data.get('id')).execute()
+                            if res.data:
+                                st.success(f"✅ Successfully deleted {target_name}")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("🚫 Permission Denied: Check RLS or dependencies.")
+                        except Exception as e:
+                            st.error(f"🌐 System Error: {str(e)}")
+        else:
+            st.info("💡 No borrowers found to manage.")
 # ==============================
 # 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
 # ==============================
