@@ -2084,7 +2084,8 @@ def show_expenses():
 
             # Extract ID from string selection
             try:
-                exp_id = int(selected_exp.split("|")[0].replace("ID:", "").strip())
+                # REMOVED int() wrapper because Supabase uses UUID strings
+                exp_id = selected_exp.split("|")[0].replace("ID:", "").strip()
                 exp_to_edit = df[df["id"] == exp_id].iloc[0]
 
                 with st.form("edit_expense_form"):
@@ -2126,7 +2127,6 @@ def show_expenses():
                     st.rerun()
             except Exception as e:
                 st.error(f"Error loading record: {e}")
-
 # ==============================
 # 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
