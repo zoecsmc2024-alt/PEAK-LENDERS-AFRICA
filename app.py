@@ -1353,11 +1353,11 @@ with tab_actions:
 
 
 # ==============================
-# 14. PAYMENTS & COLLECTIONS PAGE (SaaS Upgraded)
+# 14. PAYMENTS & COLLECTIONS PAGE (ENTERPRISE SaaS)
 # ==============================
 
 # -------------------------------
-# SAFE USER SERIALIZER (CRITICAL FIX)
+# SAFE USER SERIALIZER
 # -------------------------------
 def get_user_identity():
     user = st.session_state.get("user", None)
@@ -1374,7 +1374,7 @@ def get_user_identity():
     return str(user)
 
 # -------------------------------
-# STATUS NORMALIZER (DB SAFE)
+# STATUS NORMALIZER
 # -------------------------------
 VALID_STATUSES = {"ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
 
@@ -1383,6 +1383,25 @@ def normalize_status(status):
         return "PENDING"
     cleaned = str(status).strip().upper().replace(" ", "_")
     return cleaned if cleaned in VALID_STATUSES else "PENDING"
+
+# -------------------------------
+# JSON SAFETY (CRITICAL FIX)
+# -------------------------------
+def make_json_safe(df):
+    return df.applymap(lambda x: str(x) if not isinstance(x, (str, int, float, bool, type(None))) else x)
+
+# -------------------------------
+# SAFE SAVE WRAPPER (ENTERPRISE)
+# -------------------------------
+def save_data_safe(table, df):
+    try:
+        df = make_json_safe(df)
+        data = df.to_dict(orient="records")
+        supabase.table(table).upsert(data).execute()
+        return True
+    except Exception as e:
+        st.error(f"Error saving to {table}: {e}")
+        return False
 
 
 def show_payments():
@@ -1402,14 +1421,11 @@ def show_payments():
         st.info("ℹ️ No loans found in the system.")
         return
 
-    # Normalize columns
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # 🔥 FIX (SAFE CHECK)
     if payments_df is not None and not payments_df.empty:
         payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # Standardize Borrower Name Mapping for the UI
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
         bor_name_col = next((c for c in borrowers_df.columns if 'name' in c), "name")
@@ -1468,23 +1484,25 @@ def show_payments():
                 if st.form_submit_button("✅ Post Payment", use_container_width=True):
                     if pay_amount > 0:
                         try:
-                            # 🔥 OVERPAYMENT PROTECTION
+                            # OVERPAYMENT PROTECTION
                             if pay_amount > outstanding:
-                                st.warning(f"⚠️ Amount exceeds outstanding balance ({outstanding:,.0f}). Adjusting to allowed max.")
+                                st.warning(f"⚠️ Amount exceeds outstanding balance ({outstanding:,.0f}). Adjusting.")
                                 pay_amount = outstanding
 
                             t_id = st.session_state.get('tenant_id', 'test-tenant-123')
 
+                            receipt_no = f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{random.randint(100,999)}"
+
                             new_payment = pd.DataFrame([{
-                                "loan_id": loan["id"],
-                                "borrower": borrower_name,
+                                "loan_id": str(loan["id"]),
+                                "borrower": str(borrower_name),
                                 "amount": float(pay_amount),
                                 "date": pay_date.strftime("%Y-%m-%d"),
-                                "method": pay_method,
-                                "recorded_by": get_user_identity(),  # ✅ FIXED
+                                "method": str(pay_method),
+                                "recorded_by": get_user_identity(),
                                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                                "receipt_no": f"RCPT-{random.randint(10000,99999)}",
-                                "tenant_id": t_id
+                                "receipt_no": receipt_no,
+                                "tenant_id": str(t_id)
                             }])
 
                             new_total_paid = paid_so_far + float(pay_amount)
@@ -1495,11 +1513,11 @@ def show_payments():
                                 "id": loan["id"],
                                 "amount_paid": float(new_total_paid),
                                 "status": normalize_status(new_status),
-                                "tenant_id": t_id,
+                                "tenant_id": str(t_id),
                                 "last_payment_date": pay_date.strftime("%Y-%m-%d")
                             }])
 
-                            if save_data("payments", new_payment) and save_data("loans", loan_update):
+                            if save_data_safe("payments", new_payment) and save_data_safe("loans", loan_update):
                                 st.success(f"✅ Payment of {pay_amount:,.0f} posted for {borrower_name}!")
                                 
                                 if new_status == "CLOSED":
@@ -1514,7 +1532,7 @@ def show_payments():
                         st.warning("Please enter an amount greater than 0.")
 
     # ==============================
-    # TAB 2: HISTORY (Emoji Logic Preserved)
+    # TAB 2: HISTORY
     # ==============================
     with tab_history:
         if payments_df is not None and not payments_df.empty:
@@ -1558,7 +1576,7 @@ def show_payments():
                         "date": new_date.strftime("%Y-%m-%d"),
                         "tenant_id": st.session_state.tenant_id
                     }])
-                    if save_data("payments", update_p):
+                    if save_data_safe("payments", update_p):
                         st.success("Receipt Updated!")
                         st.cache_data.clear()
                         st.rerun()
