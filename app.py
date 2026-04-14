@@ -1549,8 +1549,8 @@ def show_collateral():
             if save_data("collateral", new_asset):
                 st.success("✅ Asset registered successfully!")
                 st.rerun()
-                else:
-                    st.error("⚠️ Please provide a description and value.")
+            else:
+                st.error("⚠️ Please provide a description and value.")
 
     # --- TAB 2: INVENTORY ---
     with tab_view:
