@@ -910,87 +910,129 @@ def show_loans():
 
     # FIX: Correct Tab Assignment to avoid NameError: 'tab_actions' is not defined
     tab_view, tab_add, tab_actions, tab_manage = st.tabs([
-        "📑 Portfolio View", "➕ New Loan", "🔄 Actions", "🛠️ Manage/Edit"
+        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
     ])
 
     # ==============================
-    # TAB: PORTFOLIO VIEW (With Colored Statuses)
+    # TAB: PORTFOLIO VIEW (Luxe Theme)
     # ==============================
     with tab_view:
-        if loans_df.empty:
-            st.info("No loans found in the portfolio.")
-        else:
-            # Reorder columns to put Borrower Name first and show mapped names
-            cols_to_show = ["borrower_name", "principal", "interest", "total_repayable", "amount_paid", "balance", "status", "end_date"]
-            display_df = loans_df[[c for c in cols_to_show if c in loans_df.columns]]
-            
-            st.dataframe(
-                display_df,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "status": st.column_config.SelectboxColumn(
-                        "Status",
-                        options=["Active", "Closed", "Overdue", "Rolled"],
-                        required=True,
-                    ),
-                    # ADDING COLORS FOR STATUSES
-                    "status": st.column_config.TextColumn(
-                        "Status",
-                        help="Current loan state",
-                    )
-                }
-            )
-            # Custom CSS to color the status column values (Visual Helper)
-            st.markdown("""
-                <style>
-                [data-testid="stMetricValue"] { font-size: 24px; }
-                </style>
-                """, unsafe_allow_html=True)
+        if not loans_df.empty:
+            # 1. THE BRIDGE: Map names if they aren't already mapped
+            if not df.empty:
+                bor_map = dict(zip(df['id'], df['name']))
+                loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown")
+            else:
+                loans_df['borrower'] = "No Borrower Data"
 
-    # ==============================
-    # TAB: NEW LOAN
+            # 2. SELECTOR: Combine Label and Name for the dropdown
+            loans_df['display_label'] = loans_df['loan_id_label'].astype(str) + " - " + loans_df['borrower'].astype(str)
+            
+            sel_label = st.selectbox("🔍 Select Loan to Inspect", 
+                                     options=loans_df['display_label'].unique(), 
+                                     key="inspect_sel_v5")
+            
+            # 3. DATA SLICE: Get details for the selected loan
+            latest_info = loans_df[loans_df["display_label"] == sel_label].iloc[-1]
+            
+            # 4. METRICS CALCULATION
+            rec_val = float(latest_info.get('amount_paid', 0))
+            total_rep = float(latest_info.get('total_repayable', 0))
+            out_val = total_rep - rec_val
+            stat_val = str(latest_info.get('status', 'N/A')).upper()
+            
+            if stat_val == "CLOSED": 
+                out_val = 0
+
+            # --- BRANDED METRIC CARDS ---
+            c1, c2, c3 = st.columns(3)
+            card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"
+            text_style = "margin:0; color:#0A192F;"
+
+            c1.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">✅ RECEIVED</p><h3 style="{text_style} font-size:18px;">{rec_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+            c2.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">🚨 OUTSTANDING</p><h3 style="{text_style} font-size:18px;">{out_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+            c3.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">📑 STATUS</p><h3 style="{text_style} font-size:18px;">{stat_val}</h3></div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- RENDER THE PEACHY TABLE ---
+            def style_loan_table(row):
+                # Status-based colors
+                status = str(row["status"])
+                colors = {"Active": "#4A90E2", "Closed": "#2E7D32", "Overdue": "#D32F2F", "BCF": "#FFA500"}
+                s_color = colors.get(status, "#666666")
+                
+                # Default style for all cells
+                styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
+                # Find the 'status' column index to apply the badge style
+                status_idx = row.index.get_loc("status")
+                styles[status_idx] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px; text-align: center;'
+                return styles
+
+            # Select specific columns to keep the table clean
+            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "start_date", "status"]
+            
+            # Final Table Display
+            st.dataframe(
+                loans_df[show_cols].style.format({
+                    "principal": "{:,.0f}", 
+                    "total_repayable": "{:,.0f}"
+                }).apply(style_loan_table, axis=1), 
+                use_container_width=True, 
+                hide_index=True
+            )
+        else:
+            st.info("No loans found. Head over to 'New Loan' to get started!")
+
+# ==============================
+    # TAB: NEW LOAN (Supabase Integration)
     # ==============================
     with tab_add:
         if active_borrowers.empty:
-            st.warning("⚠️ No active borrowers found. Please add or activate a borrower first.")
+            st.info("💡 Tip: Activate a borrower first.")
         else:
             with st.form("loan_issue_form"):
+                st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
-                name_col = next((c for c in active_borrowers.columns if 'name' in c), active_borrowers.columns[0])
                 
-                selected_borrower = col1.selectbox("Select Borrower", active_borrowers[name_col].unique())
-                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=10000)
+                borrower_map = dict(zip(active_borrowers["name"], active_borrowers["id"]))
+                selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
+                selected_id = borrower_map[selected_name]
+                
+                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
-                
-                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency"])
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5, value=10.0)
+                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
+                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                calculated_interest = (interest_rate / 100) * amount
-                total_due = amount + calculated_interest
+                total_due = amount + ((interest_rate / 100) * amount)
+                st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
-                    if amount > 0:
-                        new_loan = {
-                            "borrower_id": active_borrowers[active_borrowers[name_col] == selected_borrower].iloc[0].get('id'),
-                            "principal": float(amount),
-                            "interest": float(calculated_interest),
-                            "total_repayable": float(total_due),
-                            "amount_paid": 0.0,
-                            "balance": float(total_due),
-                            "status": "Active",
-                            "start_date": date_issued.strftime("%Y-%m-%d"),
-                            "end_date": date_due.strftime("%Y-%m-%d"),
-                            "tenant_id": str(tenant_id)
-                        }
-                        
-                        updated_df = pd.concat([loans_df, pd.DataFrame([new_loan])], ignore_index=True)
-                        if save_data_saas("loans", updated_df):
-                            st.success(f"✅ Loan issued successfully!")
-                            st.cache_data.clear()
-                            st.rerun()
+                    # --- ALL LOGIC BELOW IS NOW PROPERLY INDENTED ---
+                    t_id = "test-tenant-123"
+                    
+                    import random
+                    readable_label = f"LN-{random.randint(1000, 9999)}"
 
+                    loan_data = {
+                        "loan_id_label": readable_label, 
+                        "borrower_id": selected_id, 
+                        "principal": float(amount), 
+                        "interest": float((interest_rate/100)*amount),
+                        "total_repayable": float(total_due), 
+                        "amount_paid": 0.0,
+                        "status": "Active", 
+                        "start_date": str(date_issued), 
+                        "end_date": str(date_due),
+                        "tenant_id": t_id
+                    }
+                    
+                    new_loan_df = pd.DataFrame([loan_data])
+                    
+                    if save_data("loans", new_loan_df):
+                        st.success(f"✅ Loan {readable_label} issued!")
+                        st.rerun()
     # ==============================
     # TAB: ACTIONS (The Rollover Engine)
     # ==============================
