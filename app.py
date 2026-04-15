@@ -2763,7 +2763,7 @@ def show_dashboard_view():
         for col in col_list:
             if df is not None and col in df.columns:
                 return pd.to_numeric(df[col], errors="coerce").fillna(0)
-        return pd.Series(0, index=df.index if df is not None else [])
+        return pd.Series(0.0, index=df.index if df is not None else [])
 
     def safe_date(df, col_list):
         for col in col_list:
@@ -2798,7 +2798,6 @@ def show_dashboard_view():
     stat_col = next((c for c in df_clean.columns if "status" in c), None)
     df_clean["status_clean"] = df_clean[stat_col].astype(str).str.title() if stat_col else "Active"
 
-    date_col = next((c for c in df_clean.columns if "end" in c or "due" in c or "date" in c), None)
     df_clean["end_date_dt"] = safe_date(df_clean, ["end_date", "due_date", "date"])
 
     # --- 6. PRE-FILTER ENGINE (FAST PERFORMANCE UPGRADE) ---
@@ -2819,8 +2818,6 @@ def show_dashboard_view():
     m1, m2, m3, m4 = st.columns(4)
     style = f"background:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
 
-    # ... previous code inside show_dashboard_view ...
-
     m1.markdown(f'<div style="{style}"><b>💰 ACTIVE PRINCIPAL</b><h3>{total_issued:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m2.markdown(f'<div style="{style}"><b>📈 EXPECTED INTEREST</b><h3>{total_interest_expected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
     m3.markdown(f'<div style="{style.replace("#fff","#F0FFF4")}"><b>✅ TOTAL COLLECTED</b><h3>{total_collected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
@@ -2828,7 +2825,7 @@ def show_dashboard_view():
 
     st.write("---")
 
-    # --- 9. RECENT LOANS TABLE (INDENTED) ---
+    # --- 9. RECENT LOANS TABLE (INDENTED TO REMAIN IN SCOPE) ---
     t1, t2 = st.columns(2)
 
     with t1:
@@ -2869,6 +2866,8 @@ def show_dashboard_view():
     with t2:
         st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
         if pay_df is not None and not pay_df.empty:
+            # Ensure income is numeric for table rendering
+            pay_df["amount_clean"] = pd.to_numeric(pay_df.get("amount"), errors="coerce").fillna(0)
             recent_pay = pay_df.sort_values("date", ascending=False).head(5)
             pay_rows = ""
             for idx, (i, r) in enumerate(recent_pay.iterrows()):
@@ -2876,16 +2875,26 @@ def show_dashboard_view():
                 p_name = str(r.get('borrower', 'Unknown'))
                 p_amt = r.get('amount_clean', 0)
                 p_date = pd.to_datetime(r.get('date')).strftime('%d %b') if pd.notna(r.get('date')) else '-'
-                pay_rows += f"""<tr style="background:{bg};"><td>{p_name}</td><td style="text-align:right; color:green;">{p_amt:,.0f}</td><td style="text-align:center;">{p_date}</td></tr>"""
+                pay_rows += f"""
+                <tr style="background:{bg}; border-bottom: 1px solid #eee;">
+                    <td style="padding:8px;">{p_name}</td>
+                    <td style="padding:8px; text-align:right; color:green; font-weight:bold;">{p_amt:,.0f}</td>
+                    <td style="padding:8px; text-align:center;">{p_date}</td>
+                </tr>"""
 
-            st.markdown(f"""<table style="width:100%; font-size:13px; border-collapse:collapse;">
-                <tr style="background:#2E7D32; color:white;"><th>Borrower</th><th>Amount</th><th>Date</th></tr>
-                {pay_rows}</table>""", unsafe_allow_html=True)
+            st.markdown(f"""
+            <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
+                <thead>
+                    <tr style="background:#2E7D32; color:white;">
+                        <th style="padding:10px;">Borrower</th><th style="padding:10px;">Amount</th><th style="padding:10px;">Date</th>
+                    </tr>
+                </thead>
+                <tbody>{pay_rows}</tbody>
+            </table>""", unsafe_allow_html=True)
 
     # --- 11. CHARTS (INDENTED) ---
     st.write("---")
     c1, c2 = st.columns(2)
-    # ... ensure the rest of the chart logic is also indented ...
 
     with c1:
         if not df_clean.empty:
@@ -2894,6 +2903,7 @@ def show_dashboard_view():
 
             fig = px.pie(status_counts, names="Status", values="Count",
                          hole=0.5, color_discrete_sequence=["#4A90E2","#FF4B4B","#FFA500"])
+            fig.update_layout(title="Loan Status Distribution")
             st.plotly_chart(fig, use_container_width=True)
 
     with c2:
@@ -2914,6 +2924,7 @@ def show_dashboard_view():
             fig2 = px.bar(merged, x="Month", y=["Income","Expenses"],
                           barmode="group",
                           color_discrete_map={"Income":"#2E7D32","Expenses":"#FF4B4B"})
+            fig2.update_layout(title="Monthly Income vs Expenses")
             st.plotly_chart(fig2, use_container_width=True)
 # ==========================================
 # FINAL APP ROUTER (REACTIVE + SAAS STABLE + THEME SAFE)
