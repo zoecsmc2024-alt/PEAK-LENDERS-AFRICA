@@ -1265,7 +1265,6 @@ def show_loans():
                 selected_id = borrower_map[selected_name]
                 
                 amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
-                
                 date_issued = col1.date_input("Start Date", value=datetime.now().date())
                 
                 l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
@@ -1300,8 +1299,7 @@ def show_loans():
                         st.success(f"✅ Loan {readable_label} issued!")
                         st.rerun()
 
-
-          # ==============================
+    # ==============================
     # TAB: ACTIONS (ROLLOVER ENGINE)
     # ==============================
     with tab_actions:
@@ -1341,7 +1339,7 @@ def show_loans():
                         "interest": float(current_unpaid * (new_interest_rate / 100)),
                         "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
                         "amount_paid": 0.0,
-                        "status": "ACTIVE", # New loan starts as ACTIVE
+                        "status": "ACTIVE",
                         "start_date": datetime.now().strftime("%Y-%m-%d"),
                         "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
                         "due_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
@@ -1357,33 +1355,44 @@ def show_loans():
     # ==============================
     with tab_manage:
         if not loans_df.empty:
-            target_id = st.selectbox("Select Loan ID to Edit", loans_df["id"].unique())
+            # Provide descriptive labels for the selector
+            edit_options = dict(zip(loans_df["display_label"], loans_df["id"]))
+            target_label = st.selectbox("Select Loan to Edit", options=list(edit_options.keys()))
+            target_id = edit_options[target_label]
+            
             loan_to_edit = loans_df[loans_df["id"] == target_id].iloc[0]
 
             with st.form("edit_loan_form"):
                 c1, c2 = st.columns(2)
-                current_name = bor_map.get(str(loan_to_edit['borrower_id']), "Unknown")
-                st.text(f"Editing Loan for: {current_name}")
+                st.markdown(f"**Editing Record:** {target_label}")
                 
                 e_princ = c1.number_input("Principal", value=float(loan_to_edit['principal']))
-                e_stat = c2.selectbox("Status", ["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"], index=0)
+                
+                # Update status list to match SQL Check Constraint
+                status_list = ["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED OVER"]
+                try:
+                    current_idx = status_list.index(normalize_status(loan_to_edit['status']))
+                except ValueError:
+                    current_idx = 0
+                    
+                e_stat = c2.selectbox("Status", status_list, index=current_idx)
                 
                 if st.form_submit_button("💾 Save Changes"):
                     update_data = pd.DataFrame([{
                         "id": target_id, 
-                        "principal": e_princ, 
-                        "status": normalize_status(e_stat), 
+                        "principal": float(e_princ), 
+                        "status": e_stat, # Use straight value to match SQL rule
                         "tenant_id": st.session_state.get('tenant_id')
                     }])
                     if save_data("loans", update_data):
                         st.success("✅ Loan updated!")
                         st.rerun()
 
-            if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
+            st.divider()
+            if st.button("🗑️ Delete Loan Permanently", use_container_width=True, type="secondary"):
                 supabase.table("loans").delete().eq("id", target_id).execute()
-                st.warning("Loan Deleted.")
+                st.warning(f"Loan {target_label} has been deleted.")
                 st.rerun()
-
 
 
 # ==============================
