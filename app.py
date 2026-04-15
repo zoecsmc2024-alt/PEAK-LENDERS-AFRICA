@@ -1436,216 +1436,218 @@ def show_collateral():
                         st.rerun()
             
 
-17. ACTIVITY CALENDAR PAGE (SAAS + ENTERPRISE UPGRADE)
-==============================
+# ==============================
+# 17. ACTIVITY CALENDAR PAGE (SAAS + ENTERPRISE UPGRADE)
+# ==============================
 
 from streamlit_calendar import calendar
 import pandas as pd
 import streamlit as st
 
 def show_calendar():
-st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
+    
     # ==============================
-# 🔐 SAAS TENANT CONTEXT (ENHANCED SAFETY)
-# ==============================
-tenant_id = st.session_state.get("tenant_id", "default_tenant")
+    # 🔐 SAAS TENANT CONTEXT (ENHANCED SAFETY)
+    # ==============================
+    tenant_id = st.session_state.get("tenant_id", "default_tenant")
 
-# ==============================
-# 1. FETCH DATA (SAFETY WRAPPER ADDED)
-# ==============================
-try:
-    loans_df = get_cached_data("Loans")  # keeps your logic
-except Exception:
-    loans_df = pd.DataFrame()
+    # ==============================
+    # 1. FETCH DATA (SAFETY WRAPPER ADDED)
+    # ==============================
+    try:
+        loans_df = get_cached_data("Loans")  # keeps your logic
+    except Exception:
+        loans_df = pd.DataFrame()
 
-# ==============================
-# SAAS FILTER (HARDENED - NO LOGIC CHANGE)
-# ==============================
-if loans_df is not None and not loans_df.empty:
-    if "tenant_id" in loans_df.columns:
-        loans_df = loans_df[loans_df["tenant_id"] == tenant_id]
-    else:
-        loans_df["tenant_id"] = tenant_id
-
-# ==============================
-# EMPTY STATE (UNCHANGED LOGIC)
-# ==============================
-if loans_df is None or loans_df.empty:
-    st.info("📅 Calendar is clear! No active loans to track.")
-    return
-
-# ==============================
-# COLUMN NORMALIZATION (ENHANCED SAFETY ONLY)
-# ==============================
-loans_df.columns = (
-    loans_df.columns
-    .astype(str)
-    .str.strip()
-    .str.lower()
-    .str.replace(" ", "_")
-)
-
-# ==============================
-# SAFE COLUMN DETECTION (IMPROVED GUARDS ONLY)
-# ==============================
-l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
-l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c or 'label' in c), "borrower_id")
-l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
-l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c), "end_date")
-l_rev_col = next((c for c in loans_df.columns if 'repayable' in c or 'amount' in c), "total_repayable")
-
-# ==============================
-# SAFE COLUMN FALLBACKS (NO LOGIC REMOVED)
-# ==============================
-for col in [l_id_col, l_bor_col, l_stat_col, l_end_col, l_rev_col]:
-    if col not in loans_df.columns:
-        loans_df[col] = None
-
-# ==============================
-# TYPE STANDARDIZATION (HARDENED)
-# ==============================
-loans_df[l_end_col] = pd.to_datetime(loans_df[l_end_col], errors="coerce")
-loans_df[l_rev_col] = pd.to_numeric(loans_df[l_rev_col], errors="coerce").fillna(0)
-loans_df[l_bor_col] = loans_df[l_bor_col].astype(str).str.upper()
-
-today = pd.Timestamp.today().normalize()
-
-active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "closed"].copy()
-
-# ==============================
-# CALENDAR EVENTS (UNCHANGED LOGIC + SAFETY)
-# ==============================
-calendar_events = []
-for _, r in active_loans.iterrows():
-    if pd.notna(r[l_end_col]):
-        try:
-            is_overdue = r[l_end_col].date() < today.date()
-        except Exception:
-            is_overdue = False
-
-        ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
-
-        calendar_events.append({
-            "title": f"UGX {float(r[l_rev_col]):,.0f} - {r[l_bor_col]}",
-            "start": r[l_end_col].strftime("%Y-%m-%d"),
-            "end": r[l_end_col].strftime("%Y-%m-%d"),
-            "color": ev_color,
-            "allDay": True,
-        })
-
-calendar_options = {
-    "headerToolbar": {
-        "left": "prev,next today",
-        "center": "title",
-        "right": "dayGridMonth,timeGridWeek"
-    },
-    "initialView": "dayGridMonth",
-    "selectable": True,
-}
-
-calendar(events=calendar_events, options=calendar_options, key="collection_cal")
-
-st.markdown("---")
-
-# ==============================
-# METRICS (SAFETY ENHANCED ONLY)
-# ==============================
-try:
-    due_today_df = active_loans[active_loans[l_end_col].dt.date == today.date()]
-    upcoming_df = active_loans[
-        (active_loans[l_end_col] > today) &
-        (active_loans[l_end_col] <= today + pd.Timedelta(days=7))
-    ]
-    overdue_count = active_loans[active_loans[l_end_col] < today].shape[0]
-except Exception:
-    due_today_df = pd.DataFrame()
-    upcoming_df = pd.DataFrame()
-    overdue_count = 0
-
-m1, m2, m3 = st.columns(3)
-
-m1.markdown(
-    f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;">
-    <p>DUE TODAY</p><p>{len(due_today_df)} Accounts</p></div>""",
-    unsafe_allow_html=True
-)
-
-m2.markdown(
-    f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;">
-    <p>UPCOMING</p><p>{len(upcoming_df)} Accounts</p></div>""",
-    unsafe_allow_html=True
-)
-
-m3.markdown(
-    f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;">
-    <p>OVERDUE</p><p>{overdue_count}</p></div>""",
-    unsafe_allow_html=True
-)
-
-# ==============================
-# MASTER LOAN LEDGER (HARDENED ONLY)
-# ==============================
-st.markdown("### 🏢 Master Loan Ledger")
-
-if active_loans.empty:
-    st.info("ℹ️ No loan records found.")
-else:
-    df = active_loans.copy()
-
-    def find_col(names):
-        for col in df.columns:
-            if any(n in col.lower() for n in names):
-                return col
-        return None
-
-    id_col = find_col(["id"])
-    borrower_col = find_col(["borrower", "name"])
-    amount_col = find_col(["amount", "principal"])
-    status_col = find_col(["status"])
-    due_col = find_col(["due", "end"])
-
-    if not id_col or not borrower_col:
-        st.error("❌ Required columns missing")
-        st.stop()
-
-    df[id_col] = df[id_col].astype(str)
-
-    if amount_col:
-        df[amount_col] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
-
-    if due_col:
-        df[due_col] = pd.to_datetime(df[due_col], errors="coerce")
-
-    display_cols = {id_col: "ID", borrower_col: "Borrower"}
-
-    if amount_col:
-        display_cols[amount_col] = "Amount"
-    if due_col:
-        display_cols[due_col] = "Due Date"
-    if status_col:
-        display_cols[status_col] = "Status"
-
-    view_df = df[list(display_cols.keys())].rename(columns=display_cols)
-
-    if "Amount" in view_df.columns:
-        view_df["Amount"] = view_df["Amount"].apply(lambda x: f"{x:,.0f}")
-
-    if "Due Date" in view_df.columns:
-        view_df["Due Date"] = pd.to_datetime(view_df["Due Date"], errors='coerce').dt.strftime("%Y-%m-%d")
-
-    st.dataframe(view_df, use_container_width=True)
-
-    if due_col:
-        overdue_count = (df[due_col] < pd.Timestamp.now()).sum()
-
-        if overdue_count > 0:
-            st.warning(f"⚠️ {overdue_count} loan(s) overdue")
+    # ==============================
+    # SAAS FILTER (HARDENED - NO LOGIC CHANGE)
+    # ==============================
+    if loans_df is not None and not loans_df.empty:
+        if "tenant_id" in loans_df.columns:
+            loans_df = loans_df[loans_df["tenant_id"] == tenant_id]
         else:
-            st.success("✅ No overdue loans")                                                                                                                      
+            loans_df["tenant_id"] = tenant_id
+
+    # ==============================
+    # EMPTY STATE (UNCHANGED LOGIC)
+    # ==============================
+    if loans_df is None or loans_df.empty:
+        st.info("📅 Calendar is clear! No active loans to track.")
+        return
+
+    # ==============================
+    # COLUMN NORMALIZATION (ENHANCED SAFETY ONLY)
+    # ==============================
+    loans_df.columns = (
+        loans_df.columns
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_")
+    )
+
+    # ==============================
+    # SAFE COLUMN DETECTION (IMPROVED GUARDS ONLY)
+    # ==============================
+    l_id_col = next((c for c in loans_df.columns if 'id' in c), "id")
+    l_bor_col = next((c for c in loans_df.columns if 'borrower' in c or 'name' in c or 'label' in c), "borrower_id")
+    l_stat_col = next((c for c in loans_df.columns if 'status' in c), "status")
+    l_end_col = next((c for c in loans_df.columns if 'end' in c or 'due' in c), "end_date")
+    l_rev_col = next((c for c in loans_df.columns if 'repayable' in c or 'amount' in c), "total_repayable")
+
+    # ==============================
+    # SAFE COLUMN FALLBACKS (NO LOGIC REMOVED)
+    # ==============================
+    for col in [l_id_col, l_bor_col, l_stat_col, l_end_col, l_rev_col]:
+        if col not in loans_df.columns:
+            loans_df[col] = None
+
+    # ==============================
+    # TYPE STANDARDIZATION (HARDENED)
+    # ==============================
+    loans_df[l_end_col] = pd.to_datetime(loans_df[l_end_col], errors="coerce")
+    loans_df[l_rev_col] = pd.to_numeric(loans_df[l_rev_col], errors="coerce").fillna(0)
+    loans_df[l_bor_col] = loans_df[l_bor_col].astype(str).str.upper()
+
+    today = pd.Timestamp.today().normalize()
+
+    active_loans = loans_df[loans_df[l_stat_col].astype(str).str.lower() != "closed"].copy()
+
+    # ==============================
+    # CALENDAR EVENTS (UNCHANGED LOGIC + SAFETY)
+    # ==============================
+    calendar_events = []
+    for _, r in active_loans.iterrows():
+        if pd.notna(r[l_end_col]):
+            try:
+                is_overdue = r[l_end_col].date() < today.date()
+            except Exception:
+                is_overdue = False
+
+            ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
+
+            calendar_events.append({
+                "title": f"UGX {float(r[l_rev_col]):,.0f} - {r[l_bor_col]}",
+                "start": r[l_end_col].strftime("%Y-%m-%d"),
+                "end": r[l_end_col].strftime("%Y-%m-%d"),
+                "color": ev_color,
+                "allDay": True,
+            })
+
+    calendar_options = {
+        "headerToolbar": {
+            "left": "prev,next today",
+            "center": "title",
+            "right": "dayGridMonth,timeGridWeek"
+        },
+        "initialView": "dayGridMonth",
+        "selectable": True,
+    }
+
+    calendar(events=calendar_events, options=calendar_options, key="collection_cal")
+
+    st.markdown("---")
+
+    # ==============================
+    # METRICS (SAFETY ENHANCED ONLY)
+    # ==============================
+    try:
+        due_today_df = active_loans[active_loans[l_end_col].dt.date == today.date()]
+        upcoming_df = active_loans[
+            (active_loans[l_end_col] > today) & 
+            (active_loans[l_end_col] <= today + pd.Timedelta(days=7))
+        ]
+        overdue_count = active_loans[active_loans[l_end_col] < today].shape[0]
+    except Exception:
+        due_today_df = pd.DataFrame()
+        upcoming_df = pd.DataFrame()
+        overdue_count = 0
+
+    m1, m2, m3 = st.columns(3)
+
+    m1.markdown(
+        f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;">
+        <p style='margin:0;font-size:0.8em;color:grey;'>DUE TODAY</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{len(due_today_df)} Accounts</p></div>""",
+        unsafe_allow_html=True
+    )
+
+    m2.markdown(
+        f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;">
+        <p style='margin:0;font-size:0.8em;color:grey;'>UPCOMING</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{len(upcoming_df)} Accounts</p></div>""",
+        unsafe_allow_html=True
+    )
+
+    m3.markdown(
+        f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;">
+        <p style='margin:0;font-size:0.8em;color:grey;'>OVERDUE</p><p style='margin:0;font-size:1.5em;font-weight:bold;'>{overdue_count}</p></div>""",
+        unsafe_allow_html=True
+    )
+
+    # ==============================
+    # MASTER LOAN LEDGER (HARDENED ONLY)
+    # ==============================
+    st.markdown("### 🏢 Master Loan Ledger")
+
+    if active_loans.empty:
+        st.info("ℹ️ No loan records found.")
+    else:
+        df = active_loans.copy()
+
+        def find_col(names):
+            for col in df.columns:
+                if any(n in col.lower() for n in names):
+                    return col
+            return None
+
+        id_col = find_col(["id"])
+        borrower_col = find_col(["borrower", "name"])
+        amount_col = find_col(["amount", "principal"])
+        status_col = find_col(["status"])
+        due_col = find_col(["due", "end"])
+
+        if not id_col or not borrower_col:
+            st.error("❌ Required columns missing")
+            st.stop()
+
+        df[id_col] = df[id_col].astype(str)
+
+        if amount_col:
+            df[amount_col] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
+
+        if due_col:
+            df[due_col] = pd.to_datetime(df[due_col], errors="coerce")
+
+        display_cols = {id_col: "ID", borrower_col: "Borrower"}
+
+        if amount_col:
+            display_cols[amount_col] = "Amount"
+        if due_col:
+            display_cols[due_col] = "Due Date"
+        if status_col:
+            display_cols[status_col] = "Status"
+
+        view_df = df[list(display_cols.keys())].rename(columns=display_cols)
+
+        if "Amount" in view_df.columns:
+            view_df["Amount"] = view_df["Amount"].apply(lambda x: f"{x:,.0f}")
+
+        if "Due Date" in view_df.columns:
+            view_df["Due Date"] = pd.to_datetime(view_df["Due Date"], errors='coerce').dt.strftime("%Y-%m-%d")
+
+        st.dataframe(view_df, use_container_width=True)
+
+        if due_col:
+            overdue_count_check = (df[due_col] < pd.Timestamp.now()).sum()
+
+            if overdue_count_check > 0:
+                st.warning(f"⚠️ {overdue_count_check} loan(s) overdue")
+            else:
+                st.success("✅ No overdue loans")                                                                                                                      
                                                                                                                                                                                                                                                                  
-==============================
-18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
-==============================
+# ==============================
+# 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
+# ==============================
 
 import plotly.express as px
 import uuid
@@ -1654,341 +1656,343 @@ import streamlit as st
 from datetime import datetime
 
 def show_expenses():
-"""
-Tracks business operational costs for specific tenants.
-(Upgraded for enterprise SaaS safety)
-"""
-st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
+    """
+    Tracks business operational costs for specific tenants.
+    (Upgraded for enterprise SaaS safety)
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
+    
     # ==============================
-# 🔐 SAAS TENANT CONTEXT (HARDENED)
-# ==============================
-current_tenant = st.session_state.get('tenant_id', 'default_tenant')
+    # 🔐 SAAS TENANT CONTEXT (HARDENED)
+    # ==============================
+    current_tenant = st.session_state.get('tenant_id', 'default_tenant')
 
-# ==============================
-# 1. FETCH DATA (SAFE WRAPPER ADDED)
-# ==============================
-try:
-    df = get_cached_data("expenses")
-except Exception:
-    df = pd.DataFrame()
+    # ==============================
+    # 1. FETCH DATA (SAFE WRAPPER ADDED)
+    # ==============================
+    try:
+        df = get_cached_data("expenses")
+    except Exception:
+        df = pd.DataFrame()
 
-# ==============================
-# SAAS FILTER (UNCHANGED LOGIC + SAFETY)
-# ==============================
-if df is not None and not df.empty:
-    if "tenant_id" in df.columns:
-        df = df[df["tenant_id"] == current_tenant]
-    else:
-        df["tenant_id"] = current_tenant
+    # ==============================
+    # SAAS FILTER (UNCHANGED LOGIC + SAFETY)
+    # ==============================
+    if df is not None and not df.empty:
+        if "tenant_id" in df.columns:
+            df = df[df["tenant_id"] == current_tenant]
+        else:
+            df["tenant_id"] = current_tenant
 
-EXPENSE_CATS = ["Rent", "Insurance Account", "Utilities", "Salaries", "Marketing", "Office Expenses"]
+    EXPENSE_CATS = ["Rent", "Insurance Account", "Utilities", "Salaries", "Marketing", "Office Expenses"]
 
-# ==============================
-# EMPTY DATA SAFE INIT (UNCHANGED STRUCTURE)
-# ==============================
-if df is None or df.empty:
-    df = pd.DataFrame(columns=[
-        "id", "category", "amount", "date",
-        "description", "payment_date", "receipt_no", "tenant_id"
+    # ==============================
+    # EMPTY DATA SAFE INIT (UNCHANGED STRUCTURE)
+    # ==============================
+    if df is None or df.empty:
+        df = pd.DataFrame(columns=[
+            "id", "category", "amount", "date",
+            "description", "payment_date", "receipt_no", "tenant_id"
+        ])
+
+    # ==============================
+    # COLUMN GUARANTEE (NO LOGIC REMOVED)
+    # ==============================
+    for col in ["id", "category", "amount", "date", "description",
+                "payment_date", "receipt_no", "tenant_id"]:
+        if col not in df.columns:
+            df[col] = None
+
+    # ==============================
+    # TABS (UNCHANGED)
+    # ==============================
+    tab_add, tab_view, tab_manage = st.tabs([
+        "➕ Record Expense", "📊 Spending Analysis", "⚙️ Manage/Delete"
     ])
 
-# ==============================
-# COLUMN GUARANTEE (NO LOGIC REMOVED)
-# ==============================
-for col in ["id", "category", "amount", "date", "description",
-            "payment_date", "receipt_no", "tenant_id"]:
-    if col not in df.columns:
-        df[col] = None
+    # ==============================
+    # TAB 1: ADD (SAFE WRAPPER ONLY)
+    # ==============================
+    with tab_add:
+        with st.form("add_expense_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
 
+            category = col1.selectbox("Category", EXPENSE_CATS)
+            amount = col2.number_input("Amount (UGX)", min_value=0, step=1000)
+            desc = st.text_input("Description")
+
+            c_date, c_receipt = st.columns(2)
+            p_date = c_date.date_input("Actual Payment Date", value=datetime.now())
+            receipt_no = c_receipt.text_input("Receipt / Invoice #")
+
+            if st.form_submit_button("🚀 Save Expense Record", use_container_width=True):
+                if amount > 0 and desc:
+                    try:
+                        new_entry = pd.DataFrame([{
+                            "id": str(uuid.uuid4()),
+                            "category": category,
+                            "amount": float(amount),
+                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            "description": desc,
+                            "payment_date": p_date.strftime("%Y-%m-%d"),
+                            "receipt_no": receipt_no,
+                            "tenant_id": current_tenant
+                        }])
+
+                        updated_df = pd.concat([df, new_entry], ignore_index=True)
+
+                        if save_data("expenses", updated_df):
+                            st.success("✅ Expense recorded!")
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"🚨 Save failed: {e}")
+                else:
+                    st.error("⚠️ Provide amount & description.")
+
+    # ==============================
+    # TAB 2: VIEW (SAFE + CRASH PROTECTION)
+    # ==============================
+    with tab_view:
+        if not df.empty:
+            try:
+                df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+                total_spent = df["amount"].sum()
+
+                st.markdown(f"<h3>Total Spent: {total_spent:,.0f} UGX</h3>", unsafe_allow_html=True)
+
+                cat_summary = df.groupby("category")["amount"].sum().reset_index()
+                fig_exp = px.pie(cat_summary, names="category", values="amount", title="Expenses by Category")
+                st.plotly_chart(fig_exp, use_container_width=True)
+
+            except Exception:
+                st.warning("⚠️ Unable to generate analytics due to data format issues.")
+        else:
+            st.info("💡 No expenses recorded.")
+
+    # ==============================
+    # TAB 3: MANAGE (ENTERPRISE SAFE)
+    # ==============================
+    with tab_manage:
+        st.markdown("### 🛠️ Manage Outflow Records")
+
+        if df.empty:
+            st.info("ℹ️ No expenses found to manage.")
+        else:
+            try:
+                df = df.copy()
+
+                df["id"] = df["id"].astype(str)
+                df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+
+                df["label"] = df.apply(
+                    lambda r: f"{r['category']} - {r['amount']:,.0f} UGX | {str(r['payment_date'])[:10]}",
+                    axis=1
+                )
+
+                exp_map = {row["label"]: row for _, row in df.iterrows()}
+                selected_label = st.selectbox("🔍 Select Expense to Edit/Delete", list(exp_map.keys()))
+
+                if selected_label:
+                    exp_to_edit = exp_map[selected_label]
+                    exp_id = exp_to_edit["id"]
+
+                    with st.form("edit_expense_form"):
+                        up_amt = st.number_input("Update Amount", value=float(exp_to_edit['amount']))
+                        
+                        if st.form_submit_button("💾 Save Changes"):
+                            df.loc[df["id"] == exp_id, "amount"] = up_amt
+                            # Clean up the helper label before saving
+                            final_df = df.drop(columns=['label'])
+                            if save_data("expenses", final_df):
+                                st.success("✅ Updated!")
+                                st.rerun()
+
+                    st.divider()
+
+                    if st.button("🗑️ Delete Selected Expense", type="secondary"):
+                        df = df[df["id"] != exp_id]
+                        final_df = df.drop(columns=['label'])
+                        if save_data("expenses", final_df):
+                            st.success("✅ Deleted!")
+                            st.rerun()
+
+            except Exception as e:
+                st.error(f"🚨 Manage error: {e}")
 # ==============================
-# TABS (UNCHANGED)
+# 13. LOANS MANAGEMENT PAGE (Luxe Edition + ENTERPRISE SAAS UPGRADE)
 # ==============================
-tab_add, tab_view, tab_manage = st.tabs([
-    "➕ Record Expense", "📊 Spending Analysis", "⚙️ Manage/Delete"
-])
 
-# ==============================
-# TAB 1: ADD (SAFE WRAPPER ONLY)
-# ==============================
-with tab_add:
-    with st.form("add_expense_form", clear_on_submit=True):
-        col1, col2 = st.columns(2)
+def show_loans():
+    """
+    Core engine for issuing and managing loan agreements.
+    Features Midnight Blue branding, Start Date tracking, and formatted currency.
+    (Upgraded for enterprise SaaS stability)
+    """
+    st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
 
-        category = col1.selectbox("Category", EXPENSE_CATS)
-        amount = col2.number_input("Amount (UGX)", min_value=0, step=1000)
-        desc = st.text_input("Description")
+    # ==============================
+    # 🔐 SAAS CONTEXT (HARDENED)
+    # ==============================
+    current_tenant = st.session_state.get("tenant_id")
 
-        c_date, c_receipt = st.columns(2)
-        p_date = c_date.date_input("Actual Payment Date", value=datetime.now())
-        receipt_no = c_receipt.text_input("Receipt / Invoice #")
+    # ==============================
+    # 1. LOAD & NORMALIZE DATA (SAFE WRAPPER)
+    # ==============================
+    try:
+        if "loans" in st.session_state and not st.session_state.loans.empty:
+            loans_df = st.session_state.loans.copy()
+        else:
+            loans_df = get_cached_data("Loans")
 
-        if st.form_submit_button("🚀 Save Expense Record", use_container_width=True):
-            if amount > 0 and desc:
-                try:
-                    new_entry = pd.DataFrame([{
-                        "id": str(uuid.uuid4()),
-                        "category": category,
-                        "amount": float(amount),
-                        "date": datetime.now().strftime("%Y-%m-%d"),
-                        "description": desc,
-                        "payment_date": p_date.strftime("%Y-%m-%d"),
-                        "receipt_no": receipt_no,
-                        "tenant_id": current_tenant
-                    }])
+            if loans_df is not None:
+                st.session_state.loans = loans_df.copy()
+    except Exception:
+        loans_df = pd.DataFrame()
 
-                    updated_df = pd.concat([df, new_entry], ignore_index=True)
+    try:
+        borrowers_df = get_cached_data("Borrowers")
+    except Exception:
+        borrowers_df = pd.DataFrame()
 
-                    if save_data("expenses", updated_df):
-                        st.success("✅ Expense recorded!")
-                        st.rerun()
-                except Exception as e:
-                    st.error(f"🚨 Save failed: {e}")
-            else:
-                st.error("⚠️ Provide amount & description.")
-
-# ==============================
-# TAB 2: VIEW (SAFE + CRASH PROTECTION)
-# ==============================
-with tab_view:
-    if not df.empty:
+    # ==============================
+    # BORROWER NORMALIZATION (UNCHANGED LOGIC + SAFETY)
+    # ==============================
+    if borrowers_df is not None and not borrowers_df.empty:
+        borrowers_df.columns = [str(c).strip().replace(" ", "_") for c in borrowers_df.columns]
         try:
-            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
-            total_spent = df["amount"].sum()
-
-            st.markdown(f"<h3>{total_spent:,.0f} UGX</h3>", unsafe_allow_html=True)
-
-            cat_summary = df.groupby("category")["amount"].sum().reset_index()
-            fig_exp = px.pie(cat_summary, names="category", values="amount")
-            st.plotly_chart(fig_exp, use_container_width=True)
-
+            active_borrowers = borrowers_df[
+                borrowers_df["Status"].astype(str).str.lower() == "active"
+            ]
         except Exception:
-            st.warning("⚠️ Unable to generate analytics due to data format issues.")
+            active_borrowers = pd.DataFrame()
     else:
-        st.info("💡 No expenses recorded.")
+        active_borrowers = pd.DataFrame()
 
-# ==============================
-# TAB 3: MANAGE (ENTERPRISE SAFE)
-# ==============================
-with tab_manage:
-    st.markdown("### 🛠️ Manage Outflow Records")
+    # ==============================
+    # EMPTY SAFE INIT (UNCHANGED)
+    # ==============================
+    if loans_df is None or loans_df.empty:
+        loans_df = pd.DataFrame(columns=[
+            "Loan_ID","Borrower","Principal","Interest",
+            "Total_Repayable","Amount_Paid","Balance",
+            "Status","Start_Date","End_Date"
+        ])
 
-    if df.empty:
-        st.info("ℹ️ No expenses found to manage.")
-    else:
+    # ==============================
+    # COLUMN NORMALIZATION (SAFE)
+    # ==============================
+    loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
+
+    # ==============================
+    # 🔐 MULTI-TENANT FIX (ENHANCED SAFETY)
+    # ==============================
+    if "tenant_id" in loans_df.columns:
         try:
-            df = df.copy()
+            loans_df = loans_df[
+                loans_df["tenant_id"].astype(str) == str(current_tenant)
+            ]
+        except Exception:
+            pass
 
-            df["id"] = df["id"].astype(str)
-            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+    # ==============================
+    # NUMERIC CLEANING (HARDENED)
+    # ==============================
+    num_cols = ["Principal","Interest","Total_Repayable","Amount_Paid","Balance"]
 
-            df["label"] = df.apply(
-                lambda r: f"{r['category']} - {r['amount']:,.0f} UGX | {str(r['payment_date'])[:10]}",
+    for col in num_cols:
+        if col in loans_df.columns:
+            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+
+    loans_df["Balance"] = loans_df["Total_Repayable"] - loans_df["Amount_Paid"]
+
+    # ==============================
+    # AUTO CLOSE ENGINE (UNCHANGED LOGIC + SAFE GUARD)
+    # ==============================
+    if not loans_df.empty:
+        loans_df["Balance"] = loans_df["Balance"].clip(lower=0)
+
+        try:
+            closed_mask = loans_df["Balance"] <= 0
+            loans_df.loc[closed_mask, "Status"] = "Closed"
+            loans_df.loc[closed_mask, "Balance"] = 0
+        except Exception:
+            pass
+
+    # ==============================
+    # TABS (UNCHANGED)
+    # ==============================
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+        "📑 Portfolio View","➕ New Loan","🛠️ Manage/Edit","⚙️ Actions"
+    ])
+
+    # ==============================
+    # TAB VIEW (SAFE WRAPPER ONLY)
+    # ==============================
+    with tab_view:
+        if not loans_df.empty:
+            display_df = loans_df.copy()
+
+            display_df["Loan_ID"] = display_df["Loan_ID"].astype(str).str.replace(".0","",regex=False)
+
+            active_view = display_df.copy()
+
+            if not active_view.empty:
+                sel_id = st.selectbox(
+                    "🔍 Select Loan to Inspect",
+                    active_view["Loan_ID"].unique()
+                )
+
+                loan_history = active_view[
+                    active_view["Loan_ID"].astype(str) == str(sel_id)
+                ]
+
+                if not loan_history.empty:
+                    latest_info = loan_history.sort_values("Start_Date").iloc[-1]
+
+                    rec_val = float(latest_info.get("Amount_Paid",0))
+                    out_val = float(latest_info.get("Balance",0))
+                    stat_val = str(latest_info.get("Status","Active")).upper()
+                else:
+                    rec_val, out_val, stat_val = 0,0,"N/A"
+
+                if stat_val == "CLOSED":
+                    out_val = 0
+        else:
+            st.info("📭 No loan records available.")
+
+    # ==============================
+    # TAB MANAGE (HARDENED ONLY)
+    # ==============================
+    with tab_manage:
+        if loans_df.empty:
+            st.info("No loans available to manage.")
+        else:
+            loans_df["display_name"] = loans_df.apply(
+                lambda x: f"ID: {str(x['Loan_ID']).replace('.0','')} - {x['Borrower']}",
                 axis=1
             )
 
-            exp_map = {row["label"]: row for _, row in df.iterrows()}
-
-            selected_label = st.selectbox("🔍 Select Expense", list(exp_map.keys()))
-
-            exp_to_edit = exp_map[selected_label]
-            exp_id = exp_to_edit["id"]
-
-            with st.form("edit_expense_form"):
-                up_amt = st.number_input("Update Amount", value=float(exp_to_edit['amount']))
-
-                if st.form_submit_button("💾 Save Changes"):
-                    df.loc[df["id"] == exp_id, "amount"] = up_amt
-
-                    if save_data("expenses", df):
-                        st.success("✅ Updated!")
-                        st.rerun()
-
-            st.divider()
-
-            if st.button("🗑️ Delete"):
-                df = df[df["id"] != exp_id]
-
-                if save_data("expenses", df):
-                    st.success("✅ Deleted!")
-                    st.rerun()
-
-        except Exception as e:
-            st.error(f"🚨 Manage error: {e}")
-==============================
-13. LOANS MANAGEMENT PAGE (Luxe Edition + ENTERPRISE SAAS UPGRADE)
-==============================
-
-def show_loans():
-"""
-Core engine for issuing and managing loan agreements.
-Features Midnight Blue branding, Start Date tracking, and formatted currency.
-(Upgraded for enterprise SaaS stability)
-"""
-st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
-
-    # ==============================
-# 🔐 SAAS CONTEXT (HARDENED)
-# ==============================
-current_tenant = st.session_state.get("tenant_id")
-
-# ==============================
-# 1. LOAD & NORMALIZE DATA (SAFE WRAPPER)
-# ==============================
-try:
-    if "loans" in st.session_state and not st.session_state.loans.empty:
-        loans_df = st.session_state.loans.copy()
-    else:
-        loans_df = get_cached_data("Loans")
-
-        if loans_df is not None:
-            st.session_state.loans = loans_df.copy()
-except Exception:
-    loans_df = pd.DataFrame()
-
-try:
-    borrowers_df = get_cached_data("Borrowers")
-except Exception:
-    borrowers_df = pd.DataFrame()
-
-# ==============================
-# BORROWER NORMALIZATION (UNCHANGED LOGIC + SAFETY)
-# ==============================
-if borrowers_df is not None and not borrowers_df.empty:
-    borrowers_df.columns = [str(c).strip().replace(" ", "_") for c in borrowers_df.columns]
-    try:
-        active_borrowers = borrowers_df[
-            borrowers_df["Status"].astype(str).str.lower() == "active"
-        ]
-    except Exception:
-        active_borrowers = pd.DataFrame()
-else:
-    active_borrowers = pd.DataFrame()
-
-# ==============================
-# EMPTY SAFE INIT (UNCHANGED)
-# ==============================
-if loans_df is None or loans_df.empty:
-    loans_df = pd.DataFrame(columns=[
-        "Loan_ID","Borrower","Principal","Interest",
-        "Total_Repayable","Amount_Paid","Balance",
-        "Status","Start_Date","End_Date"
-    ])
-
-# ==============================
-# COLUMN NORMALIZATION (SAFE)
-# ==============================
-loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
-
-# ==============================
-# 🔐 MULTI-TENANT FIX (ENHANCED SAFETY)
-# ==============================
-if "tenant_id" in loans_df.columns:
-    try:
-        loans_df = loans_df[
-            loans_df["tenant_id"].astype(str) == str(current_tenant)
-        ]
-    except Exception:
-        pass
-
-# ==============================
-# NUMERIC CLEANING (HARDENED)
-# ==============================
-num_cols = ["Principal","Interest","Total_Repayable","Amount_Paid","Balance"]
-
-for col in num_cols:
-    if col in loans_df.columns:
-        loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
-
-loans_df["Balance"] = loans_df["Total_Repayable"] - loans_df["Amount_Paid"]
-
-# ==============================
-# AUTO CLOSE ENGINE (UNCHANGED LOGIC + SAFE GUARD)
-# ==============================
-if not loans_df.empty:
-    loans_df["Balance"] = loans_df["Balance"].clip(lower=0)
-
-    try:
-        closed_mask = loans_df["Balance"] <= 0
-        loans_df.loc[closed_mask, "Status"] = "Closed"
-        loans_df.loc[closed_mask, "Balance"] = 0
-    except Exception:
-        pass
-
-# ==============================
-# TABS (UNCHANGED)
-# ==============================
-tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-    "📑 Portfolio View","➕ New Loan","🛠️ Manage/Edit","⚙️ Actions"
-])
-
-# ==============================
-# TAB VIEW (SAFE WRAPPER ONLY)
-# ==============================
-with tab_view:
-    if not loans_df.empty:
-        display_df = loans_df.copy()
-
-        display_df["Loan_ID"] = display_df["Loan_ID"].astype(str).str.replace(".0","",regex=False)
-
-        active_view = display_df.copy()
-
-        if not active_view.empty:
-            sel_id = st.selectbox(
-                "🔍 Select Loan to Inspect",
-                active_view["Loan_ID"].unique()
+            selected_display = st.selectbox(
+                "Select Loan to Manage/Edit",
+                loans_df["display_name"].unique()
             )
 
-            loan_history = active_view[
-                active_view["Loan_ID"].astype(str) == str(sel_id)
-            ]
+            clean_id = selected_display.split(" - ")[0].replace("ID: ","").strip()
 
-            if not loan_history.empty:
-                latest_info = loan_history.sort_values("Start_Date").iloc[-1]
+            try:
+                match = loans_df[
+                    loans_df["Loan_ID"].astype(str) == str(clean_id)
+                ]
+            except Exception:
+                match = pd.DataFrame()
 
-                rec_val = float(latest_info.get("Amount_Paid",0))
-                out_val = float(latest_info.get("Balance",0))
-                stat_val = str(latest_info.get("Status","Active")).upper()
+            if not match.empty:
+                loan_to_edit = match.iloc[0]
             else:
-                rec_val, out_val, stat_val = 0,0,"N/A"
+                st.error("Loan not found")
+                return
 
-            if stat_val == "CLOSED":
-                out_val = 0
-    else:
-        st.info("📭 No loan records available.")
-
-# ==============================
-# TAB MANAGE (HARDENED ONLY)
-# ==============================
-with tab_manage:
-    if loans_df.empty:
-        st.info("No loans available to manage.")
-    else:
-        loans_df["display_name"] = loans_df.apply(
-            lambda x: f"ID: {str(x['Loan_ID']).replace('.0','')} - {x['Borrower']}",
-            axis=1
-        )
-
-        selected_display = st.selectbox(
-            "Select Loan to Manage/Edit",
-            loans_df["display_name"].unique()
-        )
-
-        clean_id = selected_display.split(" - ")[0].replace("ID: ","").strip()
-
-        try:
-            match = loans_df[
-                loans_df["Loan_ID"].astype(str) == str(clean_id)
-            ]
-        except Exception:
-            match = pd.DataFrame()
-
-        if not match.empty:
-            loan_to_edit = match.iloc[0]
-        else:
-            st.error("Loan not found")
-            return
-
-        st.markdown(f"#### 🛠️ Edit Loan #{clean_id}")
+            st.markdown(f"#### 🛠️ Edit Loan #{clean_id}")
 
 def show_payroll():
     """
@@ -2165,7 +2169,7 @@ def show_payroll():
             if st.button("📥 Print PDF", key="print_pay_btn"):
                 st.components.v1.html("<script>window.print();</script>", height=0)
 
-            st.components.v1.html(rows_html, height=600, scrolling=True)
+            st.components.v1.html(f"<table>{rows_html}</table>", height=600, scrolling=True)
 
             # DELETE SAFE FIX
             st.write("---")
@@ -2184,7 +2188,6 @@ def show_payroll():
                             st.rerun()
                         except Exception as e:
                             st.error(f"Delete failed: {e}")
-
 
 
 def show_reports():
