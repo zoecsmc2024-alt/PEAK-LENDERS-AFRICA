@@ -843,6 +843,11 @@ def save_data_saas(table_name, df):
 # 13. LOANS MANAGEMENT PAGE (SAAS UPGRADE)
 # ==============================
 def show_loans():
+    df = get_cached_data("loans")
+
+    if df is None or df.empty:
+        st.info("No loans available.")
+        return:
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     st.markdown(f"<h2 style='color: {brand_color};'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
