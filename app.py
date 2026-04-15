@@ -1617,101 +1617,82 @@ def show_calendar():
     )
 
     # ==============================
-# MASTER LOAN LEDGER (HARDENED & LUXE)
+# MASTER LOAN LEDGER (LUXE EDITION)
 # ==============================
 st.markdown("### 🏢 Master Loan Ledger")
 
-if Active_loans.empty:
-    st.info("ℹ️ No Active loan records found.")
+# 1. LOAD DATA 
+loans_df = get_cached_data("loans")
+borrowers_df = get_cached_data("borrowers")
+
+# 2. DATA VALIDATION & MAPPING
+if loans_df is None or loans_df.empty:
+    st.info("ℹ️ No loan records found.")
 else:
-    # 1. Setup Mapping for Names (Fixes the "String/UUID" issue)
-    # Ensure borrowers_df is available in your scope
-    if not borrowers_df.empty:
+    # Create a clean copy for the ledger view
+    ledger_df = loans_df.copy()
+
+    # Create mapping: {UUID: "Human Name"}
+    if borrowers_df is not None and not borrowers_df.empty:
         bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
+        ledger_df['Borrower'] = ledger_df['borrower_id'].map(bor_map).fillna("Unknown")
     else:
-        bor_map = {}
+        ledger_df['Borrower'] = "No Borrower Data"
 
-    df = Active_loans.copy()
+    # 3. FORMATTING COLUMNS
+    # Prioritize user-friendly labels (e.g., LN-3199) over raw database IDs
+    ledger_df['ID'] = ledger_df['loan_id_label'].astype(str)
+    
+    # Ensure numeric types for the currency formatter
+    ledger_df['Amount'] = pd.to_numeric(ledger_df['principal'], errors='coerce').fillna(0)
+    
+    # Clean up dates
+    ledger_df['Due Date'] = pd.to_datetime(ledger_df['end_date'], errors='coerce').dt.strftime("%Y-%m-%d")
 
-    # 2. Map Borrower IDs to Names
-    # We target 'borrower_id' and map it to the names from our dictionary
-    if 'borrower_id' in df.columns:
-        df['borrower_name'] = df['borrower_id'].map(bor_map).fillna("Unknown Borrower")
-    else:
-        df['borrower_name'] = "Unknown"
-
-    # 3. Column Identification Logic
-    def find_col(names):
-        for col in df.columns:
-            if any(n in col.lower() for n in names):
-                return col
-        return None
-
-    # We prioritize our new 'borrower_name' column for display
-    id_col = find_col(["loan_id_label"]) or find_col(["id"])
-    borrower_display_col = "borrower_name" 
-    amount_col = find_col(["total_repayable"]) or find_col(["amount", "principal"])
-    status_col = find_col(["status"])
-    due_col = find_col(["due", "end"])
-
-    # 4. Data Formatting
-    if amount_col:
-        df[amount_col] = pd.to_numeric(df[amount_col], errors="coerce").fillna(0)
-    if due_col:
-        df[due_col] = pd.to_datetime(df[due_col], errors="coerce")
-
-    # Define clean display names
-    display_cols = {
-        id_col: "ID", 
-        borrower_display_col: "Borrower",
-        amount_col: "Amount (UGX)",
-        due_col: "Due Date",
-        status_col: "Status"
-    }
-
-    # Filter and rename for the view
-    available_cols = [k for k in display_cols.keys() if k is not None]
-    view_df = df[available_cols].rename(columns=display_cols)
-
-    # 5. Professional Styling Function
+    # 4. STATUS STYLING ENGINE
     def style_ledger(row):
-        status = str(row.get("Status", "")).upper()
+        status = str(row.get("status", "")).upper()
+        # Custom color palette for the Luxe theme
         colors = {
-            "ACTIVE": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
-            "ROLLED": "#7B1FA2", "BCF": "#FFA500", "PENDING": "#FBC02D"
+            "ACTIVE": "#4A90E2",   # Blue
+            "CLOSED": "#2E7D32",   # Green
+            "OVERDUE": "#D32F2F",  # Red
+            "ROLLED": "#7B1FA2",   # Purple
+            "BCF": "#FFA500",      # Orange
+            "PENDING": "#FBC02D"   # Yellow
         }
-        s_color = colors.get(status, "#9E9E9E")
+        bg_color = colors.get(status, "#9E9E9E")
         
-        # Default row style
+        # Apply standard row style and specific status badge style
         styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
-        
-        if "Status" in row.index:
-            idx = row.index.get_loc("Status")
-            styles[idx] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px;'
+        if "status" in row.index:
+            idx = row.index.get_loc("status")
+            styles[idx] = (
+                f'background-color: {bg_color}; color: white; font-weight: bold; '
+                'border-radius: 4px; text-align: center;'
+            )
         return styles
 
-    # 6. Render the Table
+    # 5. RENDER THE TABLE
+    display_cols = ["ID", "Borrower", "Amount", "Due Date", "status"]
+    
     st.dataframe(
-        view_df.style
+        ledger_df[display_cols].style
         .apply(style_ledger, axis=1)
-        .format({
-            "Amount (UGX)": "{:,.0f}",
-            "Due Date": lambda x: x.strftime("%Y-%m-%d") if pd.notnull(x) else "N/A"
-        }),
+        .format({"Amount": "{:,.0f} UGX"}),
         use_container_width=True,
         hide_index=True
     )
 
-    # 7. Final Action Warnings
-    if due_col:
-        # Ensure 'today' is defined (from datetime import datetime)
-        today_date = datetime.now().date()
-        overdue_count = (df[due_col].dt.date < today_date).sum()
-        
-        if overdue_count > 0:
-            st.warning(f"⚠️ Action Required: {overdue_count} loan(s) are currently past their due date.")
-        else:
-            st.success("✅ All collections are currently on track.")                                                                                                                      
+    # 6. OVERDUE NOTIFICATION
+    today = datetime.now().date()
+    overdue_mask = (pd.to_datetime(ledger_df['end_date']).dt.date < today) & (ledger_df['status'] != 'CLOSED')
+    overdue_count = overdue_mask.sum()
+    
+    if overdue_count > 0:
+        st.warning(f"⚠️ Action Required: {overdue_count} loan(s) are currently past their due date.")
+    else:
+        st.success("✅ All active collections are currently on track.")                                                                                                                      
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
