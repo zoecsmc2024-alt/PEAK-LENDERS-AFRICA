@@ -2951,10 +2951,13 @@ if __name__ == "__main__":
         # 1. AUTH FLOW (UNAUTHENTICATED)
         # ==============================
         if not st.session_state.get("logged_in"):
-
             apply_master_theme()
-            def run_auth_ui(supabase_client):
-            st.stop()
+        # Ensure supabase is actually defined before calling this!
+        if 'supabase' in globals():
+            run_auth_ui(supabase) 
+        else:
+            st.error("Database connection not initialized.")
+        st.stop()
 
         # ==============================
         # 2. AUTHENTICATED SESSION SAFETY
