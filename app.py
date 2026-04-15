@@ -2717,12 +2717,15 @@ def show_dashboard_view():
     st.write("---")
 
     # --- 9. RECENT LOANS TABLE ---
+brand_color = get_active_color() # <--- ADD THIS LINE TO DEFINE THE VARIABLE
+
 t1, t2 = st.columns(2)
 
 with t1:
-    st.markdown(f"<h4 style='color:{brand_color};'>Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+    st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
 
     if not active_df.empty:
+        # ... rest of your code ...
         # Sort by date and take top 5
         recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
         
