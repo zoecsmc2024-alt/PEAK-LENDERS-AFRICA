@@ -1871,231 +1871,145 @@ def show_calendar():
                 st.success("✅ No overdue loans")                                                                                                                      
                                                                                                                                                                                                                                                                  
 # ==============================
-# 18. EXPENSE MANAGEMENT PAGE
+# 18. EXPENSE MANAGEMENT PAGE (SAAS + DEBUG FIXED)
 # ==============================
 import plotly.express as px
+import uuid  # ✅ NEW (for id generation)
 
 def show_expenses():
     """
     Tracks business operational costs for specific tenants.
-    Includes category logging, distribution analytics, and row management.
     """
     st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
 
-    # 1. FETCH DATA
-    df = get_cached_data("expenses")
-    current_tenant = st.session_state.get('tenant_id')
+    # ==============================
+    # 🔐 SAAS TENANT CONTEXT
+    # ==============================
+    current_tenant = st.session_state.get('tenant_id', 'default_tenant')
 
-    # The Master Category List
+    # ==============================
+    # 1. FETCH DATA
+    # ==============================
+    df = get_cached_data("expenses")
+
+    # ✅ SAAS FILTER
+    if df is not None and not df.empty:
+        if "tenant_id" in df.columns:
+            df = df[df["tenant_id"] == current_tenant]
+        else:
+            df["tenant_id"] = current_tenant
+
     EXPENSE_CATS = ["Rent", "Insurance Account", "Utilities", "Salaries", "Marketing", "Office Expenses"]
 
     if df is None or df.empty:
-        df = pd.DataFrame(columns=["id", "category", "amount", "date", "description", "payment_date", "receipt_no"])
+        df = pd.DataFrame(columns=["id", "category", "amount", "date", "description", "payment_date", "receipt_no", "tenant_id"])
+
+    # Ensure required columns exist
+    for col in ["id", "category", "amount", "date", "description", "payment_date", "receipt_no", "tenant_id"]:
+        if col not in df.columns:
+            df[col] = None
 
     # ==============================
-    # TABBED INTERFACE
+    # TABS
     # ==============================
     tab_add, tab_view, tab_manage = st.tabs(["➕ Record Expense", "📊 Spending Analysis", "⚙️ Manage/Delete"])
 
-    # --- TAB 1: ADD NEW EXPENSE ---
+    # ------------------------------
+    # TAB 1: ADD
+    # ------------------------------
     with tab_add:
-        st.markdown("<br>", unsafe_allow_html=True)
         with st.form("add_expense_form", clear_on_submit=True):
-            st.markdown("<h4 style='color: #2B3F87;'>📝 Log Business Outflow</h4>", unsafe_allow_html=True)
             col1, col2 = st.columns(2)
             
             category = col1.selectbox("Category", EXPENSE_CATS)
             amount = col2.number_input("Amount (UGX)", min_value=0, step=1000)
-            desc = st.text_input("Description (e.g., Office Power Bill March)")
+            desc = st.text_input("Description")
             
             c_date, c_receipt = st.columns(2)
             p_date = c_date.date_input("Actual Payment Date", value=datetime.now())
-            receipt_no = c_receipt.text_input("Receipt / Invoice #", placeholder="e.g. RCP-101")
+            receipt_no = c_receipt.text_input("Receipt / Invoice #")
             
             if st.form_submit_button("🚀 Save Expense Record", use_container_width=True):
                 if amount > 0 and desc:
                     new_entry = pd.DataFrame([{
+                        "id": str(uuid.uuid4()),  # ✅ FIXED
                         "category": category,
                         "amount": float(amount),
-                        "date": datetime.now().strftime("%Y-%m-%d"), 
+                        "date": datetime.now().strftime("%Y-%m-%d"),
                         "description": desc,
-                        "payment_date": p_date.strftime("%Y-%m-%d"), 
+                        "payment_date": p_date.strftime("%Y-%m-%d"),
                         "receipt_no": receipt_no,
                         "tenant_id": current_tenant
                     }])
                     
-                    if save_data("expenses", new_entry):
-                        st.success(f"✅ Expense of {amount:,.0f} recorded!")
-                        st.cache_data.clear()
+                    updated_df = pd.concat([df, new_entry], ignore_index=True)
+
+                    if save_data("expenses", updated_df):
+                        st.success(f"✅ Expense recorded!")
                         st.rerun()
                 else:
-                    st.error("⚠️ Please provide both an amount and a description.")
+                    st.error("⚠️ Provide amount & description.")
 
-    # --- TAB 2: ANALYSIS & LOG ---
+    # ------------------------------
+    # TAB 2: VIEW
+    # ------------------------------
     with tab_view:
         if not df.empty:
             df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
             total_spent = df["amount"].sum()
-            
-            st.markdown(f"""
-                <div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);">
-                    <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">TOTAL MONTHLY OUTFLOW</p>
-                    <h2 style="margin:0;color:#FF4B4B;">{total_spent:,.0f} <span style="font-size:14px;">UGX</span></h2>
-                </div>""", unsafe_allow_html=True)
-            
-            # Pie Chart Analysis
+
+            st.markdown(f"<h3>{total_spent:,.0f} UGX</h3>", unsafe_allow_html=True)
+
             cat_summary = df.groupby("category")["amount"].sum().reset_index()
-            fig_exp = px.pie(cat_summary, names="category", values="amount", 
-                           title="Spending Distribution", hole=0.4, 
-                           color_discrete_sequence=["#2B3F87", "#F0F8FF", "#FF4B4B", "#ADB5BD"])
-            fig_exp.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
+            fig_exp = px.pie(cat_summary, names="category", values="amount")
             st.plotly_chart(fig_exp, use_container_width=True)
-            
-            # Detailed Expense Log (Custom HTML Table)
-            rows_html = ""
-            for i, r in df.sort_values("date", ascending=False).reset_index().iterrows():
-                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                rows_html += f"""
-                    <tr style="background-color:{bg};border-bottom:1px solid #ddd;">
-                        <td style="padding:10px;color:#666;font-size:11px;">{r['date']}</td>
-                        <td style="padding:10px;"><b>{r['category']}</b></td>
-                        <td style="padding:10px;font-size:11px;">{r['description']}</td>
-                        <td style="padding:10px;text-align:right;font-weight:bold;color:#FF4B4B;">{float(r['amount']):,.0f}</td>
-                        <td style="padding:10px;text-align:center;color:#666;font-size:10px;">{r['receipt_no']}</td>
-                    </tr>"""
 
-            st.markdown(f"""
-                <div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;">
-                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                        <thead>
-                            <tr style="background:#2B3F87;color:white;text-align:left;">
-                                <th style="padding:12px;">Date</th><th style="padding:12px;">Category</th>
-                                <th style="padding:12px;">Description</th><th style="padding:12px;text-align:right;">Amount (UGX)</th>
-                                <th style="padding:12px;text-align:center;">Receipt #</th>
-                            </tr>
-                        </thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                </div>""", unsafe_allow_html=True)
         else:
-            st.info("💡 No expenses recorded for analysis yet.")
+            st.info("💡 No expenses recorded.")
 
-    # --- TAB 3: MANAGE / EDIT EXPENSES (PRO VERSION) ---
-with tab_manage:
-    st.markdown("### 🛠️ Manage Outflow Records")
+    # ------------------------------
+    # TAB 3: MANAGE (FIXED INDENT)
+    # ------------------------------
+    with tab_manage:
+        st.markdown("### 🛠️ Manage Outflow Records")
 
-    if df.empty:
-        st.info("ℹ️ No expenses found to manage.")
-    else:
-        # -------------------------------
-        # 1. BUILD SAFE SELECTION MAP
-        # -------------------------------
-        df = df.copy()
+        if df.empty:
+            st.info("ℹ️ No expenses found to manage.")
+        else:
+            df = df.copy()
 
-        # Ensure correct types
-        df["id"] = df["id"].astype(str)
-        df["amount"] = df["amount"].astype(float)
+            df["id"] = df["id"].astype(str)
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
 
-        # Create display label
-        df["label"] = df.apply(
-            lambda r: f"{r['category']} - {r['amount']:,.0f} UGX | {str(r['payment_date'])[:10]}",
-            axis=1
-        )
-
-        # Map label → full record
-        exp_map = {row["label"]: row for _, row in df.iterrows()}
-
-        # -------------------------------
-        # 2. SELECT EXPENSE
-        # -------------------------------
-        selected_label = st.selectbox(
-            "🔍 Select Expense to Edit/Delete",
-            list(exp_map.keys())
-        )
-
-        exp_to_edit = exp_map[selected_label]
-        exp_id = exp_to_edit["id"]
-
-        st.markdown(f"**Editing Record ID:** `{exp_id}`")
-
-        # -------------------------------
-        # 3. EDIT FORM
-        # -------------------------------
-        with st.form("edit_expense_form"):
-            c1, c2 = st.columns(2)
-
-            up_cat = c1.selectbox(
-                "Update Category",
-                EXPENSE_CATS,
-                index=EXPENSE_CATS.index(exp_to_edit['category'])
-                if exp_to_edit['category'] in EXPENSE_CATS else 0
+            df["label"] = df.apply(
+                lambda r: f"{r['category']} - {r['amount']:,.0f} UGX | {str(r['payment_date'])[:10]}",
+                axis=1
             )
 
-            up_amt = c1.number_input(
-                "Update Amount",
-                value=float(exp_to_edit['amount']),
-                min_value=0.0
-            )
+            exp_map = {row["label"]: row for _, row in df.iterrows()}
 
-            up_desc = c2.text_input(
-                "Update Description",
-                value=str(exp_to_edit['description'])
-            )
+            selected_label = st.selectbox("🔍 Select Expense", list(exp_map.keys()))
 
-            up_date = c2.date_input(
-                "Update Date",
-                value=pd.to_datetime(exp_to_edit['payment_date'])
-            )
+            exp_to_edit = exp_map[selected_label]
+            exp_id = exp_to_edit["id"]
 
-            submitted = st.form_submit_button(
-                "💾 Save Changes to Database",
-                use_container_width=True
-            )
+            with st.form("edit_expense_form"):
+                up_amt = st.number_input("Update Amount", value=float(exp_to_edit['amount']))
 
-            if submitted:
-                update_entry = pd.DataFrame([{
-                    "id": exp_id,  # UUID stays string
-                    "category": up_cat,
-                    "amount": float(up_amt),
-                    "description": up_desc,
-                    "payment_date": up_date.strftime("%Y-%m-%d"),
-                    "tenant_id": st.session_state.tenant_id
-                }])
+                if st.form_submit_button("💾 Save Changes"):
+                    df.loc[df["id"] == exp_id, "amount"] = up_amt
 
-                with st.spinner("Updating expense..."):
-                    if save_data("expenses", update_entry):
-                        st.success("✅ Expense updated successfully!")
-                        st.rerun()
-                    else:
-                        st.error("❌ Failed to update expense.")
-
-        # -------------------------------
-        # 4. DELETE SECTION (SAFE)
-        # -------------------------------
-        st.divider()
-
-        col_del1, col_del2 = st.columns([3, 1])
-
-        with col_del2:
-            if st.button("🗑️ Delete", use_container_width=True):
-                st.session_state["confirm_delete_exp"] = True
-
-        if st.session_state.get("confirm_delete_exp", False):
-            st.warning("⚠️ Are you sure you want to permanently delete this expense?")
-
-            conf_c1, conf_c2 = st.columns(2)
-
-            with conf_c1:
-                if st.button("✅ Yes, Delete", use_container_width=True):
-                    with st.spinner("Deleting expense..."):
-                        supabase.table("expenses").delete().eq("id", exp_id).execute()
-                        st.success(f"✅ Record deleted!")
-                        st.session_state["confirm_delete_exp"] = False
+                    if save_data("expenses", df):
+                        st.success("✅ Updated!")
                         st.rerun()
 
-            with conf_c2:
-                if st.button("❌ Cancel", use_container_width=True):
-                    st.session_state["confirm_delete_exp"] = False
+            st.divider()
+
+            if st.button("🗑️ Delete"):
+                df = df[df["id"] != exp_id]
+
+                if save_data("expenses", df):
+                    st.success("✅ Deleted!")
                     st.rerun()
 # ==============================
 # 19. PETTY CASH MANAGEMENT PAGE
