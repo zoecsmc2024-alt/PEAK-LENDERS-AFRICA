@@ -1703,27 +1703,27 @@ def show_expenses():
                 else:
                     st.error("⚠️ Provide amount & description.")
 
-    # ==============================
-    # TAB 2: VIEW (SAFE + CRASH PROTECTION)
-    # ==============================
+    # --- TAB 2: ANALYSIS & LOG ---
     with tab_view:
         if not df.empty:
-            try:
-                df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
-                total_spent = df["amount"].sum()
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+            total_spent = df["amount"].sum()
+            
+            st.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">TOTAL MONTHLY OUTFLOW</p><h2 style="margin:0;color:#FF4B4B;">{total_spent:,.0f} <span style="font-size:14px;">UGX</span></h2></div>""", unsafe_allow_html=True)
+            
+            # Pie Chart Analysis (Branding Preserved)
+            cat_summary = df.groupby("category")["amount"].sum().reset_index()
+            fig_exp = px.pie(cat_summary, names="category", values="amount", title="Spending Distribution", hole=0.4, color_discrete_sequence=["#2B3F87", "#F0F8FF", "#FF4B4B", "#ADB5BD"])
+            fig_exp.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
+            st.plotly_chart(fig_exp, use_container_width=True)
+            
+            # Detailed Expense Log (Custom HTML Table)
+            rows_html = ""
+            for i, r in df.sort_values("date", ascending=False).reset_index().iterrows():
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                rows_html += f"""<tr style="background-color:{bg};border-bottom:1px solid #ddd;"><td style="padding:10px;color:#666;font-size:11px;">{r['date']}</td><td style="padding:10px;"><b>{r['category']}</b></td><td style="padding:10px;font-size:11px;">{r['description']}</td><td style="padding:10px;text-align:right;font-weight:bold;color:#FF4B4B;">{float(r['amount']):,.0f}</td><td style="padding:10px;text-align:center;color:#666;font-size:10px;">{r['receipt_no']}</td></tr>"""
 
-                st.markdown(f"<h3>Total Spent: {total_spent:,.0f} UGX</h3>", unsafe_allow_html=True)
-
-                cat_summary = df.groupby("category")["amount"].sum().reset_index()
-                fig_exp = px.pie(cat_summary, names="category", values="amount", 
-                                 title="Expenses by Category",
-                                 color_discrete_sequence=px.colors.qualitative.Prism)
-                st.plotly_chart(fig_exp, use_container_width=True)
-
-            except Exception:
-                st.warning("⚠️ Unable to generate analytics due to data format issues.")
-        else:
-            st.info("💡 No expenses recorded.")
+            st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#2B3F87;color:white;text-align:left;"><th style="padding:12px;">Date</th><th style="padding:12px;">Category</th><th style="padding:12px;">Description</th><th style="padding:12px;text-align:right;">Amount (UGX)</th><th style="padding:12px;text-align:center;">Receipt #</th></tr></thead><tbody>{rows_html}</tbody></table></div>""", unsafe_allow_html=True)
 
     # ==============================
     # TAB 3: MANAGE (ENTERPRISE SAFE)
