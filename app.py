@@ -1829,7 +1829,6 @@ def show_calendar():
 
 st.markdown("### 🏢 Master Loan Ledger")
 
-if active_loans is None or active_loans.empty:
     st.info("ℹ️ No loan records found.")
 else:
     df = active_loans.copy()
