@@ -2827,9 +2827,12 @@ def show_dashboard_view():
 
     with t1:
         st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+
         if not active_df.empty:
             recent = active_df.sort_values("end_date_dt", ascending=False).head(5)
-            rows = ""
+            
+            # Start the rows string
+            rows_html = ""
             for idx, (i, r) in enumerate(recent.iterrows()):
                 bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
                 b_name = str(r.get('borrower_name', 'Unknown'))
@@ -2837,7 +2840,8 @@ def show_dashboard_view():
                 status = str(r.get('status_clean', 'Active'))
                 due_date = r['end_date_dt'].strftime('%d %b') if pd.notna(r.get('end_date_dt')) else '-'
 
-                rows += f"""
+                # Build the TR string accurately
+                rows_html += f"""
                 <tr style="background:{bg}; border-bottom: 1px solid #eee;">
                     <td style="padding:8px;">{b_name}</td>
                     <td style="padding:8px; text-align:right; color:{brand_color}; font-weight:bold;">{principal:,.0f}</td>
@@ -2846,7 +2850,8 @@ def show_dashboard_view():
                 </tr>
                 """
 
-            st.markdown(f"""
+            # Combine into the final table - Ensure NO extra text is outside these tags
+            full_table_html = f"""
             <table style="width:100%; font-size:13px; border-collapse:collapse; border:1px solid #eee;">
                 <thead>
                     <tr style="background:{brand_color}; color:white;">
@@ -2856,12 +2861,16 @@ def show_dashboard_view():
                         <th style="padding:10px; text-align:center;">Due</th>
                     </tr>
                 </thead>
-                <tbody>{rows}</tbody>
+                <tbody>
+                    {rows_html}
+                </tbody>
             </table>
-            """, unsafe_allow_html=True)
+            """
+            
+            # THE CRITICAL STEP: Use markdown with unsafe_allow_html=True
+            st.markdown(full_table_html, unsafe_allow_html=True)
         else:
             st.info("No active loans found.")
-
     # --- 10. PAYMENTS TABLE ---
     with t2:
         st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
