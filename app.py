@@ -2952,21 +2952,29 @@ if __name__ == "__main__":
         # ==============================
         if not st.session_state.get("logged_in"):
             apply_master_theme()
-        # Ensure supabase is actually defined before calling this!
-        if 'supabase' in globals():
-            run_auth_ui(supabase) 
-        else:
-            st.error("Database connection not initialized.")
-        st.stop()
+            
+            # Check if database is ready
+            if 'supabase' in globals():
+                try:
+                    # Attempt to call with argument (for newer definition)
+                    run_auth_ui(supabase)
+                except TypeError:
+                    # Fallback to call without argument (for older definition)
+                    run_auth_ui()
+            else:
+                st.error("Database connection not initialized.")
+            
+            # CRITICAL: Stop execution here so guests don't see the dashboard
+            st.stop()
 
         # ==============================
         # 2. AUTHENTICATED SESSION SAFETY
         # ==============================
+        # Reached only if logged_in == True
         check_session_timeout()
 
         # ==============================
-        # 3. APPLY THEME EARLY (CRITICAL FIX)
-        # Ensures sidebar + pages inherit color correctly
+        # 3. APPLY THEME (THEME PERSISTENCE)
         # ==============================
         apply_master_theme()
 
@@ -2978,10 +2986,7 @@ if __name__ == "__main__":
         # ==============================
         # 5. PAGE ROUTER (MAIN CONTENT)
         # ==============================
-        if page == "Settings":
-            show_settings()
-
-        elif page == "Overview":
+        if page == "Overview":
             show_dashboard_view()
 
         elif page == "Loans":
@@ -2989,15 +2994,6 @@ if __name__ == "__main__":
 
         elif page == "Borrowers":
             show_borrowers()
-
-        elif page == "Collateral":
-            show_collateral()
-
-        elif page == "Calendar":
-            show_calendar()
-
-        elif page == "Ledger":
-            show_ledger()
 
         elif page == "Payments":
             show_payments()
@@ -3013,6 +3009,18 @@ if __name__ == "__main__":
 
         elif page == "Reports":
             show_reports()
+            
+        elif page == "Settings":
+            show_settings()
+
+        elif page == "Collateral":
+            show_collateral()
+
+        elif page == "Calendar":
+            show_calendar()
+
+        elif page == "Ledger":
+            show_ledger()
 
         else:
             st.info(f"📦 The '{page}' module is coming online soon.")
