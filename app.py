@@ -1151,6 +1151,13 @@ def normalize_status(status):
     # ==============================
 # TAB: PORTFOLIO VIEW
 # ==============================
+# Make sure this line exists BEFORE your "with tab_add" block
+tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+    "📊 Portfolio View", 
+    "➕ New Loan", 
+    "🔧 Manage/Edit", 
+    "⚙️ Actions"
+])
 with tab_view:
     if not loans_df.empty:
         # --- 1. DATA PREPARATION ---
