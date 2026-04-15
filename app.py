@@ -1818,7 +1818,7 @@ def show_expenses():
                 st.error(f"🚨 Manage error: {e}")
 
 # ==============================
-# 19. PAYROLL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
+# 19. PAYROLL MANAGEMENT PAGE
 # ==============================
 
 import pandas as pd
@@ -1839,7 +1839,7 @@ def show_payroll():
     current_tenant = st.session_state.get("tenant_id")
 
     # ==============================
-    # 🔐 SAFETY CHECK (NEW - SAAS HARD GUARD)
+    # 🔐 SAFETY CHECK (SAAS HARD GUARD)
     # ==============================
     if not current_tenant:
         st.error("🔐 Session expired. Please log in again.")
@@ -1860,17 +1860,17 @@ def show_payroll():
     if df is None or df.empty:
         df = pd.DataFrame(columns=required_keys)
 
-    # 🔐 SaaS FIX: isolate tenant
+    # Filter data to only show records for the active tenant
     if "tenant_id" in df.columns:
         df = df[df["tenant_id"].astype(str) == str(current_tenant)]
     else:
         df["tenant_id"] = current_tenant
 
-    # ==============================
-    # 🧠 COLUMN NORMALIZATION (NEW - PREVENT BREAKS)
-    # ==============================
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
+    # ==============================
+    # CALC ENGINE (UGANDAN TAX COMPLIANCE)
+    # ==============================
     def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
         basic = float(basic or 0)
         arrears = float(arrears or 0)
@@ -1878,16 +1878,17 @@ def show_payroll():
         advance = float(advance or 0)
         other = float(other or 0)
 
+        # 1. Calculate Gross
         gross = (basic + arrears) - absent_deduct
-
-        # LST Logic (Local Service Tax)
+        
+        # 2. Local Service Tax (LST) - Standard 100k/year for gross > 1m
         lst = 100000 / 12 if gross > 1000000 else 0
 
-        # NSSF Logic (5% Employee, 10% Employer)
+        # 3. NSSF Calculations (5% Employee, 10% Employer)
         n5, n10 = gross * 0.05, gross * 0.10
         n15 = n5 + n10
 
-        # PAYE Logic (Uganda Tax Brackets)
+        # 4. PAYE (Ugandan Pay As You Earn) Logic
         paye = 0
         if gross > 410000:
             paye = 25000 + (0.30 * (gross - 410000))
@@ -1909,6 +1910,9 @@ def show_payroll():
 
     tab_process, tab_logs = st.tabs(["➕ Process Salary","📜 Payroll History"])
 
+    # ==============================
+    # PROCESS TAB
+    # ==============================
     with tab_process:
         with st.form("new_payroll_form", clear_on_submit=True):
             name = st.text_input("Employee Name")
@@ -1965,6 +1969,9 @@ def show_payroll():
                         st.cache_data.clear()
                         st.rerun()
 
+    # ==============================
+    # LOGS TAB (REPORTS & EXPORT)
+    # ==============================
     with tab_logs:
         if not df.empty:
             def fm(x):
@@ -1973,53 +1980,60 @@ def show_payroll():
                 except:
                     return "0"
 
-            # Rebuilding the table with your custom styling
             header_html = """
             <style>
                 .pay-table { width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 13px; }
                 .pay-table th { background: #f8f9fa; border: 1px solid #ddd; padding: 10px; }
+                .pay-table td { border: 1px solid #ddd; padding: 10px; }
             </style>
             <table class='pay-table'>
-                <tr>
-                    <th>#</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
-                    <th>PAYE</th><th>NSSF 5%</th><th>Net Pay</th><th>NSSF 10%</th><th>NSSF 15%</th>
-                </tr>
+                <thead>
+                    <tr>
+                        <th>#</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
+                        <th>PAYE</th><th>NSSF 5%</th><th>Net Pay</th><th>NSSF 10%</th><th>NSSF 15%</th>
+                    </tr>
+                </thead>
+                <tbody>
             """
-            rows_html = header_html
 
+            rows_html = ""
             for i, r in df.iterrows():
                 rows_html += f"""
                 <tr>
-                    <td style='text-align:center;border:1px solid #ddd;padding:10px;'>{i+1}</td>
-                    <td style='border:1px solid #ddd;padding:10px;'><b>{r.get('employee','')}</b><br><small>{r.get('designation','-')}</small></td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;'>{fm(r.get('arrears',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;'>{fm(r.get('basic_salary',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;font-weight:bold;'>{fm(r.get('gross_salary',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;'>{fm(r.get('paye',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;'>{fm(r.get('nssf_5',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;background:#E3F2FD;font-weight:bold;'>{fm(r.get('net_pay',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;background:#FFF9C4;'>{fm(r.get('nssf_10',0))}</td>
-                    <td style='text-align:right;border:1px solid #ddd;padding:10px;background:#FFF9C4;font-weight:bold;'>{fm(r.get('nssf_15',0))}</td>
+                    <td style='text-align:center;'>{i+1}</td>
+                    <td><b>{r.get('employee','')}</b><br><small>{r.get('designation','-')}</small></td>
+                    <td style='text-align:right;'>{fm(r.get('arrears',0))}</td>
+                    <td style='text-align:right;'>{fm(r.get('basic_salary',0))}</td>
+                    <td style='text-align:right;font-weight:bold;'>{fm(r.get('gross_salary',0))}</td>
+                    <td style='text-align:right;'>{fm(r.get('paye',0))}</td>
+                    <td style='text-align:right;'>{fm(r.get('nssf_5',0))}</td>
+                    <td style='text-align:right;background:#E3F2FD;font-weight:bold;'>{fm(r.get('net_pay',0))}</td>
+                    <td style='text-align:right;background:#FFF9C4;'>{fm(r.get('nssf_10',0))}</td>
+                    <td style='text-align:right;background:#FFF9C4;font-weight:bold;'>{fm(r.get('nssf_15',0))}</td>
                 </tr>
                 """
 
             total_net = df["net_pay"].sum()
 
-            rows_html += f"""
-            <tr style="background:#2B3F87;color:white;font-weight:bold;">
-                <td colspan="7" style="text-align:center;padding:12px;">GRAND TOTALS</td>
-                <td style="text-align:right;padding:12px;">{fm(total_net)}</td>
-                <td colspan="2"></td>
-            </tr>
+            footer_html = f"""
+                </tbody>
+                <tfoot>
+                    <tr style="background:#2B3F87;color:white;font-weight:bold;">
+                        <td colspan="7" style="text-align:center;padding:12px;">GRAND TOTALS</td>
+                        <td style="text-align:right;padding:12px;">{fm(total_net)}</td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
             </table>
             """
+
+            full_html = header_html + rows_html + footer_html
 
             if st.button("📥 Print PDF", key="print_pay_btn"):
                 st.components.v1.html("<script>window.print();</script>", height=0)
 
-            st.components.v1.html(rows_html, height=600, scrolling=True)
+            st.components.v1.html(full_html, height=600, scrolling=True)
 
-            # DELETE SAFE FIX
             st.write("---")
             with st.expander("⚙️ Manage Record"):
                 if not df.empty:
@@ -2031,14 +2045,12 @@ def show_payroll():
                     if st.button("🗑️ Delete Record"):
                         try:
                             sid = sel_opt.split("(ID: ")[1].replace(")", "")
-                            # Use global supabase client
                             supabase.table("payroll").delete().eq("id", sid).execute()
                             st.warning("Deleted.")
                             st.cache_data.clear()
                             st.rerun()
                         except Exception as e:
                             st.error(f"Delete failed: {e}")
-
 # ==============================
 # 20. ADVANCED ANALYTICS & REPORTS (SAAS + ENTERPRISE)
 # ==============================
