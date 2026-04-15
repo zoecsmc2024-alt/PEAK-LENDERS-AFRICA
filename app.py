@@ -1309,35 +1309,33 @@ def show_collateral():
 
                     if not desc or est_value <= 0:
                         st.warning("Please fill all required fields.")
-                        return
+                    else:
+                        try:
+                            actual_loan_id = loan_id_lookup.get(selected_label)
 
-                    try:
-                        actual_loan_id = loan_id_lookup.get(selected_label)
+                            if actual_loan_id is None:
+                                st.error("Invalid loan selection.")
+                            else:
+                                clean_borrower_name = selected_label.split(" (")[0]
 
-                        if actual_loan_id is None:
-                            st.error("Invalid loan selection.")
-                            return
+                                new_asset = pd.DataFrame([{
+                                    "loan_id": actual_loan_id,
+                                    "tenant_id": current_tenant,
+                                    "borrower": clean_borrower_name,
+                                    "type": asset_type,
+                                    "description": desc,
+                                    "value": float(est_value),
+                                    "status": "Held",
+                                    "date_added": datetime.now().strftime("%Y-%m-%d")
+                                }])
 
-                        clean_borrower_name = selected_label.split(" (")[0]
+                                if save_data("collateral", new_asset):
+                                    st.success("✅ Asset saved successfully!")
+                                    st.cache_data.clear()
+                                    st.rerun()
 
-                        new_asset = pd.DataFrame([{
-                            "loan_id": actual_loan_id,
-                            "tenant_id": current_tenant,
-                            "borrower": clean_borrower_name,
-                            "type": asset_type,
-                            "description": desc,
-                            "value": float(est_value),
-                            "status": "Held",
-                            "date_added": datetime.now().strftime("%Y-%m-%d")
-                        }])
-
-                        if save_data("collateral", new_asset):
-                            st.success("✅ Asset saved successfully!")
-                            st.cache_data.clear()
-                            st.rerun()
-
-                    except Exception as e:
-                        st.error(f"❌ Error saving collateral: {e}")
+                        except Exception as e:
+                            st.error(f"❌ Error saving collateral: {e}")
 
     # ==============================
     # TAB 2: INVENTORY
@@ -1434,8 +1432,8 @@ def show_collateral():
 
                     if save_data("collateral", update_df):
                         st.success("✅ Updated successfully!")
-                            st.cache_data.clear()
-                                st.rerun()
+                        st.cache_data.clear()
+                        st.rerun()
             
 ==============================
 17. ACTIVITY CALENDAR PAGE (SAAS + ENTERPRISE UPGRADE)
