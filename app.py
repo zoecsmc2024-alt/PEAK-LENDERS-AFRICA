@@ -1124,181 +1124,141 @@ def show_loans():
                 st.rerun()
 
 # ==============================
-# 14. PAYMENTS & COLLECTIONS PAGE (ENTERPRISE SaaS - UPGRADED)
+# 14. PAYMENTS & COLLECTIONS PAGE (SaaS Upgraded)
 # ==============================
-import random
-from datetime import datetime
 
-# -------------------------------
-# SAFE USER SERIALIZER
-# -------------------------------
-def get_user_identity():
-    """Returns a string representation of the current logged-in user"""
-    user = st.session_state.get("user", None)
-    if user is None:
-        return "system_user"
-    # Logic to handle different Supabase user object structures
-    if hasattr(user, "id"):
-        return str(user.id)
-    if isinstance(user, dict) and "id" in user:
-        return str(user["id"])
-    return "authorized_staff"
-
-# -------------------------------
-# STATUS NORMALIZER
-# -------------------------------
-VALID_STATUSES = {"Active", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED_OVER"}
-
-def normalize_status(status):
-    """Ensures loan statuses adhere to enterprise naming conventions"""
-    if pd.isna(status):
-        return "PENDING"
-    cleaned = str(status).strip().upper().replace(" ", "_")
-    return cleaned if cleaned in VALID_STATUSES else "PENDING"
-
-# -------------------------------
-# JSON SAFETY (CRITICAL FIX)
-# -------------------------------
-def make_json_safe(df):
-    """Standardizes types to ensure Supabase/JSON serialization doesn't crash"""
-    if df is None or df.empty:
-        return df
-    # applymap replaced with map in newer pandas, adding compatibility check
-    func = lambda x: str(x) if not isinstance(x, (str, int, float, bool, type(None))) else x
-    return df.map(func) if hasattr(df, "map") else df.applymap(func)
-
-# -------------------------------
-# SAFE SAVE WRAPPER (ENTERPRISE)
-# -------------------------------
-def save_data_safe(table, df):
-    """Handles the upsert logic with error boundary protection"""
-    try:
-        tenant_id = st.session_state.get('tenant_id')
-        df = make_json_safe(df)
-        # Force tenant_id on every row
-        df["tenant_id"] = str(tenant_id)
-        
-        data = df.to_dict(orient="records")
-        supabase.table(table).upsert(data).execute()
-        return True
-    except Exception as e:
-        st.error(f"📡 Database Sync Error ({table}): {e}")
-        return False
-
-# ==============================
-# MAIN PAYMENTS MODULE
-# ==============================
 def show_payments():
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    st.markdown(f"<h2 style='color: {brand_color};'>💵 Payments Management</h2>", unsafe_allow_html=True)
+    """
+    Manages cash inflows. Includes payment posting, 
+    automatic loan status updating, and history logs.
+    """
+    st.markdown("<h2 style='color: #2B3F87;'>💵 Payments Management</h2>", unsafe_allow_html=True)
+    
+    # 1. FETCH TENANT DATA
+    loans_df = get_cached_data("loans")
+    payments_df = get_cached_data("payments")
 
-    # -------------------------------
-    # FETCH TENANT DATA (ISOLATED)
-    # -------------------------------
-    loans_df = get_data("loans") # Using the safe get_data from Part 13
-    payments_df = get_data("payments")
-    borrowers_df = get_data("borrowers")
-
-    if loans_df is None or loans_df.empty:
-        st.info("ℹ️ No Active loans found to receive payments.")
+    if loans_df.empty:
+        st.info("ℹ️ No loans found in the system.")
         return
 
-    # Map borrower names for the UI dropdown
-    if borrowers_df is not None and not borrowers_df.empty:
-        bor_name_col = next((c for c in borrowers_df.columns if 'name' in c), "name")
-        bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df[bor_name_col]))
-    else:
-        bor_map = {}
-
-    tab_new, tab_history, tab_manage = st.tabs([
-        "➕ Record Payment", "📜 Payment History", "⚙️ Manage Records"
-    ])
+    tab_new, tab_history, tab_manage = st.tabs(["➕ Record Payment", "📜 History & Trends", "⚙️ Edit/Delete"])
 
     # ==============================
-    # TAB 1: RECORD PAYMENT
+    # TAB 1: RECORD NEW PAYMENT
     # ==============================
     with tab_new:
-        # Filter for non-CLOSED loans
-        Active_loans = loans_df[loans_df["status"].astype(str).str.upper() != "CLOSED"].copy()
-
-        if Active_loans.empty:
-            st.success("🎉 Portfolio Clean: No outstanding payments due!")
+        # Standardize for logic (Supabase columns are lowercase)
+        active_loans = loans_df[loans_df["status"].str.lower() != "closed"].copy()
+        
+        if active_loans.empty:
+            st.success("🎉 All loans are currently cleared!")
         else:
-            # Prepare display labels for the dropdown
-            Active_loans["borrower_name"] = Active_loans["borrower"].fillna("Unknown")
-            
-            loan_options = Active_loans.apply(
-                lambda x: f"ID: {x['loan_id']} | {x['borrower_name']} (Bal: {x.get('balance', 0):,.0f})",
+            # Selection logic
+            loan_options = active_loans.apply(
+                lambda x: f"ID: {x['id']} - {x['borrower']}", 
                 axis=1
             ).tolist()
-
-            selected_option = st.selectbox("Select Loan to Credit", loan_options)
-
-            # Resolve Selected Loan
+            
+            selected_option = st.selectbox("Select Loan to Credit", loan_options, key="pay_sel")
+            
+            # --- TARGETING THE CURRENT CYCLE ---
             try:
-                sel_id = selected_option.split(" | ")[0].replace("ID: ", "").strip()
-                loan = Active_loans[Active_loans["loan_id"].astype(str) == str(sel_id)].iloc[0]
-            except:
-                st.error("Error resolving selected loan.")
+                raw_id = int(selected_option.split(" - ")[0].replace("ID: ", "").strip())
+                # Get the specific loan record
+                loan = active_loans[active_loans["id"] == raw_id].iloc[0]
+            except Exception as e:
+                st.error(f"❌ Error identifying Loan: {e}")
                 st.stop()
 
-            # Calculations
-            outstanding = float(loan.get("balance", 0))
-            paid_so_far = float(loan.get("amount_paid", 0))
+            # Financial Calculations
             total_rep = float(loan.get("total_repayable", 0))
-            t_id = st.session_state.get('tenant_id')
+            paid_so_far = float(loan.get("amount_paid", 0))
+            outstanding = total_rep - paid_so_far
 
-            with st.form("payment_posting_form", clear_on_submit=True):
+            # --- STYLED CARDS (Zoe Branding Preserved) ---
+            c1, c2, c3 = st.columns(3)
+            status_val = str(loan.get('status', 'Active')).strip()
+            status_color = "#2E7D32" if status_val == "Active" else "#D32F2F"
+            
+            c1.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #2B3F87; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">CLIENT</p><h3 style="margin:0; color:#2B3F87; font-size:18px;">{loan['borrower']}</h3></div>""", unsafe_allow_html=True)
+            c2.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #FF4B4B; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">BALANCE DUE</p><h3 style="margin:0; color:#FF4B4B; font-size:18px;">{max(0, outstanding):,.0f} <span style="font-size:12px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+            c3.markdown(f"""<div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid {status_color}; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0; font-size:12px; color:#666; font-weight:bold;">STATUS</p><h3 style="margin:0; color:{status_color}; text-transform:uppercase; font-size:18px;">{status_val}</h3></div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # --- PAYMENT FORM ---
+            with st.form("payment_form", clear_on_submit=True):
                 col_a, col_b, col_c = st.columns(3)
-                pay_amount = col_a.number_input("Amount (UGX)", min_value=0, step=5000)
-                pay_method = col_b.selectbox("Method", ["Mobile Money", "Cash", "Bank Transfer"])
-                pay_date = col_c.date_input("Date Received", value=datetime.now())
+                pay_amount = col_a.number_input("Amount Received (UGX)", min_value=0, step=10000)
+                pay_method = col_b.selectbox("Method", ["Mobile Money", "Cash", "Bank Transfer", "Cheque"])
+                pay_date = col_c.date_input("Payment Date", value=datetime.now())
+                
+                if st.form_submit_button("✅ Post Payment", use_container_width=True):
+                    if pay_amount > 0:
+                        try:
+                            # 1. Prepare Payment Entry
+                            new_payment = pd.DataFrame([{
+                                "loan_id": raw_id,
+                                "borrower": loan["borrower"],
+                                "amount": float(pay_amount),
+                                "date": pay_date.strftime("%Y-%m-%d"),
+                                "method": pay_method,
+                                "recorded_by": st.session_state.get("user", "Staff"),
+                                "tenant_id": st.session_state.tenant_id
+                            }])
 
-                if st.form_submit_button("✅ Confirm Payment", use_container_width=True):
-                    if pay_amount <= 0:
-                        st.warning("Please enter an amount greater than 0.")
-                    else:
-                        # Prevent overpayment from breaking the ledger
-                        actual_pay = pay_amount
-                        if actual_pay > outstanding:
-                            st.info(f"Note: Amount adjusted from {pay_amount:,.0f} to {outstanding:,.0f} (Full Clearance)")
-                            actual_pay = outstanding
-
-                        receipt_no = f"R-{datetime.now().strftime('%y%m%d')}-{random.randint(1000,9999)}"
-
-                        # 1. Create Payment Entry
-                        new_payment = pd.DataFrame([{
-                            "loan_id": str(loan["loan_id"]),
-                            "borrower": str(loan["borrower_name"]),
-                            "amount": float(actual_pay),
-                            "date": pay_date.strftime("%Y-%m-%d"),
-                            "method": str(pay_method),
-                            "recorded_by": get_user_identity(),
-                            "receipt_no": receipt_no,
-                            "tenant_id": str(t_id)
-                        }])
-
-                        # 2. Update Loan Balance/Status
-                        new_total_paid = paid_so_far + actual_pay
-                        # Buffer of 10 UGX for rounding precision
-                        new_status = "CLOSED" if new_total_paid >= (total_rep - 10) else "Active"
-
-                        loan_update = pd.DataFrame([{
-                            "loan_id": loan["loan_id"],
-                            "amount_paid": float(new_total_paid),
-                            "status": new_status,
-                            "tenant_id": str(t_id),
-                            "last_payment_date": pay_date.strftime("%Y-%m-%d")
-                        }])
-
-                        # Atomic-style update
-                        if save_data_safe("payments", new_payment) and save_data_safe("loans", loan_update):
-                            st.success(f"Payment of {actual_pay:,.0f} posted for {loan['borrower_name']}")
-                            if new_status == "CLOSED":
-                                st.balloons()
+                            # 2. Prepare Loan Update (Update the specific ID)
+                            new_total_paid = paid_so_far + float(pay_amount)
+                            new_status = "Closed" if new_total_paid >= (total_rep - 10) else status_val
                             
-                            st.cache_data.clear()
-                            st.rerun()
+                            loan_update = pd.DataFrame([{
+                                "id": raw_id,
+                                "amount_paid": new_total_paid,
+                                "status": new_status,
+                                "tenant_id": st.session_state.tenant_id
+                            }])
+
+                            # 3. Double Sync Save
+                            if save_data("payments", new_payment) and save_data("loans", loan_update):
+                                st.success("✅ Payment recorded!"); st.cache_data.clear(); st.rerun()
+                                
+                        except Exception as e:
+                            st.error(f"🚨 Error: {str(e)}")
+
+    # ==============================
+    # TAB 2: HISTORY (Emoji Logic Preserved)
+    # ==============================
+    with tab_history:
+        if not payments_df.empty:
+            df_display = payments_df.copy()
+            def get_color_emoji(amt):
+                if amt >= 5000000: return "🟢 Large"
+                if amt >= 1000000: return "🔵 Medium"
+                return "⚪ Small"
+            
+            df_display["level"] = df_display["amount"].apply(get_color_emoji)
+            st.dataframe(df_display.sort_values("date", ascending=False), use_container_width=True, hide_index=True)
+
+    # ==============================
+    # TAB 3: EDIT / DELETE
+    # ==============================
+    with tab_manage:
+        if not payments_df.empty:
+            p_sel = st.selectbox("Select Receipt to Edit", payments_df["id"].unique())
+            p_row = payments_df[payments_df["id"] == p_sel].iloc[0]
+
+            with st.form("edit_payment_saas"):
+                new_amt = st.number_input("Adjust Amount", value=float(p_row['amount']))
+                if st.form_submit_button("💾 Update Receipt"):
+                    update_p = pd.DataFrame([{"id": p_sel, "amount": new_amt, "tenant_id": st.session_state.tenant_id}])
+                    if save_data("payments", update_p):
+                        st.success("Receipt Updated!"); st.rerun()
+            
+            if st.button("🗑️ Delete Receipt Permanently"):
+                supabase.table("payments").delete().eq("id", p_sel).execute()
+                st.warning("Receipt Deleted."); st.rerun()
+
 
     # ==============================
     # TAB 2: HISTORY
