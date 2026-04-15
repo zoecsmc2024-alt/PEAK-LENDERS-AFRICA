@@ -843,18 +843,21 @@ def save_data_saas(table_name, df):
 # 13. LOANS MANAGEMENT PAGE (SAAS UPGRADE)
 # ==============================
 def show_loans():
-    df = get_cached_data("loans")
+    # 1. Load Data
+    loans_df = get_data("loans")
+    borrowers_df = get_data("borrowers")
 
-    if df is None or df.empty:
+    if loans_df is None or loans_df.empty:
         st.info("No loans available.")
-        return:
+        return # FIXED: Removed colon
+
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     st.markdown(f"<h2 style='color: {brand_color};'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
     tenant_id = get_current_tenant()
 
     # ==============================
-    # 🧠 SESSION CACHE SAFETY
+    # 🧠 NAME MAPPING ENGINE (Fixes the ID strings issue)
     # ==============================
     if st.session_state.get("active_tenant_cache") != tenant_id:
         st.session_state.pop("loans_df_cache", None)
