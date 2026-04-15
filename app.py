@@ -1616,83 +1616,65 @@ def show_calendar():
         unsafe_allow_html=True
     )
 
-    # ==============================
-# MASTER LOAN LEDGER (LUXE EDITION)
+# ==============================
+# MASTER LOAN LEDGER (REINFORCED)
 # ==============================
 st.markdown("### 🏢 Master Loan Ledger")
 
-# 1. LOAD DATA 
-loans_df = get_cached_data("loans")
-borrowers_df = get_cached_data("borrowers")
-
-# 2. DATA VALIDATION & MAPPING
 if loans_df is None or loans_df.empty:
     st.info("ℹ️ No loan records found.")
 else:
-    # Create a clean copy for the ledger view
+    # 1. Prepare clean display data
     ledger_df = loans_df.copy()
-
-    # Create mapping: {UUID: "Human Name"}
+    
+    # Map Names
     if borrowers_df is not None and not borrowers_df.empty:
         bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
         ledger_df['Borrower'] = ledger_df['borrower_id'].map(bor_map).fillna("Unknown")
     else:
         ledger_df['Borrower'] = "No Borrower Data"
 
-    # 3. FORMATTING COLUMNS
-    # Prioritize user-friendly labels (e.g., LN-3199) over raw database IDs
-    ledger_df['ID'] = ledger_df['loan_id_label'].astype(str)
-    
-    # Ensure numeric types for the currency formatter
+    # Standardize Fields
+    ledger_df['Loan ID'] = ledger_df['loan_id_label'].astype(str)
     ledger_df['Amount'] = pd.to_numeric(ledger_df['principal'], errors='coerce').fillna(0)
-    
-    # Clean up dates
-    ledger_df['Due Date'] = pd.to_datetime(ledger_df['end_date'], errors='coerce').dt.strftime("%Y-%m-%d")
+    ledger_df['Due Date'] = pd.to_datetime(ledger_df['end_date'], errors='coerce')
+    ledger_df['status'] = ledger_df['status'].str.upper()
 
-    # 4. STATUS STYLING ENGINE
+    # 2. STATUS STYLING (Internal badge logic)
     def style_ledger(row):
-        status = str(row.get("status", "")).upper()
-        # Custom color palette for the Luxe theme
+        status = str(row.get("status", ""))
         colors = {
-            "ACTIVE": "#4A90E2",   # Blue
-            "CLOSED": "#2E7D32",   # Green
-            "OVERDUE": "#D32F2F",  # Red
-            "ROLLED": "#7B1FA2",   # Purple
-            "BCF": "#FFA500",      # Orange
-            "PENDING": "#FBC02D"   # Yellow
+            "ACTIVE": "#4A90E2", "CLOSED": "#2E7D32", "OVERDUE": "#D32F2F",
+            "ROLLED": "#7B1FA2", "BCF": "#FFA500", "PENDING": "#FBC02D"
         }
-        bg_color = colors.get(status, "#9E9E9E")
-        
-        # Apply standard row style and specific status badge style
-        styles = ['background-color: #FFF9F5; color: #0A192F;'] * len(row)
+        bg = colors.get(status, "#9E9E9E")
+        styles = [''] * len(row)
         if "status" in row.index:
             idx = row.index.get_loc("status")
-            styles[idx] = (
-                f'background-color: {bg_color}; color: white; font-weight: bold; '
-                'border-radius: 4px; text-align: center;'
-            )
+            styles[idx] = f'background-color: {bg}; color: white; font-weight: bold; border-radius: 4px; text-align: center;'
         return styles
 
-    # 5. RENDER THE TABLE
-    display_cols = ["ID", "Borrower", "Amount", "Due Date", "status"]
+    # 3. RENDER WITH COLUMN CONFIG (Fixes the "Empty Space" problem)
+    display_cols = ["Loan ID", "Borrower", "Amount", "Due Date", "status"]
     
     st.dataframe(
-        ledger_df[display_cols].style
-        .apply(style_ledger, axis=1)
-        .format({"Amount": "{:,.0f} UGX"}),
+        ledger_df[display_cols].style.apply(style_ledger, axis=1),
         use_container_width=True,
-        hide_index=True
+        hide_index=True,
+        column_config={
+            "Loan ID": st.column_config.TextColumn("ID", width="small"),
+            "Borrower": st.column_config.TextColumn("Borrower Name", width="large"),
+            "Amount": st.column_config.NumberColumn("Amount", format="%d UGX", width="medium"),
+            "Due Date": st.column_config.DateColumn("Due Date", format="YYYY-MM-DD", width="medium"),
+            "status": st.column_config.TextColumn("Status", width="small"),
+        }
     )
 
-    # 6. OVERDUE NOTIFICATION
+    # 4. Cleanup Warnings
     today = datetime.now().date()
-    overdue_mask = (pd.to_datetime(ledger_df['end_date']).dt.date < today) & (ledger_df['status'] != 'CLOSED')
-    overdue_count = overdue_mask.sum()
-    
+    overdue_count = ((ledger_df['Due Date'].dt.date < today) & (ledger_df['status'] != 'CLOSED')).sum()
     if overdue_count > 0:
-        st.warning(f"⚠️ Action Required: {overdue_count} loan(s) are currently past their due date.")
-    else:
-        st.success("✅ All active collections are currently on track.")                                                                                                                      
+        st.warning(f"⚠️ Action Required: {overdue_count} loan(s) are currently past their due date.")                                                                                                                      
                                                                                                                                                                                                                                                                  
 # ==============================
 # 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
