@@ -1435,7 +1435,7 @@ def show_collateral():
                         st.cache_data.clear()
                         st.rerun()
             
-==============================
+
 17. ACTIVITY CALENDAR PAGE (SAAS + ENTERPRISE UPGRADE)
 ==============================
 
