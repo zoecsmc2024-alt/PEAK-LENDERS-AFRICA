@@ -875,10 +875,9 @@ def show_loans():
     closed_mask = loans_df["balance"] <= 0
     loans_df.loc[closed_mask, "status"] = "Closed"
     loans_df.loc[closed_mask, "balance"] = 0
-    # --- 2. DEFINE TABS (CRITICAL: Variable names must match 'with' statements) ---
-    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
-    ])
+
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs(["📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"])
+
     # ==============================
     # TAB: PORTFOLIO VIEW (Luxe Theme)
     # ==============================
