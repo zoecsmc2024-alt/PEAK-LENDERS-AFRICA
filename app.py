@@ -1434,15 +1434,9 @@ def show_collateral():
 
                     if save_data("collateral", update_df):
                         st.success("✅ Updated successfully!")
-                        st.cache_data.clear()
-                        st.rerun()
+                            st.cache_data.clear()
+                                st.rerun()
             
-
-            
-
-
-
-
 ==============================
 17. ACTIVITY CALENDAR PAGE (SAAS + ENTERPRISE UPGRADE)
 ==============================
