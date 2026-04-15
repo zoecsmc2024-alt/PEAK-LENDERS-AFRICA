@@ -1087,7 +1087,26 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import random
+# 1. Fetch data first so active_borrowers is defined
+loans_df = get_cached_data("loans")
+borrowers_df = get_cached_data("borrowers")
 
+# 2. Process borrowers (Fixes image_ee6762.png)
+if borrowers_df is not None and not borrowers_df.empty:
+    # Standardize column names
+    borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    # Define active_borrowers globally within the function scope
+    active_borrowers = borrowers_df[borrowers_df["status"].astype(str).str.upper() == "ACTIVE"]
+else:
+    active_borrowers = pd.DataFrame()
+
+# 3. Define the tabs (Fixes image_edfea5.png and image_ef5c1d.png)
+tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+    "📊 Portfolio View", 
+    "➕ New Loan", 
+    "🔧 Manage/Edit", 
+    "⚙️ Actions"
+])
 # -------------------------------
 # STATUS STANDARDIZER (CRITICAL)
 # -------------------------------
