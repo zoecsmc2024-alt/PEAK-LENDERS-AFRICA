@@ -76,6 +76,21 @@ def apply_master_theme():
         </style>
     """, unsafe_allow_html=True)
 
+# ==============================
+# 2. SUPABASE INIT (SINGLE SOURCE OF TRUTH)
+# ==============================
+@st.cache_resource
+def init_supabase():
+    try:
+        URL = st.secrets["SUPERBASE_URL"]
+        KEY = st.secrets["SUPERBASE_KEY"]
+        return create_client(URL, KEY)
+    except Exception as e:
+        st.error(f"Supabase connection credentials missing or invalid: {e}")
+        st.stop()
+
+supabase = init_supabase()
+
 
 
 # ==============================
