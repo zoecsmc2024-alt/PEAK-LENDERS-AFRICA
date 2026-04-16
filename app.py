@@ -325,19 +325,22 @@ def tenant_filter(df):
 
 
 # ==============================
-# 11. LOGIN PAGE (SAFE + CLEAN)
+# 11. LOGIN PAGE (INTEGRATED)
 # ==============================
 def login_page():
     # Centered layout for login
     _, col, _ = st.columns([1, 2, 1])
 
     with col:
-        st.image("https://via.placeholder.com/150", width=100) # Replace with your logo if needed
+        st.image("https://via.placeholder.com/150", width=100) 
         st.markdown("## 🔐 Finance Portal Login")
 
         company = st.text_input("Company Code", help="Provided by your administrator").strip().upper()
         email = st.text_input("Email").strip().lower()
         password = st.text_input("Password", type="password")
+        
+        # --- NEW: REMEMBER ME ---
+        remember_me = st.checkbox("Remember Me")
 
         if st.button("Access Dashboard", use_container_width=True):
             if not company or not email or not password:
@@ -348,70 +351,25 @@ def login_page():
                 result = authenticate(supabase, company, email, password)
 
                 if result["success"]:
+                    # If remember_me is logic is implemented in your session helper
                     create_session(result)
                 else:
                     record_failed_attempt(email)
                     st.error(result["error"])
-def signup_page(supabase):
-    import time
-    st.markdown("<h2 style='text-align:center;'>🆕 Create Account</h2>", unsafe_allow_html=True)
-    
-    tenant_code = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
-    email = st.text_input("📧 Email", key="signup_email").strip().lower()
-    password = st.text_input("🔑 Password", type="password", key="signup_pass")
 
-    if st.button("🚀 Create Account", use_container_width=True):
-        if not all([tenant_code, email, password]):
-            st.warning("⚠️ Please fill all fields.")
-        else:
-            try:
-                # 1. TENANT CHECK
-                check = supabase.table("tenants").select("id").eq("company_code", tenant_code).execute()
-                if check.data:
-                    tenant_id = check.data[0]['id']
-                else:
-                    new_t = supabase.table("tenants").insert({
-                        "company_code": tenant_code,
-                        "name": tenant_code.capitalize()
-                    }).execute()
-                    tenant_id = new_t.data[0]['id']
-
-                # 2. AUTH SIGNUP
-                res = supabase.auth.sign_up({
-                    "email": email,
-                    "password": password,
-                    "options": {"data": {"tenant_id": str(tenant_id), "role": "Admin"}}
-                })
-
-                if res.user:
-                    user_data = {
-                        "id": res.user.id,
-                        "tenant_id": str(tenant_id),
-                        "role": "Admin",
-                        "full_name": email.split('@')[0].capitalize()
-                    }
-
-                    try:
-                        supabase.table("users").insert(user_data).execute()
-                        st.success("✅ SUCCESS! Account created.")
-                        time.sleep(1)
-                        st.session_state.view = "login"
-                        st.rerun()
-                    except Exception as db_err:
-                        if "23505" in str(db_err):
-                            st.info("👋 Account exists. Redirecting...")
-                            time.sleep(1)
-                            st.session_state.view = "login"
-                            st.rerun()
-                        else:
-                            st.error(f"🚨 Profile Error: {str(db_err)}")
-
-            except Exception as e:
-                st.error(f"🚨 Signup Error: {str(e)}")
-
-    if st.button("⬅️ Back to Login", key="signup_back_final"):
-        st.session_state.view = "login"
-        st.rerun()
+        # --- NEW: NAVIGATION LINKS ---
+        st.markdown("---")
+        nav_col1, nav_col2 = st.columns(2)
+        
+        with nav_col1:
+            if st.button("🆕 Create Account", use_container_width=True, key="go_signup"):
+                st.session_state.view = "signup"
+                st.rerun()
+                
+        with nav_col2:
+            if st.button("🔑 Forgot Password?", use_container_width=True, key="go_forgot"):
+                st.session_state.view = "forgot_password"
+                st.rerun()
 
 
 # ==============================
