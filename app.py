@@ -81,13 +81,6 @@ def apply_master_theme():
 # ==============================
 @st.cache_resource
 def init_supabase():
-    try:
-        URL = st.secrets["SUPERBASE_URL"]
-        KEY = st.secrets["SUPERBASE_KEY"]
-        return create_client(URL, KEY)
-    except Exception as e:
-        st.error(f"Supabase connection credentials missing or invalid: {e}")
-        st.stop()
 
 supabase = init_supabase()
 
