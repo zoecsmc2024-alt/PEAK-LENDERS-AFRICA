@@ -2338,23 +2338,59 @@ def show_ledger():
 
         for _, l_row in client_loans.iterrows():
             l_id = l_row['id']
-            p, i = float(l_row.get('principal', 0)), float(l_row.get('interest', 0))
 
-            l_pay = 0
+            principal = float(l_row.get('principal', 0))
+            interest = float(l_row.get('interest', 0))
+            initial_amount = principal + interest
+
+            loan_payments = pd.DataFrame()
+
             if payments_df is not None and not payments_df.empty:
-                # Use str conversion for ID safety
-                l_pay = payments_df[payments_df["loan_id"].astype(str) == str(l_id)]["amount"].sum()
+                loan_payments = payments_df[
+                    payments_df["loan_id"].astype(str) == str(l_id)
+                ].copy()
 
-            l_bal = (p + i) - l_pay
-            grand_total += l_bal
+            total_paid = loan_payments["amount"].sum() if not loan_payments.empty else 0
+            balance = initial_amount - total_paid
+            grand_total += balance
 
+            # ======================
+            # LOAN HEADER
+            # ======================
             html_statement += f"""
-            <div style="margin-top: 20px; padding: 12px; background: {baby_blue}; border-left: 4px solid {navy_blue}; font-weight: bold; color: {navy_blue}; display: flex; justify-content: space-between;">
-                <span>LOAN REFERENCE: #{l_id}</span>
-                <span>BALANCE: {l_bal:,.0f} UGX</span>
+            <div style="margin-top: 20px; padding: 12px; background: {baby_blue}; border-left: 4px solid {navy_blue}; font-weight: bold; color: {navy_blue};">
+                LOAN ID: #{l_id} | INITIAL: {initial_amount:,.0f} UGX | PAID: {total_paid:,.0f} UGX | BALANCE: {balance:,.0f} UGX
             </div>
             """
 
+            # ======================
+            # PAYMENT TABLE
+            # ======================
+            if not loan_payments.empty:
+                html_statement += """
+                <table style="width:100%; border-collapse: collapse; margin-top:10px;">
+                    <tr style="background:#eee;">
+                        <th style="padding:8px; border:1px solid #ddd;">Date</th>
+                        <th style="padding:8px; border:1px solid #ddd;">Amount Paid</th>
+                    </tr>
+                """
+
+                for _, p_row in loan_payments.iterrows():
+                    pay_date = p_row.get("payment_date", "")
+                    amount = float(p_row.get("amount", 0))
+
+                    html_statement += f"""
+                    <tr>
+                        <td style="padding:8px; border:1px solid #ddd;">{pay_date}</td>
+                        <td style="padding:8px; border:1px solid #ddd;">{amount:,.0f} UGX</td>
+                    </tr>
+                    """
+
+                html_statement += "</table>"
+            else:
+                html_statement += "<p style='color:red; padding: 5px;'>No payments made on this loan</p>"
+
+        # Closing elements after the loop finishes
         html_statement += f"""
             <div style="margin-top: 40px; padding: 25px; border: 2px solid {navy_blue}; text-align: right; background: #f8faff; border-radius: 8px;">
                 <h2 style="color: {navy_blue}; margin: 0; font-size: 16px;">TOTAL CONSOLIDATED OUTSTANDING</h2>
