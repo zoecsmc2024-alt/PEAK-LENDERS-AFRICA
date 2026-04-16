@@ -2198,14 +2198,23 @@ def show_ledger():
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
 
     # ==============================
-    # SELECTION LOGIC
+    # SELECTION LOGIC (FIXED INDENTATION)
     # ==============================
-    loan_options = [f"ID: {r['id']} - {r['borrower']}" for _, r in loans_df.iterrows()]
-    selected_loan = st.selectbox("Select Loan to View Full Statement", loan_options, key="ledger_main_select")
-    
+    loan_map = {
+        f"ID: {r['id']} - {r['borrower']}": str(r["id"])
+        for _, r in loans_df.iterrows()
+    }
+
+    selected_label = st.selectbox(
+        "Select Loan to View Full Statement",
+        list(loan_map.keys()),
+        key="ledger_main_select"
+    )
+
     try:
-        raw_id = int(selected_loan.split(" - ")[0].replace("ID: ", "").strip())
-        loan_info = loans_df[loans_df["id"] == raw_id].iloc[0]
+        raw_id = loan_map[selected_label]  # ✅ always correct
+        loan_info = loans_df[loans_df["id"].astype(str) == raw_id].iloc[0]
+
     except Exception as e:
         st.error(f"Error locating loan record: {e}")
         return
@@ -2275,15 +2284,16 @@ def show_ledger():
             })
 
     # Render audit table
-    st.dataframe(
-        pd.DataFrame(ledger_data).style.format({
-            "Debit": "{:,.0f}",
-            "Credit": "{:,.0f}",
-            "Balance": "{:,.0f}"
-        }),
-        use_container_width=True,
-        hide_index=True
-    )
+    if ledger_data:
+        st.dataframe(
+            pd.DataFrame(ledger_data).style.format({
+                "Debit": "{:,.0f}",
+                "Credit": "{:,.0f}",
+                "Balance": "{:,.0f}"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
 
     # ==============================
     # PRINTABLE STATEMENT (HTML/PDF PREVIEW)
@@ -2332,6 +2342,7 @@ def show_ledger():
 
             l_pay = 0
             if payments_df is not None and not payments_df.empty:
+                # Use str conversion for ID safety
                 l_pay = payments_df[payments_df["loan_id"].astype(str) == str(l_id)]["amount"].sum()
 
             l_bal = (p + i) - l_pay
