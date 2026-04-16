@@ -213,16 +213,44 @@ import os
 from datetime import datetime, timedelta
 
 # ==============================
-# 🔌 SUPABASE INIT (MUST BE FIRST)
+# 🔌 SUPABASE INIT (ROBUST)
 # ==============================
-SUPABASE_URL = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-SUPABASE_KEY = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
+import os
+import streamlit as st
+from supabase import create_client
 
+# Try BOTH lowercase + uppercase + env vars
+SUPABASE_URL = (
+    st.secrets.get("supabase_url") or
+    st.secrets.get("SUPABASE_URL") or
+    os.getenv("SUPABASE_URL")
+)
+
+SUPABASE_KEY = (
+    st.secrets.get("supabase_key") or
+    st.secrets.get("SUPABASE_KEY") or
+    os.getenv("SUPABASE_KEY")
+)
+
+# ==============================
+# 🚨 FAIL FAST + DEBUG
+# ==============================
 if not SUPABASE_URL or not SUPABASE_KEY:
     st.error("🚨 Supabase credentials not configured")
+
+    # 🔍 Debug visibility (REMOVE after fix)
+    st.write("DEBUG → Available secrets:", list(st.secrets.keys()))
+
     st.stop()
 
-supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+# ==============================
+# ✅ CREATE CLIENT
+# ==============================
+try:
+    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+except Exception as e:
+    st.error(f"🚨 Supabase initialization failed: {e}")
+    st.stop()
 
 # ==============================
 # 6. AUTH CORE (UNIFIED - FINAL)
