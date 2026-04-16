@@ -355,6 +355,17 @@ def create_session(result, remember_me=False):
     st.rerun()
 
 # ==============================
+# 🆕 SIGNUP PAGE (PLACEHOLDER)
+# ==============================
+def signup_page(supabase):
+    st.markdown("### 🆕 Create Your Account")
+    # You can paste your existing signup logic here
+    tenant_code = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
+    if st.button("Back to Login", key="back_login_signup"):
+        st.session_state["view"] = "login"
+        st.rerun()
+
+# ==============================
 # 🔒 AUTH UI WRAPPER & ROUTER
 # ==============================
 def run_auth_ui(supabase):
@@ -367,25 +378,21 @@ def run_auth_ui(supabase):
     # ✅ AUTHENTICATED FLOW
     if st.session_state["authenticated"]:
         st.success("Welcome to the dashboard 🚀")
-
         if st.button("Log Out", key="logout_btn"):
             st.session_state.clear()
             st.rerun()
-
-        return  # 👉 your main app goes here
+        return  # 👉 Main dashboard code goes here in your file
 
     # ✅ ROUTING FOR NON-AUTH USERS
     if st.session_state["view"] == "login":
         login_page(supabase)
 
     elif st.session_state["view"] == "signup":
-        st.markdown("### 🆕 Sign Up Page")
-        if st.button("Back to Login", key="back_login_signup"):
-            st.session_state["view"] = "login"
-            st.rerun()
+        signup_page(supabase)
 
     elif st.session_state["view"] == "forgot_password":
         st.markdown("### 🔑 Reset Password")
+        st.info("Password reset instructions would be handled here.")
         if st.button("Back to Login", key="back_login_forgot"):
             st.session_state["view"] = "login"
             st.rerun()
@@ -462,7 +469,6 @@ def authenticate(supabase, company, email, password):
 # ==============================
 if __name__ == "__main__":
     run_auth_ui(supabase)
-
 
 def render_sidebar():
     """
