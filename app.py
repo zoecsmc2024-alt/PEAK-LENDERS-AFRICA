@@ -421,12 +421,6 @@ def run_auth_ui(supabase):
             st.session_state["view"] = "login"
             st.rerun()
 
-# ==============================
-# 🚀 ENTRY POINT
-# ==============================
-if __name__ == "__main__":
-    run_auth_ui(supabase)
-
 def render_sidebar():
     """
     ENTERPRISE MULTI-TENANT SIDEBAR (UPGRADED SAFELY)
@@ -2685,26 +2679,42 @@ def show_dashboard_view():
             # ... Income/Expense Logic ...
             st.write("Monthly Cashflow View Active")
 # ==========================================
-# FINAL APP ROUTER (REActive & STABLE)
+# FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
 
 if __name__ == "__main__":
-    if not st.session_state.get("logged_in"):
+
+    # Ensure defaults
+    if "logged_in" not in st.session_state:
+        st.session_state["logged_in"] = False
+
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
+
+    # ======================
+    # 🔐 AUTH FLOW (ONLY ONCE)
+    # ======================
+    if not st.session_state["logged_in"]:
         st.session_state['theme_color'] = "#1E3A8A"
         apply_master_theme()
+
+        # ✅ ONLY CALL THIS ONCE
         run_auth_ui(supabase)
+
+    # ======================
+    # 🚀 MAIN APP
+    # ======================
     else:
         try:
-            # Wrap the authenticated logic in a try block
             check_session_timeout()
-            
-            # 1. SIDEBAR FIRST (Fetch color)
+
+            # Sidebar
             page = render_sidebar()
-            
-            # 2. THEME SECOND (Apply color)
+
+            # Theme
             apply_master_theme()
-            
-            # 3. CONTENT THIRD
+
+            # Views
             if page == "Settings":
                 show_settings()
             elif page == "Overview":
@@ -2731,6 +2741,6 @@ if __name__ == "__main__":
                 show_payroll()
             else:
                 st.info(f"The {page} module is coming online soon.")
-                
+
         except Exception as e:
             st.error(f"Application Error: {e}")
