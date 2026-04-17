@@ -77,12 +77,29 @@ def apply_master_theme():
     """, unsafe_allow_html=True)
 
 # ==============================
-# 2. SUPABASE INIT (SINGLE SOURCE OF TRUTH)
+# 🔌 SUPABASE INIT (SAFE GLOBAL)
 # ==============================
+
 @st.cache_resource
 def init_supabase():
-    supabase = init_supabase()
+    try:
+        url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
+        if not url or not key:
+            return None  # ✅ don't crash app
+
+        return create_client(url, key)
+
+    except Exception as e:
+        return None  # ✅ fail silently (handled later)
+
+
+supabase = init_supabase()
+
+# ⚠️ DO NOT STOP APP GLOBALLY
+if supabase is None:
+    st.warning("⚠️ Supabase not connected (some features may not work)")
 
 
 # ==============================
