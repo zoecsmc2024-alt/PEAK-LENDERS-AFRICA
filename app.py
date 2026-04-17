@@ -59,6 +59,31 @@ def apply_master_theme():
 
     st.markdown(f"""
     <style>
+    /* SELECTBOX FIX */
+    div[data-baseweb="select"] > div {{
+        background: rgba(255,255,255,0.9) !important;
+        border-radius: 12px !important;
+        border: none !important;
+        font-weight: 500;
+    }}
+    
+    /* RADIO BUTTON FIX */
+    div[role="radiogroup"] label {{
+        padding: 10px !important;
+        border-radius: 10px;
+        transition: 0.2s ease;
+    }}
+
+    /* HOVER */
+    div[role="radiogroup"] label:hover {{
+        background: rgba(255,255,255,0.08);
+    }}
+
+    /* ACTIVE ITEM */
+    div[role="radiogroup"] input:checked + div {{
+        background: rgba(255,255,255,0.15) !important;
+        border-radius: 10px;
+    }}
 
     /* SIDEBAR BACKGROUND (GRADIENT) */
     [data-testid="stSidebar"] {{
@@ -97,7 +122,6 @@ def apply_master_theme():
         border-radius: 50%;
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }}
-
     </style>
     """, unsafe_allow_html=True)
 
@@ -477,14 +501,6 @@ def run_auth_ui(supabase):
             st.rerun()
 
 def render_sidebar():
-
-    # ==============================
-    # 🎨 BRAND HEADER (UPGRADED)
-    # ==============================
-    st.sidebar.markdown("""
-    <div style="text-align:center; padding:20px 10px;">
-    """, unsafe_allow_html=True)
-
     # ==============================
     # 1. FETCH TENANTS (UNCHANGED)
     # ==============================
@@ -507,6 +523,8 @@ def render_sidebar():
     # 2. SIDEBAR UI
     # ==============================
     with st.sidebar:
+        # Header Padding
+        st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
 
         if tenant_map:
             options = list(tenant_map.keys())
@@ -528,7 +546,7 @@ def render_sidebar():
             Active_company = tenant_map.get(Active_company_name, None)
 
             # ==============================
-            # 🔁 TENANT SYNC (UNCHANGED)
+            # 🔁 TENANT SYNC
             # ==============================
             if Active_company:
                 if str(st.session_state.get('tenant_id')) != str(Active_company['id']):
@@ -549,7 +567,6 @@ def render_sidebar():
         # 💎 LOGO + BRAND (MERGED + PREMIUM)
         # ==============================
         logo_val = Active_company.get('logo_url') if Active_company else None
-
         final_logo_url = None
 
         if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
@@ -558,40 +575,46 @@ def render_sidebar():
             else:
                 try:
                     project_url = st.secrets.get("supabase_url") or st.secrets.get("SUPABASE_URL")
-                    project_url = project_url.strip("/")
-                    final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
-                except:
+                    if project_url:
+                        project_url = project_url.strip("/")
+                        final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
+                except Exception:
                     final_logo_url = None
 
-        # 🔷 CENTERED LOGO
-        st.markdown("<div style='text-align:center; margin-top:10px;'>", unsafe_allow_html=True)
+        # Rendering the Brand UI
+        st.markdown("<div style='text-align:center; margin-top:20px;'>", unsafe_allow_html=True)
 
         if final_logo_url:
             try:
-                st.image(f"{final_logo_url}?t={int(time.time())}", width=90)
-            except:
-                st.markdown("<h1>🏢</h1>", unsafe_allow_html=True)
+                st.markdown("""
+                    <div style="
+                        background: rgba(255, 255, 255, 0.05);
+                        padding: 15px;
+                        border-radius: 20px;
+                        display: inline-block;
+                        border: 1px solid rgba(255, 255, 255, 0.1);
+                        margin-bottom: 10px;
+                    ">
+                """, unsafe_allow_html=True)
+                st.image(final_logo_url, width=80)
+                st.markdown("</div>", unsafe_allow_html=True)
+            except Exception:
+                st.markdown("<h1 style='font-size: 50px;'>🏢</h1>", unsafe_allow_html=True)
         else:
-            st.markdown("<h1>🏢</h1>", unsafe_allow_html=True)
+            st.markdown("<h1 style='font-size: 50px;'>🏢</h1>", unsafe_allow_html=True)
 
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # 🔷 COMPANY NAME
         st.markdown(f"""
-        <div style="text-align:center;">
-            <h3 style="margin:5px 0; color:white;">
-                {Active_company_name}
-            </h3>
-            <p style="font-size:12px; color:rgba(255,255,255,0.7);">
-                Finance Core System
-            </p>
-        </div>
+            <div style="text-align:center;">
+                <h3 style="margin: 0; color: white; font-weight: 600;">{Active_company_name}</h3>
+                <p style="font-size: 11px; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 5px;">
+                    Finance Core System
+                </p>
+            </div>
+            <hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>
         """, unsafe_allow_html=True)
 
-        st.markdown("---")
-
         # ==============================
-        # 🚀 NAVIGATION (CLEANER)
+        # 🚀 NAVIGATION
         # ==============================
         menu = {
             "Overview": "📈",
@@ -624,23 +647,29 @@ def render_sidebar():
             key="navigation_radio"
         )
 
-        st.markdown("---")
+        st.markdown("<br>", unsafe_allow_html=True)
 
         # ==============================
-        # 🔐 LOGOUT (UPGRADED LOOK)
+        # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
         # ==============================
+        
+        # Add spacing above the button using markdown
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+
+        # The button must be indented to stay inside the 'with st.sidebar' block
         if st.button("🚪 Logout", use_container_width=True):
+            # Clear session state except for persistent UI settings
             for key in list(st.session_state.keys()):
                 if key not in ["theme_color"]:
                     del st.session_state[key]
-
+            
+            # Use try-except for rerun to handle edge cases in some Streamlit versions
             try:
                 st.rerun()
             except:
                 pass
-
     # ==============================
-    # 🎯 PAGE RESOLUTION (UNCHANGED)
+    # 🎯 PAGE RESOLUTION
     # ==============================
     try:
         final_page = selection.split(" ", 1)[1]
