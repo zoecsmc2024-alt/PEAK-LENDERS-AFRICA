@@ -1248,23 +1248,31 @@ def show_loans():
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ==============================
-        # 📊 TABLE (POLISHED WITH STATUS CHIPS)
+        # 📊 TABLE (POLISHED WITH DYNAMIC COLORS)
         # ==============================
         show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
+        
+        # Define the color mapping function
+        def style_status(val):
+            color_map = {
+                "ACTIVE": "background-color: #d1fae5; color: #065f46;",   # Soft Green
+                "PENDING": "background-color: #fef3c7; color: #92400e;",  # Soft Amber
+                "OVERDUE": "background-color: #fee2e2; color: #991b1b;",  # Soft Red
+                "CLOSED": "background-color: #f3f4f6; color: #374151;",   # Soft Gray
+                "ROLLED": "background-color: #e0e7ff; color: #3730a3;",   # Soft Indigo
+                "BCF": "background-color: #fae8ff; color: #86198f;"       # Soft Purple
+            }
+            return color_map.get(val, "")
+
+        # Apply styling to the dataframe
+        styled_df = filtered_loans[show_cols].style.format({
+            "principal": "{:,.0f}",
+            "total_repayable": "{:,.0f}",
+            "balance": "{:,.0f}"
+        }).applymap(style_status, subset=["status"])
 
         st.dataframe(
-            filtered_loans[show_cols],
-            column_config={
-                "principal": st.column_config.NumberColumn("Principal", format="%,.0f"),
-                "total_repayable": st.column_config.NumberColumn("Total Due", format="%,.0f"),
-                "balance": st.column_config.NumberColumn("Balance", format="%,.0f"),
-                "status": st.column_config.SelectboxColumn(
-                    "Status",
-                    options=["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "ROLLED", "BCF"],
-                    # Status dots coloring
-                    required=True,
-                )
-            },
+            styled_df,
             use_container_width=True,
             hide_index=True
         )
