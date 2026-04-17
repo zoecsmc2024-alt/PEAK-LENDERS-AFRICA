@@ -855,17 +855,53 @@ def show_borrowers():
     else:
         risk_map = {}
 
+        # ==============================
+    # ➕ ADD BORROWER (TOP PRIORITY)
+    # ==============================
+    st.markdown("### ➕ Add Borrower")
+
+    with st.form("add_borrower", clear_on_submit=True):
+
+        c1, c2, c3 = st.columns(3)
+        name = c1.text_input("Full Name")
+        phone = c2.text_input("Phone")
+        email = c3.text_input("Email")
+
+        if st.form_submit_button("Add Borrower"):
+
+            if name and phone:
+
+                new = pd.DataFrame([{
+                    "id": str(uuid.uuid4()),
+                    "name": name,
+                    "phone": phone,
+                    "email": email,
+                    "status": "Active",
+                    "tenant_id": str(tenant_id)
+                }])
+
+                updated = pd.concat([borrowers_df, new], ignore_index=True)
+
+                if save_data("borrowers", updated):
+                    st.success("Borrower added")
+                    st.rerun()
+            else:
+                st.error("Name & phone required")
+
+    st.divider()
+
     # ==============================
     # 🔍 SEARCH
     # ==============================
     search = st.text_input("🔍 Search name / phone").lower()
 
     # ==============================
-    # 📋 BORROWERS TABLE
+    # 📊 TABLE VIEW (BANKING STYLE)
     # ==============================
     if not borrowers_df.empty:
 
         df = borrowers_df.copy()
+
         df["name"] = df["name"].astype(str)
         df["phone"] = df["phone"].astype(str)
 
@@ -875,9 +911,9 @@ def show_borrowers():
         )
         df = df[mask]
 
-        st.markdown("### 👥 Borrowers")
+        rows = ""
 
-        for i, r in df.iterrows():
+        for _, r in df.iterrows():
 
             borrower_id = str(r["id"])
             name = r["name"]
@@ -885,11 +921,10 @@ def show_borrowers():
             email = r.get("email", "")
 
             risk = risk_map.get(borrower_id, {})
-            risk = risk if isinstance(risk, dict) else {}
             exposure = float(risk.get("exposure", 0) or 0)
             risk_label = risk.get("risk", "🟢 Healthy")
 
-            # Color
+            # Color badge
             if "🔴" in risk_label:
                 color = "#dc2626"
             elif "🟠" in risk_label:
@@ -899,21 +934,53 @@ def show_borrowers():
             else:
                 color = "#16a34a"
 
-            with st.container():
+            risk_badge = f"""
+            <span style="
+                padding:4px 10px;
+                border-radius:12px;
+                font-size:12px;
+                font-weight:600;
+                background:{color};
+                color:white;">
+                {risk_label}
+            </span>
+            """
 
-                c1, c2, c3, c4 = st.columns([3,2,2,2])
+            rows += f"""
+            <tr style="border-bottom:1px solid #eee;">
+                <td style="padding:10px; font-weight:600;">{name}</td>
+                <td style="padding:10px;">{phone}</td>
+                <td style="padding:10px;">{email}</td>
+                <td style="padding:10px;">{risk_badge}</td>
+                <td style="padding:10px; font-weight:600;">UGX {exposure:,.0f}</td>
+                <td style="padding:10px;">
+                    <button onclick="window.location.reload()">View</button>
+                </td>
+            </tr>
+            """
 
-                c1.markdown(f"**{name}**  \n📞 {phone}  \n✉️ {email}")
-                c2.markdown(f"<span style='color:{color}; font-weight:600'>{risk_label}</span>", unsafe_allow_html=True)
-                c3.metric("Exposure", f"UGX {exposure:,.0f}")
-
-                if c4.button("View", key=f"view_{borrower_id}"):
-                    st.session_state["selected_borrower"] = borrower_id
-
-                st.divider()
+        st.markdown(f"""
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr style="background:{brand_color}; color:white;">
+                    <th style="padding:12px;">Name</th>
+                    <th style="padding:12px;">Phone</th>
+                    <th style="padding:12px;">Email</th>
+                    <th style="padding:12px;">Risk</th>
+                    <th style="padding:12px;">Exposure</th>
+                    <th style="padding:12px;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows}
+            </tbody>
+        </table>
+        </div>
+        """, unsafe_allow_html=True)
 
     else:
-        st.info("No borrowers found")
+        st.info("No borrowers found.")
 
     # ==============================
     # 👤 BORROWER PROFILE PANEL
@@ -970,40 +1037,7 @@ def show_borrowers():
                 st.session_state.pop("selected_borrower", None)
                 st.rerun()
 
-    # ==============================
-    # ➕ ADD BORROWER
-    # ==============================
-    st.divider()
-    st.markdown("### ➕ Add Borrower")
 
-    with st.form("add_borrower", clear_on_submit=True):
-
-        c1, c2 = st.columns(2)
-        name = c1.text_input("Full Name")
-        phone = c2.text_input("Phone")
-        email = st.text_input("Email")
-
-        if st.form_submit_button("Add Borrower"):
-
-            if name and phone:
-
-                new = pd.DataFrame([{
-                    "id": str(uuid.uuid4()),
-                    "name": name,
-                    "phone": phone,
-                    "email": email,
-                    "status": "Active",
-                    "tenant_id": str(tenant_id)
-                }])
-
-                updated = pd.concat([borrowers_df, new], ignore_index=True)
-
-                if save_data("borrowers", updated):
-                    st.success("Added")
-                    st.rerun()
-
-            else:
-                st.error("Name & phone required")
 # ==============================
 # 🔐 SAAS TENANT CONTEXT (HARDENED)
 # ==============================
