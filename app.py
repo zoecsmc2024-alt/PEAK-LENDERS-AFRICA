@@ -940,6 +940,19 @@ def show_borrowers():
                         <tbody>{rows_html}</tbody>
                     </table>
                 </div>""", unsafe_allow_html=True)
+
+                # ==============================
+                # 🖱️ SELECTION INTERACTION
+                # ==============================
+                st.write("")
+                selected_name = st.selectbox(
+                    "🎯 Select a borrower to manage profile:", 
+                    options=["-- Select --"] + filtered_df["name"].tolist()
+                )
+                if selected_name != "-- Select --":
+                    sel_id = filtered_df[filtered_df["name"] == selected_name]["id"].values[0]
+                    st.session_state["selected_borrower"] = sel_id
+                
             else:
                 st.info("No borrowers found matching your search.")
         else:
@@ -948,58 +961,54 @@ def show_borrowers():
     # ==============================
     # 👤 BORROWER PROFILE PANEL
     # ==============================
+    # Outside of the tabs so it shows clearly at the bottom or when a selection is made
     selected_id = st.session_state.get("selected_borrower")
 
     if selected_id:
-
+        st.write("---")
         st.markdown("## 👤 Borrower Profile")
 
-        borrower = borrowers_df[borrowers_df["id"] == selected_id]
+        borrower_query = borrowers_df[borrowers_df["id"].astype(str) == str(selected_id)]
 
-        if borrower.empty:
+        if borrower_query.empty:
             st.warning("Borrower not found")
-            return
-
-        borrower = borrower.iloc[0]
-
-        name = st.text_input("Name", borrower["name"])
-        phone = st.text_input("Phone", borrower["phone"])
-        email = st.text_input("Email", borrower["email"])
-
-        # ==============================
-        # 📊 LOANS LINKED
-        # ==============================
-        user_loans = loans_df[loans_df["borrower_id"] == selected_id] if not loans_df.empty else pd.DataFrame()
-
-        st.markdown("### 📊 Loan History")
-
-        if not user_loans.empty:
-            st.dataframe(user_loans, use_container_width=True)
         else:
-            st.info("No loans found")
+            borrower = borrower_query.iloc[0]
 
-        # ==============================
-        # 🛠️ ACTIONS
-        # ==============================
-        c1, c2 = st.columns(2)
+            with st.container(border=True):
+                c1, c2 = st.columns(2)
+                name = c1.text_input("Name", borrower["name"])
+                phone = c2.text_input("Phone", borrower["phone"])
+                email = c1.text_input("Email", borrower["email"])
 
-        if c1.button("💾 Update Borrower"):
+                # ==============================
+                # 📊 LOANS LINKED
+                # ==============================
+                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)] if not loans_df.empty else pd.DataFrame()
 
-            borrowers_df.loc[borrowers_df["id"] == selected_id, ["name","phone","email"]] = [name, phone, email]
+                st.markdown("### 📊 Loan History")
+                if not user_loans.empty:
+                    st.dataframe(user_loans, use_container_width=True)
+                else:
+                    st.info("No loans found")
 
-            if save_data("borrowers", borrowers_df):
-                st.success("Updated")
-                st.rerun()
+                # ==============================
+                # 🛠️ ACTIONS
+                # ==============================
+                act_c1, act_c2 = st.columns(2)
 
-        if c2.button("🗑️ Delete Borrower"):
+                if act_c1.button("💾 Update Borrower", use_container_width=True):
+                    borrowers_df.loc[borrowers_df["id"].astype(str) == str(selected_id), ["name","phone","email"]] = [name, phone, email]
+                    if save_data("borrowers", borrowers_df):
+                        st.success("Updated")
+                        st.rerun()
 
-            updated = borrowers_df[borrowers_df["id"] != selected_id]
-
-            if save_data("borrowers", updated):
-                st.warning("Deleted")
-                st.session_state.pop("selected_borrower", None)
-                st.rerun()
-
+                if act_c2.button("🗑️ Delete Borrower", use_container_width=True):
+                    updated = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
+                    if save_data("borrowers", updated):
+                        st.warning("Deleted")
+                        st.session_state.pop("selected_borrower", None)
+                        st.rerun()
 
 # ==============================
 # 🔐 SAAS TENANT CONTEXT (HARDENED)
