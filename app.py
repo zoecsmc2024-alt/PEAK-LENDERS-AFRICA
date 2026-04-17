@@ -3075,7 +3075,7 @@ from io import BytesIO
 # ==============================
 def generate_pdf_statement(client_name, loans_df, payments_df):
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
 
     styles = getSampleStyleSheet()
     elements = []
@@ -3089,6 +3089,8 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
     for _, loan in loans_df.iterrows():
         loan_id = str(loan["id"])
+        # We use a readable label if possible, or truncate the long UUID for the header
+        display_id = str(loan.get("loan_id_label", loan_id)) 
         principal = float(loan.get("principal", 0))
         interest = float(loan.get("interest", 0))
         initial_amount = principal + interest
@@ -3106,12 +3108,16 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
         balance = initial_amount
 
-        elements.append(Paragraph(f"<b>Loan ID:</b> {loan_id}", styles["Heading3"]))
+        elements.append(Paragraph(f"<b>Loan Ref:</b> {display_id}", styles["Heading3"]))
 
         data = [["Date", "Description", "Debit", "Credit", "Balance"]]
 
+        # Truncate dates to YYYY-MM-DD to prevent overwriting
+        start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
+        clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
+
         data.append([
-            str(loan.get("created_at", loan.get("start_date", ""))),
+            clean_start_date,
             "Loan Disbursement",
             f"{initial_amount:,.0f}",
             "0",
@@ -3122,9 +3128,12 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             for _, p in loan_payments.iterrows():
                 amount = float(p.get("amount", 0))
                 balance -= amount
+                
+                pay_date_raw = str(p.get("payment_date", p.get("date", "")))
+                clean_pay_date = pay_date_raw[:10] if len(pay_date_raw) > 10 else pay_date_raw
 
                 data.append([
-                    str(p.get("payment_date", p.get("date", ""))),
+                    clean_pay_date,
                     "Repayment",
                     "0",
                     f"{amount:,.0f}",
@@ -3135,13 +3144,17 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
         grand_total += balance
 
-        table = Table(data, repeatRows=1, colWidths=[80, 160, 70, 70, 80])
+        # Adjusted colWidths: widened the Description and Balance columns
+        table = Table(data, repeatRows=1, colWidths=[75, 170, 85, 85, 100])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
+            ("ALIGN", (0, 0), (0, -1), "LEFT"),
             ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 9), # Slightly smaller font for better fit
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
 
         elements.append(table)
@@ -3186,7 +3199,7 @@ def show_ledger():
     # SELECTION
     # ==============================
     loan_map = {
-        f"ID: {r['id']} - {r['borrower']}": str(r["id"])
+        f"ID: {r.get('loan_id_label', r['id'])} - {r['borrower']}": str(r["id"])
         for _, r in loans_df.iterrows()
     }
 
@@ -3204,7 +3217,7 @@ def show_ledger():
     running = current_p + interest_amt
 
     ledger_data.append({
-        "Date": loan_info.get("start_date", "-"),
+        "Date": str(loan_info.get("start_date", "-"))[:10],
         "Description": "Disbursement",
         "Debit": current_p,
         "Credit": 0,
@@ -3213,7 +3226,7 @@ def show_ledger():
 
     if interest_amt > 0:
         ledger_data.append({
-            "Date": loan_info.get("start_date", "-"),
+            "Date": str(loan_info.get("start_date", "-"))[:10],
             "Description": "Interest",
             "Debit": interest_amt,
             "Credit": 0,
@@ -3228,7 +3241,7 @@ def show_ledger():
             running -= amt
 
             ledger_data.append({
-                "Date": p.get("date", "-"),
+                "Date": str(p.get("date", p.get("payment_date", "-")))[:10],
                 "Description": "Repayment",
                 "Debit": 0,
                 "Credit": amt,
@@ -3251,7 +3264,7 @@ def show_ledger():
         st.download_button(
             "⬇️ Download PDF",
             pdf,
-            file_name=f"{client_name}.pdf",
+            file_name=f"{client_name}_Statement.pdf",
             mime="application/pdf"
         )
 # ==============================
