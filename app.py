@@ -738,7 +738,7 @@ except:
     final_page = "Overview"
 
     st.session_state['current_page'] = final_page
-    return final_page
+return final_page
         
 # ==============================
 # 12. BORROWERS MANAGEMENT PAGE (SAAS + DEBUG FIXED + ENTERPRISE UPGRADE)
