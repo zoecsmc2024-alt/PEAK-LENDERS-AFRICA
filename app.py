@@ -961,7 +961,6 @@ def show_borrowers():
     # ==============================
     # 👤 BORROWER PROFILE PANEL
     # ==============================
-    # Outside of the tabs so it shows clearly at the bottom or when a selection is made
     selected_id = st.session_state.get("selected_borrower")
 
     if selected_id:
@@ -982,19 +981,40 @@ def show_borrowers():
                 email = c1.text_input("Email", borrower["email"])
 
                 # ==============================
-                # 📊 LOANS LINKED
+                # 📊 LOANS LINKED (WITH FORMATTING)
                 # ==============================
-                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)] if not loans_df.empty else pd.DataFrame()
+                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy() if not loans_df.empty else pd.DataFrame()
 
                 st.markdown("### 📊 Loan History")
+                
                 if not user_loans.empty:
-                    st.dataframe(user_loans, use_container_width=True)
+                    # Formatting: Display with commas using column_config
+                    st.dataframe(
+                        user_loans, 
+                        use_container_width=True,
+                        column_config={
+                            "balance": st.column_config.NumberColumn("Balance", format="#,##0.00"),
+                            "amount": st.column_config.NumberColumn("Principal", format="#,##0.00"),
+                            "exposure": st.column_config.NumberColumn("Total Exposure", format="#,##0.00")
+                        }
+                    )
+                    
+                    # PDF / Data Export
+                    csv = user_loans.to_csv(index=False).encode('utf-8')
+                    st.download_button(
+                        label="📥 Export Loan Statement (CSV)",
+                        data=csv,
+                        file_name=f"Statement_{name.replace(' ', '_')}.csv",
+                        mime="text/csv",
+                    )
+                    st.caption("Note: For PDF, open the CSV in Excel and 'Save as PDF'.")
                 else:
                     st.info("No loans found")
 
                 # ==============================
                 # 🛠️ ACTIONS
                 # ==============================
+                st.write("---")
                 act_c1, act_c2 = st.columns(2)
 
                 if act_c1.button("💾 Update Borrower", use_container_width=True):
