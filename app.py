@@ -1872,6 +1872,224 @@ def show_expenses():
 
             except Exception as e:
                 st.error(f"🚨 Manage error: {e}")
+# ==============================
+# 19. PETTY CASH MANAGEMENT PAGE
+# ==============================
+
+def show_petty_cash():
+    """
+    Manages daily office cash transactions. Tracks inflows/outflows
+    for specific tenants with real-time balance alerts.
+    """
+
+    # ==============================
+    # 🎨 BANKING UI SYSTEM
+    # ==============================
+    st.markdown("""
+    <style>
+
+    .block-container {
+        padding-top: 1.2rem;
+    }
+
+    /* Glass Cards */
+    .glass-card {
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        background: linear-gradient(145deg, rgba(255,255,255,0.7), rgba(255,255,255,0.4));
+        border-radius: 16px;
+        padding: 18px;
+        border: 1px solid rgba(255,255,255,0.25);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+        transition: all 0.25s ease;
+    }
+
+    .glass-card:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 12px 30px rgba(0,0,0,0.1);
+    }
+
+    /* Metric Titles */
+    .metric-title {
+        font-size: 11px;
+        color: #6b7280;
+        font-weight: 600;
+        letter-spacing: 0.6px;
+    }
+
+    /* Metric Values */
+    .metric-value {
+        font-size: 22px;
+        font-weight: 700;
+        margin-top: 6px;
+    }
+
+    /* Status badge */
+    .status-badge {
+        font-size: 10px;
+        padding: 3px 8px;
+        border-radius: 20px;
+        margin-left: 6px;
+        font-weight: 600;
+    }
+
+    .safe {
+        background: rgba(16,185,129,0.15);
+        color: #10B981;
+    }
+
+    .low {
+        background: rgba(255,75,75,0.15);
+        color: #FF4B4B;
+    }
+
+    /* Tabs */
+    .stTabs [role="tab"] {
+        font-weight: 600;
+        padding: 10px 18px;
+    }
+
+    .stTabs [aria-selected="true"] {
+        border-bottom: 3px solid #2B3F87;
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<h2 style='color:#2B3F87;'>💵 Petty Cash Management</h2>", unsafe_allow_html=True)
+
+    # 1. FETCH TENANT DATA
+    df = get_cached_data("petty_cash")
+
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "type", "amount", "date", "description"])
+    else:
+        df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+
+    # 2. SMART BALANCE METRICS
+    inflow = df[df["type"] == "In"]["amount"].sum()
+    outflow = df[df["type"] == "Out"]["amount"].sum()
+    balance = inflow - outflow
+
+    # Balance intelligence
+    bal_color = "#10B981" if balance >= 50000 else "#FF4B4B"
+    bal_status = "SAFE" if balance >= 50000 else "LOW"
+
+    # ==============================
+    # 💎 METRIC CARDS
+    # ==============================
+    c1, c2, c3 = st.columns(3)
+
+    c1.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">TOTAL CASH IN</div>
+        <div class="metric-value" style="color:#10B981;">
+            {inflow:,.0f} UGX
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c2.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">TOTAL CASH OUT</div>
+        <div class="metric-value" style="color:#FF4B4B;">
+            {outflow:,.0f} UGX
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c3.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">
+            CURRENT BALANCE
+            <span class="status-badge {'safe' if balance >= 50000 else 'low'}">
+                {bal_status}
+            </span>
+        </div>
+        <div class="metric-value" style="color:{bal_color};">
+            {balance:,.0f} UGX
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ==============================
+    # 📊 SECTION HEADER
+    # ==============================
+    st.markdown("### 📊 Cash Activity")
+
+    tab_record, tab_history = st.tabs(["➕ Record Entry", "📜 Transaction History"])
+
+    # --- TAB 1 ---
+    with tab_record:
+        with st.form("petty_cash_form", clear_on_submit=True):
+            col_a, col_b = st.columns(2)
+            ttype = col_a.selectbox("Transaction Type", ["Out", "In"])
+            t_amount = col_b.number_input("Amount (UGX)", min_value=0, step=1000)
+            desc = st.text_input("Purpose / Description", placeholder="e.g., Office Water Refill")
+
+            if st.form_submit_button("💾 Save to Cashbook"):
+                if t_amount > 0 and desc:
+                    new_row = pd.DataFrame([{
+                        "type": ttype,
+                        "amount": float(t_amount),
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "description": desc,
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    
+                    if save_data("petty_cash", new_row):
+                        st.success(f"Successfully recorded {t_amount:,.0f} UGX!")
+                        st.rerun()
+                else:
+                    st.error("Please provide amount and description.")
+
+    # --- TAB 2 ---
+    with tab_history:
+        st.markdown("### 📜 Transaction Log")
+
+        if not df.empty:
+            def color_type(val):
+                return 'color: #10B981;' if val == 'In' else 'color: #FF4B4B;'
+            
+            st.dataframe(
+                df.sort_values("date", ascending=False)
+                .style.map(color_type, subset=['type'])
+                .format({"amount": "{:,.0f}"}),
+                use_container_width=True, hide_index=True
+            )
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            with st.expander("⚙️ Advanced: Edit or Delete Transaction"):
+                options = [f"ID: {int(row['id'])} | {row['type']} - {row['description']}" for _, row in df.iterrows()]
+                selected_task = st.selectbox("Select Entry to Modify", options)
+                
+                sel_id = int(selected_task.split(" | ")[0].replace("ID: ", ""))
+                item = df[df["id"] == sel_id].iloc[0]
+
+                up_type = st.selectbox("Update Type", ["In", "Out"], index=0 if item["type"] == "In" else 1)
+                up_amt = st.number_input("Update Amount", value=float(item["amount"]), step=1000.0)
+                up_desc = st.text_input("Update Description", value=str(item["description"]))
+
+                c_up, c_del = st.columns(2)
+                if c_up.button("💾 Save Changes", use_container_width=True):
+                    update_entry = pd.DataFrame([{
+                        "id": sel_id,
+                        "type": up_type,
+                        "amount": up_amt,
+                        "description": up_desc,
+                        "tenant_id": st.session_state.tenant_id
+                    }])
+                    if save_data("petty_cash", update_entry):
+                        st.success("Updated Successfully!")
+                        st.rerun()
+
+                if c_del.button("🗑️ Delete Permanently", use_container_width=True):
+                    supabase.table("petty_cash").delete().eq("id", sel_id).execute()
+                    st.warning("Entry Deleted."); st.rerun()
+                
 
 # ==============================
 # 19. PAYROLL MANAGEMENT PAGE
@@ -2858,8 +3076,6 @@ if __name__ == "__main__":
                 show_calendar()
             elif page == "Ledger":
                 show_ledger()
-            elif page == "Overdue Tracker":
-                show_overdue_tracker()
             elif page == "Payments":
                 show_payments()
             elif page == "Expenses":
