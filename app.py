@@ -2739,7 +2739,7 @@ def show_payroll():
     # ==============================
     # 💳 PROCESS PAYROLL
     # ==============================
-    with tab1:
+    with tab_process:
 
         st.markdown("### 🧾 Salary Processing Engine")
 
@@ -2817,7 +2817,7 @@ def show_payroll():
     # ==============================
     # 📜 PAYROLL TABLE
     # ==============================
-    with tab2:
+    with tab ledger:
 
         if not df.empty:
 
