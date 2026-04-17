@@ -18,6 +18,7 @@ import time
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import uuid
 # ==============================
 # 🔒 SAFETY: Ensure supabase always exists
 # ==============================
@@ -2736,15 +2737,13 @@ def show_payroll():
     # ==============================
     tab_process, tab_logs, tab_ledger = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger", "Logs"])
 
-    # ==============================
+   # ==============================
     # 💳 PROCESS PAYROLL
     # ==============================
     with tab_process:
-
         st.markdown("### 🧾 Salary Processing Engine")
 
         with st.form("payroll_form", clear_on_submit=True):
-
             name = st.text_input("Employee Name")
 
             c1, c2, c3 = st.columns(3)
@@ -2759,31 +2758,30 @@ def show_payroll():
             st.markdown("#### 💵 Salary Inputs")
 
             c6, c7, c8 = st.columns(3)
-            arrears = c6.number_input("Arrears")
-            basic = c7.number_input("Basic Salary")
-            absent = c8.number_input("Absent Deduction")
+            arrears = c6.number_input("Arrears", min_value=0.0)
+            basic = c7.number_input("Basic Salary", min_value=0.0)
+            absent = c8.number_input("Absent Deduction", min_value=0.0)
 
             c9, c10 = st.columns(2)
-            advance = c9.number_input("Advance")
-            other = c10.number_input("Other Deductions")
+            advance = c9.number_input("Advance", min_value=0.0)
+            other = c10.number_input("Other Deductions", min_value=0.0)
 
-            # 🔥 LIVE PREVIEW
-            preview = calc_engine(basic, arrears, absent, advance, other)
+            # 🔥 LIVE PREVIEW (Uses the calc_engine defined previously)
+            preview = run_manual_sync_calculations(basic, arrears, absent, advance, other)
 
             st.markdown(f"""
-            <div style="padding:15px;border-radius:10px;background:#F8FAFC;margin-top:10px;">
-                <b>💡 Live Salary Breakdown</b><br><br>
-                Gross: UGX {preview['gross']:,} <br>
-                PAYE: UGX {preview['paye']:,} <br>
-                NSSF (5%): UGX {preview['n5']:,} <br>
-                Net Pay: <b>UGX {preview['net']:,}</b>
+            <div style="padding:15px;border-radius:10px;background:#F8FAFC;margin-top:10px;border:1px solid #E2E8F0;">
+                <b style="color:#1E293B;">💡 Live Salary Breakdown</b><br><br>
+                <span style="color:#64748B;">Gross:</span> UGX {preview['gross']:,} <br>
+                <span style="color:#64748B;">PAYE:</span> UGX {preview['paye']:,} <br>
+                <span style="color:#64748B;">NSSF (5%):</span> UGX {preview['n5']:,} <br>
+                <span style="color:#1E293B; font-weight:bold;">Net Pay: UGX {preview['net']:,}</span>
             </div>
             """, unsafe_allow_html=True)
 
             if st.form_submit_button("🚀 Process Payroll", use_container_width=True):
-
                 if name and basic > 0:
-
+                    # Constructing the dataframe with correct indentation
                     payload = pd.DataFrame([{
                         "employee": name,
                         "tin": tin,
@@ -2804,15 +2802,15 @@ def show_payroll():
                         "net_pay": preview["net"],
                         "lst": preview["lst"],
                         "date": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": str(tenant)
+                        "tenant_id": str(current_tenant)
                     }])
 
                     if save_data("payroll", payload):
                         st.success(f"✅ Payroll processed for {name}")
+                        st.cache_data.clear()
                         st.rerun()
-
                 else:
-                    st.error("Enter valid employee & salary")
+                    st.error("⚠️ Please enter a valid employee name and basic salary.")
 
     # ==============================
     # 📜 PAYROLL TABLE
