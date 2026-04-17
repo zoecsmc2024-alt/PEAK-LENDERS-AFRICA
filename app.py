@@ -711,7 +711,6 @@ with st.sidebar:
         label_visibility="collapsed",
         key="navigation_radio"
     )
-
     st.markdown("<br>", unsafe_allow_html=True)
         # ==============================
         # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
