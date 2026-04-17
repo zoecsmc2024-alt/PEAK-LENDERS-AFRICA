@@ -531,12 +531,11 @@ def render_sidebar():
 
     current_tenant_id = st.session_state.get('tenant_id')
 
-    def render_sidebar(tenant_map, current_tenant_id):
-    # ==============================
+def render_sidebar(tenant_map, current_tenant_id):
+# ==============================
 # 2. SIDEBAR UI
 # ==============================
 with st.sidebar:
-    # Header Padding
     st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
 
     # ==============================
