@@ -883,17 +883,21 @@ def show_borrowers():
     else:
         st.success("✅ No critical borrowers")
         
-tab_main, tab_audit = st.tabs(["📋 Borrowers", "🧾 Audit"])
-        # ==============================
+    # Standardize indentation for the UI flow
+    tab_main, tab_audit = st.tabs(["📋 Borrowers", "🧾 Audit"])
+
+    # ==============================
     # 🔍 SEARCH
     # ==============================
-    search = st.text_input("🔍 Search borrower")
-    search = search.lower() if isinstance(search, str) else ""
+    # This logic lives above the tabs so it can filter data for all tabs if needed
+    search = st.text_input("🔍 Search borrower", placeholder="Type name...")
+    search_query = search.lower() if isinstance(search, str) else ""
+
     with tab_main:
-    # ==============================
-    # 📋 TABLE
-    # ==============================
-    if not borrowers_df.empty:
+        # ==============================
+        # 📋 TABLE (INSIDE TAB)
+        # ==============================
+        if not borrowers_df.empty:
 
         df = borrowers_df.copy()
 
