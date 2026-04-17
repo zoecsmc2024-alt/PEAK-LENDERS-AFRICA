@@ -873,7 +873,8 @@ def show_borrowers():
             email = r.get("email", "")
 
             risk = risk_map.get(borrower_id, {})
-            exposure = float(risk.get("exposure", 0))
+            risk = risk if isinstance(risk, dict) else {}
+            exposure = float(risk.get("exposure", 0) or 0)
             risk_label = risk.get("risk", "🟢 Healthy")
 
             # Color
