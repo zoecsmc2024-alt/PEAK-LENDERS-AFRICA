@@ -983,32 +983,26 @@ def show_borrowers():
                 # ==============================
                 # 📊 LOANS LINKED (CLEAN VIEW)
                 # ==============================
-                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy() if not loans_df.empty else pd.DataFrame()
+                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy()
 
                 st.markdown("### 📊 Loan History")
 
                 if not user_loans.empty:
-                    # We use column_config to hide IDs and format money
                     st.dataframe(
                         user_loans, 
                         use_container_width=True,
-                        hide_index=True, # Removes the leftmost numbers (1, 4, 5)
+                        hide_index=True,
                         column_config={
-                            # 🙈 HIDE THE "TURN OFF" IDs
-                            "id": None, 
-                            "tenant_id": None,
-                            "borrower_id": None,
+                            "id": None, "tenant_id": None, "borrower_id": None, 
+                            "created_at": None, "type": None, "borrower_name": None,
+                            "status_new": None, "due_date": None, "days_overdue": None, "is_overdue": None,
+
+                            "principal": st.column_config.NumberColumn("Principal", format="%,d"),
+                            "interest": st.column_config.NumberColumn("Interest", format="%,d"),
+                            "total_repayable": st.column_config.NumberColumn("Total Due", format="%,d"),
+                            "amount_paid": st.column_config.NumberColumn("Paid", format="%,d"),
+                            "balance": st.column_config.NumberColumn("Balance", format="%,d"),
                             
-                            # 🏷️ LABEL THE VISIBLE COLUMNS
-                            "loan_id_label": st.column_config.TextColumn("Loan ID"),
-                            
-                            # 💰 ADD COMMAS TO MONEY
-                            "principal": st.column_config.NumberColumn("Principal", format="#,##0"),
-                            "interest": st.column_config.NumberColumn("Interest", format="#,##0"),
-                            "total_repayable": st.column_config.NumberColumn("Total Due", format="#,##0"),
-                            "amount_paid": st.column_config.NumberColumn("Paid", format="#,##0"),
-                            
-                            # 📅 CLEAN DATES
                             "start_date": st.column_config.DateColumn("Started"),
                             "end_date": st.column_config.DateColumn("Due Date"),
                         }
@@ -1024,7 +1018,6 @@ def show_borrowers():
                     )
                 else:
                     st.info("No loans found for this borrower")
-
                 # ==============================
                 # 🛠️ ACTIONS
                 # ==============================
