@@ -873,7 +873,7 @@ def show_borrowers():
                 else:
                     st.error("⚠️ Please fill in Name and Phone Number.")
 
-    with tab_view:
+   with tab_view:
         # ==============================
         # 🔍 SEARCH
         # ==============================
@@ -895,8 +895,8 @@ def show_borrowers():
 
             if not filtered_df.empty:
                 rows_html = ""
+                # --- START ROW GENERATION LOOP ---
                 for i, r in filtered_df.reset_index().iterrows():
-                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                     b_id = str(r.get("id", ""))
                     
                     # Risk Logic
@@ -908,42 +908,92 @@ def show_borrowers():
                     elif "🟡" in risk_label: color = "#f59e0b"
                     else: color = "#16a34a"
 
+                    # Build the individual rows
                     rows_html += f"""
-                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
-                        <td style="padding:12px;"><b>{r.get('name', 'Unknown')}</b></td>
-                        <td style="padding:12px;">{r.get('phone', 'N/A')}</td>
-                        <td style="padding:12px;">{r.get('email', 'N/A')}</td>
-                        <td style="padding:12px;">
-                            <span style="background:{color}; color:white; padding:3px 8px; border-radius:12px; font-size:11px;">
-                                {risk_label}
-                            </span>
-                        </td>
-                        <td style="padding:12px; text-align:center;">
-                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">
-                                {r.get('status', 'Active')}
-                            </span>
-                        </td>
-                    </tr>"""
+                    <tr>
+                        <td><span class="borrower-name">{r.get('name', 'N/A')}</span></td>
+                        <td>{r.get('phone', 'N/A')}</td>
+                        <td>{r.get('email', 'N/A')}</td>
+                        <td><span class="risk-badge" style="background:{color};">{risk_label}</span></td>
+                        <td style="text-align:center;"><span class="status-badge">{r.get('status', 'Active')}</span></td>
+                    </tr>
+                    """
+                # --- END ROW GENERATION LOOP ---
 
+                # Now render the full table ONCE
                 st.markdown(f"""
-                <div style='border:2px solid {brand_color}33; border-radius:10px; overflow:hidden; margin-top:20px;'>
-                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
+                <style>
+                .borrower-table {{
+                    border-radius:12px;
+                    overflow:hidden;
+                    border:1px solid #e5e7eb;
+                    box-shadow:0 4px 12px rgba(0,0,0,0.04);
+                    margin-bottom: 20px;
+                }}
+                .borrower-table table {{
+                    width:100%;
+                    border-collapse:collapse;
+                    font-family:sans-serif;
+                    font-size:13px;
+                }}
+                .borrower-table thead tr {{
+                    background:{brand_color};
+                    color:white;
+                    text-transform:uppercase;
+                    font-size:11px;
+                    letter-spacing:0.5px;
+                }}
+                .borrower-table th, .borrower-table td {{
+                    padding:12px;
+                    text-align: left;
+                }}
+                .borrower-table tbody tr:hover {{
+                    background:#f9fafb;
+                    transition:0.2s ease;
+                }}
+                .borrower-name {{
+                    font-weight:600;
+                    color:#111827;
+                }}
+                .status-badge {{
+                    background:{brand_color};
+                    color:white;
+                    padding:4px 10px;
+                    border-radius:20px;
+                    font-size:11px;
+                    font-weight:500;
+                }}
+                .risk-badge {{
+                    padding:4px 10px;
+                    border-radius:20px;
+                    font-size:11px;
+                    font-weight:600;
+                    color:white;
+                }}
+                </style>
+
+                <div class="borrower-table">
+                    <table>
                         <thead>
-                            <tr style='background:{brand_color}; color:white; text-align:left;'>
-                                <th style='padding:12px;'>Borrower Name</th>
-                                <th style='padding:12px;'>Phone</th>
-                                <th style='padding:12px;'>Email</th>
-                                <th style='padding:12px;'>Risk Status</th>
-                                <th style='padding:12px; text-align:center;'>Status</th>
+                            <tr>
+                                <th>Borrower</th>
+                                <th>Phone</th>
+                                <th>Email</th>
+                                <th>Risk</th>
+                                <th style="text-align:center;">Status</th>
                             </tr>
                         </thead>
-                        <tbody>{rows_html}</tbody>
+                        <tbody>
+                            {rows_html}
+                        </tbody>
                     </table>
-                </div>""", unsafe_allow_html=True)
+                </div>
+                """, unsafe_allow_html=True)
             else:
                 st.info("No borrowers found matching your search.")
         else:
             st.info("No borrowers registered yet.")
+
     # ==============================
     # 👤 BORROWER PROFILE PANEL
     # ==============================
