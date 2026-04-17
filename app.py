@@ -898,7 +898,9 @@ def show_borrowers():
         # 📋 TABLE (INSIDE TAB)
         # ==============================
         if not borrowers_df.empty:
-
+            # Filtering logic usually goes here
+            filtered_df = borrowers_df[borrowers_df['name'].str.lower().contains(search_query)] if search_query else borrowers_df
+            st.dataframe(filtered_df, use_container_width=True)
         df = borrowers_df.copy()
 
         df[name_col] = df[name_col].astype(str)
