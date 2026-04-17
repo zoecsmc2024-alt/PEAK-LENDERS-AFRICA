@@ -959,31 +959,7 @@ def show_borrowers():
             """
 
         # Final render (STRICT HTML ONLY HERE)
-        st.markdown(f"""
-        <div style="overflow-x:auto;">
-            <table style="
-                width:100%;
-                border-collapse:collapse;
-                font-size:14px;
-                border-radius:10px;
-                overflow:hidden;
-                box-shadow:0 2px 10px rgba(0,0,0,0.05);
-            ">
-                <thead>
-                    <tr style="background:{brand_color}; color:white; text-align:left;">
-                        <th style="padding:12px;">Name</th>
-                        <th style="padding:12px;">Phone</th>
-                        <th style="padding:12px;">Email</th>
-                        <th style="padding:12px;">Risk</th>
-                        <th style="padding:12px;">Exposure</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows if rows.strip() else "<tr><td colspan='5' style='padding:12px;'>No results found</td></tr>"}
-                </tbody>
-            </table>
-        </div>
-        """, unsafe_allow_html=True)
+        st.text
 
     else:
         st.info("No borrowers found.")
