@@ -2737,7 +2737,7 @@ def show_payroll():
     # ==============================
     tab_process, tab_logs, tab_ledger = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger", "Logs"])
 
-   # ==============================
+    # ==============================
     # 💳 PROCESS PAYROLL
     # ==============================
     with tab_process:
@@ -2753,7 +2753,7 @@ def show_payroll():
 
             c4, c5 = st.columns(2)
             acc = c4.text_input("Account No.")
-            nssf = c5.text_input("NSSF No.")
+            nssf_input = c5.text_input("NSSF No.")
 
             st.markdown("#### 💵 Salary Inputs")
 
@@ -2767,7 +2767,7 @@ def show_payroll():
             other = c10.number_input("Other Deductions", min_value=0.0)
 
             # 🔥 LIVE PREVIEW (Uses the calc_engine defined previously)
-            preview = run_manual_sync_calculations(basic, arrears, absent, advance, other)
+            preview = calc_engine(basic, arrears, absent, advance, other)
 
             st.markdown(f"""
             <div style="padding:15px;border-radius:10px;background:#F8FAFC;margin-top:10px;border:1px solid #E2E8F0;">
@@ -2788,7 +2788,7 @@ def show_payroll():
                         "designation": role,
                         "mob_no": mob,
                         "account_no": acc,
-                        "nssf_no": nssf,
+                        "nssf_no": nssf_input,
                         "arrears": arrears,
                         "basic_salary": basic,
                         "absent_deduction": absent,
@@ -2802,7 +2802,7 @@ def show_payroll():
                         "net_pay": preview["net"],
                         "lst": preview["lst"],
                         "date": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": str(current_tenant)
+                        "tenant_id": str(tenant)
                     }])
 
                     if save_data("payroll", payload):
