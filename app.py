@@ -55,83 +55,47 @@ SESSION_TIMEOUT = 30
 # 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
 def apply_master_theme():
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    brand_color = st.session_state.get("theme_color", "#1E3A8A")
 
     st.markdown(f"""
     <style>
 
-    /* ===== GLOBAL APP ===== */
-    .stApp {{
-        background: linear-gradient(135deg, #f5f7fb, #eef2f7);
-        font-family: 'Segoe UI', sans-serif;
-    }}
-
-    /* ===== SIDEBAR (GRADIENT FINTECH STYLE) ===== */
+    /* SIDEBAR BACKGROUND (GRADIENT) */
     [data-testid="stSidebar"] {{
-        background: linear-gradient(180deg, {brand_color}, #0f172a) !important;
-        padding-top: 20px;
+        background: linear-gradient(180deg, {brand_color} 0%, #0F172A 100%) !important;
     }}
 
-    [data-testid="stSidebar"] * {{
+    /* REMOVE DEFAULT PADDING */
+    [data-testid="stSidebar"] > div:first-child {{
+        padding-top: 0rem;
+    }}
+
+    /* NAV TEXT */
+    [data-testid="stSidebar"] .stRadio label {{
         color: white !important;
+        font-size: 15px !important;
+        font-weight: 500 !important;
     }}
 
-    /* Sidebar buttons */
-    [data-testid="stSidebar"] button {{
-        background: rgba(255,255,255,0.1) !important;
-        border: none !important;
-        border-radius: 10px !important;
-        backdrop-filter: blur(10px);
-    }}
-
-    /* ===== CARDS (GLASS STYLE) ===== */
-    .glass-card {{
-        background: rgba(255,255,255,0.7);
-        backdrop-filter: blur(10px);
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-    }}
-
-    /* ===== METRICS ===== */
-    div[data-testid="stMetric"] {{
-        background: white;
-        padding: 15px;
-        border-radius: 12px;
-        box-shadow: 0px 4px 15px rgba(0,0,0,0.05);
-    }}
-
-    div[data-testid="stMetricValue"] {{
-        font-size: 28px !important;
-        font-weight: bold;
-        color: {brand_color};
-    }}
-
-    /* ===== BUTTONS ===== */
-    .stButton>button {{
-        background: linear-gradient(135deg, {brand_color}, #3b82f6);
-        color: white;
+    /* ACTIVE NAV ITEM */
+    [data-testid="stSidebar"] .stRadio div[role="radiogroup"] > label[data-baseweb="radio"] > div:first-child {{
+        background-color: rgba(255,255,255,0.15) !important;
         border-radius: 10px;
-        border: none;
-        padding: 10px 18px;
-        font-weight: 600;
+        padding: 8px;
     }}
 
-    .stButton>button:hover {{
-        transform: translateY(-1px);
-        box-shadow: 0 6px 15px rgba(0,0,0,0.1);
+    /* BUTTONS */
+    [data-testid="stSidebar"] button {{
+        background-color: white !important;
+        color: {brand_color} !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
     }}
 
-    /* ===== TABLE ===== */
-    .stDataFrame {{
-        border-radius: 12px;
-        overflow: hidden;
-    }}
-
-    /* ===== INPUTS ===== */
-    input, textarea {{
-        border-radius: 8px !important;
+    /* LOGO CIRCLE EFFECT */
+    .logo-container img {{
+        border-radius: 50%;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }}
 
     </style>
@@ -513,19 +477,18 @@ def run_auth_ui(supabase):
             st.rerun()
 
 def render_sidebar():
-    st.sidebar.markdown(f"""
-<div style="text-align:center; padding:15px;">
-    <h2 style="color:white;">💰</h2>
-    <h3 style="margin:0;">{st.session_state.get('company_name','ZOE CONSULTS')}</h3>
-    <p style="font-size:12px; opacity:0.7;">Finance Core</p>
-</div>
-""", unsafe_allow_html=True)
 
     # ==============================
-    # 1. FETCH TENANTS (SAFE + ROBUST)
+    # 🎨 BRAND HEADER (UPGRADED)
+    # ==============================
+    st.sidebar.markdown("""
+    <div style="text-align:center; padding:20px 10px;">
+    """, unsafe_allow_html=True)
+
+    # ==============================
+    # 1. FETCH TENANTS (UNCHANGED)
     # ==============================
     try:
-        # Optimization: select only what we need to minimize bandwidth
         tenants_res = supabase.table("tenants")\
             .select("id, name, brand_color, logo_url")\
             .execute()
@@ -544,14 +507,11 @@ def render_sidebar():
     # 2. SIDEBAR UI
     # ==============================
     with st.sidebar:
-        # ------------------------------
-        # TENANT SWITCHER (HARDENED)
-        # ------------------------------
+
         if tenant_map:
             options = list(tenant_map.keys())
             default_index = 0
 
-            # Safe lookup of current tenant to set the default dropdown value
             if current_tenant_id:
                 for i, name in enumerate(options):
                     if str(tenant_map[name]['id']) == str(current_tenant_id):
@@ -559,7 +519,7 @@ def render_sidebar():
                         break
 
             Active_company_name = st.selectbox(
-                "Business Portal:",
+                "🏢 Business",
                 options,
                 index=default_index,
                 key="sidebar_portal_select"
@@ -567,17 +527,15 @@ def render_sidebar():
 
             Active_company = tenant_map.get(Active_company_name, None)
 
-            # ------------------------------
-            # CRITICAL SYNC FIX (NO LOGIC LOSS)
-            # ------------------------------
+            # ==============================
+            # 🔁 TENANT SYNC (UNCHANGED)
+            # ==============================
             if Active_company:
-                # Only trigger a rerun if the tenant actually changed
                 if str(st.session_state.get('tenant_id')) != str(Active_company['id']):
                     st.session_state['tenant_id'] = Active_company['id']
                     st.session_state['theme_color'] = Active_company.get('brand_color', '#2B3F87')
                     st.session_state['company'] = Active_company.get('name')
 
-                    # Clear cache so the new company's data loads immediately
                     st.cache_data.clear()
                     try:
                         st.rerun()
@@ -588,42 +546,52 @@ def render_sidebar():
             st.stop()
 
         # ==============================
-        # 3. LOGO RENDER (FIXED + SAFE)
+        # 💎 LOGO + BRAND (MERGED + PREMIUM)
         # ==============================
-        st.write("") # Spacer
-        _, col_mid, _ = st.columns([1, 2, 1])
+        logo_val = Active_company.get('logo_url') if Active_company else None
 
-        with col_mid:
-            logo_val = Active_company.get('logo_url') if Active_company else None
+        final_logo_url = None
 
-            # Logic to handle missing or null logo values
-            if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
-                # 1. If it's a direct URL
-                if str(logo_val).startswith("http"):
-                    final_logo_url = logo_val
-                # 2. If it's a Supabase storage path
-                else:
-                    try:
-                        project_url = st.secrets["supabase_url"].strip("/")
-                        final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
-                    except Exception:
-                        final_logo_url = None
-
-                # Render with cache-busting timestamp to ensure updates show immediately
-                if final_logo_url:
-                    try:
-                        st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
-                    except Exception:
-                        st.markdown("<h1 style='text-align:center;'>🏢</h1>", unsafe_allow_html=True)
-                else:
-                    st.markdown("<h1 style='text-align:center;'>🏢</h1>", unsafe_allow_html=True)
+        if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
+            if str(logo_val).startswith("http"):
+                final_logo_url = logo_val
             else:
-                st.markdown("<h1 style='text-align:center;'>🌍</h1>", unsafe_allow_html=True)
+                try:
+                    project_url = st.secrets.get("supabase_url") or st.secrets.get("SUPABASE_URL")
+                    project_url = project_url.strip("/")
+                    final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
+                except:
+                    final_logo_url = None
 
-        st.divider()
+        # 🔷 CENTERED LOGO
+        st.markdown("<div style='text-align:center; margin-top:10px;'>", unsafe_allow_html=True)
+
+        if final_logo_url:
+            try:
+                st.image(f"{final_logo_url}?t={int(time.time())}", width=90)
+            except:
+                st.markdown("<h1>🏢</h1>", unsafe_allow_html=True)
+        else:
+            st.markdown("<h1>🏢</h1>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # 🔷 COMPANY NAME
+        st.markdown(f"""
+        <div style="text-align:center;">
+            <h3 style="margin:5px 0; color:white;">
+                {Active_company_name}
+            </h3>
+            <p style="font-size:12px; color:rgba(255,255,255,0.7);">
+                Finance Core System
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
 
         # ==============================
-        # 4. NAVIGATION MENU (PRESERVED)
+        # 🚀 NAVIGATION (CLEANER)
         # ==============================
         menu = {
             "Overview": "📈",
@@ -643,10 +611,9 @@ def render_sidebar():
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
         current_p = st.session_state.get('current_page', "Overview")
 
-        # Find the index of the current page for the radio button
         try:
             default_ix = list(menu.keys()).index(current_p)
-        except (ValueError, Exception):
+        except:
             default_ix = 0
 
         selection = st.radio(
@@ -657,29 +624,27 @@ def render_sidebar():
             key="navigation_radio"
         )
 
-        st.divider()
+        st.markdown("---")
 
         # ==============================
-        # 5. LOGOUT (HARDENED SESSION WIPE)
+        # 🔐 LOGOUT (UPGRADED LOOK)
         # ==============================
         if st.button("🚪 Logout", use_container_width=True):
-            # Preserve only system-level settings if needed, wipe user data
             for key in list(st.session_state.keys()):
-                if key not in ["theme_color"]: # Optional: keep theme through logout
+                if key not in ["theme_color"]:
                     del st.session_state[key]
-            
+
             try:
                 st.rerun()
             except:
                 pass
 
     # ==============================
-    # 6. PAGE RESOLUTION (SAFE PARSING)
+    # 🎯 PAGE RESOLUTION (UNCHANGED)
     # ==============================
     try:
-        # Extract the page name from the "Emoji Name" string
         final_page = selection.split(" ", 1)[1]
-    except (IndexError, Exception):
+    except:
         final_page = "Overview"
 
     st.session_state['current_page'] = final_page
