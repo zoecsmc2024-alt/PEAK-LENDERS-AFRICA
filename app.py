@@ -576,7 +576,7 @@ def render_sidebar():
             st.stop()
 
         # ==============================
-        # 💎 PRO BRAND BLOCK (ELITE - SYNCHRONIZED + HTML FIXED)
+        # 💎 PRO BRAND BLOCK (FIXED HTML SYNTAX)
         # ==============================
         import time
 
@@ -594,11 +594,16 @@ def render_sidebar():
                 except:
                     final_logo_url = None
 
-        # Logic for creating the logo HTML string
-        logo_html = ""
-        if final_logo_url:
-            # Notice the double braces {{ }} around the CSS styles
-            logo_html = f"""
+        # 1. Prepare variables first to keep them out of the messy CSS string
+        ts = int(time.time())
+        logo_content = f'<img src="{final_logo_url}?t={ts}" width="80" style="border-radius:50%; object-fit:cover;"/>' if final_logo_url else "<h1 style='font-size:40px; margin:0;'>🏢</h1>"
+        
+        total_loans = len(st.session_state.get('loans_df', []))
+        total_clients = len(st.session_state.get('borrowers_df', []))
+
+        # 2. Use %s formatting instead of f-strings to protect the CSS curly braces
+        brand_html = """
+        <div style="text-align:center; margin-top:10px;">
             <div style="
                 display:inline-block;
                 padding:12px;
@@ -606,26 +611,12 @@ def render_sidebar():
                 background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
                 box-shadow: 0 0 25px rgba(255,255,255,0.15);
             ">
-                <img src="{final_logo_url}?t={int(time.time())}" width="80" style="border-radius:50%; object-fit:cover;"/>
+                %s
             </div>
-            """
-        else:
-            logo_html = "<h1 style='font-size:40px; margin:0;'>🏢</h1>"
-
-        # Fetch stats safely
-        total_loans = len(st.session_state.get('loans_df', []))
-        total_clients = len(st.session_state.get('borrowers_df', []))
-
-        # Render the entire Elite Brand Block
-        # ALL CSS curly braces below are now doubled to avoid Python KeyErrors
-        st.markdown(f"""
-        <div style="text-align:center; margin-top:10px;">
-
-            {logo_html}
 
             <div style="margin-top:12px;">
                 <h3 style="color:white; margin:0; font-family: 'Source Sans Pro', sans-serif;">
-                    {Active_company_name}
+                    %s
                     <span style="
                         font-size:12px;
                         background:#22c55e;
@@ -637,50 +628,24 @@ def render_sidebar():
                 </h3>
             </div>
 
-            <p style="
-                font-size:11px;
-                color:rgba(255,255,255,0.6);
-                letter-spacing:1px;
-                margin-top:4px;
-                text-transform: uppercase;
-                font-weight: 600;
-            ">
+            <p style="font-size:11px; color:rgba(255,255,255,0.6); letter-spacing:1px; margin-top:4px; text-transform: uppercase; font-weight: 600;">
                 FINANCE CORE SYSTEM
             </p>
 
-            <div style="
-                display:flex;
-                justify-content:center;
-                gap:10px;
-                margin-top:15px;
-            ">
-                <div style="
-                    flex:1;
-                    background:rgba(255,255,255,0.08);
-                    padding:10px 5px;
-                    border-radius:12px;
-                    color:white;
-                    border: 1px solid rgba(255,255,255,0.1);
-                ">
-                    <div style="font-size:14px; font-weight:bold;">💵 {total_loans}</div>
+            <div style="display:flex; justify-content:center; gap:10px; margin-top:15px;">
+                <div style="flex:1; background:rgba(255,255,255,0.08); padding:10px 5px; border-radius:12px; color:white; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:14px; font-weight:bold;">💵 %s</div>
                     <div style="font-size:9px; opacity:0.6; font-weight:700;">LOANS</div>
                 </div>
-
-                <div style="
-                    flex:1;
-                    background:rgba(255,255,255,0.08);
-                    padding:10px 5px;
-                    border-radius:12px;
-                    color:white;
-                    border: 1px solid rgba(255,255,255,0.1);
-                ">
-                    <div style="font-size:14px; font-weight:bold;">👥 {total_clients}</div>
+                <div style="flex:1; background:rgba(255,255,255,0.08); padding:10px 5px; border-radius:12px; color:white; border: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size:14px; font-weight:bold;">👥 %s</div>
                     <div style="font-size:9px; opacity:0.6; font-weight:700;">CLIENTS</div>
                 </div>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """ % (logo_content, Active_company_name, total_loans, total_clients)
 
+        st.markdown(brand_html, unsafe_allow_html=True)
         st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
 
         st.markdown("---")
