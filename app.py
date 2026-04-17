@@ -2137,10 +2137,11 @@ def show_overdue_tracker():
         st.error(f"Error fetching data: {e}")
         return
 
-    if not loans_raw:
-        st.warning("No loan data available.")
-        return
+    if loans_raw is None:
+    st.warning("No loan data available.")
+    return
 
+    # Convert safely
     loans_df = pd.DataFrame(loans_raw)
 
     if loans_df.empty:
