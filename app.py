@@ -2734,7 +2734,7 @@ def show_payroll():
     # ==============================
     # 📑 TABS
     # ==============================
-    tab_process, tab_logs = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger"])
+    tab_process, tab_logs, tab2 = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger"])
 
     # ==============================
     # 💳 PROCESS PAYROLL
