@@ -888,7 +888,7 @@ def show_borrowers():
     # ==============================
     search = st.text_input("🔍 Search borrower").lower()
 
-        # ==============================
+    # ==============================
     # 📋 TABLE
     # ==============================
     if not borrowers_df.empty:
