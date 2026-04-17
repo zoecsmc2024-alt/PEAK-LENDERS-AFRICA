@@ -888,64 +888,100 @@ def show_borrowers():
     # ==============================
     search = st.text_input("🔍 Search borrower").lower()
 
-    # ==============================
+        # ==============================
     # 📋 TABLE
     # ==============================
     if not borrowers_df.empty:
 
         df = borrowers_df.copy()
 
+        # Ensure safe string operations
         df[name_col] = df[name_col].astype(str)
         df[phone_col] = df[phone_col].astype(str)
 
-        mask = df[name_col].str.lower().str.contains(search, na=False) | df[phone_col].str.contains(search, na=False)
+        # Safe search
+        search_term = search.strip().lower() if isinstance(search, str) else ""
+        mask = (
+            df[name_col].str.lower().str.contains(search_term, na=False) |
+            df[phone_col].str.contains(search_term, na=False)
+        )
         df = df[mask]
 
+        # Prevent HTML leak
         rows = ""
 
         for i, r in df.reset_index(drop=True).iterrows():
 
-            name = r.get(name_col, "Unknown")
-            phone = r.get(phone_col, "N/A")
-            email = r.get("email", "N/A")
+            name = str(r.get(name_col, "Unknown"))
+            phone = str(r.get(phone_col, "N/A"))
+            email = str(r.get("email", "N/A"))
 
-            risk = risk_map.get(name, {})
+            # Risk mapping (safe)
+            risk = risk_map.get(name, {}) if isinstance(risk_map, dict) else {}
             risk_label = risk.get("risk", "🟢 Healthy")
-            exposure = risk.get("exposure", 0)
+            exposure = float(risk.get("exposure", 0) or 0)
 
+            # Row background
             if "🔴" in risk_label:
                 bg = "#FFECEC"
+                badge_color = "#dc2626"
             elif "🟠" in risk_label:
                 bg = "#FFF4E5"
+                badge_color = "#ea580c"
             elif "🟡" in risk_label:
                 bg = "#FFFBE6"
+                badge_color = "#f59e0b"
             else:
                 bg = "#F8FAFC"
+                badge_color = "#16a34a"
+
+            # Premium badge
+            risk_badge = f"""
+            <span style="
+                padding:4px 10px;
+                border-radius:12px;
+                font-size:12px;
+                font-weight:600;
+                background:{badge_color};
+                color:white;">
+                {risk_label}
+            </span>
+            """
 
             rows += f"""
             <tr style="background:{bg}; border-bottom:1px solid #eee;">
-                <td style="padding:10px;">{name}</td>
+                <td style="padding:10px; font-weight:600;">{name}</td>
                 <td style="padding:10px;">{phone}</td>
                 <td style="padding:10px;">{email}</td>
-                <td style="padding:10px;">{risk_label}</td>
-                <td style="padding:10px;">UGX {float(exposure):,.0f}</td>
+                <td style="padding:10px;">{risk_badge}</td>
+                <td style="padding:10px; font-weight:600;">UGX {exposure:,.0f}</td>
             </tr>
             """
 
+        # Final render (STRICT HTML ONLY HERE)
         st.markdown(f"""
         <div style="overflow-x:auto;">
-        <table style="width:100%; border-collapse:collapse;">
-            <thead>
-                <tr style="background:{brand_color}; color:white;">
-                    <th style="padding:12px;">Name</th>
-                    <th style="padding:12px;">Phone</th>
-                    <th style="padding:12px;">Email</th>
-                    <th style="padding:12px;">Risk</th>
-                    <th style="padding:12px;">Exposure</th>
-                </tr>
-            </thead>
-            <tbody>{rows}</tbody>
-        </table>
+            <table style="
+                width:100%;
+                border-collapse:collapse;
+                font-size:14px;
+                border-radius:10px;
+                overflow:hidden;
+                box-shadow:0 2px 10px rgba(0,0,0,0.05);
+            ">
+                <thead>
+                    <tr style="background:{brand_color}; color:white; text-align:left;">
+                        <th style="padding:12px;">Name</th>
+                        <th style="padding:12px;">Phone</th>
+                        <th style="padding:12px;">Email</th>
+                        <th style="padding:12px;">Risk</th>
+                        <th style="padding:12px;">Exposure</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows if rows.strip() else "<tr><td colspan='5' style='padding:12px;'>No results found</td></tr>"}
+                </tbody>
+            </table>
         </div>
         """, unsafe_allow_html=True)
 
