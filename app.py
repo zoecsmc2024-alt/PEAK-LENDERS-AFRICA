@@ -882,12 +882,14 @@ def show_borrowers():
             st.error(f"🚨 {r['borrower']} • {int(r['overdue_loans'])} overdue • {int(r['max_days'])} days • UGX {r['exposure']:.0f}")
     else:
         st.success("✅ No critical borrowers")
-
-    # ==============================
+        
+tab_main, tab_audit = st.tabs(["📋 Borrowers", "🧾 Audit",🛠️ Actions])
+        # ==============================
     # 🔍 SEARCH
     # ==============================
-    search = st.text_input("🔍 Search borrower").lower()
-
+    search = st.text_input("🔍 Search borrower")
+    search = search.lower() if isinstance(search, str) else ""
+    with tab_main:
     # ==============================
     # 📋 TABLE
     # ==============================
@@ -895,20 +897,22 @@ def show_borrowers():
 
         df = borrowers_df.copy()
 
-        # Ensure safe string operations
         df[name_col] = df[name_col].astype(str)
         df[phone_col] = df[phone_col].astype(str)
 
-        # Safe search
-        search_term = search.strip().lower() if isinstance(search, str) else ""
+        # Safe filtering
         mask = (
-            df[name_col].str.lower().str.contains(search_term, na=False) |
-            df[phone_col].str.contains(search_term, na=False)
+            df[name_col].str.lower().str.contains(search, na=False) |
+            df[phone_col].str.contains(search, na=False)
         )
         df = df[mask]
 
-        # Prevent HTML leak
         rows = ""
+
+        # Normalize risk map (prevents mismatches)
+        safe_risk_map = {
+            str(k).strip().lower(): v for k, v in risk_map.items()
+        } if isinstance(risk_map, dict) else {}
 
         for i, r in df.reset_index(drop=True).iterrows():
 
@@ -916,50 +920,47 @@ def show_borrowers():
             phone = str(r.get(phone_col, "N/A"))
             email = str(r.get("email", "N/A"))
 
-            # Risk mapping (safe)
-            risk = risk_map.get(name, {}) if isinstance(risk_map, dict) else {}
+            risk = safe_risk_map.get(name.strip().lower(), {})
             risk_label = risk.get("risk", "🟢 Healthy")
             exposure = float(risk.get("exposure", 0) or 0)
 
-            # Row background
             if "🔴" in risk_label:
                 bg = "#FFECEC"
-                badge_color = "#dc2626"
             elif "🟠" in risk_label:
                 bg = "#FFF4E5"
-                badge_color = "#ea580c"
             elif "🟡" in risk_label:
                 bg = "#FFFBE6"
-                badge_color = "#f59e0b"
             else:
                 bg = "#F8FAFC"
-                badge_color = "#16a34a"
-
-            # Premium badge
-            risk_badge = f"""
-            <span style="
-                padding:4px 10px;
-                border-radius:12px;
-                font-size:12px;
-                font-weight:600;
-                background:{badge_color};
-                color:white;">
-                {risk_label}
-            </span>
-            """
 
             rows += f"""
             <tr style="background:{bg}; border-bottom:1px solid #eee;">
-                <td style="padding:10px; font-weight:600;">{name}</td>
+                <td style="padding:10px;">{name}</td>
                 <td style="padding:10px;">{phone}</td>
                 <td style="padding:10px;">{email}</td>
-                <td style="padding:10px;">{risk_badge}</td>
-                <td style="padding:10px; font-weight:600;">UGX {exposure:,.0f}</td>
+                <td style="padding:10px;">{risk_label}</td>
+                <td style="padding:10px;">UGX {exposure:,.0f}</td>
             </tr>
             """
 
-        # Final render (STRICT HTML ONLY HERE)
-        st.text
+        st.markdown(f"""
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr style="background:{brand_color}; color:white;">
+                    <th style="padding:12px;">Name</th>
+                    <th style="padding:12px;">Phone</th>
+                    <th style="padding:12px;">Email</th>
+                    <th style="padding:12px;">Risk</th>
+                    <th style="padding:12px;">Exposure</th>
+                </tr>
+            </thead>
+            <tbody>
+                {rows}
+            </tbody>
+        </table>
+        </div>
+        """, unsafe_allow_html=True)
 
     else:
         st.info("No borrowers found.")
@@ -971,6 +972,7 @@ def show_borrowers():
     st.markdown("### ➕ Add Borrower")
 
     with st.form("add_borrower", clear_on_submit=True):
+
         c1, c2 = st.columns(2)
         name = c1.text_input("Full Name")
         phone = c2.text_input("Phone")
@@ -978,6 +980,7 @@ def show_borrowers():
         email = st.text_input("Email")
 
         if st.form_submit_button("Save"):
+
             if name and phone:
 
                 new = pd.DataFrame([{
@@ -995,6 +998,7 @@ def show_borrowers():
                     st.success("Saved")
                     st.cache_data.clear()
                     st.rerun()
+
             else:
                 st.error("Name and phone required")
 
