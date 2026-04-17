@@ -2817,7 +2817,7 @@ def show_payroll():
     # ==============================
     # 📜 PAYROLL TABLE
     # ==============================
-    with tab ledger:
+    with tab_ledger:
 
         if not df.empty:
 
