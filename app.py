@@ -1217,12 +1217,19 @@ def show_loans():
         latest_info = loans_df[loans_df["id"] == raw_id].iloc[0]
 
         # ==============================
-        # 💎 METRIC CARDS (UPGRADED UI)
+        # 💎 METRIC CARDS (UPGRADED UI WITH STATUS COLORS)
         # ==============================
         rec_val = float(latest_info.get('amount_paid', 0))
         total_rep = float(latest_info.get('total_repayable', 0))
         out_val = float(latest_info.get('balance', 0))
         stat_val = str(latest_info.get('status', 'N/A')).upper()
+
+        # Logic for Metric Color
+        stat_color = "#2B3F87" # Default Blue
+        if stat_val == "ACTIVE": stat_color = "#16a34a" # Green
+        elif stat_val == "OVERDUE": stat_color = "#dc2626" # Red
+        elif stat_val == "PENDING": stat_color = "#f59e0b" # Amber
+        elif stat_val == "CLOSED": stat_color = "#6b7280" # Gray
 
         c1, c2, c3 = st.columns(3)
 
@@ -1236,21 +1243,28 @@ def show_loans():
 
         c1.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">RECEIVED</p><h3 style="margin:0; color:#0A192F;">UGX {rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
         c2.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">OUTSTANDING</p><h3 style="margin:0; color:#FF4B4B;">UGX {out_val:,.0f}</h3></div>""", unsafe_allow_html=True)
-        c3.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">STATUS</p><h3 style="margin:0; color:#2B3F87;">{stat_val}</h3></div>""", unsafe_allow_html=True)
+        c3.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">STATUS</p><h3 style="margin:0; color:{stat_color};">{stat_val}</h3></div>""", unsafe_allow_html=True)
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ==============================
-        # 📊 TABLE (POLISHED)
+        # 📊 TABLE (POLISHED WITH STATUS CHIPS)
         # ==============================
         show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
 
         st.dataframe(
-            filtered_loans[show_cols].style.format({
-                "principal": "{:,.0f}",
-                "total_repayable": "{:,.0f}",
-                "balance": "{:,.0f}"
-            }),
+            filtered_loans[show_cols],
+            column_config={
+                "principal": st.column_config.NumberColumn("Principal", format="%,.0f"),
+                "total_repayable": st.column_config.NumberColumn("Total Due", format="%,.0f"),
+                "balance": st.column_config.NumberColumn("Balance", format="%,.0f"),
+                "status": st.column_config.SelectboxColumn(
+                    "Status",
+                    options=["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "ROLLED", "BCF"],
+                    # Status dots coloring
+                    required=True,
+                )
+            },
             use_container_width=True,
             hide_index=True
         )
