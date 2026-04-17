@@ -546,7 +546,7 @@ def render_sidebar():
             Active_company = tenant_map.get(Active_company_name, None)
 
             # ==============================
-            # 🔁 TENANT SYNC
+            # 🔁 TENANT SYNC (INSIDE SIDEBAR)
             # ==============================
             if Active_company:
                 if str(st.session_state.get('tenant_id')) != str(Active_company['id']):
@@ -560,12 +560,14 @@ def render_sidebar():
                     except:
                         pass
         else:
-            st.warning("No business entities found.")
+            st.sidebar.warning("No business entities found.")
             st.stop()
 
         # ==============================
-        # 💎 LOGO + BRAND (MERGED + PREMIUM)
+        # 💎 PRO BRAND BLOCK (ELITE - CORRECTED INDENT)
         # ==============================
+        import time # Ensure this is imported at the top of your file
+        
         logo_val = Active_company.get('logo_url') if Active_company else None
         final_logo_url = None
 
@@ -575,47 +577,102 @@ def render_sidebar():
             else:
                 try:
                     project_url = st.secrets.get("supabase_url") or st.secrets.get("SUPABASE_URL")
-                    if project_url:
-                        project_url = project_url.strip("/")
-                        final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
-                except Exception:
+                    project_url = project_url.strip("/")
+                    final_logo_url = f"{project_url}/storage/v1/object/public/company-logos/{logo_val}"
+                except:
                     final_logo_url = None
 
-        # Rendering the Brand UI
-        st.markdown("<div style='text-align:center; margin-top:20px;'>", unsafe_allow_html=True)
+        # 🔷 MAIN WRAPPER START
+        st.markdown('<div style="text-align:center; margin-top:20px;">', unsafe_allow_html=True)
 
+        # 🟢 LOGO WITH GLOW
         if final_logo_url:
-            try:
-                st.markdown("""
-                    <div style="
-                        background: rgba(255, 255, 255, 0.05);
-                        padding: 15px;
-                        border-radius: 20px;
-                        display: inline-block;
-                        border: 1px solid rgba(255, 255, 255, 0.1);
-                        margin-bottom: 10px;
-                    ">
-                """, unsafe_allow_html=True)
-                st.image(final_logo_url, width=80)
-                st.markdown("</div>", unsafe_allow_html=True)
-            except Exception:
-                st.markdown("<h1 style='font-size: 50px;'>🏢</h1>", unsafe_allow_html=True)
-        else:
-            st.markdown("<h1 style='font-size: 50px;'>🏢</h1>", unsafe_allow_html=True)
+            st.markdown("""
+            <div style="
+                display:inline-block;
+                padding:12px;
+                border-radius:50%;
+                background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
+                box-shadow: 0 0 25px rgba(255,255,255,0.15);
+            ">
+            """, unsafe_allow_html=True)
 
+            # Added a timestamp to the URL to force-refresh the logo if it changes
+            st.image(f"{final_logo_url}?t={int(time.time())}", width=80)
+
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("<h1 style='font-size:40px;'>🏢</h1>", unsafe_allow_html=True)
+
+        # 🏢 COMPANY NAME + BADGE
         st.markdown(f"""
-            <div style="text-align:center;">
-                <h3 style="margin: 0; color: white; font-weight: 600;">{Active_company_name}</h3>
-                <p style="font-size: 11px; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 1.5px; margin-top: 5px;">
-                    Finance Core System
-                </p>
-            </div>
-            <hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>
+        <div style="margin-top:12px;">
+            <h3 style="color:white; margin:0; font-family: sans-serif;">
+                {Active_company_name}
+                <span style="
+                    font-size:12px;
+                    background:#22c55e;
+                    color:white;
+                    padding:2px 6px;
+                    border-radius:6px;
+                    vertical-align: middle;
+                ">✔</span>
+            </h3>
+        </div>
+        <p style="
+            font-size:11px;
+            color:rgba(255,255,255,0.6);
+            letter-spacing:1px;
+            margin-top:4px;
+            text-transform: uppercase;
+        ">
+            FINANCE CORE SYSTEM
+        </p>
         """, unsafe_allow_html=True)
 
-        # ==============================
-        # 🚀 NAVIGATION
-        # ==============================
+        # 📊 MINI STATS (LIVE)
+        try:
+            # Check for data in session state or globals
+            total_loans = len(st.session_state.get('loans_df', []))
+            total_clients = len(st.session_state.get('borrowers_df', []))
+        except:
+            total_loans, total_clients = 0, 0
+
+        st.markdown(f"""
+        <div style="
+            display:flex;
+            justify-content:center;
+            gap:10px;
+            margin-top:15px;
+        ">
+            <div style="
+                flex:1;
+                background:rgba(255,255,255,0.08);
+                padding:10px 5px;
+                border-radius:12px;
+                color:white;
+                border: 1px solid rgba(255,255,255,0.1);
+            ">
+                <div style="font-size:14px; font-weight:bold;">💵 {total_loans}</div>
+                <div style="font-size:10px; opacity:0.6; text-transform:uppercase;">Loans</div>
+            </div>
+
+            <div style="
+                flex:1;
+                background:rgba(255,255,255,0.08);
+                padding:10px 5px;
+                border-radius:12px;
+                color:white;
+                border: 1px solid rgba(255,255,255,0.1);
+            ">
+                <div style="font-size:14px; font-weight:bold;">👥 {total_clients}</div>
+                <div style="font-size:10px; opacity:0.6; text-transform:uppercase;">Clients</div>
+            </div>
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        st.markdown("---")
         menu = {
             "Overview": "📈",
             "Loans": "💵",
