@@ -182,7 +182,13 @@ def get_cached_data(table_name):
     except Exception as e:
         print(f"[DATA ERROR] {table_name}: {e}")  # avoids UI spam
         return []
+def safe_numeric_column(df, col, default=0.0):
+    if col in df.columns:
+        series = pd.to_numeric(df[col], errors="coerce")
+    else:
+        series = pd.Series([default] * len(df))
 
+    return series.fillna(default)
 
 # ==============================
 # 3. MULTI-TENANT SESSION CORE
@@ -738,179 +744,247 @@ def render_sidebar():
     return final_page
         
 # ==============================
-# 12. BORROWERS MANAGEMENT PAGE (BANKING-GRADE UPGRADE)
+# 🏦 BORROWERS + RISK INTELLIGENCE (PRODUCTION GRADE)
 # ==============================
-import uuid 
 import streamlit as st
 import pandas as pd
 import numpy as np
+import uuid
+from datetime import datetime
 
 def show_borrowers():
 
+    # ==============================
+    # 🎨 BRAND
+    # ==============================
     brand_color = st.session_state.get("theme_color", "#2B3F87")
-    st.markdown(f"<h2 style='color: {brand_color};'>👥 Borrowers Management</h2>", unsafe_allow_html=True)
-    
-    # ==============================
-    # 🔐 SAAS TENANT CONTEXT
-    # ==============================
-    current_tenant = st.session_state.get('tenant_id')
+    st.markdown(f"<h2 style='color:{brand_color};'>👥 Borrowers & Risk Intelligence</h2>", unsafe_allow_html=True)
 
-    if not current_tenant:
+    # ==============================
+    # 🔐 TENANT SECURITY
+    # ==============================
+    tenant_id = st.session_state.get("tenant_id")
+    if not tenant_id:
         st.error("🔐 Session expired. Please login again.")
         st.stop()
 
     # ==============================
-    # 1. FETCH DATA
+    # 🧠 SAFE HELPERS
     # ==============================
-    df_raw = get_cached_data("borrowers")
-    loans_df = get_cached_data("loans")
+    def safe_df(df):
+        return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
-    if df_raw is None:
-        df_raw = pd.DataFrame()
+    def safe_col(df, col, default=None):
+        if col in df.columns:
+            return df[col]
+        return pd.Series([default] * len(df))
 
-    if loans_df is None:
-        loans_df = pd.DataFrame()
-
-    # ==============================
-    # 🔥 STANDARDIZATION
-    # ==============================
-    if not df_raw.empty:
-        df_raw.columns = df_raw.columns.str.strip().str.lower().str.replace(" ", "_")
-
-        if "tenant_id" in df_raw.columns:
-            df = df_raw[df_raw["tenant_id"].astype(str) == str(current_tenant)].copy()
+    def safe_numeric(df, col, default=0.0):
+        if col in df.columns:
+            s = pd.to_numeric(df[col], errors="coerce")
         else:
-            df = df_raw.copy()
-            df["tenant_id"] = current_tenant
+            s = pd.Series([default] * len(df))
+        return s.fillna(default)
+
+    # ==============================
+    # 📥 LOAD DATA
+    # ==============================
+    borrowers_df = safe_df(get_cached_data("borrowers"))
+    loans_df = safe_df(get_cached_data("loans"))
+
+    # Normalize
+    for df in [borrowers_df, loans_df]:
+        if not df.empty:
+            df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+
+    # Tenant filter
+    if "tenant_id" in borrowers_df.columns:
+        borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(tenant_id)]
+
+    if "tenant_id" in loans_df.columns:
+        loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
+
+    # Ensure borrower columns
+    required_cols = ["id", "name", "phone", "email", "status"]
+    for col in required_cols:
+        if col not in borrowers_df.columns:
+            borrowers_df[col] = None
+
+    name_col = "name"
+    phone_col = "phone"
+
+    # ==============================
+    # 🔥 OVERDUE ENGINE
+    # ==============================
+    def compute_overdue(df):
+        if df.empty:
+            return df
+
+        df["due_date"] = pd.to_datetime(safe_col(df, "due_date"), errors="coerce")
+        df["balance"] = safe_numeric(df, "balance")
+        df["borrower"] = safe_col(df, "borrower", "").astype(str)
+
+        today = pd.Timestamp.today()
+
+        df["days_overdue"] = (today - df["due_date"]).dt.days
+        df["days_overdue"] = df["days_overdue"].apply(lambda x: x if x > 0 else 0)
+
+        df["is_overdue"] = (df["days_overdue"] > 0) & (df["balance"] > 0)
+
+        return df
+
+    loans_df = compute_overdue(loans_df)
+
+    # ==============================
+    # 📊 RISK ENGINE
+    # ==============================
+    if not loans_df.empty and "borrower" in loans_df.columns:
+
+        risk_df = loans_df.groupby("borrower").agg({
+            "balance": "sum",
+            "is_overdue": "sum",
+            "days_overdue": "max"
+        }).reset_index()
+
+        risk_df.rename(columns={
+            "balance": "exposure",
+            "is_overdue": "overdue_loans",
+            "days_overdue": "max_days"
+        }, inplace=True)
+
+        def classify(row):
+            if row["overdue_loans"] == 0:
+                return "🟢 Healthy"
+            elif row["max_days"] <= 7:
+                return "🟡 Watch"
+            elif row["max_days"] <= 30:
+                return "🟠 Risk"
+            else:
+                return "🔴 Critical"
+
+        risk_df["risk"] = risk_df.apply(classify, axis=1)
+
+        risk_map = risk_df.set_index("borrower").to_dict("index")
+
     else:
-        df = pd.DataFrame(columns=[
-            "id", "name", "phone", "email", "address",
-            "national_id", "next_of_kin", "status", "tenant_id"
-        ])
-
-    if not loans_df.empty:
-        loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        if "tenant_id" in loans_df.columns:
-            loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)]
-
-        loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
-        loans_df["balance"] = pd.to_numeric(loans_df.get("balance", 0), errors="coerce").fillna(0)
-
-    df["id"] = df["id"].astype(str)
+        risk_df = pd.DataFrame()
+        risk_map = {}
 
     # ==============================
-    # UI TABS
+    # 🚨 ALERTS
     # ==============================
-    tab_view, tab_add, tab_audit = st.tabs(["📑 View All", "➕ Add New", "⚙️ Audit & Manage"])
+    st.markdown("### 🚨 Critical Alerts")
 
-    # ==============================
-    # TAB 1: VIEW (PREMIUM UI)
-    # ==============================
-    with tab_view:
+    critical = risk_df[risk_df["risk"].str.contains("🔴")] if not risk_df.empty else pd.DataFrame()
 
-        col1, col2 = st.columns([3, 1])
-
-        with col1:
-            search = st.text_input("🔍 Search Borrower", placeholder="Name or phone...", key="bor_search_v2")
-
-        with col2:
-            status_filter = st.selectbox("Filter", ["All", "Active", "Inactive"], key="bor_filter_v2")
-
-        filtered_df = df.copy()
-
-        if search and search.strip() != "":
-            filtered_df = filtered_df[
-                filtered_df.apply(
-                    lambda r: search.lower() in str(r.get("name","")).lower()
-                    or search in str(r.get("phone","")),
-                    axis=1
-                )
-            ]
-
-        if status_filter != "All":
-            filtered_df = filtered_df[
-                filtered_df["status"].astype(str).str.lower() == status_filter.lower()
-            ]
-
-        if filtered_df.empty:
-            st.warning("No matching borrowers.")
-            st.stop()
-
-        # ==============================
-        # 💎 CARD UI (BANKING STYLE)
-        # ==============================
-        for _, r in filtered_df.iterrows():
-
-            borrower_id = str(r["id"])
-
-            user_loans = loans_df[loans_df["borrower_id"] == borrower_id] if not loans_df.empty else pd.DataFrame()
-
-            total_loans = len(user_loans)
-            total_balance = float(user_loans["balance"].sum()) if not user_loans.empty else 0
-
-            st.markdown(f"""
-                <div style="
-                    background: white;
-                    padding:18px;
-                    border-radius:14px;
-                    margin-bottom:12px;
-                    border-left:6px solid {brand_color};
-                    box-shadow:0 4px 18px rgba(0,0,0,0.04);
-                ">
-                    <div style="display:flex;justify-content:space-between;">
-                        <div>
-                            <h4 style="margin:0;color:#0A192F;">{r.get("name","Unknown")}</h4>
-                            <p style="margin:0;font-size:12px;color:#777;">📞 {r.get("phone","N/A")}</p>
-                        </div>
-                        <div style="text-align:right;">
-                            <p style="margin:0;font-size:11px;color:#999;">LOANS</p>
-                            <b>{total_loans}</b>
-                            <p style="margin:0;font-size:11px;color:#999;">EXPOSURE</p>
-                            <b style="color:#FF4B4B;">UGX {total_balance:,.0f}</b>
-                        </div>
-                    </div>
-                </div>
-            """, unsafe_allow_html=True)
+    if not critical.empty:
+        for _, r in critical.iterrows():
+            st.error(f"🚨 {r['borrower']} • {int(r['overdue_loans'])} overdue • {int(r['max_days'])} days • UGX {r['exposure']:.0f}")
+    else:
+        st.success("✅ No critical borrowers")
 
     # ==============================
-    # TAB 2: ADD
+    # 🔍 SEARCH
     # ==============================
-    with tab_add:
+    search = st.text_input("🔍 Search borrower").lower()
 
-        with st.form("add_borrower_form", clear_on_submit=True):
+    # ==============================
+    # 📋 TABLE
+    # ==============================
+    if not borrowers_df.empty:
 
-            c1, c2 = st.columns(2)
+        df = borrowers_df.copy()
 
-            name_in = c1.text_input("Full Name*")
-            phone_in = c2.text_input("Phone Number*")
+        df[name_col] = df[name_col].astype(str)
+        df[phone_col] = df[phone_col].astype(str)
 
-            email_in = st.text_input("Email")
-            address_in = st.text_input("Address")
-            nid_in = st.text_input("National ID")
-            nok_in = st.text_input("Next of Kin")
+        mask = df[name_col].str.lower().str.contains(search, na=False) | df[phone_col].str.contains(search, na=False)
+        df = df[mask]
 
-            if st.form_submit_button("🚀 Save Borrower Profile"):
+        rows = ""
 
-                if name_in and phone_in:
+        for i, r in df.reset_index(drop=True).iterrows():
 
-                    new_entry = {
-                        "id": str(uuid.uuid4()),
-                        "name": name_in,
-                        "phone": phone_in,
-                        "email": email_in,
-                        "address": address_in,
-                        "national_id": nid_in,
-                        "next_of_kin": nok_in,
-                        "status": "Active",
-                        "tenant_id": str(current_tenant)
-                    }
+            name = r.get(name_col, "Unknown")
+            phone = r.get(phone_col, "N/A")
+            email = r.get("email", "N/A")
 
-                    if save_data("borrowers", pd.DataFrame([new_entry])):
-                        st.success(f"✅ {name_in} added!")
-                        st.cache_data.clear()
-                        st.rerun()
-                else:
-                    st.error("Name and Phone required.")
+            risk = risk_map.get(name, {})
+            risk_label = risk.get("risk", "🟢 Healthy")
+            exposure = risk.get("exposure", 0)
+
+            if "🔴" in risk_label:
+                bg = "#FFECEC"
+            elif "🟠" in risk_label:
+                bg = "#FFF4E5"
+            elif "🟡" in risk_label:
+                bg = "#FFFBE6"
+            else:
+                bg = "#F8FAFC"
+
+            rows += f"""
+            <tr style="background:{bg}; border-bottom:1px solid #eee;">
+                <td style="padding:10px;">{name}</td>
+                <td style="padding:10px;">{phone}</td>
+                <td style="padding:10px;">{email}</td>
+                <td style="padding:10px;">{risk_label}</td>
+                <td style="padding:10px;">UGX {float(exposure):,.0f}</td>
+            </tr>
+            """
+
+        st.markdown(f"""
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr style="background:{brand_color}; color:white;">
+                    <th style="padding:12px;">Name</th>
+                    <th style="padding:12px;">Phone</th>
+                    <th style="padding:12px;">Email</th>
+                    <th style="padding:12px;">Risk</th>
+                    <th style="padding:12px;">Exposure</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+        </table>
+        </div>
+        """, unsafe_allow_html=True)
+
+    else:
+        st.info("No borrowers found.")
+
+    # ==============================
+    # ➕ ADD BORROWER
+    # ==============================
+    st.divider()
+    st.markdown("### ➕ Add Borrower")
+
+    with st.form("add_borrower", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        name = c1.text_input("Full Name")
+        phone = c2.text_input("Phone")
+
+        email = st.text_input("Email")
+
+        if st.form_submit_button("Save"):
+            if name and phone:
+
+                new = pd.DataFrame([{
+                    "id": str(uuid.uuid4()),
+                    "name": name,
+                    "phone": phone,
+                    "email": email,
+                    "status": "Active",
+                    "tenant_id": str(tenant_id)
+                }])
+
+                updated = pd.concat([borrowers_df, new], ignore_index=True)
+
+                if save_data("borrowers", updated):
+                    st.success("Saved")
+                    st.cache_data.clear()
+                    st.rerun()
+            else:
+                st.error("Name and phone required")
 
     # ==============================
     # TAB 3: AUDIT (CONNECTED TO LOANS)
