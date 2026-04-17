@@ -665,8 +665,6 @@ def render_sidebar():
                 display:flex;
                 gap:8px;
                 margin-top:12px;
-            
-            </div>
         </div>
         """, unsafe_allow_html=True)
 
