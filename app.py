@@ -499,19 +499,19 @@ def create_company_signup(supabase):
             # ==============================
             # 2. CREATE AUTH USER
             # ==============================
-            # ==============================
-            # 2. CREATE AUTH USER
-            # ==============================
             auth_res = supabase.auth.sign_up({
                 "email": email,
                 "password": password
             })
 
             if not auth_res.user:
-                st.error("Failed to create account")
+                st.error("Failed to create account. Check if email signups are enabled in Supabase.")
                 return
 
             user_id = auth_res.user.id
+            
+            # 🆕 CRITICAL: Small delay to ensure Auth ID propagates to public schema
+            time.sleep(1.5)
 
             # ==============================
             # 3. CREATE TENANT
@@ -547,7 +547,15 @@ def create_company_signup(supabase):
                 "role": "Admin"
             }
 
-            supabase.table("users").insert(user_payload).execute()
+            # Attempting insert with detailed error capture
+            try:
+                supabase.table("users").insert(user_payload).execute()
+            except Exception as user_err:
+                # If this fails, the auth user exists but the profile doesn't.
+                # Usually due to RLS or Foreign Key constraints.
+                print(f"DEBUG: Profile Insert Failed: {user_err}")
+                st.error(f"Account created, but profile setup failed: {user_err}")
+                return
 
             # ==============================
             # SUCCESS
@@ -564,13 +572,18 @@ def create_company_signup(supabase):
             st.success(f"🔗 Invite Link: {invite_link}")
 
             st.warning("⚠️ Share this link with your staff")
+            st.info("Log in using your Company Code and Email.")
 
             st.session_state["view"] = "login"
-            st.rerun()
+            # Optional: st.rerun() - disabled so they can read the code first
+            if st.button("Go to Login"):
+                st.rerun()
 
         except Exception as e:
-            st.error(f"Error: {str(e)}")
+            st.error(f"Error during registration: {str(e)}")
+            print(f"DEBUG: General Exception: {e}")
 
+# ... (Rest of your functions remain exactly the same)
 
 # ==============================
 # 👑 ADMIN INVITE DASHBOARD
