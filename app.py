@@ -621,7 +621,7 @@ def run_auth_ui(supabase):
         # Add password reset logic here
         if st.button("Back to Login", key="back_login_forgot"):
             st.session_state["view"] = "login"
-            st.rerun())
+            st.rerun()
 def render_sidebar():
     # ==============================
     # 1. FETCH TENANTS (UNCHANGED)
