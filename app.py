@@ -447,15 +447,90 @@ def tenant_filter(df):
     return df[df["tenant_id"] == st.session_state.get("tenant_id")].copy()
 
 # ==============================
-# 🆕 SIGNUP PAGE
+# 🆕 SIGNUP PAGE (FULLY WORKING)
 # ==============================
 def signup_page(supabase):
     st.markdown("### 🆕 Create Your Account")
-    tenant_code = st.text_input("🏢 Company Code", key="signup_tenant").strip().upper()
 
-    if st.button("Back to Login", key="back_login_signup"):
-        st.session_state["view"] = "login"
-        st.rerun()
+    st.caption("Enter your company code to join your organization")
+
+    name = st.text_input("Full Name")
+    email = st.text_input("Email").strip().lower()
+    password = st.text_input("Password", type="password")
+
+    company_code = st.text_input(
+        "🏢 Company Code",
+        placeholder="Enter code provided by your company"
+    ).strip().upper()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("⬅ Back to Login"):
+            st.session_state["view"] = "login"
+            st.rerun()
+
+    with col2:
+        if st.button("🚀 Create Account", use_container_width=True):
+
+            if not all([name, email, password, company_code]):
+                st.error("All fields are required")
+                return
+
+            try:
+                # ==============================
+                # 1. FIND TENANT
+                # ==============================
+                tenant_res = supabase.table("tenants")\
+                    .select("id, name, company_code")\
+                    .ilike("company_code", company_code)\
+                    .execute()
+
+                if not tenant_res.data:
+                    st.error("Invalid Company Code")
+                    return
+
+                tenant = tenant_res.data[0]
+                tenant_id = tenant["id"]
+
+                # ==============================
+                # 2. CREATE AUTH USER
+                # ==============================
+                auth_res = supabase.auth.sign_up({
+                    "email": email,
+                    "password": password
+                })
+
+                if not auth_res.user:
+                    st.error("Failed to create account")
+                    return
+
+                user_id = auth_res.user.id
+
+                # ==============================
+                # 3. INSERT USER PROFILE
+                # ==============================
+                import uuid
+
+                profile_payload = {
+                    "id": user_id,
+                    "name": name,
+                    "email": email,
+                    "tenant_id": tenant_id,
+                    "role": "Staff"
+                }
+
+                insert_res = supabase.table("users").insert(profile_payload).execute()
+
+                if insert_res.data:
+                    st.success("✅ Account created successfully! Please log in.")
+                    st.session_state["view"] = "login"
+                    st.rerun()
+                else:
+                    st.error("User created but profile failed")
+
+            except Exception as e:
+                st.error(f"Signup failed: {str(e)}")
 
 # ==============================
 # 🔑 LOGIN PAGE (ONLY ONE)
