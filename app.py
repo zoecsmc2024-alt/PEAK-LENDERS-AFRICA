@@ -455,326 +455,54 @@ def tenant_filter(df):
     return df[df["tenant_id"] == st.session_state.get("tenant_id")].copy()
 
 # ==============================
-# 🏢 CREATE COMPANY (ADMIN FLOW)
-# ==============================
-def create_company_signup(supabase):
-    st.markdown("### 🏢 Register Your Company")
-    st.caption("Create your organization account. You will become the administrator.")
-
-    company_name = st.text_input("Company Name", placeholder="e.g. Zoe Consults Ltd")
-    admin_name = st.text_input("Your Full Name")
-    email = st.text_input("Email").strip().lower()
-    password = st.text_input("Password", type="password")
-    confirm_password = st.text_input("Confirm Password", type="password")
-
-    if st.button("🚀 Create Company", use_container_width=True):
-
-        if not all([company_name, admin_name, email, password, confirm_password]):
-            st.error("All fields are required")
-            return
-
-        if password != confirm_password:
-            st.error("Passwords do not match")
-            return
-
-        if len(password) < 6:
-            st.error("Password must be at least 6 characters")
-            return
-
-        try:
-            import uuid
-            import random
-            import time
-
-            # ==============================
-            # 1. GENERATE COMPANY CODE
-            # ==============================
-            company_code = str(random.randint(10000000000000, 99999999999999))
-
-            # ==============================
-            # 🆕 GENERATE INVITE TOKEN
-            # ==============================
-            invite_token = generate_invite_token()
-
-            # ==============================
-            # 2. CREATE AUTH USER
-            # ==============================
-            auth_res = supabase.auth.sign_up({
-                "email": email,
-                "password": password
-            })
-
-            if not auth_res.user:
-                st.error("Failed to create account. Check if email signups are enabled in Supabase.")
-                return
-
-            user_id = auth_res.user.id
-            
-            # 🆕 CRITICAL: Small delay to ensure Auth ID propagates to public schema
-            time.sleep(1.5)
-
-            # ==============================
-            # 3. CREATE TENANT
-            # ==============================
-            tenant_id = str(uuid.uuid4())
-
-            tenant_payload = {
-                "id": tenant_id,
-                "name": company_name,
-                "company_code": company_code
-            }
-
-            supabase.table("tenants").insert(tenant_payload).execute()
-
-            # ==============================
-            # 🆕 CREATE DEFAULT INVITE
-            # ==============================
-            supabase.table("invites").insert({
-                "tenant_id": tenant_id,
-                "token": invite_token,
-                "used": False,
-                "created_at": datetime.now().isoformat()
-            }).execute()
-
-            # ==============================
-            # 4. CREATE ADMIN USER PROFILE
-            # ==============================
-            user_payload = {
-                "id": user_id,
-                "name": admin_name,
-                "email": email,
-                "tenant_id": tenant_id,
-                "role": "Admin"
-            }
-
-            # Attempting insert with detailed error capture
-            try:
-                supabase.table("users").insert(user_payload).execute()
-            except Exception as user_err:
-                # If this fails, the auth user exists but the profile doesn't.
-                # Usually due to RLS or Foreign Key constraints.
-                print(f"DEBUG: Profile Insert Failed: {user_err}")
-                st.error(f"Account created, but profile setup failed: {user_err}")
-                return
-
-            # ==============================
-            # SUCCESS
-            # ==============================
-            st.success("✅ Company created successfully!")
-
-            st.info(f"🏢 Company: {company_name}")
-            st.success(f"🔑 Your Company Code: {company_code}")
-
-            # ==============================
-            # 🆕 SHOW INVITE LINK
-            # ==============================
-            invite_link = f"http://localhost:8501/?invite={invite_token}"
-            st.success(f"🔗 Invite Link: {invite_link}")
-
-            st.warning("⚠️ Share this link with your staff")
-            st.info("Log in using your Company Code and Email.")
-
-            st.session_state["view"] = "login"
-            # Optional: st.rerun() - disabled so they can read the code first
-            if st.button("Go to Login"):
-                st.rerun()
-
-        except Exception as e:
-            st.error(f"Error during registration: {str(e)}")
-            print(f"DEBUG: General Exception: {e}")
-
-# ... (Rest of your functions remain exactly the same)
-
-# ==============================
-# 👑 ADMIN INVITE DASHBOARD
-# ==============================
-def admin_invite_dashboard(supabase):
-    st.markdown("### 👑 Invite Team Members")
-    st.caption("Create secure invite links for your staff")
-
-    tenant_id = st.session_state.get("tenant_id")
-
-    if not tenant_id:
-        st.error("No tenant found")
-        return
-
-    # ==============================
-    # 🔐 GENERATE NEW INVITE
-    # ==============================
-    with st.expander("➕ Create Invite Link", expanded=True):
-
-        invite_email = st.text_input("Optional: Restrict to Email")
-
-        if st.button("🔗 Generate Invite Link", use_container_width=True):
-
-            try:
-                token = generate_invite_token()
-
-                supabase.table("invites").insert({
-                    "tenant_id": tenant_id,
-                    "token": token,
-                    "email": invite_email if invite_email else None,
-                    "used": False,
-                    "created_at": datetime.now().isoformat()
-                }).execute()
-
-                invite_link = f"http://localhost:8501/?invite={token}"
-
-                st.success("✅ Invite created!")
-                st.code(invite_link)
-
-                st.info("Share this link with your team")
-
-            except Exception as e:
-                st.error(str(e))
-
-    # ==============================
-    # 📊 VIEW INVITES
-    # ==============================
-    st.markdown("### 📋 Active Invites")
-
-    try:
-        invites = supabase.table("invites")\
-            .select("*")\
-            .eq("tenant_id", tenant_id)\
-            .order("created_at", desc=True)\
-            .execute().data
-
-        if not invites:
-            st.info("No invites yet")
-            return
-
-        for invite in invites:
-            token = invite["token"]
-            used = invite["used"]
-            email = invite.get("email")
-            created = invite.get("created_at")
-
-            invite_link = f"http://localhost:8501/?invite={token}"
-
-            with st.container():
-                col1, col2, col3, col4 = st.columns([4, 2, 2, 2])
-
-                with col1:
-                    st.code(invite_link)
-
-                with col2:
-                    if used:
-                        st.success("Used")
-                    else:
-                        st.warning("Active")
-
-                with col3:
-                    st.caption(email if email else "Open Invite")
-                    st.caption(created)
-
-                with col4:
-                    if not used:
-                        if st.button("❌ Revoke", key=f"revoke_{token}"):
-
-                            supabase.table("invites")\
-                                .delete()\
-                                .eq("token", token)\
-                                .execute()
-
-                            st.warning("Invite revoked")
-                            st.rerun()
-
-        st.markdown("---")
-
-    except Exception as e:
-        st.error(str(e))
-
-
-# ==============================
-# 👥 STAFF SIGNUP (JOIN COMPANY)
+# 🆕 SIGNUP PAGE (FULLY WORKING)
 # ==============================
 def signup_page(supabase):
-    st.markdown("### 🆕 Join Your Company")
-    st.caption("Use your invite link or company code")
+    st.markdown("### 🆕 Create Your Account")
 
-    # ==============================
-    # 🆕 CHECK INVITE TOKEN
-    # ==============================
-    query_params = st.query_params
-    invite_token = query_params.get("invite", None)
+    st.caption("Enter your company code to join your organization")
 
     name = st.text_input("Full Name")
     email = st.text_input("Email").strip().lower()
     password = st.text_input("Password", type="password")
-    confirm_password = st.text_input("Confirm Password", type="password")
-    company_code = st.text_input("Company Code (optional)").strip()
+
+    company_code = st.text_input(
+        "🏢 Company Code",
+        placeholder="Enter code provided by your company"
+    ).strip().upper()
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("⬅ Back"):
+        if st.button("⬅ Back to Login"):
             st.session_state["view"] = "login"
             st.rerun()
 
     with col2:
-        if st.button("🚀 Join Company", use_container_width=True):
+        if st.button("🚀 Create Account", use_container_width=True):
 
-            if not all([name, email, password, confirm_password]):
-                st.error("All fields required")
-                return
-
-            if password != confirm_password:
-                st.error("Passwords do not match")
-                return
-
-            if len(password) < 6:
-                st.error("Password too short")
+            if not all([name, email, password, company_code]):
+                st.error("All fields are required")
                 return
 
             try:
-                tenant = None
-                invite = None
-
                 # ==============================
-                # 🆕 JOIN VIA INVITE TOKEN
+                # 1. FIND TENANT
                 # ==============================
-                if invite_token:
-                    invite_res = supabase.table("invites")\
-                        .select("tenant_id, used, email")\
-                        .eq("token", invite_token)\
-                        .execute()
+                tenant_res = supabase.table("tenants")\
+                    .select("id, name, company_code")\
+                    .ilike("company_code", company_code)\
+                    .execute()
 
-                    if not invite_res.data:
-                        st.error("Invalid invite link")
-                        return
-
-                    invite = invite_res.data[0]
-
-                    if invite["used"]:
-                        st.error("Invite already used")
-                        return
-
-                    if invite.get("email") and invite["email"] != email:
-                        st.error("This invite is restricted to another email")
-                        return
-
-                    tenant = {"id": invite["tenant_id"]}
-
-                # ==============================
-                # FALLBACK: COMPANY CODE
-                # ==============================
-                if not tenant and company_code:
-                    tenants = supabase.table("tenants")\
-                        .select("id, name, company_code")\
-                        .execute().data
-
-                    tenant = next(
-                        (t for t in tenants if str(t["company_code"]).strip() == company_code.strip()),
-                        None
-                    )
-
-                if not tenant:
-                    st.error("Invalid invite or company code")
+                if not tenant_res.data:
+                    st.error("Invalid Company Code")
                     return
 
+                tenant = tenant_res.data[0]
+                tenant_id = tenant["id"]
+
                 # ==============================
-                # CREATE AUTH USER
+                # 2. CREATE AUTH USER
                 # ==============================
                 auth_res = supabase.auth.sign_up({
                     "email": email,
@@ -782,38 +510,35 @@ def signup_page(supabase):
                 })
 
                 if not auth_res.user:
-                    st.error("Signup failed")
+                    st.error("Failed to create account")
                     return
 
                 user_id = auth_res.user.id
 
                 # ==============================
-                # CREATE USER PROFILE
+                # 3. INSERT USER PROFILE
                 # ==============================
-                supabase.table("users").insert({
+                import uuid
+
+                profile_payload = {
                     "id": user_id,
                     "name": name,
                     "email": email,
-                    "tenant_id": tenant["id"],
+                    "tenant_id": tenant_id,
                     "role": "Staff"
-                }).execute()
+                }
 
-                # ==============================
-                # 🆕 MARK INVITE USED
-                # ==============================
-                if invite_token:
-                    supabase.table("invites")\
-                        .update({"used": True})\
-                        .eq("token", invite_token)\
-                        .execute()
+                insert_res = supabase.table("users").insert(profile_payload).execute()
 
-                st.success("✅ Account created. Please login.")
-                st.session_state["view"] = "login"
-                st.rerun()
+                if insert_res.data:
+                    st.success("✅ Account created successfully! Please log in.")
+                    st.session_state["view"] = "login"
+                    st.rerun()
+                else:
+                    st.error("User created but profile failed")
 
             except Exception as e:
-                st.error(str(e))
-
+                st.error(f"Signup failed: {str(e)}")
 
 # ==============================
 # 🔑 LOGIN PAGE (ONLY ONE)
