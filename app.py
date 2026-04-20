@@ -499,6 +499,9 @@ def create_company_signup(supabase):
             # ==============================
             # 2. CREATE AUTH USER
             # ==============================
+            # ==============================
+            # 2. CREATE AUTH USER
+            # ==============================
             auth_res = supabase.auth.sign_up({
                 "email": email,
                 "password": password
