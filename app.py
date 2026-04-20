@@ -867,7 +867,7 @@ def run_auth_ui(supabase):
         create_company_signup(supabase)
 
     elif st.session_state["view"] == "admin_invites":
-    admin_invite_dashboard(supabase)
+        admin_invite_dashboard(supabase)
 
     elif st.session_state["view"] == "forgot_password":
         st.markdown("### 🔑 Reset Password")
