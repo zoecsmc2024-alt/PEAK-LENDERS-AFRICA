@@ -523,9 +523,12 @@ def signup_page(supabase):
                 insert_res = supabase.table("users").insert(profile_payload).execute()
 
                 if insert_res.data:
-                    st.success("✅ Account created successfully! Please log in.")
-                    st.session_state["view"] = "login"
-                    st.rerun()
+                    create_session({
+                        "user_id": user_id,
+                        "tenant_id": tenant_id,
+                        "role": "Staff",
+                        "company": tenant["name"]
+                    })
                 else:
                     st.error("User created but profile failed")
 
