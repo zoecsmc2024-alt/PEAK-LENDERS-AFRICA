@@ -444,6 +444,9 @@ def record_failed_attempt(email):
     count, _ = attempts.get(email, (0, datetime.now()))
     attempts[email] = (count + 1, datetime.now())
 
+import streamlit as st
+import time
+
 # ==============================
 # 10. TENANT FILTER
 # ==============================
@@ -452,14 +455,15 @@ def tenant_filter(df):
         return df
     if "tenant_id" not in df.columns:
         return df
-    return df[df["tenant_id"] == st.session_state.get("tenant_id")].copy()
+    
+    current_tenant = st.session_state.get("tenant_id")
+    return df[df["tenant_id"] == current_tenant].copy()
 
 # ==============================
-# 🆕 SIGNUP PAGE (FULLY WORKING)
+# 🆕 SIGNUP PAGE (STABILIZED)
 # ==============================
 def signup_page(supabase):
     st.markdown("### 🆕 Create Your Account")
-
     st.caption("Enter your company code to join your organization")
 
     name = st.text_input("Full Name")
@@ -468,58 +472,52 @@ def signup_page(supabase):
 
     company_code = st.text_input(
         "🏢 Company Code",
-        placeholder="Enter code provided by your company"
+        placeholder="Enter 14-digit code provided by your company"
     ).strip().upper()
 
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("⬅ Back to Login"):
+        if st.button("⬅ Back to Login", key="signup_back"):
             st.session_state["view"] = "login"
             st.rerun()
 
     with col2:
-        if st.button("🚀 Create Account", use_container_width=True):
-
+        if st.button("🚀 Create Account", use_container_width=True, key="signup_submit"):
             if not all([name, email, password, company_code]):
                 st.error("All fields are required")
                 return
 
             try:
-                # ==============================
                 # 1. FIND TENANT
-                # ==============================
                 tenant_res = supabase.table("tenants")\
                     .select("id, name, company_code")\
                     .ilike("company_code", company_code)\
                     .execute()
 
                 if not tenant_res.data:
-                    st.error("Invalid Company Code")
+                    st.error("Invalid Company Code. Please check with your administrator.")
                     return
 
                 tenant = tenant_res.data[0]
                 tenant_id = tenant["id"]
 
-                # ==============================
                 # 2. CREATE AUTH USER
-                # ==============================
                 auth_res = supabase.auth.sign_up({
                     "email": email,
                     "password": password
                 })
 
                 if not auth_res.user:
-                    st.error("Failed to create account")
+                    st.error("Failed to create account. Email may already be registered.")
                     return
 
                 user_id = auth_res.user.id
 
-                # ==============================
-                # 3. INSERT USER PROFILE
-                # ==============================
-                import uuid
+                # 🆕 CRITICAL: Delay to allow Auth ID to propagate to the public schema
+                time.sleep(1.5)
 
+                # 3. INSERT USER PROFILE
                 profile_payload = {
                     "id": user_id,
                     "name": name,
@@ -533,55 +531,62 @@ def signup_page(supabase):
                 if insert_res.data:
                     st.success("✅ Account created successfully! Please log in.")
                     st.session_state["view"] = "login"
+                    time.sleep(1)
                     st.rerun()
                 else:
-                    st.error("User created but profile failed")
+                    st.error("User created in Auth, but profile creation failed. Contact support.")
 
             except Exception as e:
                 st.error(f"Signup failed: {str(e)}")
 
 # ==============================
-# 🔑 LOGIN PAGE (ONLY ONE)
+# 🔑 LOGIN PAGE
 # ==============================
 def login_page(supabase):
     _, col, _ = st.columns([1, 2, 1])
 
     with col:
-        st.image("https://via.placeholder.com/150", width=100)
+        # Use a local or project logo if available
         st.markdown("## 🔐 Finance Portal Login")
 
-        company = st.text_input("Company Code", key="login_company").strip().upper()
-        email = st.text_input("Email", key="login_email").strip().lower()
-        password = st.text_input("Password", type="password", key="login_password")
+        company_input = st.text_input("Company Code", key="login_company").strip().upper()
+        email_input = st.text_input("Email", key="login_email").strip().lower()
+        password_input = st.text_input("Password", type="password", key="login_password")
 
         remember_me = st.checkbox("Remember Me", key="login_remember")
 
         if st.button("Access Dashboard", use_container_width=True, key="login_btn"):
-
-            if not check_rate_limit(email):
+            # Check rate limits (ensure check_rate_limit is defined in utils)
+            if not check_rate_limit(email_input):
                 st.error("Too many attempts. Try again later.")
                 return
 
-            if not company or not email or not password:
+            if not all([company_input, email_input, password_input]):
                 st.error("Please fill in all fields")
                 return
 
-            result = authenticate(supabase, company, email, password)
+            result = authenticate(supabase, company_input, email_input, password_input)
 
             if result.get("success"):
                 create_session(result, remember_me)
+                st.rerun()
             else:
-                record_failed_attempt(email)
-                st.error(result.get("error", "Login failed"))
+                record_failed_attempt(email_input)
+                st.error(result.get("error", "Invalid Credentials"))
 
-        # Navigation
+        # Navigation Footer
         st.markdown("---")
-        col1, col2 = st.columns(2)
+        nav_col1, nav_col2 = st.columns(2)
 
-        if st.button("🏢 Register Company"):
-            st.session_state["view"] = "create_company"
-            st.rerun()
-
+        with nav_col1:
+            if st.button("🏢 Register Company", use_container_width=True, key="nav_reg"):
+                st.session_state["view"] = "create_company"
+                st.rerun()
+        
+        with nav_col2:
+            if st.button("🆕 Join as Staff", use_container_width=True, key="nav_join"):
+                st.session_state["view"] = "signup"
+                st.rerun()
 
 # ==============================
 # 🔒 ROUTER
@@ -590,31 +595,33 @@ def run_auth_ui(supabase):
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
+    # User is already logged in
     if st.session_state.get("authenticated"):
-        st.success(f"Welcome {st.session_state.get('company')} 🚀")
+        st.success(f"Welcome back, {st.session_state.get('user_name', 'User')}! 🚀")
+        st.info(f"Organization: {st.session_state.get('company')}")
 
-        if st.button("Log Out", key="logout_btn"):
+        if st.button("Log Out", key="logout_btn", use_container_width=True):
             st.session_state.clear()
             st.rerun()
         return
 
-    if st.session_state["view"] == "login":
+    # View Routing
+    current_view = st.session_state["view"]
+
+    if current_view == "login":
         login_page(supabase)
-
-    elif st.session_state["view"] == "signup":
+    elif current_view == "signup":
         signup_page(supabase)
-
-    elif st.session_state["view"] == "create_company":
+    elif current_view == "create_company":
         create_company_signup(supabase)
-
-    elif st.session_state["view"] == "admin_invites":
+    elif current_view == "admin_invites":
         admin_invite_dashboard(supabase)
-
-    elif st.session_state["view"] == "forgot_password":
+    elif current_view == "forgot_password":
         st.markdown("### 🔑 Reset Password")
+        # Add password reset logic here
         if st.button("Back to Login", key="back_login_forgot"):
             st.session_state["view"] = "login"
-            st.rerun()
+            st.rerun())
 def render_sidebar():
     # ==============================
     # 1. FETCH TENANTS (UNCHANGED)
