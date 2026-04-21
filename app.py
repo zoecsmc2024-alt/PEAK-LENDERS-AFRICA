@@ -801,40 +801,54 @@ def render_sidebar():
             </div>
             """
 
-        # ✅ RENDER
-        st.markdown(f"""
-        <div style="text-align:center; padding:10px 5px 0 5px;">
-            {logo_component}
-            <div style="margin-top:10px;">
-                <h3 style="color:white; margin:0; font-size:16px; font-weight:600;">
-                    {Active_company_name}
-                    <span style="
-                        font-size:10px;
-                        background:#22c55e;
-                        color:white;
-                        padding:2px 5px;
-                        border-radius:5px;
-                        margin-left:4px;
-                    ">✔</span>
-                </h3>
-            </div>
-            <p style="
-                font-size:10px;
-                color:rgba(255,255,255,0.6);
-                letter-spacing:1px;
-                margin-top:4px;
-                text-transform: uppercase;
+        # ✅ RENDER (NO LEAK)
+st.markdown(f"""
+<div style="
+    width:100%;
+    max-width:100%;
+    overflow:hidden;
+    display:block;
+    box-sizing:border-box;
+">
+    <div style="text-align:center; padding:10px 5px 0 5px;">
+        {logo_component}
+        <div style="margin-top:10px;">
+            <h3 style="
+                color:white;
+                margin:0;
+                font-size:16px;
                 font-weight:600;
+                word-wrap:break-word;
             ">
-                FINANCE CORE
-            </p>
+                {Active_company_name}
+                <span style="
+                    font-size:10px;
+                    background:#22c55e;
+                    color:white;
+                    padding:2px 5px;
+                    border-radius:5px;
+                    margin-left:4px;
+                ">✔</span>
+            </h3>
         </div>
-        """, unsafe_allow_html=True)
+        <p style="
+            font-size:10px;
+            color:rgba(255,255,255,0.6);
+            letter-spacing:1px;
+            margin-top:4px;
+            text-transform: uppercase;
+            font-weight:600;
+        ">
+            FINANCE CORE
+        </p>
+    </div>
+</div>
+""", unsafe_allow_html=True)
 
-        st.markdown(
-            "<hr style='margin: 15px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>",
-            unsafe_allow_html=True
-        )
+st.markdown(
+    "<hr style='width:100%; margin:15px 0; border:0; border-top:1px solid rgba(255,255,255,0.1);'>",
+    unsafe_allow_html=True
+)
 
         # ==============================
         # 📍 MENU
