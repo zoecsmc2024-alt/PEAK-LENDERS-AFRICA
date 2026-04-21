@@ -249,14 +249,6 @@ def run_auth_ui(supabase):
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
-    # Logged In View
-    if st.session_state.get("authenticated"):
-        st.success(f"Welcome, {st.session_state.get('user_name', 'User')}! 🚀")
-        if st.button("Log Out", use_container_width=True):
-            st.session_state.clear()
-            st.rerun()
-        return
-
     # Logged Out Views
     current_view = st.session_state["view"]
     if current_view == "login":
