@@ -1589,6 +1589,7 @@ def show_payments():
 
     st.markdown("<h2 style='color: #2B3F87;'>💵 Payments Management</h2>", unsafe_allow_html=True)
 
+    
     # ==============================
     # 📦 DATA LOAD
     # ==============================
@@ -1598,39 +1599,54 @@ def show_payments():
         borrowers_raw = get_cached_data("borrowers")
     except Exception as e:
         st.error(f"Error fetching data: {e}")
-        return
+        return # SAFE: now inside a function
 
-    loans_df = pd.DataFrame(loans_raw or [])
-    payments_df = pd.DataFrame(payments_raw or [])
-    borrowers_df = pd.DataFrame(borrowers_raw or [])
+    # SAFE DATAFRAME CREATION
+    loans_df = pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame()
+    payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
+    borrowers_df = pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame()
 
     if loans_df.empty:
         st.info("ℹ️ No loans found in the system.")
-        return
+        return # SAFE: now inside a function
 
     # ==============================
-    # 🛡️ NORMALIZATION
+    # 🛡️ NORMALIZE (INDENTED CORRECTLY)
     # ==============================
+    # Using lower() and strip() prevents "Column not found" errors
     loans_df.columns = loans_df.columns.str.lower().str.strip()
-    payments_df.columns = payments_df.columns.str.lower().str.strip()
-    borrowers_df.columns = borrowers_df.columns.str.lower().str.strip()
+    
+    if not payments_df.empty:
+        payments_df.columns = payments_df.columns.str.lower().str.strip()
+    
+    if not borrowers_df.empty:
+        borrowers_df.columns = borrowers_df.columns.str.lower().str.strip()
 
+    # Ensure ID consistency (Critical for mapping)
     if "id" in borrowers_df.columns:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
 
     if "borrower_id" in loans_df.columns:
         loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
 
-    # Map borrower names
-    if not borrowers_df.empty and "name" in borrowers_df.columns:
+    # Borrower mapping logic
+    if not borrowers_df.empty and "name" in borrowers_df.columns and "borrower_id" in loans_df.columns:
         borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
         loans_df["borrower"] = loans_df["borrower_id"].map(borrower_map).fillna("Unknown")
     else:
-        loans_df["borrower"] = loans_df.get("borrower", "Unknown")
+        if "borrower" not in loans_df.columns:
+            loans_df["borrower"] = "Unknown"
 
-    loans_df["status"] = loans_df.get("status", "ACTIVE")
-    loans_df["amount_paid"] = loans_df.get("amount_paid", 0)
-    loans_df["total_repayable"] = loans_df.get("total_repayable", 0)
+    # Set Defaults to prevent NaN errors in UI
+    if "status" not in loans_df.columns:
+        loans_df["status"] = "ACTIVE"
+
+    # Numeric hardening
+    for col in ["amount_paid", "total_repayable"]:
+        if col not in loans_df.columns:
+            loans_df[col] = 0
+        else:
+            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
 
     # ==============================
     # 📑 TABS
