@@ -1723,8 +1723,6 @@ def show_payments():
                                     st.stop()
 
                                 receipt_no = generate_receipt_no(supabase, tenant_id)
-                                
-                                # Define label to prevent DB constraint errors
                                 loan_label = f"LN-{loan_id[:6]}" 
 
                                 new_payment = pd.DataFrame([{
@@ -1738,7 +1736,6 @@ def show_payments():
                                     "tenant_id": tenant_id
                                 }])
 
-                                # Calculate update
                                 new_paid = paid + amount
                                 new_status = "CLOSED" if new_paid >= total else "ACTIVE"
                                 
@@ -1750,7 +1747,6 @@ def show_payments():
                                     "tenant_id": tenant_id
                                 }])
 
-                                # Atomic update
                                 if save_data("payments", new_payment) and save_data("loans", loan_update):
                                     file_path = f"/tmp/{receipt_no}.pdf"
                                     generate_receipt_pdf({
@@ -1762,15 +1758,13 @@ def show_payments():
                                         "Recorded By": st.session_state.get("user", "Staff")
                                     }, file_path)
 
-                                    st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
-                                    
+                                    # Handle Receipt Download State
                                     with open(file_path, "rb") as f:
-                                        st.download_button(
-                                            "📄 Download Receipt", 
-                                            f, 
-                                            file_name=f"{receipt_no}.pdf", 
-                                            mime="application/pdf"
-                                        )
+                                        pdf_bytes = f.read()
+                                        st.session_state["receipt_pdf"] = pdf_bytes
+                                        st.session_state["show_receipt"] = True
+
+                                    st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
                                     
                                     # CRITICAL: Clear cache and rerun to update the "Loans" page balances
                                     st.cache_data.clear()
@@ -1778,6 +1772,19 @@ def show_payments():
 
                             except Exception as e:
                                 st.error(f"❌ {e}")
+
+        # Display Receipt Download if available
+        if st.session_state.get("show_receipt"):
+            st.download_button(
+                "📥 Download Latest Receipt",
+                data=st.session_state["receipt_pdf"],
+                file_name="receipt.pdf",
+                mime="application/pdf"
+            )
+            if st.button("Clear Receipt"):
+                st.session_state["show_receipt"] = False
+                st.rerun()
+
     # ==============================
     # ⚙️ EDIT / DELETE OVERLAYS
     # ==============================
