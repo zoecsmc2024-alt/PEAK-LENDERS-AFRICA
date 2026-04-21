@@ -1666,128 +1666,156 @@ def show_payments():
             payments_df["borrower"] = "Unknown"
 
     # ==============================
-    # 📑 TABS (INDENTED CORRECTLY)
-    # ==============================
-    tab_new, tab_history, tab_manage = st.tabs(["➕ Record Payment", "📜 History & Trends", "⚙️ Edit/Delete"])
+# 📑 TABS (INDENTED CORRECTLY)
+# ==============================
+tab_new, tab_history, tab_manage = st.tabs(["➕ Record Payment", "📜 History & Trends", "⚙️ Edit/Delete"])
 
-    # ==============================
-    # TAB 1: RECORD NEW PAYMENT
-    # ==============================
-    with tab_new:
-        active_loans = loans_df[loans_df["status"].astype(str).str.lower() != "closed"].copy()
-        
-        if active_loans.empty:
-            st.success("🎉 All loans are currently cleared!")
+# ==============================
+# TAB 1: RECORD NEW PAYMENT
+# ==============================
+with tab_new:
+    active_loans = loans_df[
+        loans_df["status"].astype(str).str.lower() == "active"
+    ]
+
+    if active_loans.empty:
+        st.success("🎉 All loans are currently cleared!")
+    else:
+        # Ensure ID is string-safe
+        active_loans["id"] = active_loans["id"].astype(str)
+
+        # --- SEARCH BOX (LIVE FILTER) ---
+        search_query = st.text_input(
+            "🔍 Search Borrower / Loan",
+            placeholder="Type name, phone, or loan ref...",
+            key="loan_search"
+        )
+
+        # --- BUILD DISPLAY + SAFE MAP ---
+        def format_option(row):
+            balance = max(
+                0,
+                float(row.get("total_repayable", 0)) - float(row.get("amount_paid", 0))
+            )
+            return f"{row.get('borrower','Unknown')}  •  {row.get('loan_id_label','LN')}  •  UGX {balance:,.0f}"
+
+        # --- SMART FILTER (FIXED) ---
+        search_query = search_query.strip().lower()
+
+        if search_query:
+            filtered_loans = active_loans[
+                active_loans.apply(
+                    lambda r: (
+                        search_query in str(r.get("borrower", "")).lower()
+                        or search_query in str(r.get("loan_id_label", "")).lower()
+                        or search_query in str(r.get("id", "")).lower()
+                    ),
+                    axis=1
+                )
+            ]
         else:
-                        # Ensure ID is string-safe
-            active_loans["id"] = active_loans["id"].astype(str)
+            filtered_loans = active_loans
 
-            # --- SEARCH BOX (LIVE FILTER) ---
-            search_query = st.text_input(
-                "🔍 Search Borrower / Loan",
-                placeholder="Type name, phone, or loan ref...",
-                key="loan_search"
-            )
+        # Prevent empty crash (NO return)
+        if filtered_loans.empty:
+            st.warning("No matching loans found.")
+            st.stop()
 
-            # --- BUILD DISPLAY + SAFE MAP ---
-            def format_option(row):
-                balance = max(0, float(row.get("total_repayable", 0)) - float(row.get("amount_paid", 0)))
-                return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {balance:,.0f}"
+        # Mapping
+        loan_map = {
+            format_option(row): str(row["id"])
+            for _, row in filtered_loans.iterrows()
+        }
 
-    
-            # Filter logic (SAFE)
-            if search_query and search_query.strip() != "":
-                filtered_loans = active_loans[
-                    active_loans.apply(
-                        lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
-                        or search_query.lower() in str(r.get("loan_id_label", "")).lower()
-                        or search_query.lower() in str(r.get("id", "")).lower(),
-                        axis=1
-                    )
-                ]
-            else:
-                filtered_loans = active_loans
+        # --- AUTOCOMPLETE-LIKE SELECT ---
+        selected_option = st.selectbox(
+            "Select Loan to Credit",
+            list(loan_map.keys()),
+            key="pay_sel"
+        )
 
-            # Prevent empty crash
-            if filtered_loans.empty:
-                st.warning("No matching loans found.")
-                return
+        # --- SAFE ID RESOLUTION ---
+        try:
+            raw_id = loan_map[selected_option]
+            loan = active_loans[active_loans["id"] == raw_id].iloc[0]
+        except Exception as e:
+            st.error(f"❌ Error identifying Loan: {e}")
+            st.stop()
 
-            # Mapping
-            loan_map = {
-                format_option(row): str(row["id"])
-                for _, row in filtered_loans.iterrows()
-            }
+        total_rep = float(loan.get("total_repayable", 0))
+        paid_so_far = float(loan.get("amount_paid", 0))
+        outstanding = total_rep - paid_so_far
 
-            # --- AUTOCOMPLETE-LIKE SELECT ---
-            selected_option = st.selectbox(
-                "Select Loan to Credit",
-                list(loan_map.keys()),
-                key="pay_sel"
-            )
+        c1, c2, c3 = st.columns(3)
+        status_val = str(loan.get("status", "Active")).strip()
+        status_color = "#2E7D32" if status_val.lower() == "active" else "#D32F2F"
 
-            # --- SAFE ID RESOLUTION ---
-            try:
-                raw_id = loan_map[selected_option]
-                loan = active_loans[active_loans["id"] == raw_id].iloc[0]
-            except Exception as e:
-                st.error(f"❌ Error identifying Loan: {e}")
-                st.stop()
+        c1.markdown(
+            f"""<div class="card" style="border-left-color:#2B3F87;">
+            <p class="title">CLIENT</p>
+            <h3 class="value" style="color:#2B3F87;">{loan.get('borrower','Unknown')}</h3>
+            </div>""",
+            unsafe_allow_html=True
+        )
 
-            total_rep = float(loan.get("total_repayable", 0))
-            paid_so_far = float(loan.get("amount_paid", 0))
-            outstanding = total_rep - paid_so_far
+        c2.markdown(
+            f"""<div class="card" style="border-left-color:#FF4B4B;">
+            <p class="title">BALANCE DUE</p>
+            <h3 class="value" style="color:#FF4B4B;">{max(0, outstanding):,.0f} UGX</h3>
+            </div>""",
+            unsafe_allow_html=True
+        )
 
-            c1, c2, c3 = st.columns(3)
-            status_val = str(loan.get('status', 'Active')).strip()
-            status_color = "#2E7D32" if status_val.lower() == "active" else "#D32F2F"
-            
-            c1.markdown(f"""<div class="card" style="border-left-color:#2B3F87;"><p class="title">CLIENT</p><h3 class="value" style="color:#2B3F87;">{loan['borrower']}</h3></div>""", unsafe_allow_html=True)
-            c2.markdown(f"""<div class="card" style="border-left-color:#FF4B4B;"><p class="title">BALANCE DUE</p><h3 class="value" style="color:#FF4B4B;">{max(0, outstanding):,.0f} UGX</h3></div>""", unsafe_allow_html=True)
-            c3.markdown(f"""<div class="card" style="border-left-color:{status_color};"><p class="title">STATUS</p><h3 class="value" style="color:{status_color}; text-transform:uppercase;">{status_val}</h3></div>""", unsafe_allow_html=True)
+        c3.markdown(
+            f"""<div class="card" style="border-left-color:{status_color};">
+            <p class="title">STATUS</p>
+            <h3 class="value" style="color:{status_color}; text-transform:uppercase;">{status_val}</h3>
+            </div>""",
+            unsafe_allow_html=True
+        )
 
-            st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("<br>", unsafe_allow_html=True)
 
-            with st.form("payment_form", clear_on_submit=True):
-                col_a, col_b, col_c = st.columns(3)
-                pay_amount = col_a.number_input("Amount Received (UGX)", min_value=0, step=10000)
-                pay_method = col_b.selectbox("Method", ["Mobile Money", "Cash", "Bank Transfer", "Cheque"])
-                pay_date = col_c.date_input("Payment Date", value=datetime.now())
-                
-                if st.form_submit_button("✅ Post Payment", use_container_width=True):
-                    if pay_amount > 0:
-                        try:
-                            new_payment = pd.DataFrame([{
-                                "loan_id": raw_id,
-                                "borrower": loan["borrower"],
-                                "amount": float(pay_amount),
-                                "date": pay_date.strftime("%Y-%m-%d"),
-                                "method": pay_method,
-                                "recorded_by": st.session_state.get("user", "Staff"),
-                                "tenant_id": st.session_state.tenant_id
-                            }])
+        with st.form("payment_form", clear_on_submit=True):
+            col_a, col_b, col_c = st.columns(3)
+            pay_amount = col_a.number_input("Amount Received (UGX)", min_value=0, step=10000)
+            pay_method = col_b.selectbox("Method", ["Mobile Money", "Cash", "Bank Transfer", "Cheque"])
+            pay_date = col_c.date_input("Payment Date", value=datetime.now())
 
-                            new_total_paid = paid_so_far + float(pay_amount)
-                            new_status = "Closed" if new_total_paid >= (total_rep - 10) else status_val
-                            
-                            loan_update = pd.DataFrame([{
-                                "id": raw_id,
-                                "amount_paid": new_total_paid,
-                                "status": new_status,
-                                "tenant_id": st.session_state.tenant_id
-                            }])
+            if st.form_submit_button("✅ Post Payment", use_container_width=True):
+                if pay_amount > 0:
+                    try:
+                        new_payment = pd.DataFrame([{
+                            "loan_id": raw_id,
+                            "borrower": loan.get("borrower", "Unknown"),
+                            "amount": float(pay_amount),
+                            "date": pay_date.strftime("%Y-%m-%d"),
+                            "method": pay_method,
+                            "recorded_by": st.session_state.get("user", "Staff"),
+                            "tenant_id": st.session_state.tenant_id
+                        }])
 
-                            if save_data("payments", new_payment) and save_data("loans", loan_update):
-                                st.success("✅ Payment recorded!")
-                                st.cache_data.clear()
-                                st.rerun()
-                                
-                        except Exception as e:
-                            st.error(f"🚨 Error: {str(e)}")
+                        new_total_paid = paid_so_far + float(pay_amount)
+                        new_status = "Closed" if new_total_paid >= (total_rep - 10) else status_val
 
-    # ==============================
-    # TAB 2: HISTORY (ENHANCED)
-    # ==============================
+                        loan_update = pd.DataFrame([{
+                            "id": raw_id,
+                            "amount_paid": new_total_paid,
+                            "status": new_status,
+                            "tenant_id": st.session_state.tenant_id
+                        }])
+
+                        if save_data("payments", new_payment) and save_data("loans", loan_update):
+                            st.success("✅ Payment recorded!")
+                            st.cache_data.clear()
+                            st.rerun()
+
+                    except Exception as e:
+                        st.error(f"🚨 Error: {str(e)}")
+
+# ==============================
+# TAB 2: HISTORY (ENHANCED)
+# ==============================
     with tab_history:
         if payments_df is not None and not payments_df.empty:
             df_display = payments_df.copy()
