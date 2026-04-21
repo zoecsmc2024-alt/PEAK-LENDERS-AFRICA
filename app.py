@@ -1321,19 +1321,20 @@ def show_loans():
         loans_df['borrower'] = loans_df.get('borrower', "Unknown")
 
     # ==============================
-# 🧬 TREND LOGIC: CHRONOLOGICAL FAMILY GROUPING
-# ==============================
-if not loans_df.empty:
-    # 1. Create a "Root Anchor" based on the very first loan date for each borrower
-    loans_df['root_anchor'] = loans_df.groupby('borrower')['start_date'].transform('min')
-    
-    # 2. SORT LOGIC:
-    # Root Anchor (False = Newest families at top)
-    # Start Date (True = Within a family, Oldest at top, Newest at bottom)
-    loans_df = loans_df.sort_values(
-        by=["root_anchor", "borrower", "start_date"], 
-        ascending=[False, True, True] 
-    ).drop(columns=['root_anchor'])
+    # 🧬 TREND LOGIC: CHRONOLOGICAL FAMILY GROUPING
+    # ==============================
+    if not loans_df.empty:
+        # 1. Create a "Root Anchor" based on the very first loan date for each borrower
+        loans_df['root_anchor'] = loans_df.groupby('borrower')['start_date'].transform('min')
+        
+        # 2. SORT LOGIC:
+        # Root Anchor (False = Newest families at top)
+        # Start Date (True = Within a family, Oldest at top, Newest at bottom)
+        loans_df = loans_df.sort_values(
+            by=["root_anchor", "borrower", "start_date"], 
+            ascending=[False, True, True] 
+        ).drop(columns=['root_anchor'])
+
     # ==============================
     # UI TABS
     # ==============================
@@ -1407,26 +1408,22 @@ if not loans_df.empty:
 
             show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
             
-            # --- FULL ROW HIGHLIGHTING LOGIC ---
+            # --- FULL ROW HIGHLIGHTING ---
             def style_row_by_status(row):
-                """Applies background color to the entire row based on status"""
                 status = str(row["status"]).upper()
                 bg_map = {
-                    "ACTIVE": "background-color: #D1FAE5; color: #064E3B;", # Mint Green
+                    "ACTIVE": "background-color: #D1FAE5; color: #064E3B;", # Mint
                     "PENDING": "background-color: #FEF3C7; color: #78350F;", # Amber
-                    "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", # Soft Red
-                    "CLOSED": "background-color: #F3F4F6; color: #374151;",  # Light Gray
-                    "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;",  # Sky Blue
-                    "BCF": "background-color: #EDE9FE; color: #4C1D95;"      # Lavender
+                    "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", # Red
+                    "CLOSED": "background-color: #F3F4F6; color: #374151;",  # Gray
+                    "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;",  # Blue
+                    "BCF": "background-color: #EDE9FE; color: #4C1D95;"      # Purple
                 }
                 style = bg_map.get(status, "")
                 return [style] * len(row)
 
-            # Apply formatting and Row-Level Style
             styled_df = filtered_loans[show_cols].style.format({
-                "principal": "{:,.0f}", 
-                "total_repayable": "{:,.0f}", 
-                "balance": "{:,.0f}"
+                "principal": "{:,.0f}", "total_repayable": "{:,.0f}", "balance": "{:,.0f}"
             }).apply(style_row_by_status, axis=1)
 
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
