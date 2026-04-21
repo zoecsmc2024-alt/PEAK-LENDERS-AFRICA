@@ -910,13 +910,11 @@ if st.session_state.get("authenticated"):
     # 🎯 PAGE RESOLUTION
     # ==============================
     try:
-        final_page = selection.split(" ", 1)[1]
+        final_page = selection.split(" ", 1)
     except:
         final_page = "Overview"
-
     st.session_state['current_page'] = final_page
-
-    return final_page
+        return final_page
         
 # ==============================
 # 🚀 BORROWERS ENGINE (PRODUCTION)
