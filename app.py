@@ -2989,9 +2989,9 @@ def show_payroll():
                             st.rerun()
                         except Exception as e:
                             st.error(f"Delete failed: {e}")
-# ==============================
+# ==========================================
 # 20. ADVANCED ANALYTICS & REPORTS (SAAS + ENTERPRISE)
-# ==============================
+# ==========================================
 import plotly.express as px
 import pandas as pd
 import streamlit as st
@@ -3035,6 +3035,26 @@ def show_reports():
         st.info("📈 Record more loan data to see your financial analytics.")
         return
 
+    # ==========================================
+    # 🔥 DATA STANDARDIZATION & CRASH FIXES
+    # ==========================================
+    # 1. Numeric Cleaning (Fixes 'int' has no attribute 'fillna' error)
+    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
+    for col in num_cols:
+        if col in loans.columns:
+            loans[col] = pd.to_numeric(loans[col], errors="coerce").fillna(0)
+        else:
+            loans[col] = 0.0
+
+    # 2. Chronological Trend Logic (Oldest at Top, Newest at Bottom)
+    loans['start_date'] = pd.to_datetime(loans.get('start_date', pd.NaT), errors='coerce')
+    loans['root_anchor'] = loans.groupby('borrower')['start_date'].transform('min')
+    
+    loans = loans.sort_values(
+        by=["root_anchor", "borrower", "start_date"], 
+        ascending=[False, True, True] 
+    ).drop(columns=['root_anchor'])
+
     # ==============================
     # 2. PAYROLL SAFETY & TAX TOTALS (Logic Intact)
     # ==============================
@@ -3048,8 +3068,8 @@ def show_reports():
     # ==============================
     # 3. CONSOLIDATED DATA SUMS
     # ==============================
-    l_amt = pd.to_numeric(loans.get("principal", 0), errors="coerce").fillna(0).sum()
-    l_int = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0).sum()
+    l_amt = loans["principal"].sum()
+    l_int = loans["interest"].sum()
 
     p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if payments is not None else 0
     exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if expenses is not None else 0
@@ -3062,7 +3082,6 @@ def show_reports():
         ).fillna(0).sum()
 
     # 💰 FINANCIAL LOGIC (PRESERVED)
-    # Total outflow includes operational expenses + petty cash spent + tax liabilities
     total_outflow = exp_amt + petty_out + nssf_total + paye_total
     net_profit = p_amt - total_outflow
 
@@ -3080,6 +3099,30 @@ def show_reports():
     k4.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid {p_color};box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">NET PROFIT</p><h4 style="margin:0;color:{p_color};">{net_profit:,.0f}</h4></div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
+
+    # ==========================================
+    # 🎨 LEDGER VIEW WITH FULL ROW HIGHLIGHTING
+    # ==========================================
+    st.write("**📝 Consolidated Loan Ledger**")
+    
+    def apply_full_row_style(row):
+        status = str(row["status"]).upper()
+        bg_map = {
+            "ACTIVE": "background-color: #D1FAE5; color: #064E3B;", # Mint
+            "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;", # Sky Blue
+            "CLOSED": "background-color: #F3F4F6; color: #374151;", # Light Gray
+            "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", # Soft Red
+            "PENDING": "background-color: #FEF3C7; color: #78350F;", # Amber
+        }
+        style = bg_map.get(status, "")
+        return [style] * len(row)
+
+    show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
+    styled_df = loans[show_cols].style.format({
+        "principal": "{:,.0f}", "total_repayable": "{:,.0f}", "balance": "{:,.0f}"
+    }).apply(apply_full_row_style, axis=1)
+
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ==============================
     # 5. VISUAL ANALYTICS
@@ -3120,8 +3163,6 @@ def show_reports():
 
     with col_right:
         st.write("**🛡️ Portfolio Weight (Top 5 Borrowers)**")
-
-        # Group principal issued by borrower to check concentration risk
         top_borrowers = loans.groupby("borrower")["principal"].sum().sort_values(ascending=False).head(5).reset_index()
 
         fig_pie = px.pie(
@@ -3144,7 +3185,6 @@ def show_reports():
     loans["end_date"] = pd.to_datetime(loans.get("end_date", pd.NaT), errors="coerce")
     loans["status"] = loans.get("status", "").astype(str)
 
-    # PAR calculation: Sum of principal on overdue loans / Total principal issued
     overdue_mask = (
         loans["status"].str.lower().isin(["overdue", "rolled/overdue", "pending"]) &
         (loans["end_date"].dt.date < pd.Timestamp.today().date())
@@ -3157,7 +3197,6 @@ def show_reports():
 
     with r1:
         st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
-        # Progress bar colors are handled by the threshold logic in r2
         st.progress(min(float(risk_percent) / 100, 1.0))
         st.write(f"Total Overdue Principal: **{overdue_val:,.0f} UGX**")
 
