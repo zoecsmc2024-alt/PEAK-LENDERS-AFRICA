@@ -240,32 +240,35 @@ def upload_image(file, bucket="collateral-photos"):
         st.error(f"Upload failed: {e}")
         return None
 
-
-# ==============================
-# 5. DATA LAYER (MERGED - NO DUPLICATES)
-# ==============================
 import streamlit as st
 import uuid
 import time
 import random
-from datetime import datetime
 
-def create_session(auth_data, company_code):
-    """Stores user data in Streamlit session state after successful login."""
-    st.session_state["authenticated"] = True
-    st.session_state["user_id"] = auth_data['user']['id']
-    st.session_state["email"] = auth_data['user']['email']
-    st.session_state["tenant_id"] = auth_data['profile']['tenant_id']
-    st.session_state["role"] = auth_data['profile']['role']
-    st.session_state["company_code"] = company_code
-loans_df = pd.DataFrame() 
-borrowers_df = pd.DataFrame()
+def run_auth_ui(supabase):
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
 
-try:
-    loans_df = get_cached_data("loans")
-    borrowers_df = get_cached_data("borrowers")
-except Exception as e:
-    st.error(f"Error fetching data: {e}")
+    # Logged In View
+    if st.session_state.get("authenticated"):
+        st.success(f"Welcome, {st.session_state.get('user_name', 'User')}! 🚀")
+        if st.button("Log Out", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
+        return
+
+    # Logged Out Views
+    current_view = st.session_state["view"]
+    if current_view == "login":
+        login_page(supabase)
+    elif current_view == "signup":
+        staff_signup_page(supabase)
+    elif current_view == "create_company":
+        admin_company_registration(supabase)
+# ==============================
+# 5. DATA LAYER (MERGED - NO DUPLICATES)
+# ==============================
+
 
 
 @st.cache_data(ttl=600)
@@ -475,34 +478,45 @@ def tenant_filter(df):
 def admin_company_registration(supabase):
     st.header("🏢 Register Your Company")
     
-    c_name = st.text_input("Company Name")
-    a_name = st.text_input("Admin Full Name")
-    email = st.text_input("Admin Email").strip().lower()
-    pwd = st.text_input("Password", type="password")
+    company_name = st.text_input("Organization Name")
+    admin_name = st.text_input("Admin Full Name")
+    email = st.text_input("Business Email").strip().lower()
+    password = st.text_input("Password", type="password")
 
-    if st.button("Create Company", use_container_width=True):
+    if st.button("Create Organization", use_container_width=True):
         try:
-            import random, time, uuid
-            # Generate 14-digit code and IDs
-            c_code = str(random.randint(10**13, (10**14)-1))
-            t_id = str(uuid.uuid4())
+            # Generate IDs and 14-digit Code
+            tenant_id = str(uuid.uuid4())
+            company_code = str(random.randint(10**13, (10**14)-1))
 
-            # 1. Create Auth User
-            res = supabase.auth.sign_up({"email": email, "password": pwd})
-            if not res.user: raise Exception("Auth failed.")
+            # 1. Create Auth Account
+            res = supabase.auth.sign_up({"email": email, "password": password})
+            if not res.user: 
+                raise Exception("Email already registered.")
             
-            # 2. Insert Tenant
-            supabase.table("tenants").insert({"id": t_id, "name": c_name, "company_code": c_code}).execute()
-
-            # 3. Insert Profile (with stabilization delay)
-            time.sleep(1.5)
-            supabase.table("users").insert({
-                "id": res.user.id, "name": a_name, "email": email, 
-                "tenant_id": t_id, "role": "Admin"
+            # 2. Insert Tenant Row
+            supabase.table("tenants").insert({
+                "id": tenant_id, 
+                "name": company_name, 
+                "company_code": company_code
             }).execute()
 
-            st.success(f"Registered! YOUR COMPANY CODE: {c_code}")
-            st.warning("Write this code down; you need it to log in!")
+            # 3. Stabilized Profile Insert (Retries solve synchronization delays)
+            profile_payload = {
+                "id": res.user.id, "name": admin_name, "email": email,
+                "tenant_id": tenant_id, "role": "Admin"
+            }
+            
+            for attempt in range(3):
+                try:
+                    time.sleep(1.5) # Wait for Supabase to propagate Auth ID
+                    supabase.table("users").insert(profile_payload).execute()
+                    break
+                except Exception as e:
+                    if attempt == 2: raise e
+
+            st.success(f"✅ Registered! YOUR LOGIN CODE: {company_code}")
+            st.info("Write this code down; your staff needs it to join.")
             if st.button("Go to Login"):
                 st.session_state["view"] = "login"
                 st.rerun()
@@ -552,29 +566,28 @@ def view_staff_signup(supabase):
 def login_page(supabase):
     st.markdown("## 🔐 Finance Portal Login")
     
-    # Input fields
-    c_code = st.text_input("14-Digit Company Code", placeholder="e.g. 10293847561023").strip()
+    c_code = st.text_input("14-Digit Company Code", placeholder="e.g., 10293847561023").strip()
     email = st.text_input("Email").strip().lower()
     pwd = st.text_input("Password", type="password")
 
     if st.button("Access Dashboard", use_container_width=True, type="primary"):
         try:
-            # 1. Auth with Supabase
+            # 1. Authenticate with Supabase Auth
             auth_res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
             
-            # 2. Cross-reference Company Code
-            user_query = supabase.table("users").select("*, tenants(company_code)")\
+            # 2. Verify Company Code matches User's Organization
+            user_data = supabase.table("users").select("*, tenants(company_code)")\
                 .eq("id", auth_res.user.id).single().execute()
 
-            db_code = str(user_query.data.get('tenants', {}).get('company_code'))
+            db_code = str(user_data.data.get('tenants', {}).get('company_code'))
 
             if db_code == c_code:
                 st.session_state.update({
                     "authenticated": True,
                     "user_id": auth_res.user.id,
-                    "tenant_id": user_query.data['tenant_id'],
-                    "user_name": user_query.data['name'],
-                    "role": user_query.data['role']
+                    "tenant_id": user_data.data['tenant_id'],
+                    "user_name": user_data.data['name'],
+                    "role": user_data.data['role']
                 })
                 st.rerun()
             else:
@@ -584,10 +597,11 @@ def login_page(supabase):
             st.error("Invalid credentials. Please check your email and password.")
 
     st.divider()
-    if st.button("🏢 Register New Company"):
+    col1, col2 = st.columns(2)
+    if col1.button("🏢 Register Company"):
         st.session_state["view"] = "create_company"
         st.rerun()
-    if st.button("👥 Join as Staff"):
+    if col2.button("👥 Join as Staff"):
         st.session_state["view"] = "signup"
         st.rerun()
 # ==============================
