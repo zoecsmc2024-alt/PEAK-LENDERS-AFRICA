@@ -1553,11 +1553,9 @@ import uuid
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
-def generate_receipt_no():
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    short_id = str(uuid.uuid4())[:6].upper()
-    return f"RCPT-{timestamp}-{short_id}"
-
+# ==============================
+# 🧾 RECEIPT GENERATION
+# ==============================
 def generate_receipt_pdf(data, filename):
     doc = SimpleDocTemplate(filename)
     styles = getSampleStyleSheet()
@@ -1569,42 +1567,18 @@ def generate_receipt_pdf(data, filename):
         content.append(Spacer(1, 8))
     doc.build(content)
 
+# ✅ SINGLE SOURCE OF TRUTH (RPC)
 def generate_receipt_no(supabase, tenant_id):
     try:
-        # Get current counter
-        res = supabase.table("receipt_counters") \
-            .select("*") \
-            .eq("tenant_id", tenant_id) \
-            .execute()
-
-        if res.data:
-            last_number = res.data[0]["last_number"] + 1
-
-            # Update counter
-            supabase.table("receipt_counters") \
-                .update({"last_number": last_number}) \
-                .eq("tenant_id", tenant_id) \
-                .execute()
-        else:
-            last_number = 1
-
-            # Insert new counter
-            supabase.table("receipt_counters") \
-                .insert({
-                    "tenant_id": tenant_id,
-                    "last_number": last_number
-                }) \
-                .execute()
-
-        # Format receipt
-        return f"RCPT-{str(last_number).zfill(6)}"
-
+        res = supabase.rpc("get_next_receipt", {"p_tenant": tenant_id}).execute()
+        return res.data
     except Exception as e:
         st.error(f"Receipt generation failed: {e}")
-        return None
-def generate_receipt_no(supabase, tenant_id):
-    res = supabase.rpc("get_next_receipt", {"p_tenant": tenant_id}).execute()
-    return res.data
+        return f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
+
+# ==============================
+# 💵 PAYMENTS MODULE
+# ==============================
 def show_payments():
     st.markdown("## 💵 Payments Management")
 
@@ -1643,6 +1617,9 @@ def show_payments():
     if "id" in loans_df.columns:
         loans_df["id"] = loans_df["id"].astype(str)
 
+    if "loan_id" in payments_df.columns:
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+
     # ==============================
     # 👤 BORROWER NAME RESOLUTION
     # ==============================
@@ -1660,8 +1637,18 @@ def show_payments():
     if "status" not in loans_df.columns:
         loans_df["status"] = "ACTIVE"
 
+    loans_df["status"] = loans_df["status"].astype(str).str.upper()
+
     loans_df["amount_paid"] = pd.to_numeric(loans_df.get("amount_paid", 0), errors="coerce").fillna(0)
     loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", 0), errors="coerce").fillna(0)
+
+    # ==============================
+    # 🔥 CRITICAL FIX: SYNC PAYMENTS → LOANS
+    # ==============================
+    if not payments_df.empty and "loan_id" in payments_df.columns:
+        payments_df["amount"] = pd.to_numeric(payments_df.get("amount", 0), errors="coerce").fillna(0)
+        payment_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
+        loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(0)
 
     # ==============================
     # 📑 TABS
@@ -1672,7 +1659,7 @@ def show_payments():
     # ➕ TAB 1: RECORD PAYMENT
     # ==============================
     with tab1:
-        active_loans = loans_df[loans_df["status"].astype(str).str.lower() == "active"].copy()
+        active_loans = loans_df[loans_df["status"] == "ACTIVE"].copy()
 
         if active_loans.empty:
             st.success("🎉 No active loans.")
@@ -1711,69 +1698,69 @@ def show_payments():
                     date = st.date_input("Date", datetime.now())
                     submit = st.form_submit_button("Post Payment")
 
-                    if submit:
-                        if amount <= 0:
-                            st.warning("Enter valid amount.")
-                        else:
-                            try:
-                                tenant_id = st.session_state.get("tenant_id")
+                # ✅ OUTSIDE FORM
+                if submit:
+                    if amount <= 0:
+                        st.warning("Enter valid amount.")
+                    else:
+                        try:
+                            tenant_id = st.session_state.get("tenant_id")
 
-                                if not tenant_id:
-                                    st.error("❌ Tenant not found. Please login again.")
-                                    st.stop()
+                            if not tenant_id:
+                                st.error("❌ Tenant not found. Please login again.")
+                                st.stop()
 
-                                receipt_no = generate_receipt_no(supabase, tenant_id)
-                                loan_label = f"LN-{loan_id[:6]}" 
+                            receipt_no = generate_receipt_no(supabase, tenant_id)
+                            loan_label = f"LN-{loan_id[:6]}"
 
-                                new_payment = pd.DataFrame([{
-                                    "receipt_no": receipt_no,
-                                    "loan_id": loan_id,
-                                    "borrower": loan["borrower"],
-                                    "amount": float(amount),
-                                    "date": date.strftime("%Y-%m-%d"),
-                                    "method": method,
-                                    "recorded_by": st.session_state.get("user", "Staff"),
-                                    "tenant_id": tenant_id
-                                }])
+                            # ✅ INSERT PAYMENT
+                            supabase.table("payments").insert({
+                                "receipt_no": receipt_no,
+                                "loan_id": loan_id,
+                                "borrower": loan["borrower"],
+                                "amount": float(amount),
+                                "date": date.strftime("%Y-%m-%d"),
+                                "method": method,
+                                "recorded_by": st.session_state.get("user", "Staff"),
+                                "tenant_id": tenant_id
+                            }).execute()
 
-                                new_paid = paid + amount
-                                new_status = "CLOSED" if new_paid >= total else "ACTIVE"
-                                
-                                loan_update = pd.DataFrame([{
-                                    "id": loan_id,
-                                    "amount_paid": new_paid,
-                                    "status": new_status,
-                                    "loan_id_label": loan_label,
-                                    "tenant_id": tenant_id
-                                }])
+                            # ✅ UPDATE LOAN
+                            new_paid = paid + amount
+                            new_status = "CLOSED" if new_paid >= total else "ACTIVE"
 
-                                if save_data("payments", new_payment) and save_data("loans", loan_update):
-                                    file_path = f"/tmp/{receipt_no}.pdf"
-                                    generate_receipt_pdf({
-                                        "Receipt No": receipt_no,
-                                        "Borrower": loan["borrower"],
-                                        "Amount": f"UGX {amount:,.0f}",
-                                        "Method": method,
-                                        "Date": date.strftime("%Y-%m-%d"),
-                                        "Recorded By": st.session_state.get("user", "Staff")
-                                    }, file_path)
+                            supabase.table("loans").update({
+                                "amount_paid": new_paid,
+                                "status": new_status,
+                                "loan_id_label": loan_label
+                            }).eq("id", loan_id).execute()
 
-                                    # Handle Receipt Download State
-                                    with open(file_path, "rb") as f:
-                                        pdf_bytes = f.read()
-                                        st.session_state["receipt_pdf"] = pdf_bytes
-                                        st.session_state["show_receipt"] = True
+                            # ✅ RECEIPT
+                            file_path = f"/tmp/{receipt_no}.pdf"
+                            generate_receipt_pdf({
+                                "Receipt No": receipt_no,
+                                "Borrower": loan["borrower"],
+                                "Amount": f"UGX {amount:,.0f}",
+                                "Method": method,
+                                "Date": date.strftime("%Y-%m-%d"),
+                                "Recorded By": st.session_state.get("user", "Staff")
+                            }, file_path)
 
-                                    st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
-                                    
-                                    # CRITICAL: Clear cache and rerun to update the "Loans" page balances
-                                    st.cache_data.clear()
-                                    st.rerun() 
+                            with open(file_path, "rb") as f:
+                                st.session_state["receipt_pdf"] = f.read()
+                                st.session_state["show_receipt"] = True
 
-                            except Exception as e:
-                                st.error(f"❌ {e}")
+                            st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
 
-        # Display Receipt Download if available
+                            st.cache_data.clear()
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(f"❌ {e}")
+
+        # ==============================
+        # 📥 DOWNLOAD RECEIPT
+        # ==============================
         if st.session_state.get("show_receipt"):
             st.download_button(
                 "📥 Download Latest Receipt",
@@ -1781,68 +1768,23 @@ def show_payments():
                 file_name="receipt.pdf",
                 mime="application/pdf"
             )
+
             if st.button("Clear Receipt"):
                 st.session_state["show_receipt"] = False
                 st.rerun()
 
     # ==============================
-    # ⚙️ EDIT / DELETE OVERLAYS
-    # ==============================
-    if "edit_payment" in st.session_state:
-        st.divider()
-        st.subheader("✏️ Edit Payment")
-        edit = st.session_state["edit_payment"]
-
-        new_amount = st.number_input("Amount", value=float(edit["amount"]))
-        new_method = st.selectbox("Method", ["Cash", "Bank", "Mobile"], index=0)
-        new_date = st.date_input("Date")
-
-        if st.button("Update Payment"):
-            try:
-                supabase.table("payments").update({
-                    "amount": float(new_amount),
-                    "method": new_method,
-                    "date": str(new_date)
-                }).eq("id", edit["id"]).execute()
-
-                st.success("✅ Payment updated")
-                del st.session_state["edit_payment"]
-                st.rerun()
-            except Exception as e:
-                st.error(f"Update failed: {e}")
-            
-    if "delete_payment_id" in st.session_state:
-        st.divider()
-        st.warning("⚠️ Are you sure you want to delete this payment?")
-        col1, col2 = st.columns(2)
-
-        if col1.button("Yes, Delete"):
-            try:
-                supabase.table("payments").delete().eq("id", st.session_state["delete_payment_id"]).execute()
-                st.success("🗑️ Payment deleted")
-                del st.session_state["delete_payment_id"]
-                st.rerun()
-            except Exception as e:
-                st.error(f"Delete failed: {e}")
-
-        if col2.button("Cancel"):
-            del st.session_state["delete_payment_id"]
-            st.rerun()
-    # ==============================
     # 📜 TAB 2: HISTORY
     # ==============================
-
     with tab2:
-
         if payments_df.empty:
             st.info("No payments yet.")
             return
 
         df = payments_df.copy()
 
-        if "amount" in df.columns:
-            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
-            df["amount"] = df["amount"].apply(lambda x: f"UGX {x:,.0f}")
+        df["amount"] = pd.to_numeric(df.get("amount", 0), errors="coerce").fillna(0)
+        df["amount"] = df["amount"].apply(lambda x: f"UGX {x:,.0f}")
 
         if "date" in df.columns:
             df = df.sort_values("date", ascending=False)
