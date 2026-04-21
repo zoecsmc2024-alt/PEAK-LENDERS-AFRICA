@@ -886,22 +886,26 @@ def render_sidebar():
         # ==============================
 # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
 # ==============================
-st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+# Place this inside your 'authenticated' view block
+if st.session_state.get("authenticated"):
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-if st.button("🚪 Logout", use_container_width=True):
-    # ✅ Explicitly reset auth state FIRST
-    st.session_state["logged_in"] = False
-    st.session_state["authenticated"] = False
-
-    # ✅ Then clear everything else safely
-    for key in list(st.session_state.keys()):
-        if key not in ["theme_color", "logged_in", "authenticated"]:
-            del st.session_state[key]
-
-    try:
+    if st.button("🚪 Logout", use_container_width=True):
+        # 1. Clear the specific auth flags
+        st.session_state["logged_in"] = False
+        st.session_state["authenticated"] = False
+        
+        # 2. Wipe the rest of the session state
+        for key in list(st.session_state.keys()):
+            if key not in ["theme_color", "logged_in", "authenticated"]:
+                del st.session_state[key]
+        
+        # 3. Give Streamlit a moment to process the clear
+        st.success("Logging out...")
+        time.sleep(0.5)
+        
+        # 4. Trigger the rerun
         st.rerun()
-    except:
-        pass
     # ==============================
     # 🎯 PAGE RESOLUTION
     # ==============================
