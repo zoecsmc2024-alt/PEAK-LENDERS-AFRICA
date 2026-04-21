@@ -1331,10 +1331,9 @@ def show_loans():
     ])
 
     # ==============================
-    # TAB: PORTFOLIO VIEW
+    # 💎 TAB: PORTFOLIO VIEW
     # ==============================
     with tab_view:
-
         # --- SEARCH (MATCHES PAYMENT PAGE UX) ---
         search_query = st.text_input(
             "🔍 Search Loan / Borrower",
@@ -1355,31 +1354,37 @@ def show_loans():
         else:
             filtered_loans = loans_df
 
+        # ✅ FIXED: Indentation for the empty check and display logic
         if filtered_loans.empty:
             st.warning("No matching loans found.")
-            st.stop()
+        else:
+            # --- DISPLAY FORMAT ---
+            def format_option(row):
+                # Using .get() ensures we don't crash if a column name is slightly different
+                b_name = row.get('borrower', 'Unknown')
+                label = row.get('loan_id_label', 'LN')
+                bal = row.get('balance', 0)
+                return f"{b_name}  •  {label}  •  UGX {bal:,.0f}"
 
-        # --- DISPLAY FORMAT (SAME AS PAYMENTS PAGE) ---
-        def format_option(row):
-            return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {row['balance']:,.0f}"
+            loan_map = {
+                format_option(row): str(row["id"])
+                for _, row in filtered_loans.iterrows()
+            }
 
-        loan_map = {
-            format_option(row): str(row["id"])
-            for _, row in filtered_loans.iterrows()
-        }
+            selected_option = st.selectbox(
+                "Select Loan to Inspect",
+                list(loan_map.keys()),
+                key="inspect_sel_v6"
+            )
 
-        selected_option = st.selectbox(
-            "Select Loan to Inspect",
-            list(loan_map.keys()),
-            key="inspect_sel_v6"
-        )
+            # Retrieve details for the selected loan
+            raw_id = loan_map[selected_option]
+            latest_info = loans_df[loans_df["id"] == raw_id].iloc[0]
 
-        raw_id = loan_map[selected_option]
-        latest_info = loans_df[loans_df["id"] == raw_id].iloc[0]
-
-        # ==============================
-        # 💎 METRIC CARDS (UPGRADED UI WITH STATUS COLORS)
-        # ==============================
+            # ==============================
+            # 💎 METRIC CARDS (UPGRADED UI WITH STATUS COLORS)
+            # ==============================
+            # Your metric card code follows here, indented to match this block
         rec_val = float(latest_info.get('amount_paid', 0))
         total_rep = float(latest_info.get('total_repayable', 0))
         out_val = float(latest_info.get('balance', 0))
