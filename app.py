@@ -3091,28 +3091,75 @@ def show_reports():
     c4.markdown(kpi("NET PROFIT", profit, profit_color), True)
 
     # ==============================
-    # 📊 LEDGER (VISUALIZED)
-    # ==============================
-    st.markdown("### 🧾 Loan Intelligence Ledger")
+# 📊 FINANCIAL STATEMENTS
+# ==============================
+st.markdown("---")
+st.markdown("## 📊 Financial Statements")
 
-    def row_style(r):
-        s = str(r["status"]).upper()
-        return {
-            "ACTIVE": "background:#00C89622;color:#00C896",
-            "OVERDUE": "background:#FF3B3022;color:#FF3B30",
-            "CLOSED": "background:#8E8E9322;color:#8E8E93",
-        }.get(s, "")
+# ==============================
+# P/L CALCULATION
+# ==============================
+interest_income = col_sum(loans, "interest")
+total_income = interest_income
 
-    loans_show = loans.copy()
+total_expenses = expenses_total + petty_out + nssf + paye
+net_profit = total_income - total_expenses
 
-    if "status" in loans_show.columns:
-        styled = loans_show.style.apply(
-            lambda r: [row_style(r)] * len(r), axis=1
-        )
-    else:
-        styled = loans_show.style
+pl1, pl2 = st.columns(2)
 
-    st.dataframe(styled, use_container_width=True)
+with pl1:
+    st.markdown("### 💰 Profit & Loss Statement")
+
+    st.markdown(f"""
+    <div style="background:#0f172a;padding:18px;border-radius:12px;color:white">
+    <b>INCOME</b><br>
+    Interest Earned: UGX {interest_income:,.0f}<br><br>
+
+    <b>EXPENSES</b><br>
+    Operating Expenses: UGX {expenses_total:,.0f}<br>
+    Payroll (NSSF + PAYE): UGX {(nssf+paye):,.0f}<br>
+    Petty Cash Out: UGX {petty_out:,.0f}<br><br>
+
+    <hr>
+    <b>NET PROFIT: 
+        <span style="color:{'#22C55E' if net_profit>=0 else '#FF3B30'}">
+        UGX {net_profit:,.0f}
+        </span>
+    </b>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ==============================
+# BALANCE SHEET
+# ==============================
+with pl2:
+    st.markdown("### 🧾 Balance Sheet")
+
+    # Assets
+    loan_book = col_sum(loans, "balance")
+    cash = collected - total_expenses
+
+    total_assets = loan_book + cash
+
+    # Simple equity model
+    equity = total_assets
+
+    st.markdown(f"""
+    <div style="background:#0f172a;padding:18px;border-radius:12px;color:white">
+    
+    <b>ASSETS</b><br>
+    Cash: UGX {cash:,.0f}<br>
+    Loan Book (Receivables): UGX {loan_book:,.0f}<br>
+    <b>Total Assets: UGX {total_assets:,.0f}</b><br><br>
+
+    <b>LIABILITIES</b><br>
+    (None tracked)<br><br>
+
+    <b>EQUITY</b><br>
+    Retained Earnings: UGX {equity:,.0f}
+    
+    </div>
+    """, unsafe_allow_html=True)
 
     # ==============================
     # 📈 TREND ENGINE
