@@ -3763,7 +3763,7 @@ if __name__ == "__main__":
             elif page == "Payroll":
                 show_payroll()
             elif page == "Reports":
-                show_reports():
+                show_reports()
             else:
                 st.info(f"The {page} module is coming online soon.")
 
