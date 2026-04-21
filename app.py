@@ -2997,7 +2997,6 @@ import pandas as pd
 import streamlit as st
 
 def show_reports():
-
     st.markdown("""
     <h2 style='
         background: linear-gradient(90deg,#0A192F,#1E3A8A);
@@ -3031,21 +3030,24 @@ def show_reports():
         return
 
     # ==============================
-    # HARDEN NUMERIC
+    # HARDEN NUMERIC (CRASH PROTECTION)
     # ==============================
     def col_sum(df, col):
         if df is None or df.empty or col not in df.columns:
             return 0.0
-        return pd.to_numeric(df[col], errors="coerce").fillna(0).sum()
+        # Force conversion to Series to prevent 'int' object errors
+        return pd.to_numeric(pd.Series(df[col]), errors="coerce").fillna(0).sum()
 
     for c in ["principal", "interest", "total_repayable", "balance"]:
         if c in loans.columns:
             loans[c] = pd.to_numeric(loans[c], errors="coerce").fillna(0)
 
-    # Borrower mapping
+    # Borrower mapping (Fixes 'borrower' KeyError)
     if not borrowers.empty and "borrower_id" in loans.columns:
         m = dict(zip(borrowers["id"].astype(str), borrowers["name"]))
         loans["borrower"] = loans["borrower_id"].astype(str).map(m).fillna("Unknown")
+    else:
+        loans["borrower"] = "Unknown"
 
     # ==============================
     # CORE METRICS
@@ -3075,91 +3077,75 @@ def show_reports():
             background: linear-gradient(135deg,#0f172a,#1e293b);
             box-shadow:0 8px 30px rgba(0,0,0,0.25);
             color:white;
+            margin-bottom: 10px;
         ">
-            <p style="font-size:11px;opacity:.7">{title}</p>
+            <p style="font-size:11px;opacity:.7;margin:0;">{title}</p>
             <h2 style="margin:0;color:{color}">UGX {value:,.0f}</h2>
         </div>
         """
 
     c1, c2, c3, c4 = st.columns(4)
 
-    c1.markdown(kpi("CAPITAL DEPLOYED", capital, "#38BDF8"), True)
-    c2.markdown(kpi("INTEREST GENERATED", interest, "#22C55E"), True)
-    c3.markdown(kpi("TOTAL COLLECTIONS", collected, "#A78BFA"), True)
+    c1.markdown(kpi("CAPITAL DEPLOYED", capital, "#38BDF8"), unsafe_allow_html=True)
+    c2.markdown(kpi("INTEREST GENERATED", interest, "#22C55E"), unsafe_allow_html=True)
+    c3.markdown(kpi("TOTAL COLLECTIONS", collected, "#A78BFA"), unsafe_allow_html=True)
 
     profit_color = "#22C55E" if profit >= 0 else "#FF3B30"
-    c4.markdown(kpi("NET PROFIT", profit, profit_color), True)
+    c4.markdown(kpi("NET PROFIT", profit, profit_color), unsafe_allow_html=True)
 
     # ==============================
-# 📊 FINANCIAL STATEMENTS
-# ==============================
-st.markdown("---")
-st.markdown("## 📊 Financial Statements")
+    # 📊 FINANCIAL STATEMENTS
+    # ==============================
+    st.markdown("---")
+    st.markdown("## 📊 Financial Statements")
 
-# ==============================
-# P/L CALCULATION
-# ==============================
-interest_income = col_sum(loans, "interest")
-total_income = interest_income
+    # P/L CALCULATION
+    interest_income = col_sum(loans, "interest")
+    total_income = interest_income
+    total_expenses = expenses_total + petty_out + nssf + paye
+    net_profit_statement = total_income - total_expenses
 
-total_expenses = expenses_total + petty_out + nssf + paye
-net_profit = total_income - total_expenses
+    pl1, pl2 = st.columns(2)
 
-pl1, pl2 = st.columns(2)
+    with pl1:
+        st.markdown("### 💰 Profit & Loss Statement")
+        st.markdown(f"""
+        <div style="background:#0f172a;padding:18px;border-radius:12px;color:white">
+        <b>INCOME</b><br>
+        Interest Earned: UGX {interest_income:,.0f}<br><br>
+        <b>EXPENSES</b><br>
+        Operating Expenses: UGX {expenses_total:,.0f}<br>
+        Payroll (NSSF + PAYE): UGX {(nssf+paye):,.0f}<br>
+        Petty Cash Out: UGX {petty_out:,.0f}<br><br>
+        <hr>
+        <b>NET PROFIT: 
+            <span style="color:{'#22C55E' if net_profit_statement>=0 else '#FF3B30'}">
+            UGX {net_profit_statement:,.0f}
+            </span>
+        </b>
+        </div>
+        """, unsafe_allow_html=True)
 
-with pl1:
-    st.markdown("### 💰 Profit & Loss Statement")
+    # BALANCE SHEET
+    with pl2:
+        st.markdown("### 🧾 Balance Sheet")
+        loan_book = col_sum(loans, "balance")
+        cash = collected - total_expenses
+        total_assets = loan_book + cash
+        equity = total_assets
 
-    st.markdown(f"""
-    <div style="background:#0f172a;padding:18px;border-radius:12px;color:white">
-    <b>INCOME</b><br>
-    Interest Earned: UGX {interest_income:,.0f}<br><br>
-
-    <b>EXPENSES</b><br>
-    Operating Expenses: UGX {expenses_total:,.0f}<br>
-    Payroll (NSSF + PAYE): UGX {(nssf+paye):,.0f}<br>
-    Petty Cash Out: UGX {petty_out:,.0f}<br><br>
-
-    <hr>
-    <b>NET PROFIT: 
-        <span style="color:{'#22C55E' if net_profit>=0 else '#FF3B30'}">
-        UGX {net_profit:,.0f}
-        </span>
-    </b>
-    </div>
-    """, unsafe_allow_html=True)
-
-# ==============================
-# BALANCE SHEET
-# ==============================
-with pl2:
-    st.markdown("### 🧾 Balance Sheet")
-
-    # Assets
-    loan_book = col_sum(loans, "balance")
-    cash = collected - total_expenses
-
-    total_assets = loan_book + cash
-
-    # Simple equity model
-    equity = total_assets
-
-    st.markdown(f"""
-    <div style="background:#0f172a;padding:18px;border-radius:12px;color:white">
-    
-    <b>ASSETS</b><br>
-    Cash: UGX {cash:,.0f}<br>
-    Loan Book (Receivables): UGX {loan_book:,.0f}<br>
-    <b>Total Assets: UGX {total_assets:,.0f}</b><br><br>
-
-    <b>LIABILITIES</b><br>
-    (None tracked)<br><br>
-
-    <b>EQUITY</b><br>
-    Retained Earnings: UGX {equity:,.0f}
-    
-    </div>
-    """, unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="background:#0f172a;padding:18px;border-radius:12px;color:white">
+        <b>ASSETS</b><br>
+        Cash: UGX {cash:,.0f}<br>
+        Loan Book (Receivables): UGX {loan_book:,.0f}<br>
+        <b>Total Assets: UGX {total_assets:,.0f}</b><br><br>
+        <b>LIABILITIES</b><br>
+        (None tracked)<br><br>
+        <b>EQUITY</b><br>
+        Retained Earnings: UGX {equity:,.0f}
+        </div>
+        """, unsafe_allow_html=True)
 
     # ==============================
     # 📈 TREND ENGINE
@@ -3169,35 +3155,33 @@ with pl2:
 
     with col1:
         st.markdown("### 💰 Cashflow Dynamics")
-
         if not payments.empty:
             payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
             inc = payments.groupby(payments["date"].dt.strftime('%Y-%m'))["amount"].sum()
-
+            
             exp = pd.Series(dtype=float)
             if not expenses.empty:
                 expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
                 exp = expenses.groupby(expenses["date"].dt.strftime('%Y-%m'))["amount"].sum()
 
-            df = pd.concat([inc, exp], axis=1).fillna(0)
-            df.columns = ["Income", "Expenses"]
-            df = df.reset_index().rename(columns={"index": "Month"})
+            df_trend = pd.concat([inc, exp], axis=1).fillna(0)
+            df_trend.columns = ["Income", "Expenses"]
+            df_trend = df_trend.reset_index().rename(columns={"index": "Month"})
 
-            fig = px.area(df, x="Month", y=["Income", "Expenses"])
-            fig.update_layout(
-                paper_bgcolor='rgba(0,0,0,0)',
-                plot_bgcolor='rgba(0,0,0,0)'
-            )
-            st.plotly_chart(fig, use_container_width=True)
+            fig_cash = px.area(df_trend, x="Month", y=["Income", "Expenses"], 
+                               color_discrete_map={"Income": "#22C55E", "Expenses": "#FF3B30"})
+            fig_cash.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=20, b=0))
+            st.plotly_chart(fig_cash, use_container_width=True)
+        else:
+            st.info("No payment history to display trends.")
 
     with col2:
         st.markdown("### 🧠 Exposure Intelligence")
-
-        top = loans.groupby("borrower")["principal"].sum().nlargest(5).reset_index()
-
-        fig = px.pie(top, names="borrower", values="principal", hole=0.6)
-        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
-        st.plotly_chart(fig, use_container_width=True)
+        top_borrowers = loans.groupby("borrower")["principal"].sum().nlargest(5).reset_index()
+        fig_pie = px.pie(top_borrowers, names="borrower", values="principal", hole=0.6,
+                         color_discrete_sequence=px.colors.qualitative.Pastel)
+        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', margin=dict(l=0, r=0, t=20, b=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
 
     # ==============================
     # 🚨 RISK ENGINE (UPGRADED)
@@ -3206,14 +3190,11 @@ with pl2:
     st.markdown("### 🚨 Portfolio Risk Engine")
 
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
-
-    overdue = loans[
-        (loans["status"].str.upper() == "OVERDUE") &
-        (loans["end_date"] < pd.Timestamp.today())
-    ]
+    overdue_mask = (loans["status"].str.upper() == "OVERDUE") & (loans["end_date"] < pd.Timestamp.today())
+    overdue = loans[overdue_mask]
 
     overdue_val = col_sum(overdue, "principal")
-    risk = (overdue_val / capital * 100) if capital > 0 else 0
+    risk_pct = (overdue_val / capital * 100) if capital > 0 else 0
 
     st.markdown(f"""
     <div style="
@@ -3221,15 +3202,16 @@ with pl2:
         border-radius:12px;
         background: linear-gradient(90deg,#1e293b,#0f172a);
         color:white;
+        border-left: 5px solid {'#22C55E' if risk_pct < 10 else '#FF3B30' if risk_pct > 25 else '#FACC15'};
     ">
-    ⚠️ Portfolio Risk Level: <b>{risk:.2f}%</b><br>
+    ⚠️ Portfolio Risk Level: <b>{risk_pct:.2f}%</b><br>
     Exposure: UGX {overdue_val:,.0f}
     </div>
     """, unsafe_allow_html=True)
 
-    if risk < 10:
+    if risk_pct < 10:
         st.success("Healthy Portfolio")
-    elif risk < 25:
+    elif risk_pct < 25:
         st.warning("Moderate Risk")
     else:
         st.error("Critical Portfolio Risk")
