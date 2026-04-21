@@ -781,12 +781,7 @@ def render_sidebar():
         # ✅ SAFE LOGO BLOCK
         if final_logo_url:
             logo_component = f"""
-            <div style="
-                display:flex;
-                justify-content:center;
-                align-items:center;
-                margin-top:10px;
-            ">
+            <div style="display:flex; justify-content:center; align-items:center; margin-top:10px;">
                 <div style="
                     padding:10px;
                     border-radius:50%;
@@ -806,21 +801,12 @@ def render_sidebar():
             </div>
             """
 
-        # ✅ SAFE STATS
-        total_loans = len(st.session_state.get('loans_df', []))
-        total_clients = len(st.session_state.get('borrowers_df', []))
-
-        # ✅ FIXED: CLOSED DIV PROPERLY
+        # ✅ RENDER
         st.markdown(f"""
         <div style="text-align:center; padding:10px 5px 0 5px;">
             {logo_component}
             <div style="margin-top:10px;">
-                <h3 style="
-                    color:white;
-                    margin:0;
-                    font-size:16px;
-                    font-weight:600;
-                ">
+                <h3 style="color:white; margin:0; font-size:16px; font-weight:600;">
                     {Active_company_name}
                     <span style="
                         font-size:10px;
@@ -842,15 +828,17 @@ def render_sidebar():
             ">
                 FINANCE CORE
             </p>
-            <div style="
-                display:flex;
-                gap:8px;
-                margin-top:12px;
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
-        st.markdown("---")
+        st.markdown(
+            "<hr style='margin: 15px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>",
+            unsafe_allow_html=True
+        )
+
+        # ==============================
+        # 📍 MENU
+        # ==============================
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
@@ -873,16 +861,13 @@ def render_sidebar():
             key="navigation_radio"
         )
 
-        # ✅ FIX: MAP BACK TO CLEAN PAGE NAME
         selected_page = selection.split(" ", 1)[1]
-
-        # ✅ SAVE STATE
         st.session_state['current_page'] = selected_page
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ==============================
-        # 🔐 LOGOUT (FIXED POSITION)
+        # 🔐 LOGOUT
         # ==============================
         if st.session_state.get("authenticated"):
             st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
@@ -899,9 +884,7 @@ def render_sidebar():
                 time.sleep(0.5)
                 st.rerun()
 
-    # ✅ CRITICAL FIX (RETURN PAGE)
     return selected_page
-
 
 # ==============================
 # 🚀 BORROWERS ENGINE (PRODUCTION)
