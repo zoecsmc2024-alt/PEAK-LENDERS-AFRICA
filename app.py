@@ -851,7 +851,7 @@ def render_sidebar():
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
-            "Petty Cash": "🪙", "Overdue Tracker": "🚨", "Payments": "💰", "Settings": "⚙️"
+            "Petty Cash": "🪙", "Overdue Tracker": "🚨", "Payments": "💰", "Reports ": "📊", "Settings": "⚙️"
         }
 
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
@@ -3762,6 +3762,8 @@ if __name__ == "__main__":
                 show_overdue_tracker()
             elif page == "Payroll":
                 show_payroll()
+            elif page == "Reports":
+                show_reports():
             else:
                 st.info(f"The {page} module is coming online soon.")
 
