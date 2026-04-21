@@ -786,6 +786,33 @@ def render_sidebar():
                 st.image(final_logo_url, width=70)
             else:
                 st.markdown("### 🏢")
+                # ✅ SAFE LOGO BLOCK
+        if final_logo_url:
+            logo_component = f"""
+            <div style="
+                display:flex;
+                justify-content:center;
+                align-items:center;
+                margin-top:10px;
+            ">
+                <div style="
+                    padding:10px;
+                    border-radius:50%;
+                    background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
+                    box-shadow: 0 0 20px rgba(255,255,255,0.12);
+                ">
+                    <img src="{final_logo_url}?t={int(time.time())}"
+                         width="70"
+                         style="border-radius:50%; object-fit:cover;" />
+                </div>
+            </div>
+            """.strip()
+        else:
+            logo_component = """
+            <div style="text-align:center; margin-top:10px;">
+                <h1 style="font-size:38px; margin:0;">🏢</h1>
+            </div>
+            """
 
         # ✅ COMPANY NAME (WITH GLOW)
         st.markdown(
