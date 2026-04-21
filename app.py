@@ -1569,6 +1569,42 @@ def generate_receipt_pdf(data, filename):
         content.append(Spacer(1, 8))
     doc.build(content)
 
+def generate_receipt_no(supabase, tenant_id):
+    try:
+        # Get current counter
+        res = supabase.table("receipt_counters") \
+            .select("*") \
+            .eq("tenant_id", tenant_id) \
+            .execute()
+
+        if res.data:
+            last_number = res.data[0]["last_number"] + 1
+
+            # Update counter
+            supabase.table("receipt_counters") \
+                .update({"last_number": last_number}) \
+                .eq("tenant_id", tenant_id) \
+                .execute()
+        else:
+            last_number = 1
+
+            # Insert new counter
+            supabase.table("receipt_counters") \
+                .insert({
+                    "tenant_id": tenant_id,
+                    "last_number": last_number
+                }) \
+                .execute()
+
+        # Format receipt
+        return f"RCPT-{str(last_number).zfill(6)}"
+
+    except Exception as e:
+        st.error(f"Receipt generation failed: {e}")
+        return None
+def generate_receipt_no(supabase, tenant_id):
+    res = supabase.rpc("get_next_receipt", {"p_tenant": tenant_id}).execute()
+    return res.data
 def show_payments():
     st.markdown("## 💵 Payments Management")
 
@@ -1681,6 +1717,12 @@ def show_payments():
                         else:
                             try:
                                 receipt_no = generate_receipt_no()
+                                tenant_id = st.session_state.tenant_id
+                                
+                                # Define label to prevent DB constraint errors
+                                loan_label = f"LN-{loan_id[:6]}" 
+
+                                # Prepare payment record
                                 new_payment = pd.DataFrame([{
                                     "receipt_no": receipt_no,
                                     "loan_id": loan_id,
@@ -1689,24 +1731,27 @@ def show_payments():
                                     "date": date.strftime("%Y-%m-%d"),
                                     "method": method,
                                     "recorded_by": st.session_state.get("user", "Staff"),
-                                    "tenant_id": st.session_state.tenant_id
+                                    "tenant_id": tenant_id
                                 }])
 
+                                # Update Loan Balance & Status
                                 new_paid = paid + amount
                                 new_status = "Closed" if new_paid >= total else "Active"
+                                
                                 loan_update = pd.DataFrame([{
                                     "id": loan_id,
                                     "amount_paid": new_paid,
                                     "status": new_status,
                                     "loan_id_label": loan_label,
-                                    "tenant_id": st.session_state.tenant_id
+                                    "tenant_id": tenant_id
                                 }])
 
+                                # Single save logic block
                                 if save_data("payments", new_payment) and save_data("loans", loan_update):
-                                    # Generate PDF inside correct block
                                     file_path = f"/tmp/{receipt_no}.pdf"
+                                    
                                     generate_receipt_pdf({
-                                        "description": f"RCPT-{receipt_no}",
+                                        "Receipt No": receipt_no,
                                         "Borrower": loan["borrower"],
                                         "Amount": f"UGX {amount:,.0f}",
                                         "Method": method,
@@ -1715,6 +1760,7 @@ def show_payments():
                                     }, file_path)
 
                                     st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
+                                    
                                     with open(file_path, "rb") as f:
                                         st.download_button(
                                             "📄 Download Receipt",
@@ -1722,9 +1768,10 @@ def show_payments():
                                             file_name=f"{receipt_no}.pdf",
                                             mime="application/pdf"
                                         )
+                                    
+                                    st.cache_data.clear()
                             except Exception as e:
                                 st.error(f"❌ {e}")
-
     # ==============================
     # 📜 TAB 2: HISTORY
     # ==============================
