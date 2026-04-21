@@ -3767,3 +3767,6 @@ if __name__ == "__main__":
             else:
                 # This only shows if you add a new sidebar item without a function
                 st.info(f"The {page} module is coming online soon.")
+        except Exception as e:
+
+            st.error(f"Application Error: {e}")
