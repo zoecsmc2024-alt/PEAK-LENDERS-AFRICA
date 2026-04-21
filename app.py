@@ -1230,7 +1230,9 @@ def get_data(table_name):
             df["tenant_id"] = tenant_id
     
     return df
-
+    if not isinstance(loans_df, pd.DataFrame):
+        loans_df = pd.DataFrame()
+        
 def save_data_saas(table_name, df):
     tenant_id = get_current_tenant()
     df["tenant_id"] = str(tenant_id)
@@ -1272,8 +1274,10 @@ def show_loans():
 
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
-        loans_df[col] = pd.to_numeric(loans_df.get(col, 0), errors="coerce").fillna(0)
-
+        if col in loans_df.columns:
+            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+        else:
+            loans_df[col] = 0.0
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
     if "status" in loans_df.columns:
