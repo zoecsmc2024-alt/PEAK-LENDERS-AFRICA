@@ -655,6 +655,7 @@ def login_page(supabase):
             if db_code == c_code:
                 st.session_state.update({
                     "authenticated": True,
+                    "logged_in": True,
                     "user_id": user_id,
                     "tenant_id": user_data['tenant_id'],
                     "user_name": user_data['name'],
@@ -883,19 +884,24 @@ def render_sidebar():
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ==============================
-        # 🔐 LOGOUT (CLEAN & FUNCTIONAL)
-        # ==============================
-        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+# 🔐 LOGOUT (CLEAN & FUNCTIONAL)
+# ==============================
+st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-        if st.button("🚪 Logout", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                if key not in ["theme_color"]:
-                    del st.session_state[key]
-            try:
-                st.rerun()
-            except:
-                pass
+if st.button("🚪 Logout", use_container_width=True):
+    # ✅ Explicitly reset auth state FIRST
+    st.session_state["logged_in"] = False
+    st.session_state["authenticated"] = False
 
+    # ✅ Then clear everything else safely
+    for key in list(st.session_state.keys()):
+        if key not in ["theme_color", "logged_in", "authenticated"]:
+            del st.session_state[key]
+
+    try:
+        st.rerun()
+    except:
+        pass
     # ==============================
     # 🎯 PAGE RESOLUTION
     # ==============================
