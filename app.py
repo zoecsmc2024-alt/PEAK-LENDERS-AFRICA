@@ -3125,7 +3125,7 @@ def show_reports():
         }
         style = bg_map.get(status, "")
         return [style] * len(row)
-
+        
     show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
     styled_df = loans[show_cols].style.format({
         "principal": "{:,.0f}", "total_repayable": "{:,.0f}", "balance": "{:,.0f}"
