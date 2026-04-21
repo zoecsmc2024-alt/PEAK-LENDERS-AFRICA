@@ -260,7 +260,8 @@ def run_auth_ui(supabase):
 # ==============================
 # 5. DATA LAYER (MERGED - NO DUPLICATES)
 # ==============================
-
+loans_df = pd.DataFrame(loans_raw)
+payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
 
 
 @st.cache_data(ttl=600)
@@ -1607,36 +1608,65 @@ def show_payments():
 
     loans_df = pd.DataFrame(loans_raw)
     payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
-
     if loans_df.empty:
         st.info("ℹ️ No loans found in the system.")
         return
 
     # ==============================
-    # 🛡️ COLUMN NORMALIZATION
+    # 🛡️ COLUMN NORMALIZATION (HARDENED + CONSISTENT)
     # ==============================
-    if "borrower" not in loans_df.columns:
-        if "borrower_name" in loans_df.columns:
-            loans_df["borrower"] = loans_df["borrower_name"]
-        elif "client" in loans_df.columns:
-            loans_df["borrower"] = loans_df["client"]
+
+    # --- LOAD BORROWERS FOR NAME RESOLUTION ---
+    borrowers_raw = get_cached_data("borrowers")
+    borrowers_df = pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame()
+
+    # Ensure ID consistency for Borrowers
+    if not borrowers_df.empty:
+        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower()
+        if "id" in borrowers_df.columns:
+            borrowers_df["id"] = borrowers_df["id"].astype(str)
+
+    # --- NORMALIZE LOANS ---
+    if not loans_df.empty:
+        loans_df.columns = loans_df.columns.str.strip().str.lower()
+
+        # Ensure borrower_id exists and is string
+        if "borrower_id" in loans_df.columns:
+            loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
+
+        # 🔥 PRIMARY FIX: Resolve borrower names from borrower_id
+        if not borrowers_df.empty and "borrower_id" in loans_df.columns and "name" in borrowers_df.columns:
+            borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+            loans_df["borrower"] = loans_df["borrower_id"].map(borrower_map).fillna("Unknown")
         else:
-            loans_df["borrower"] = "Unknown"
+            # Fallbacks (legacy support)
+            if "borrower" not in loans_df.columns:
+                if "borrower_name" in loans_df.columns:
+                    loans_df["borrower"] = loans_df["borrower_name"]
+                elif "client" in loans_df.columns:
+                    loans_df["borrower"] = loans_df["client"]
+                else:
+                    loans_df["borrower"] = "Unknown"
 
-    if "borrower" not in payments_df.columns:
-        payments_df["borrower"] = "Unknown"
+        # --- ENSURE REQUIRED FIELDS EXIST ---
+        # Setting defaults if columns are missing
+        if "status" not in loans_df.columns:
+            loans_df["status"] = "ACTIVE"
+        
+        if "amount_paid" not in loans_df.columns:
+            loans_df["amount_paid"] = 0
+            
+        if "total_repayable" not in loans_df.columns:
+            loans_df["total_repayable"] = 0
 
-    if "status" not in loans_df.columns:
-        loans_df["status"] = "Active"
-
-    if "amount_paid" not in loans_df.columns:
-        loans_df["amount_paid"] = 0
-
-    if "total_repayable" not in loans_df.columns:
-        loans_df["total_repayable"] = 0
+    # --- NORMALIZE PAYMENTS ---
+    if not payments_df.empty:
+        payments_df.columns = payments_df.columns.str.strip().str.lower()
+        if "borrower" not in payments_df.columns:
+            payments_df["borrower"] = "Unknown"
 
     # ==============================
-    # TABS
+    # 📑 TABS (INDENTED CORRECTLY)
     # ==============================
     tab_new, tab_history, tab_manage = st.tabs(["➕ Record Payment", "📜 History & Trends", "⚙️ Edit/Delete"])
 
@@ -1662,13 +1692,15 @@ def show_payments():
             # --- BUILD DISPLAY + SAFE MAP ---
             def format_option(row):
                 balance = max(0, float(row.get("total_repayable", 0)) - float(row.get("amount_paid", 0)))
-                return f"{row['borrower']}  •  UGX {balance:,.0f}  •  #{str(row['id'])[:6]}"
+                return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {balance:,.0f}"
 
+    
             # Filter logic (SAFE)
             if search_query and search_query.strip() != "":
                 filtered_loans = active_loans[
                     active_loans.apply(
                         lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
+                        or search_query.lower() in str(r.get("loan_id_label", "")).lower()
                         or search_query.lower() in str(r.get("id", "")).lower(),
                         axis=1
                     )
@@ -1679,7 +1711,7 @@ def show_payments():
             # Prevent empty crash
             if filtered_loans.empty:
                 st.warning("No matching loans found.")
-                st.stop()
+                return
 
             # Mapping
             loan_map = {
