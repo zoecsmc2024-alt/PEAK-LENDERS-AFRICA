@@ -1716,8 +1716,8 @@ def show_payments():
                             st.warning("Enter valid amount.")
                         else:
                             try:
-                                receipt_no = generate_receipt_no()
-                                tenant_id = st.session_state.tenant_id
+                                receipt_no = generate_receipt_no(supabase, tenant_id)
+                                tenant_id = st.session_state.get("tenant_id")
                                 
                                 # Define label to prevent DB constraint errors
                                 loan_label = f"LN-{loan_id[:6]}" 
