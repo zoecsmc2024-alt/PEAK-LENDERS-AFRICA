@@ -624,26 +624,41 @@ def login_page(supabase):
                 raise Exception("Authentication failed")
 
             user_id = auth_res.user.id
+            user_email = auth_res.user.email
 
-            # 2. Fetch user + tenant
+            # 2. Fetch user + tenant (SAFE VERSION)
             user_data = supabase.table("users") \
                 .select("*, tenants(company_code)") \
                 .eq("id", user_id) \
-                .single() \
                 .execute()
+
+            # 🔥 AUTO-HEAL if ID mismatch
+            if not user_data.data:
+                user_data = supabase.table("users") \
+                    .select("*, tenants(company_code)") \
+                    .eq("email", user_email) \
+                    .execute()
+
+                if user_data.data:
+                    supabase.table("users") \
+                        .update({"id": user_id}) \
+                        .eq("email", user_email) \
+                        .execute()
 
             if not user_data.data:
                 raise Exception("User profile not found")
 
-            db_code = str(user_data.data.get('tenants', {}).get('company_code'))
+            user_data = user_data.data[0]
+
+            db_code = str(user_data.get('tenants', {}).get('company_code'))
 
             if db_code == c_code:
                 st.session_state.update({
                     "authenticated": True,
                     "user_id": user_id,
-                    "tenant_id": user_data.data['tenant_id'],
-                    "user_name": user_data.data['name'],
-                    "role": user_data.data['role']
+                    "tenant_id": user_data['tenant_id'],
+                    "user_name": user_data['name'],
+                    "role": user_data['role']
                 })
                 st.rerun()
             else:
