@@ -512,8 +512,8 @@ def admin_company_registration(supabase):
                 "company_code": company_code
             }).execute()
 
-            if tenant_res.error:
-                raise Exception(tenant_res.error.message)
+            if not tenant_res.data:
+                raise Exception("Failed to create tenant.")
 
             # 3. Create Admin Profile
             profile_payload = {
@@ -529,8 +529,8 @@ def admin_company_registration(supabase):
 
             profile_res = supabase.table("users").insert(profile_payload).execute()
 
-            if profile_res.error:
-                raise Exception(profile_res.error.message)
+            if not profile_res.data:
+                raise Exception("Failed to create user profile.")
 
             st.success(f"✅ Registered! YOUR LOGIN CODE: {company_code}")
             st.info("Write this code down; your staff needs it to join.")
@@ -591,8 +591,8 @@ def view_staff_signup(supabase):
                 "role": "Staff"
             }).execute()
 
-            if profile_res.error:
-                raise Exception(profile_res.error.message)
+            if not profile_res.data:
+                raise Exception("Failed to create user profile.")
 
             st.success("Account created! You can now log in.")
             st.session_state["view"] = "login"
