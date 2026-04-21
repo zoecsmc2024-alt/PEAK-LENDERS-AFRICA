@@ -759,8 +759,8 @@ def render_sidebar():
             st.sidebar.warning("No business entities found.")
             st.stop()
 
-                # ==============================
-        # 💎 SIDEBAR BRANDING (SAFE VERSION)
+                        # ==============================
+        # 💎 SIDEBAR BRANDING (SAFE + GLOW)
         # ==============================
         import time
 
@@ -787,18 +787,35 @@ def render_sidebar():
             else:
                 st.markdown("### 🏢")
 
-        # ✅ COMPANY NAME
+        # ✅ COMPANY NAME (WITH GLOW)
         st.markdown(
             f"""
-            <div style='text-align:center; font-weight:600; font-size:15px; margin-top:5px;'>
-                {Active_company_name} <span style="color:#22c55e;">✔</span>
+            <div style='
+                text-align:center;
+                font-weight:600;
+                font-size:15px;
+                margin-top:5px;
+                color:#f1f5f9;
+                text-shadow:
+                    0 0 4px rgba(255,255,255,0.4),
+                    0 0 8px rgba(255,255,255,0.2);
+            '>
+                {Active_company_name}
+                <span style="
+                    color:#22c55e;
+                    margin-left:4px;
+                    text-shadow: 0 0 6px rgba(34,197,94,0.6);
+                ">✔</span>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-        # ✅ SUBTEXT
-        st.caption("FINANCE CORE")
+        # ✅ SUBTEXT (VISIBLE ON DARK BACKGROUND)
+        st.markdown(
+            "<div style='text-align:center; font-size:11px; color:rgba(255,255,255,0.7); letter-spacing:1px;'>FINANCE CORE</div>",
+            unsafe_allow_html=True
+        )
 
         # ✅ DIVIDER
         st.divider()
