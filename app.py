@@ -1698,6 +1698,7 @@ def show_payments():
                                     "id": loan_id,
                                     "amount_paid": new_paid,
                                     "status": new_status,
+                                    "loan_id_label": loan_label,
                                     "tenant_id": st.session_state.tenant_id
                                 }])
 
