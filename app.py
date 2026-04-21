@@ -1836,36 +1836,7 @@ with tab_new:
         else:
             st.info("No transaction history found.")
 
-    # ==============================
-    # TAB 3: EDIT / DELETE
-    # ==============================
-    with tab_manage:
-        if payments_df is not None and not payments_df.empty:
-            p_sel = st.selectbox("Select Receipt to Edit", payments_df["id"].dropna().unique())
-            
-            try:
-                p_row = payments_df[payments_df["id"] == p_sel].iloc[0]
-            except:
-                st.warning("Invalid selection.")
-                return
-
-            with st.form("edit_payment_saas"):
-                new_amt = st.number_input("Adjust Amount", value=float(p_row.get('amount', 0)))
-                if st.form_submit_button("💾 Update Receipt"):
-                    update_p = pd.DataFrame([{"id": p_sel, "amount": new_amt, "tenant_id": st.session_state.tenant_id}])
-                    if save_data("payments", update_p):
-                        st.success("Receipt Updated!")
-                        st.rerun()
-            
-            if st.button("🗑️ Delete Receipt Permanently"):
-                try:
-                    supabase.table("payments").delete().eq("id", p_sel).execute()
-                    st.warning("Receipt Deleted.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Delete failed: {e}")
-
-    # ==============================
+   # ==============================
     # TAB 2: HISTORY
     # ==============================
     with tab_history:
@@ -1877,6 +1848,7 @@ with tab_new:
 
             df_display["amount_fmt"] = df_display["amount"].apply(lambda x: f"UGX {x:,.0f}")
             
+            # Select only columns that actually exist to prevent key errors
             cols = [c for c in ["date", "borrower", "amount_fmt", "method", "receipt_no", "recorded_by"] if c in df_display.columns]
 
             st.dataframe(
@@ -1888,24 +1860,50 @@ with tab_new:
             st.info("No transaction history found for this tenant.")
 
     # ==============================
-    # TAB 3: MANAGE (ADMIN)
+    # TAB 3: MANAGE (ADMIN) - Consolidated
     # ==============================
     with tab_manage:
         if payments_df is not None and not payments_df.empty:
-            if "receipt_no" in payments_df.columns:
-                p_sel_id = st.selectbox("Select Receipt to Action", payments_df["receipt_no"].dropna().unique())
-                p_row = payments_df[payments_df["receipt_no"] == p_sel_id].iloc[0]
+            # Use receipt_no if available, otherwise fallback to id
+            id_col = "receipt_no" if "receipt_no" in payments_df.columns else "id"
+            
+            p_sel = st.selectbox(f"Select Receipt ({id_col}) to Action", payments_df[id_col].dropna().unique())
+            
+            try:
+                p_row = payments_df[payments_df[id_col] == p_sel].iloc[0]
+            except:
+                st.warning("Invalid selection.")
+                # We use return or stop here if this is inside a function
+                return 
 
-                st.warning("⚠️ Warning: Deleting or editing payments requires a manual balance reconciliation of the associated loan.")
-                
-                if st.button("🗑️ Void Payment Receipt", type="primary", use_container_width=True):
-                    try:
-                        supabase.table("payments").delete().eq("receipt_no", p_sel_id).eq("tenant_id", st.session_state.tenant_id).execute()
-                        st.success(f"Receipt {p_sel_id} voided.")
+            st.warning("⚠️ Warning: Deleting or editing payments requires a manual balance reconciliation of the associated loan.")
+
+            # --- EDIT FORM ---
+            with st.form("edit_payment_saas"):
+                new_amt = st.number_input("Adjust Amount", value=float(p_row.get('amount', 0)))
+                if st.form_submit_button("💾 Update Receipt"):
+                    # Safer tenant_id retrieval
+                    t_id = st.session_state.get('tenant_id')
+                    update_p = pd.DataFrame([{"id": p_row.get('id'), "amount": new_amt, "tenant_id": t_id}])
+                    
+                    if save_data("payments", update_p):
+                        st.success("Receipt Updated!")
                         st.cache_data.clear()
                         st.rerun()
-                    except Exception as e:
-                        st.error(f"Deletion failed: {e}")
+            
+            st.markdown("---")
+            
+            # --- VOID/DELETE ACTION ---
+            if st.button("🗑️ Void Payment Receipt Permanently", type="primary", use_container_width=True):
+                try:
+                    t_id = st.session_state.get('tenant_id')
+                    # Double-check record belongs to tenant before deleting
+                    supabase.table("payments").delete().eq(id_col, p_sel).eq("tenant_id", t_id).execute()
+                    st.warning(f"Receipt {p_sel} voided.")
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Deletion failed: {e}")
 # ==============================
 # 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
