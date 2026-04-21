@@ -2990,7 +2990,7 @@ def show_payroll():
                         except Exception as e:
                             st.error(f"Delete failed: {e}")
 # ==========================================
-# 20. ADVANCED ANALYTICS & REPORTS (SAAS + ENTERPRISE)
+# 20. ADVANCED ANALYTICS & REPORTS (STABLE)
 # ==========================================
 import plotly.express as px
 import pandas as pd
@@ -2998,30 +2998,23 @@ import streamlit as st
 
 def show_reports():
     """
-    Consolidates multi-tenant data to provide financial health metrics.
-    Preserves Net Profit logic and Portfolio at Risk (PAR) assessment.
+    Consolidates multi-tenant data with aggressive error handling 
+    for 'int' vs 'series' attribute errors.
     """
     st.markdown("<h2 style='color: #4A90E2;'>📊 Advanced Analytics & Reports</h2>", unsafe_allow_html=True)
 
-    # ==============================
-    # 🔐 SAAS SAFETY (NEW HARD GUARD)
-    # ==============================
     current_tenant = st.session_state.get("tenant_id", "default_tenant")
 
-    # 1. FETCH ALL RELEVANT DATA
+    # 1. FETCH DATA
     loans = get_cached_data("loans")
     payments = get_cached_data("payments")
     expenses = get_cached_data("expenses")
     payroll = get_cached_data("payroll")
     petty = get_cached_data("petty_cash")
-    borrowers_df = get_cached_data("borrowers") # Added to fix 'borrower' KeyError
+    borrowers_df = get_cached_data("borrowers")
 
-    # ==============================
-    # 🔐 SAAS FILTER (NEW - CONSISTENCY FIX)
-    # ==============================
     def safe_filter(df):
-        if df is None or df.empty:
-            return df
+        if df is None or df.empty: return pd.DataFrame()
         if "tenant_id" in df.columns:
             return df[df["tenant_id"].astype(str) == str(current_tenant)]
         return df
@@ -3033,81 +3026,61 @@ def show_reports():
     petty = safe_filter(petty)
     borrowers_df = safe_filter(borrowers_df)
 
-    if loans is None or loans.empty:
+    if loans.empty:
         st.info("📈 Record more loan data to see your financial analytics.")
         return
 
     # ==========================================
-    # 🔥 DATA STANDARDIZATION & 'BORROWER' FIX
+    # 🛠️ THE "INT" OBJECT FIX (AGGRESSIVE)
     # ==========================================
-    # 1. Map Borrower Names (Fixes the 'borrower' KeyError)
-    if borrowers_df is not None and not borrowers_df.empty and "borrower_id" in loans.columns:
+    def force_series_sum(df, col_name):
+        """Ensures we always work with a Series, preventing 'int' attribute errors."""
+        if df is None or df.empty or col_name not in df.columns:
+            return 0.0
+        return pd.to_numeric(df[col_name], errors="coerce").fillna(0).sum()
+
+    # Apply Borrower Mapping
+    if not borrowers_df.empty and "borrower_id" in loans.columns:
         bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df['name']))
         loans['borrower'] = loans['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
-    elif "borrower" not in loans.columns:
-        loans["borrower"] = "Unknown"
-
-    # 2. Numeric Cleaning (Fixes 'int' has no attribute 'fillna' error)
-    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
-    for col in num_cols:
+    
+    # Standardize Loans Numeric Columns
+    for col in ["principal", "interest", "total_repayable", "balance"]:
         if col in loans.columns:
             loans[col] = pd.to_numeric(loans[col], errors="coerce").fillna(0)
-        else:
-            loans[col] = 0.0
 
-    # 3. Chronological Trend Logic (Oldest at Top, Newest at Bottom)
+    # Chronological Sort (Oldest top, Newest bottom)
     loans['start_date'] = pd.to_datetime(loans.get('start_date', pd.NaT), errors='coerce')
-    loans['root_anchor'] = loans.groupby('borrower')['start_date'].transform('min')
-    
-    loans = loans.sort_values(
-        by=["root_anchor", "borrower", "start_date"], 
-        ascending=[False, True, True] 
-    ).drop(columns=['root_anchor'])
+    loans = loans.sort_values(by=["borrower", "start_date"], ascending=[True, True])
 
     # ==============================
-    # 2. PAYROLL SAFETY & TAX TOTALS (Logic Intact)
+    # 💰 CALCULATION ENGINE (CRASH-PROOF)
     # ==============================
-    nssf_total, paye_total = 0, 0
-    if payroll is not None and not payroll.empty:
-        n5 = pd.to_numeric(payroll.get("nssf_5", 0), errors="coerce").fillna(0).sum()
-        n10 = pd.to_numeric(payroll.get("nssf_10", 0), errors="coerce").fillna(0).sum()
-        nssf_total = n5 + n10
-        paye_total = pd.to_numeric(payroll.get("paye", 0), errors="coerce").fillna(0).sum()
+    l_amt = force_series_sum(loans, "principal")
+    l_int = force_series_sum(loans, "interest")
+    p_amt = force_series_sum(payments, "amount")
+    exp_amt = force_series_sum(expenses, "amount")
 
-    # ==============================
-    # 3. CONSOLIDATED DATA SUMS
-    # ==============================
-    l_amt = loans["principal"].sum()
-    l_int = loans["interest"].sum()
+    # Payroll Taxes
+    nssf_total = force_series_sum(payroll, "nssf_5") + force_series_sum(payroll, "nssf_10")
+    paye_total = force_series_sum(payroll, "paye")
 
-    p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if payments is not None else 0
-    exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if expenses is not None else 0
-
+    # Petty Cash Out
     petty_out = 0
-    if petty is not None and not petty.empty:
-        petty_out = pd.to_numeric(
-            petty[petty["type"] == "Out"].get("amount", 0),
-            errors="coerce"
-        ).fillna(0).sum()
+    if not petty.empty:
+        petty_out = force_series_sum(petty[petty["type"] == "Out"], "amount")
 
-    # 💰 FINANCIAL LOGIC (PRESERVED)
-    total_outflow = exp_amt + petty_out + nssf_total + paye_total
-    net_profit = p_amt - total_outflow
+    net_profit = p_amt - (exp_amt + petty_out + nssf_total + paye_total)
 
     # ==============================
-    # 4. KPI DASHBOARD
+    # 📊 DASHBOARD UI
     # ==============================
     st.subheader("🚀 Financial Performance")
     k1, k2, k3, k4 = st.columns(4)
-
-    k1.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">CAPITAL ISSUED</p><h4 style="margin:0;color:#4A90E2;">{l_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
-    k2.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">INTEREST ACCRUED</p><h4 style="margin:0;color:#4A90E2;">{l_int:,.0f}</h4></div>""", unsafe_allow_html=True)
-    k3.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">COLLECTIONS</p><h4 style="margin:0;color:#2E7D32;">{p_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
-
-    p_color = "#2E7D32" if net_profit >= 0 else "#FF4B4B"
-    k4.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid {p_color};box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">NET PROFIT</p><h4 style="margin:0;color:{p_color};">{net_profit:,.0f}</h4></div>""", unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    k1.metric("CAPITAL ISSUED", f"{l_amt:,.0f}")
+    k2.metric("INTEREST ACCRUED", f"{l_int:,.0f}")
+    k3.metric("COLLECTIONS", f"{p_amt:,.0f}")
+    k4.metric("NET PROFIT", f"{net_profit:,.0f}", delta_color="normal")
 
     # ==========================================
     # 🎨 LEDGER VIEW WITH FULL ROW HIGHLIGHTING
@@ -3121,18 +3094,15 @@ def show_reports():
             "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;", 
             "CLOSED": "background-color: #F3F4F6; color: #374151;", 
             "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", 
-            "PENDING": "background-color: #FEF3C7; color: #78350F;", 
         }
-        style = bg_map.get(status, "")
-        return [style] * len(row)
-        
+        return [bg_map.get(status, "")] * len(row)
+
     show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
     styled_df = loans[show_cols].style.format({
         "principal": "{:,.0f}", "total_repayable": "{:,.0f}", "balance": "{:,.0f}"
     }).apply(apply_full_row_style, axis=1)
 
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
     # ==============================
     # 5. VISUAL ANALYTICS
     # ==============================
