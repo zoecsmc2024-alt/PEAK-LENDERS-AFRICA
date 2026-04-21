@@ -1722,7 +1722,6 @@ def show_payments():
                                 # Define label to prevent DB constraint errors
                                 loan_label = f"LN-{loan_id[:6]}" 
 
-                                # Prepare payment record
                                 new_payment = pd.DataFrame([{
                                     "receipt_no": receipt_no,
                                     "loan_id": loan_id,
@@ -1734,7 +1733,6 @@ def show_payments():
                                     "tenant_id": tenant_id
                                 }])
 
-                                # Update Loan Balance & Status
                                 new_paid = paid + amount
                                 new_status = "Closed" if new_paid >= total else "Active"
                                 
@@ -1746,10 +1744,8 @@ def show_payments():
                                     "tenant_id": tenant_id
                                 }])
 
-                                # Single save logic block
                                 if save_data("payments", new_payment) and save_data("loans", loan_update):
                                     file_path = f"/tmp/{receipt_no}.pdf"
-                                    
                                     generate_receipt_pdf({
                                         "Receipt No": receipt_no,
                                         "Borrower": loan["borrower"],
@@ -1760,18 +1756,56 @@ def show_payments():
                                     }, file_path)
 
                                     st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
-                                    
                                     with open(file_path, "rb") as f:
-                                        st.download_button(
-                                            "📄 Download Receipt",
-                                            f,
-                                            file_name=f"{receipt_no}.pdf",
-                                            mime="application/pdf"
-                                        )
+                                        st.download_button("📄 Download Receipt", f, file_name=f"{receipt_no}.pdf", mime="application/pdf")
                                     
                                     st.cache_data.clear()
                             except Exception as e:
                                 st.error(f"❌ {e}")
+
+    # ==============================
+    # ⚙️ EDIT / DELETE OVERLAYS
+    # ==============================
+    if "edit_payment" in st.session_state:
+        st.divider()
+        st.subheader("✏️ Edit Payment")
+        edit = st.session_state["edit_payment"]
+
+        new_amount = st.number_input("Amount", value=float(edit["amount"]))
+        new_method = st.selectbox("Method", ["Cash", "Bank", "Mobile"], index=0)
+        new_date = st.date_input("Date")
+
+        if st.button("Update Payment"):
+            try:
+                supabase.table("payments").update({
+                    "amount": float(new_amount),
+                    "method": new_method,
+                    "date": str(new_date)
+                }).eq("id", edit["id"]).execute()
+
+                st.success("✅ Payment updated")
+                del st.session_state["edit_payment"]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Update failed: {e}")
+            
+    if "delete_payment_id" in st.session_state:
+        st.divider()
+        st.warning("⚠️ Are you sure you want to delete this payment?")
+        col1, col2 = st.columns(2)
+
+        if col1.button("Yes, Delete"):
+            try:
+                supabase.table("payments").delete().eq("id", st.session_state["delete_payment_id"]).execute()
+                st.success("🗑️ Payment deleted")
+                del st.session_state["delete_payment_id"]
+                st.rerun()
+            except Exception as e:
+                st.error(f"Delete failed: {e}")
+
+        if col2.button("Cancel"):
+            del st.session_state["delete_payment_id"]
+            st.rerun()
     # ==============================
     # 📜 TAB 2: HISTORY
     # ==============================
