@@ -846,13 +846,11 @@ def render_sidebar():
                 display:flex;
                 gap:8px;
                 margin-top:12px;
-            "></div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
         st.markdown("---")
-
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
