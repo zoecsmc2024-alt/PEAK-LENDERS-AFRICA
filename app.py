@@ -1590,27 +1590,27 @@ def show_payments():
     st.markdown("<h2 style='color: #2B3F87;'>💵 Payments Management</h2>", unsafe_allow_html=True)
     
     # ==============================
-    # 1. FETCH TENANT DATA (SAFE)
+    # 📦 1. FETCH & INITIALIZE DATA (SAFE)
     # ==============================
     try:
         loans_raw = get_cached_data("loans")
         payments_raw = get_cached_data("payments")
     except Exception as e:
         st.error(f"Error fetching data: {e}")
-        return
+        return  # This is now safe because it is inside a function
 
-    if loans_raw is None:
-        st.info("ℹ️ No loans found in the system.")
-        return
-
-    loans_df = pd.DataFrame(loans_raw)
+    # Convert to DataFrames immediately with fallback to empty ones
+    loans_df = pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame()
     payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
+
+    # --- EMPTY STATE CHECK ---
     if loans_df.empty:
         st.info("ℹ️ No loans found in the system.")
-        return
+        st.info("👉 Use the 'New Loan' tab to create your first agreement.")
+        return  # Halts the rest of the UI rendering if no data exists
 
     # ==============================
-    # 🛡️ COLUMN NORMALIZATION (HARDENED + CONSISTENT)
+    # 🛡️ 2. COLUMN NORMALIZATION (HARDENED + CONSISTENT)
     # ==============================
 
     # --- LOAD BORROWERS FOR NAME RESOLUTION ---
