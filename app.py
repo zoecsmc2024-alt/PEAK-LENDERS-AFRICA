@@ -1716,13 +1716,13 @@ def show_payments():
                             st.warning("Enter valid amount.")
                         else:
                             try:
-                        tenant_id = st.session_state.get("tenant_id")
+                                tenant_id = st.session_state.get("tenant_id")
 
-                        if not tenant_id:
-                            st.error("❌ Tenant not found. Please login again.")
-                            st.stop()
+                                if not tenant_id:
+                                    st.error("❌ Tenant not found. Please login again.")
+                                    st.stop()
 
-                        receipt_no = generate_receipt_no(supabase, tenant_id)
+                                receipt_no = generate_receipt_no(supabase, tenant_id)
                                 
                                 # Define label to prevent DB constraint errors
                                 loan_label = f"LN-{loan_id[:6]}" 
@@ -1738,6 +1738,7 @@ def show_payments():
                                     "tenant_id": tenant_id
                                 }])
 
+                                # Calculate update
                                 new_paid = paid + amount
                                 new_status = "Closed" if new_paid >= total else "Active"
                                 
@@ -1749,6 +1750,7 @@ def show_payments():
                                     "tenant_id": tenant_id
                                 }])
 
+                                # Atomic update
                                 if save_data("payments", new_payment) and save_data("loans", loan_update):
                                     file_path = f"/tmp/{receipt_no}.pdf"
                                     generate_receipt_pdf({
@@ -1761,13 +1763,21 @@ def show_payments():
                                     }, file_path)
 
                                     st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
-                                    with open(file_path, "rb") as f:
-                                        st.download_button("📄 Download Receipt", f, file_name=f"{receipt_no}.pdf", mime="application/pdf")
                                     
+                                    with open(file_path, "rb") as f:
+                                        st.download_button(
+                                            "📄 Download Receipt", 
+                                            f, 
+                                            file_name=f"{receipt_no}.pdf", 
+                                            mime="application/pdf"
+                                        )
+                                    
+                                    # CRITICAL: Clear cache and rerun to update the "Loans" page balances
                                     st.cache_data.clear()
+                                    st.rerun() 
+
                             except Exception as e:
                                 st.error(f"❌ {e}")
-
     # ==============================
     # ⚙️ EDIT / DELETE OVERLAYS
     # ==============================
