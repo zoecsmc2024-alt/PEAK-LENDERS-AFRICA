@@ -3763,9 +3763,7 @@ if __name__ == "__main__":
             elif page == "Payroll":
                 show_payroll()
             elif page == "Reports":
-                show_reports()
+                show_reports() # This will now call your developed module
             else:
+                # This only shows if you add a new sidebar item without a function
                 st.info(f"The {page} module is coming online soon.")
-
-        except Exception as e:
-            st.error(f"Application Error: {e}")
