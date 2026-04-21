@@ -1706,7 +1706,7 @@ def show_payments():
                                     # Generate PDF inside correct block
                                     file_path = f"/tmp/{receipt_no}.pdf"
                                     generate_receipt_pdf({
-                                        "Receipt No": receipt_no,
+                                        "description": f"RCPT-{receipt_no}",
                                         "Borrower": loan["borrower"],
                                         "Amount": f"UGX {amount:,.0f}",
                                         "Method": method,
