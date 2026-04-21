@@ -2990,202 +2990,202 @@ def show_payroll():
                         except Exception as e:
                             st.error(f"Delete failed: {e}")
 # ==========================================
-# 20. ADVANCED ANALYTICS & REPORTS (STABLE)
+# 🚀 BALLISTIC FINTECH REPORTS ENGINE
 # ==========================================
 import plotly.express as px
 import pandas as pd
 import streamlit as st
 
 def show_reports():
-    """
-    Consolidates multi-tenant data with aggressive error handling 
-    for 'int' vs 'series' attribute errors.
-    """
-    st.markdown("<h2 style='color: #4A90E2;'>📊 Advanced Analytics & Reports</h2>", unsafe_allow_html=True)
 
-    current_tenant = st.session_state.get("tenant_id", "default_tenant")
+    st.markdown("""
+    <h2 style='
+        background: linear-gradient(90deg,#0A192F,#1E3A8A);
+        padding:14px 18px;
+        border-radius:12px;
+        color:white;
+    '>📊 Financial Intelligence Dashboard</h2>
+    """, unsafe_allow_html=True)
 
-    # 1. FETCH DATA
-    loans = get_cached_data("loans")
-    payments = get_cached_data("payments")
-    expenses = get_cached_data("expenses")
-    payroll = get_cached_data("payroll")
-    petty = get_cached_data("petty_cash")
-    borrowers_df = get_cached_data("borrowers")
+    tenant = st.session_state.get("tenant_id", "default")
 
-    def safe_filter(df):
-        if df is None or df.empty: return pd.DataFrame()
+    # ==============================
+    # SAFE FETCH
+    # ==============================
+    def safe(df):
+        if df is None or df.empty:
+            return pd.DataFrame()
         if "tenant_id" in df.columns:
-            return df[df["tenant_id"].astype(str) == str(current_tenant)]
+            return df[df["tenant_id"].astype(str) == str(tenant)]
         return df
 
-    loans = safe_filter(loans)
-    payments = safe_filter(payments)
-    expenses = safe_filter(expenses)
-    payroll = safe_filter(payroll)
-    petty = safe_filter(petty)
-    borrowers_df = safe_filter(borrowers_df)
+    loans = safe(get_cached_data("loans"))
+    payments = safe(get_cached_data("payments"))
+    expenses = safe(get_cached_data("expenses"))
+    payroll = safe(get_cached_data("payroll"))
+    petty = safe(get_cached_data("petty_cash"))
+    borrowers = safe(get_cached_data("borrowers"))
 
     if loans.empty:
-        st.info("📈 Record more loan data to see your financial analytics.")
+        st.info("No financial data yet.")
         return
 
-    # ==========================================
-    # 🛠️ THE "INT" OBJECT FIX (AGGRESSIVE)
-    # ==========================================
-    def force_series_sum(df, col_name):
-        """Ensures we always work with a Series, preventing 'int' attribute errors."""
-        if df is None or df.empty or col_name not in df.columns:
+    # ==============================
+    # HARDEN NUMERIC
+    # ==============================
+    def col_sum(df, col):
+        if df is None or df.empty or col not in df.columns:
             return 0.0
-        return pd.to_numeric(df[col_name], errors="coerce").fillna(0).sum()
+        return pd.to_numeric(df[col], errors="coerce").fillna(0).sum()
 
-    # Apply Borrower Mapping
-    if not borrowers_df.empty and "borrower_id" in loans.columns:
-        bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df['name']))
-        loans['borrower'] = loans['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
-    
-    # Standardize Loans Numeric Columns
-    for col in ["principal", "interest", "total_repayable", "balance"]:
-        if col in loans.columns:
-            loans[col] = pd.to_numeric(loans[col], errors="coerce").fillna(0)
+    for c in ["principal", "interest", "total_repayable", "balance"]:
+        if c in loans.columns:
+            loans[c] = pd.to_numeric(loans[c], errors="coerce").fillna(0)
 
-    # Chronological Sort (Oldest top, Newest bottom)
-    loans['start_date'] = pd.to_datetime(loans.get('start_date', pd.NaT), errors='coerce')
-    loans = loans.sort_values(by=["borrower", "start_date"], ascending=[True, True])
+    # Borrower mapping
+    if not borrowers.empty and "borrower_id" in loans.columns:
+        m = dict(zip(borrowers["id"].astype(str), borrowers["name"]))
+        loans["borrower"] = loans["borrower_id"].astype(str).map(m).fillna("Unknown")
 
     # ==============================
-    # 💰 CALCULATION ENGINE (CRASH-PROOF)
+    # CORE METRICS
     # ==============================
-    l_amt = force_series_sum(loans, "principal")
-    l_int = force_series_sum(loans, "interest")
-    p_amt = force_series_sum(payments, "amount")
-    exp_amt = force_series_sum(expenses, "amount")
+    capital = col_sum(loans, "principal")
+    interest = col_sum(loans, "interest")
+    collected = col_sum(payments, "amount")
+    expenses_total = col_sum(expenses, "amount")
 
-    # Payroll Taxes
-    nssf_total = force_series_sum(payroll, "nssf_5") + force_series_sum(payroll, "nssf_10")
-    paye_total = force_series_sum(payroll, "paye")
+    nssf = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10")
+    paye = col_sum(payroll, "paye")
 
-    # Petty Cash Out
     petty_out = 0
     if not petty.empty:
-        petty_out = force_series_sum(petty[petty["type"] == "Out"], "amount")
+        petty_out = col_sum(petty[petty["type"] == "Out"], "amount")
 
-    net_profit = p_amt - (exp_amt + petty_out + nssf_total + paye_total)
+    profit = collected - (expenses_total + petty_out + nssf + paye)
 
     # ==============================
-    # 📊 DASHBOARD UI
+    # 💎 KPI CARDS (PREMIUM)
     # ==============================
-    st.subheader("🚀 Financial Performance")
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("CAPITAL ISSUED", f"{l_amt:,.0f}")
-    k2.metric("INTEREST ACCRUED", f"{l_int:,.0f}")
-    k3.metric("COLLECTIONS", f"{p_amt:,.0f}")
-    k4.metric("NET PROFIT", f"{net_profit:,.0f}", delta_color="normal")
+    def kpi(title, value, color):
+        return f"""
+        <div style="
+            padding:18px;
+            border-radius:14px;
+            background: linear-gradient(135deg,#0f172a,#1e293b);
+            box-shadow:0 8px 30px rgba(0,0,0,0.25);
+            color:white;
+        ">
+            <p style="font-size:11px;opacity:.7">{title}</p>
+            <h2 style="margin:0;color:{color}">UGX {value:,.0f}</h2>
+        </div>
+        """
 
-    # ==========================================
-    # 🎨 LEDGER VIEW WITH FULL ROW HIGHLIGHTING
-    # ==========================================
-    st.write("**📝 Consolidated Loan Ledger**")
-    
-    def apply_full_row_style(row):
-        status = str(row["status"]).upper()
-        bg_map = {
-            "ACTIVE": "background-color: #D1FAE5; color: #064E3B;", 
-            "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;", 
-            "CLOSED": "background-color: #F3F4F6; color: #374151;", 
-            "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", 
-        }
-        return [bg_map.get(status, "")] * len(row)
+    c1, c2, c3, c4 = st.columns(4)
 
-    show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
-    styled_df = loans[show_cols].style.format({
-        "principal": "{:,.0f}", "total_repayable": "{:,.0f}", "balance": "{:,.0f}"
-    }).apply(apply_full_row_style, axis=1)
+    c1.markdown(kpi("CAPITAL DEPLOYED", capital, "#38BDF8"), True)
+    c2.markdown(kpi("INTEREST GENERATED", interest, "#22C55E"), True)
+    c3.markdown(kpi("TOTAL COLLECTIONS", collected, "#A78BFA"), True)
 
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    profit_color = "#22C55E" if profit >= 0 else "#FF3B30"
+    c4.markdown(kpi("NET PROFIT", profit, profit_color), True)
+
     # ==============================
-    # 5. VISUAL ANALYTICS
+    # 📊 LEDGER (VISUALIZED)
     # ==============================
-    st.markdown("---")
-    col_left, col_right = st.columns(2)
+    st.markdown("### 🧾 Loan Intelligence Ledger")
 
-    with col_left:
-        st.write("**💰 Income vs. Expenses (Trend)**")
+    def row_style(r):
+        s = str(r["status"]).upper()
+        return {
+            "ACTIVE": "background:#00C89622;color:#00C896",
+            "OVERDUE": "background:#FF3B3022;color:#FF3B30",
+            "CLOSED": "background:#8E8E9322;color:#8E8E93",
+        }.get(s, "")
 
-        if payments is not None and not payments.empty:
-            payments = payments.copy()
-            payments["date"] = pd.to_datetime(payments.get("date", pd.NaT), errors='coerce')
+    loans_show = loans.copy()
 
-            inc_trend = payments.groupby(payments["date"].dt.strftime('%Y-%m'))["amount"].sum().reset_index()
-
-            exp_trend = pd.DataFrame(columns=["date", "amount"])
-            if expenses is not None and not expenses.empty:
-                expenses = expenses.copy()
-                expenses["date"] = pd.to_datetime(expenses.get("date", pd.NaT), errors='coerce')
-                exp_trend = expenses.groupby(expenses["date"].dt.strftime('%Y-%m'))["amount"].sum().reset_index()
-
-            merged = pd.merge(inc_trend, exp_trend, on="date", how="outer").fillna(0)
-            merged.columns = ["Month", "Income", "Expenses"]
-            merged = merged.sort_values("Month")
-
-            fig_bar = px.bar(
-                merged,
-                x="Month",
-                y=["Income", "Expenses"],
-                barmode="group",
-                color_discrete_map={"Income": "#10B981", "Expenses": "#FF4B4B"}
-            )
-            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', legend_title="", margin=dict(l=0, r=0, t=20, b=0))
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("No transaction history for trend analysis.")
-
-    with col_right:
-        st.write("**🛡️ Portfolio Weight (Top 5 Borrowers)**")
-        top_borrowers = loans.groupby("borrower")["principal"].sum().sort_values(ascending=False).head(5).reset_index()
-
-        fig_pie = px.pie(
-            top_borrowers,
-            names="borrower",
-            values="principal",
-            hole=0.5,
-            color_discrete_sequence=px.colors.sequential.GnBu_r
+    if "status" in loans_show.columns:
+        styled = loans_show.style.apply(
+            lambda r: [row_style(r)] * len(r), axis=1
         )
-        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', showlegend=True, margin=dict(l=0, r=0, t=20, b=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+    else:
+        styled = loans_show.style
+
+    st.dataframe(styled, use_container_width=True)
 
     # ==============================
-    # 6. RISK INDICATOR (PAR % FIXED SAFETY)
+    # 📈 TREND ENGINE
     # ==============================
     st.markdown("---")
-    st.subheader("🚨 Risk Assessment (Portfolio at Risk)")
+    col1, col2 = st.columns(2)
 
-    loans = loans.copy()
-    loans["end_date"] = pd.to_datetime(loans.get("end_date", pd.NaT), errors="coerce")
-    loans["status"] = loans.get("status", "").astype(str)
+    with col1:
+        st.markdown("### 💰 Cashflow Dynamics")
 
-    overdue_mask = (
-        loans["status"].str.lower().isin(["overdue", "rolled/overdue", "pending"]) &
-        (loans["end_date"].dt.date < pd.Timestamp.today().date())
-    )
+        if not payments.empty:
+            payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
+            inc = payments.groupby(payments["date"].dt.strftime('%Y-%m'))["amount"].sum()
 
-    overdue_val = pd.to_numeric(loans.loc[overdue_mask, "principal"], errors="coerce").fillna(0).sum()
-    risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
+            exp = pd.Series(dtype=float)
+            if not expenses.empty:
+                expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
+                exp = expenses.groupby(expenses["date"].dt.strftime('%Y-%m'))["amount"].sum()
 
-    r1, r2 = st.columns([2, 1])
+            df = pd.concat([inc, exp], axis=1).fillna(0)
+            df.columns = ["Income", "Expenses"]
+            df = df.reset_index().rename(columns={"index": "Month"})
 
-    with r1:
-        st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
-        st.progress(min(float(risk_percent) / 100, 1.0))
-        st.write(f"Total Overdue Principal: **{overdue_val:,.0f} UGX**")
+            fig = px.area(df, x="Month", y=["Income", "Expenses"])
+            fig.update_layout(
+                paper_bgcolor='rgba(0,0,0,0)',
+                plot_bgcolor='rgba(0,0,0,0)'
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
-    with r2:
-        if risk_percent < 10:
-            st.success("✅ Healthy Portfolio")
-        elif risk_percent < 25:
-            st.warning("⚠️ Moderate Risk")
-        else:
-            st.error("🆘 Critical Risk Level")
+    with col2:
+        st.markdown("### 🧠 Exposure Intelligence")
+
+        top = loans.groupby("borrower")["principal"].sum().nlargest(5).reset_index()
+
+        fig = px.pie(top, names="borrower", values="principal", hole=0.6)
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)')
+        st.plotly_chart(fig, use_container_width=True)
+
+    # ==============================
+    # 🚨 RISK ENGINE (UPGRADED)
+    # ==============================
+    st.markdown("---")
+    st.markdown("### 🚨 Portfolio Risk Engine")
+
+    loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
+
+    overdue = loans[
+        (loans["status"].str.upper() == "OVERDUE") &
+        (loans["end_date"] < pd.Timestamp.today())
+    ]
+
+    overdue_val = col_sum(overdue, "principal")
+    risk = (overdue_val / capital * 100) if capital > 0 else 0
+
+    st.markdown(f"""
+    <div style="
+        padding:16px;
+        border-radius:12px;
+        background: linear-gradient(90deg,#1e293b,#0f172a);
+        color:white;
+    ">
+    ⚠️ Portfolio Risk Level: <b>{risk:.2f}%</b><br>
+    Exposure: UGX {overdue_val:,.0f}
+    </div>
+    """, unsafe_allow_html=True)
+
+    if risk < 10:
+        st.success("Healthy Portfolio")
+    elif risk < 25:
+        st.warning("Moderate Risk")
+    else:
+        st.error("Critical Portfolio Risk")
 # ==============================
 # 21. MASTER LEDGER (SAAS + ENTERPRISE)
 # ==============================
