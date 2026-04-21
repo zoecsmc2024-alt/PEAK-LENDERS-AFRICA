@@ -1483,7 +1483,7 @@ def show_loans():
                     "loan_id_label": new_label, "borrower_id": loan_to_roll['borrower_id'],
                     "principal": float(current_unpaid), "interest": float(current_unpaid * (new_interest_rate / 100)),
                     "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
-                    "amount_paid": 0.0, "status": "BCF", "start_date": datetime.now().strftime("%Y-%m-%d"),
+                    "amount_paid": 0.0, "status": "ACTIVE", "start_date": datetime.now().strftime("%Y-%m-%d"),
                     "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"), "tenant_id": t_id
                 }])
                 if save_data("loans", new_cycle):
