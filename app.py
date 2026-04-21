@@ -1502,7 +1502,7 @@ def show_loans():
                     "interest": float(current_unpaid * (new_interest_rate / 100)),
                     "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
                     "amount_paid": 0.0,
-                    "status": "ACTIVE",
+                    "status": "BCF",
                     "start_date": datetime.now().strftime("%Y-%m-%d"),
                     "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
                     "tenant_id": t_id
@@ -1740,7 +1740,7 @@ def show_payments():
 
                                 # Calculate update
                                 new_paid = paid + amount
-                                new_status = "Closed" if new_paid >= total else "Active"
+                                new_status = "CLOSED" if new_paid >= total else "ACTIVE"
                                 
                                 loan_update = pd.DataFrame([{
                                     "id": loan_id,
