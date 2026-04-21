@@ -1744,7 +1744,8 @@ def show_payments():
         if "date" in df.columns:
             df = df.sort_values("date", ascending=False)
 
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        cols = [c for c in ["date", "borrower", "amount", "method", "receipt_no"] if c in df.columns]
+        st.dataframe(df[cols], use_container_width=True, hide_index=True)
 # ==============================
 # 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
