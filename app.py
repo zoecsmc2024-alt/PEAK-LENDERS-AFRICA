@@ -759,8 +759,8 @@ def render_sidebar():
             st.sidebar.warning("No business entities found.")
             st.stop()
 
-        # ==============================
-        # 💎 SIDEBAR BRANDING (ELITE)
+                # ==============================
+        # 💎 SIDEBAR BRANDING (SAFE VERSION)
         # ==============================
         import time
 
@@ -778,77 +778,30 @@ def render_sidebar():
                 except Exception:
                     final_logo_url = None
 
-        # ✅ SAFE LOGO BLOCK
-        if final_logo_url:
-            logo_component = f"""
-            <div style="display:flex; justify-content:center; align-items:center; margin-top:10px;">
-                <div style="
-                    padding:10px;
-                    border-radius:50%;
-                    background: radial-gradient(circle, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 70%);
-                    box-shadow: 0 0 20px rgba(255,255,255,0.12);
-                ">
-                    <img src="{final_logo_url}?t={int(time.time())}"
-                         width="70"
-                         style="border-radius:50%; object-fit:cover;" />
-                </div>
-            </div>
-            """.strip()
-        else:
-            logo_component = """
-            <div style="text-align:center; margin-top:10px;">
-                <h1 style="font-size:38px; margin:0;">🏢</h1>
-            </div>
-            """
+        # ✅ CENTER EVERYTHING SAFELY
+        col1, col2, col3 = st.columns([1, 2, 1])
 
-                # ✅ RENDER (NO LEAK)
-        st.markdown(f"""
-        <div style="
-            width:100%;
-            max-width:100%;
-            overflow:hidden;
-            display:block;
-            box-sizing:border-box;
-        ">
-            <div style="text-align:center; padding:10px 5px 0 5px;">
-                {logo_component}
-                <div style="margin-top:10px;">
-                    <h3 style="
-                        color:white;
-                        margin:0;
-                        font-size:16px;
-                        font-weight:600;
-                        word-wrap:break-word;
-                    ">
-                        {Active_company_name}
-                        <span style="
-                            font-size:10px;
-                            background:#22c55e;
-                            color:white;
-                            padding:2px 5px;
-                            border-radius:5px;
-                            margin-left:4px;
-                        ">✔</span>
-                    </h3>
-                </div>
-                <p style="
-                    font-size:10px;
-                    color:rgba(255,255,255,0.6);
-                    letter-spacing:1px;
-                    margin-top:4px;
-                    text-transform: uppercase;
-                    font-weight:600;
-                ">
-                    FINANCE CORE
-                </p>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        with col2:
+            if final_logo_url:
+                st.image(final_logo_url, width=70)
+            else:
+                st.markdown("### 🏢")
 
+        # ✅ COMPANY NAME
         st.markdown(
-            "<hr style='width:100%; margin:15px 0; border:0; border-top:1px solid rgba(255,255,255,0.1);'>",
+            f"""
+            <div style='text-align:center; font-weight:600; font-size:15px; margin-top:5px;'>
+                {Active_company_name} <span style="color:#22c55e;">✔</span>
+            </div>
+            """,
             unsafe_allow_html=True
         )
+
+        # ✅ SUBTEXT
+        st.caption("FINANCE CORE")
+
+        # ✅ DIVIDER
+        st.divider()
 
         # ==============================
         # 📍 MENU
