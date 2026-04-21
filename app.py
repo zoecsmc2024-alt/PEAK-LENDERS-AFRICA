@@ -3014,6 +3014,7 @@ def show_reports():
     expenses = get_cached_data("expenses")
     payroll = get_cached_data("payroll")
     petty = get_cached_data("petty_cash")
+    borrowers_df = get_cached_data("borrowers") # Added to fix 'borrower' KeyError
 
     # ==============================
     # 🔐 SAAS FILTER (NEW - CONSISTENCY FIX)
@@ -3030,15 +3031,23 @@ def show_reports():
     expenses = safe_filter(expenses)
     payroll = safe_filter(payroll)
     petty = safe_filter(petty)
+    borrowers_df = safe_filter(borrowers_df)
 
     if loans is None or loans.empty:
         st.info("📈 Record more loan data to see your financial analytics.")
         return
 
     # ==========================================
-    # 🔥 DATA STANDARDIZATION & CRASH FIXES
+    # 🔥 DATA STANDARDIZATION & 'BORROWER' FIX
     # ==========================================
-    # 1. Numeric Cleaning (Fixes 'int' has no attribute 'fillna' error)
+    # 1. Map Borrower Names (Fixes the 'borrower' KeyError)
+    if borrowers_df is not None and not borrowers_df.empty and "borrower_id" in loans.columns:
+        bor_map = dict(zip(borrowers_df['id'].astype(str), borrowers_df['name']))
+        loans['borrower'] = loans['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+    elif "borrower" not in loans.columns:
+        loans["borrower"] = "Unknown"
+
+    # 2. Numeric Cleaning (Fixes 'int' has no attribute 'fillna' error)
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
         if col in loans.columns:
@@ -3046,7 +3055,7 @@ def show_reports():
         else:
             loans[col] = 0.0
 
-    # 2. Chronological Trend Logic (Oldest at Top, Newest at Bottom)
+    # 3. Chronological Trend Logic (Oldest at Top, Newest at Bottom)
     loans['start_date'] = pd.to_datetime(loans.get('start_date', pd.NaT), errors='coerce')
     loans['root_anchor'] = loans.groupby('borrower')['start_date'].transform('min')
     
@@ -3108,11 +3117,11 @@ def show_reports():
     def apply_full_row_style(row):
         status = str(row["status"]).upper()
         bg_map = {
-            "ACTIVE": "background-color: #D1FAE5; color: #064E3B;", # Mint
-            "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;", # Sky Blue
-            "CLOSED": "background-color: #F3F4F6; color: #374151;", # Light Gray
-            "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", # Soft Red
-            "PENDING": "background-color: #FEF3C7; color: #78350F;", # Amber
+            "ACTIVE": "background-color: #D1FAE5; color: #064E3B;", 
+            "ROLLED": "background-color: #DBEAFE; color: #1E3A8A;", 
+            "CLOSED": "background-color: #F3F4F6; color: #374151;", 
+            "OVERDUE": "background-color: #FEE2E2; color: #7F1D1D;", 
+            "PENDING": "background-color: #FEF3C7; color: #78350F;", 
         }
         style = bg_map.get(status, "")
         return [style] * len(row)
