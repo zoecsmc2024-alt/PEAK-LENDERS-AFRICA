@@ -810,7 +810,7 @@ def render_sidebar():
         total_loans = len(st.session_state.get('loans_df', []))
         total_clients = len(st.session_state.get('borrowers_df', []))
 
-        # ✅ FINAL RENDER (ONE BLOCK ONLY)
+        # ✅ FIXED: CLOSED DIV PROPERLY
         st.markdown(f"""
         <div style="text-align:center; padding:10px 5px 0 5px;">
             {logo_component}
@@ -846,11 +846,13 @@ def render_sidebar():
                 display:flex;
                 gap:8px;
                 margin-top:12px;
+            "></div>
         </div>
         """, unsafe_allow_html=True)
 
         st.markdown("<hr style='margin: 20px 0; border: 0; border-top: 1px solid rgba(255,255,255,0.1);'>", unsafe_allow_html=True)
         st.markdown("---")
+
         menu = {
             "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
@@ -872,34 +874,37 @@ def render_sidebar():
             label_visibility="collapsed",
             key="navigation_radio"
         )
-        
+
+        # ✅ FIX: MAP BACK TO CLEAN PAGE NAME
+        selected_page = selection.split(" ", 1)[1]
+
+        # ✅ SAVE STATE
+        st.session_state['current_page'] = selected_page
+
         st.markdown("<br>", unsafe_allow_html=True)
 
         # ==============================
-# 🔐 LOGOUT (CLEAN & FUNCTIONAL)
-# ==============================
-# Place this inside your 'authenticated' view block
-if st.session_state.get("authenticated"):
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        # 🔐 LOGOUT (FIXED POSITION)
+        # ==============================
+        if st.session_state.get("authenticated"):
+            st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-    if st.button("🚪 Logout", use_container_width=True):
-        # 1. Clear the specific auth flags
-        st.session_state["logged_in"] = False
-        st.session_state["authenticated"] = False
-        
-        # 2. Wipe the rest of the session state
-        for key in list(st.session_state.keys()):
-            if key not in ["theme_color", "logged_in", "authenticated"]:
-                del st.session_state[key]
-        
-        # 3. Give Streamlit a moment to process the clear
-        st.success("Logging out...")
-        time.sleep(0.5)
-        
-        # 4. Trigger the rerun
-        st.rerun()
-    
-        
+            if st.button("🚪 Logout", use_container_width=True):
+                st.session_state["logged_in"] = False
+                st.session_state["authenticated"] = False
+
+                for key in list(st.session_state.keys()):
+                    if key not in ["theme_color", "logged_in", "authenticated"]:
+                        del st.session_state[key]
+
+                st.success("Logging out...")
+                time.sleep(0.5)
+                st.rerun()
+
+    # ✅ CRITICAL FIX (RETURN PAGE)
+    return selected_page
+
+
 # ==============================
 # 🚀 BORROWERS ENGINE (PRODUCTION)
 # ==============================
