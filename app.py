@@ -260,9 +260,6 @@ def run_auth_ui(supabase):
 # ==============================
 # 5. DATA LAYER (MERGED - NO DUPLICATES)
 # ==============================
-loans_df = pd.DataFrame(loans_raw)
-payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
-
 
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):  # ✅ MAIN FUNCTION
