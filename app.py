@@ -1273,7 +1273,7 @@ def show_loans():
         ])
 
     # ==============================
-    # 🔥 DATA STANDARDIZATION & PAYMENT SYNC (CRITICAL)
+    # 🔥 DATA STANDARDIZATION & SMART SYNC (FIXED)
     # ==============================
     loans_df["id"] = loans_df["id"].astype(str)
 
@@ -1297,10 +1297,21 @@ def show_loans():
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
     loans_df["status"] = loans_df["status"].astype(str).str.upper()
 
-    # 3. Auto-Close fully paid loans (Set to CLEARED for Green styling)
-    closed_mask = loans_df["balance"] <= 0
-    loans_df.loc[closed_mask, "status"] = "CLEARED"
-    loans_df.loc[closed_mask, "balance"] = 0
+    # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
+    def determine_status(row):
+        # If already BCF (Rolled Over) or PENDING, keep that status!
+        if row["status"] in ["BCF", "PENDING"]:
+            return row["status"]
+        # If balance is 0 and not rolled over, it is CLEARED
+        if row["balance"] <= 0:
+            return "CLEARED"
+        # Otherwise, it stays ACTIVE
+        return "ACTIVE"
+
+    loans_df["status"] = loans_df.apply(determine_status, axis=1)
+    
+    # Ensure balance is zeroed for anything mathematically cleared
+    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     # 4. Constant SN & Cycle Management Logic
     if not loans_df.empty:
@@ -1322,7 +1333,6 @@ def show_loans():
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
     ])
-
     # ==============================
     # TAB: PORTFOLIO VIEW
     # ==============================
@@ -1336,28 +1346,29 @@ def show_loans():
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
-            # 1. ADDED: start_date and end_date (Due Date) to the visible columns
+            # 1. Visible columns
             show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
             
-            # 2. UPDATED: Changed to row-level styling to fill the entire row
+            # 2. UPDATED: Smart Row-Level Styling
             def style_entire_row(row):
                 val = str(row["status"]).upper()
+                # ACTIVE is now empty ("") so it stays neutral white
                 color_map = {
-                    "ACTIVE": "background-color: #d1fae5; color: #065f46;",
-                    "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;",
+                    "ACTIVE": "", 
+                    "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", # Soft Red
                     "CLOSED": "background-color: #f3f4f6; color: #374151;",
-                    "CLEARED": "background-color: #d1fae5; color: #065f46;",
-                    "BCF": "background-color: #ffedd5; color: #9a3412;" 
+                    "CLEARED": "background-color: #d1fae5; color: #065f46;", # Green
+                    "BCF": "background-color: #ffedd5; color: #9a3412;" # Soft Orange
                 }
                 color = color_map.get(val, "")
-                return [color] * len(row) # This applies the color to every cell in the row
+                return [color] * len(row) 
 
-            # 3. Apply the format and the new row-style
+            # 3. Apply formatting and styling
             styled_df = filtered_loans[show_cols].style.format({
                 "principal": "{:,.0f}", 
                 "total_repayable": "{:,.0f}", 
                 "balance": "{:,.0f}"
-            }).apply(style_entire_row, axis=1) # Changed from .map to .apply for full row colors
+            }).apply(style_entire_row, axis=1) 
 
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
     # ==============================
