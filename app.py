@@ -1346,27 +1346,27 @@ def show_loans():
     # ➕ NEW LOAN
     # ==============================
     with tab_add:
-        if active_borrowers.empty:
-            st.info("💡 Tip: Activate a borrower in the 'Borrowers' section.")
-        else:
-            with st.form("loan_issue_form"):
-                col1, col2 = st.columns(2)  
+    if active_borrowers.empty:
+        st.info("💡 Tip: Activate a borrower in the 'Borrowers' section.")
+    else:
+        with st.form("loan_issue_form"):
+            col1, col2 = st.columns(2)  
 
-                selected_borrower = col1.selectbox("Select Borrower", active_borrowers["name"].unique())
-                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
-                date_issued = col1.date_input("Start Date", value=datetime.now())
+            selected_borrower = col1.selectbox("Select Borrower", active_borrowers["name"].unique())
+            amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
+            date_issued = col1.date_input("Start Date", value=datetime.now())
 
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
-                date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
+            interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
+            date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                interest = (interest_rate / 100) * amount
-                total_due = amount + interest
+            interest = (interest_rate / 100) * amount
+            total_due = amount + interest
 
-                if st.form_submit_button("🚀 Confirm & Issue Loan"):
-                    # Protection against image_398b3e.png errors
-                    loan_id_series = pd.to_numeric(pd.Series(loans_df.get("Loan_ID", 0)), errors='coerce')
-                    last_id = loan_id_series.max()
-                    new_id = int(last_id + 1) if pd.notna(last_id) else 1
+            if st.form_submit_button("🚀 Confirm & Issue Loan"):
+                # Protection against image_398b3e.png errors
+                loan_id_series = pd.to_numeric(pd.Series(loans_df.get("Loan_ID", 0)), errors='coerce')
+                last_id = loan_id_series.max()
+                new_id = int(last_id + 1) if pd.notna(last_id) else 1
 
                 new_loan = pd.DataFrame([{
                     "Loan_ID": new_id,
@@ -1380,16 +1380,16 @@ def show_loans():
                     "End_Date": date_due.strftime("%Y-%m-%d")
                 }])
 
-                    updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
-                    
-                    # Ensure numeric columns remain numeric during save
-                    for col in ["Principal", "Interest", "Total_Repayable", "Amount_Paid"]:
-                        if col in updated_df.columns:
-                            updated_df[col] = pd.to_numeric(updated_df[col]).fillna(0.0)
+                updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
+                
+                # Ensure numeric columns remain numeric during save
+                for col in ["Principal", "Interest", "Total_Repayable", "Amount_Paid"]:
+                    if col in updated_df.columns:
+                        updated_df[col] = pd.to_numeric(updated_df[col]).fillna(0.0)
 
-                    if save_data("Loans", updated_df):
-                        st.success(f"✅ Loan #{new_id} issued!")
-                        st.rerun()
+                if save_data("Loans", updated_df):
+                    st.success(f"✅ Loan #{new_id} issued!")
+                    st.rerun()
 
     # ==============================
     # ⚙️ ACTIONS (ROLLOVER)
