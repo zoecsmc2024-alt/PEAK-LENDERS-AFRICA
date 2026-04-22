@@ -1319,31 +1319,37 @@ def show_loans():
     with tab_view:
         search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
 
-        filtered_loans = loans_df
+        filtered_loans = loans_df.copy() # Use a copy to avoid view warnings
         if search_query:
             filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
 
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
-            show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "status"]
+            # 1. ADDED: start_date and end_date (Due Date) to the visible columns
+            show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
             
-            def style_status(val):
+            # 2. UPDATED: Changed to row-level styling to fill the entire row
+            def style_entire_row(row):
+                val = str(row["status"]).upper()
                 color_map = {
                     "ACTIVE": "background-color: #d1fae5; color: #065f46;",
                     "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;",
                     "CLOSED": "background-color: #f3f4f6; color: #374151;",
                     "CLEARED": "background-color: #d1fae5; color: #065f46;",
-                    "BCF": "background-color: #ffedd5; color: #9a3412;" #
+                    "BCF": "background-color: #ffedd5; color: #9a3412;" 
                 }
-                return color_map.get(val, "")
+                color = color_map.get(val, "")
+                return [color] * len(row) # This applies the color to every cell in the row
 
+            # 3. Apply the format and the new row-style
             styled_df = filtered_loans[show_cols].style.format({
-                "principal": "{:,.0f}", "total_repayable": "{:,.0f}", "balance": "{:,.0f}"
-            }).map(style_status, subset=["status"])
+                "principal": "{:,.0f}", 
+                "total_repayable": "{:,.0f}", 
+                "balance": "{:,.0f}"
+            }).apply(style_entire_row, axis=1) # Changed from .map to .apply for full row colors
 
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
     # ==============================
     # TAB: NEW LOAN (COMPLETE & NUMERIC)
     # ==============================
@@ -1411,14 +1417,27 @@ def show_loans():
             new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
 
             if st.button("🔥 Execute Rollover", use_container_width=True):
-                # 1. Update OLD loan to BCF
+                # --- AUTO-DATE CALCULATION ---
+                # 1. Convert the old due date to a datetime object
+                try:
+                    old_due_date = pd.to_datetime(loan_to_roll['end_date'])
+                except:
+                    old_due_date = datetime.now()
+                
+                # 2. New Start Date = Old Due Date
+                new_start = old_due_date.strftime("%Y-%m-%d")
+                # 3. New Due Date = New Start Date + 30 Days
+                new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
+
+                # Update OLD loan to BCF
                 supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
 
-                # 2. Compound: New Principal = Old Balance
+                # Compound: New Principal = Old Balance
                 calc_interest = current_unpaid * (new_interest_rate / 100)
+                
                 new_cycle = pd.DataFrame([{
-                    "sn": loan_to_roll['sn'],
-                    "loan_id_label": f"ROLL-{random.randint(1000, 9999)}",
+                    "sn": loan_to_roll['sn'],               # Keep the numeric SN for grouping
+                    "loan_id_label": str(loan_to_roll['sn']).zfill(5), # Styled as 00001
                     "borrower_id": loan_to_roll['borrower_id'],
                     "principal": current_unpaid,
                     "interest": calc_interest,
@@ -1426,16 +1445,15 @@ def show_loans():
                     "amount_paid": 0.0,
                     "status": "ACTIVE",
                     "cycle_no": int(loan_to_roll['cycle_no']) + 1,
-                    "start_date": datetime.now().strftime("%Y-%m-%d"),
-                    "end_date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                    "start_date": new_start,               # ✅ Auto-updated
+                    "end_date": new_due,                   # ✅ Auto-updated
                     "tenant_id": get_current_tenant()
                 }])
 
                 if save_data("loans", new_cycle):
-                    st.success("✅ Rollover Complete!")
+                    st.success(f"✅ Rollover Complete! New Due Date: {new_due}")
                     st.cache_data.clear()
                     st.rerun()
-
     # ==============================
     # TAB: MANAGE/EDIT
     # ==============================
