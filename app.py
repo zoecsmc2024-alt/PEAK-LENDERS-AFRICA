@@ -1345,7 +1345,7 @@ def show_loans():
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ==============================
-    # TAB: NEW LOAN (NUMERIC EDITION)
+    # TAB: NEW LOAN (COMPLETE & NUMERIC)
     # ==============================
     with tab_add:
         if Active_borrowers.empty:
@@ -1357,42 +1357,42 @@ def show_loans():
                 
                 borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
                 selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
-                
-                # We fetch the selected ID safely here
                 selected_id = borrower_map.get(selected_name)
                 
                 amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
+                
+                # RESTORED: Loan Type and Interest Rate row
+                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
                 interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
                 total_due = amount + ((interest_rate / 100) * amount)
                 st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
-                # 🔥 HARDENED SAVE LOGIC (Numeric Only)
                 if st.form_submit_button("🚀 Confirm & Issue Loan"):
-                    # 1. Generate numeric SN based on current count
-                    # This creates the 1, 2, 3 sequence the DB expects
+                    # Generate pure numeric sequence for Supabase
                     next_sn_value = len(loans_df) + 1 
                     
                     loan_data = {
-                        "sn": next_sn_value,             # Pure number (No "LN-" prefix)
-                        "loan_id_label": str(next_sn_value).zfill(5), # Shows as 00001 in UI
+                        "sn": next_sn_value,             # Numeric for DB harmony
+                        "loan_id_label": str(next_sn_value).zfill(5), # UI Style: 00001
                         "borrower_id": str(selected_id),
+                        "loan_type": l_type,             # ✅ ADDED BACK
                         "principal": float(amount),
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due),
                         "amount_paid": 0.0,
                         "status": "ACTIVE",
+                        "start_date": str(date_issued),
+                        "end_date": str(date_due),
                         "tenant_id": str(st.session_state.get('tenant_id', 'default'))
                     }
                     
-                    # 2. Attempt save
                     if save_data("loans", pd.DataFrame([loan_data])):
-                        st.success(f"✅ Success! Loan #{next_sn_value:05d} issued.")
+                        st.success(f"✅ Success! Loan {next_sn_value:05d} issued.")
                         st.cache_data.clear()
                         st.rerun()
-
     # ==============================
     # TAB: ACTIONS (ROLLOVER)
     # ==============================
