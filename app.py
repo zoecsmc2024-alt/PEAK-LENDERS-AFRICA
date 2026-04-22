@@ -1414,27 +1414,42 @@ def show_loans():
             # ==============================
             # 📊 TABLE (POLISHED WITH DYNAMIC COLORS)
             # ==============================
-            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
+            # We include 'SN' (Serial Number) which should be linked to the borrower's 
+            # original loan sequence to remain constant
             
-            # Define the color mapping function
+            # 1. Ensure SN exists. If not in DB, we generate it based on the first occurrence 
+            # of a loan for that borrower to keep it constant
+            if "sn" not in filtered_loans.columns:
+                filtered_loans["sn"] = filtered_loans.groupby("borrower_id").cumcount() + 1
+                filtered_loans["sn"] = filtered_loans["sn"].apply(lambda x: f"{x:05d}")
+
+            # 2. Add Cycle Number for clarity
+            if "cycle_no" not in filtered_loans.columns:
+                filtered_loans["cycle_no"] = filtered_loans.groupby("borrower_id").cumcount() + 1
+
+            show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "status"]
+            
+            # Define the color mapping function matching your spreadsheet Luxe theme
             def style_status(val):
                 color_map = {
                     "ACTIVE": "background-color: #d1fae5; color: #065f46;",   # Soft Green
-                    "PENDING": "background-color: #fef3c7; color: #92400e;",  # Soft Amber
-                    "OVERDUE": "background-color: #fee2e2; color: #991b1b;",  # Soft Red
+                    "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;",  # Soft Red
+                    "OVERDUE": "background-color: #fecaca; color: #991b1b;",  # Deeper Red
                     "CLOSED": "background-color: #f3f4f6; color: #374151;",   # Soft Gray
+                    "CLEARED": "background-color: #d1fae5; color: #065f46;",  # Green
                     "ROLLED": "background-color: #e0e7ff; color: #3730a3;",   # Soft Indigo
-                    "BCF": "background-color: #fae8ff; color: #86198f;"       # Soft Purple
+                    "BCF": "background-color: #ffedd5; color: #9a3412;"       # Soft Orange
                 }
                 return color_map.get(val, "")
 
-            # Apply styling to the dataframe - Using .map instead of .applymap
+            # Apply formatting and styling
             styled_df = filtered_loans[show_cols].style.format({
                 "principal": "{:,.0f}",
                 "total_repayable": "{:,.0f}",
                 "balance": "{:,.0f}"
             }).map(style_status, subset=["status"])
 
+            # Render the banking-grade table
             st.dataframe(
                 styled_df,
                 use_container_width=True,
@@ -1503,38 +1518,49 @@ def show_loans():
 
         st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover & Settlement</h4>", unsafe_allow_html=True)
 
-        eligible_loans = loans_df[loans_df["status"] != "CLOSED"]
+        # Spreadsheet Logic: Only loans not 'CLOSED' or 'CLEARED' can be rolled
+        eligible_loans = loans_df[~loans_df["status"].isin(["CLOSED", "CLEARED"])]
 
         if eligible_loans.empty:
             st.success("All loans are currently settled! ✨")
         else:
-
             roll_map = {
-                f"{row['borrower']} • {row.get('loan_id_label')}": row["id"]
+                f"{row['borrower']} • {row.get('loan_id_label')} • Bal: UGX {row['balance']:,.0f}": row["id"]
                 for _, row in eligible_loans.iterrows()
             }
 
             roll_sel = st.selectbox("Select Loan to Roll Over", list(roll_map.keys()))
             loan_to_roll = eligible_loans[eligible_loans["id"] == roll_map[roll_sel]].iloc[0]
 
-            current_unpaid = loan_to_roll['balance']
-            new_interest_rate = st.number_input("New Monthly Interest (%)", value=10.0)
+            # COMPOUNDING LOGIC: The new principal is exactly the current unpaid balance
+            current_unpaid = float(loan_to_roll['balance'])
+            
+            col1, col2 = st.columns(2)
+            col1.metric("Current Balance", f"{current_unpaid:,.0f} UGX")
+            new_interest_rate = col2.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
 
             if st.button("🔥 Execute Rollover", use_container_width=True):
+                # 1. Update the OLD loan status to 'BCF' (Brought Cash Forward) per spreadsheet
+                supabase.table("loans").update({
+                    "status": "BCF",
+                    "tenant_id": st.session_state.get('tenant_id', 'default-admin')
+                }).eq("id", loan_to_roll['id']).execute()
 
-                supabase.table("loans").update({"status": "ROLLED"}).eq("id", loan_to_roll['id']).execute()
-
+                # 2. Prepare the NEW loan cycle with Compounded Principal
                 t_id = st.session_state.get('tenant_id', 'default-admin')
-
                 import random
                 new_label = f"ROLL-{random.randint(1000, 9999)}"
+                
+                # Math: New Total = Current Balance + (New Interest Rate * Current Balance)
+                calculated_interest = current_unpaid * (new_interest_rate / 100)
+                total_repayable = current_unpaid + calculated_interest
 
                 new_cycle = pd.DataFrame([{
                     "loan_id_label": new_label,
                     "borrower_id": loan_to_roll['borrower_id'],
-                    "principal": float(current_unpaid),
-                    "interest": float(current_unpaid * (new_interest_rate / 100)),
-                    "total_repayable": float(current_unpaid * (1 + (new_interest_rate / 100))),
+                    "principal": float(current_unpaid),         # Compounded Principal
+                    "interest": float(calculated_interest),
+                    "total_repayable": float(total_repayable),
                     "amount_paid": 0.0,
                     "status": "ACTIVE",
                     "start_date": datetime.now().strftime("%Y-%m-%d"),
@@ -1542,11 +1568,11 @@ def show_loans():
                     "tenant_id": t_id
                 }])
 
+                # 3. Save new cycle and refresh
                 if save_data("loans", new_cycle):
-                    st.success(f"✅ Loan rolled over as {new_label}!")
+                    st.success(f"✅ Loan rolled over as {new_label}! New Total: UGX {total_repayable:,.0f}")
                     st.cache_data.clear()
                     st.rerun()
-
     # ==============================
     # TAB: MANAGE/EDIT
     # ==============================
