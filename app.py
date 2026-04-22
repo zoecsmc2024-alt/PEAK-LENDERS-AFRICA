@@ -1288,9 +1288,9 @@ def show_loans():
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
 
     if "cycle_no" in loans.columns:
-    loans["cycle_no"] = pd.to_numeric(loans["cycle_no"], errors="coerce").fillna(1)
-else:
-    loans["cycle_no"] = 1
+        loans["cycle_no"] = pd.to_numeric(loans["cycle_no"], errors="coerce").fillna(1)
+    else:
+        loans["cycle_no"] = 1
     loans["balance"] = (loans["total_repayable"] - loans["amount_paid"]).clip(lower=0)
 
     loans["status"] = loans.get("status","").astype(str).str.upper()
