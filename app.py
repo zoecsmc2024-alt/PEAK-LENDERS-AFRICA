@@ -1336,34 +1336,33 @@ def show_loans():
     # TAB: PORTFOLIO VIEW
     # ==============================
     with tab_view:
+        search_query = st.text_input(
+            "🔍 Search Loan / Borrower",
+            placeholder="Type borrower name or loan ref...",
+            key="loan_search_main"
+        )
 
-    search_query = st.text_input(
-        "🔍 Search Loan / Borrower",
-        placeholder="Type borrower name or loan ref...",
-        key="loan_search_main"
-    )
+        if search_query and search_query.strip() != "":
+            filtered_loans = loans_df[
+                loans_df.apply(
+                    lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
+                    or search_query.lower() in str(r.get("loan_id_label", "")).lower()
+                    or search_query.lower() in str(r.get("id", "")).lower(),
+                    axis=1
+                )
+            ]
+        else:
+            filtered_loans = loans_df
 
-    if search_query and search_query.strip() != "":
-        filtered_loans = loans_df[
-            loans_df.apply(
-                lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
-                or search_query.lower() in str(r.get("loan_id_label", "")).lower()
-                or search_query.lower() in str(r.get("id", "")).lower(),
-                axis=1
-            )
-        ]
-    else:
-        filtered_loans = loans_df
-
-    # ✅ HANDLE EMPTY SAFELY
-    if filtered_loans.empty:
-        st.warning("No matching loans found.")
-        st.info("👉 You can create a new loan from the 'New Loan' tab.")
-    
-    else:
-        # ==============================
-        # SAFE ZONE — ONLY RUN WHEN DATA EXISTS
-        # ==============================
+        # ✅ HANDLE EMPTY SAFELY
+        if filtered_loans.empty:
+            st.warning("No matching loans found.")
+            st.info("👉 You can create a new loan from the 'New Loan' tab.")
+        
+        else:
+     # ==============================
+     # SAFE ZONE — ONLY RUN WHEN DATA EXISTS
+     # ==============================
 
         def format_option(row):
             return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {row['balance']:,.0f}"
