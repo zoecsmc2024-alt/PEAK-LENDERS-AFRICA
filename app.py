@@ -1592,7 +1592,8 @@ def show_payments():
     # ➕ TAB 1: RECORD PAYMENT
     # ==============================
     with tab1:
-        active_loans = loans_df[loans_df["status"] == "ACTIVE"].copy()
+        # Keep only ACTIVE and BCF loans so you can record payments for rolled-over loans too
+        active_loans = loans_df[loans_df["status"].isin(["ACTIVE", "BCF"])].copy()
 
         if active_loans.empty:
             st.success("🎉 No active loans.")
@@ -1602,7 +1603,7 @@ def show_payments():
                 search = search.lower()
                 active_loans = active_loans[
                     active_loans.apply(lambda r: search in str(r.get("borrower", "")).lower() 
-                    or search in str(r.get("id", "")).lower(), axis=1)
+                    or search in str(r.get("sn", "")).lower(), axis=1) # Search by SN instead
                 ]
 
             if active_loans.empty:
@@ -1610,15 +1611,17 @@ def show_payments():
             else:
                 def format_loan(row):
                     balance = row["total_repayable"] - row["amount_paid"]
-                    return f"{row['borrower']} • UGX {balance:,.0f}"
+                    return f"{row['borrower']} • SN: {row['sn']} • Bal: UGX {balance:,.0f}"
 
                 options = {format_loan(row): row["id"] for _, row in active_loans.iterrows()}
                 selected = st.selectbox("Select Loan", list(options.keys()))
                 loan_id = options[selected]
-                loan = active_loans[active_loans["id"] == loan_id].iloc[0] if not df.empty else None if not df.empty else None
+                
+                # Fixed the 'if not df.empty' double-check that was causing errors
+                loan = active_loans[active_loans["id"] == loan_id].iloc[0]
 
-                total = loan["total_repayable"]
-                paid = loan["amount_paid"]
+                total = float(loan["total_repayable"])
+                paid = float(loan["amount_paid"])
                 balance = total - paid
 
                 c1, c2 = st.columns(2)
@@ -1644,7 +1647,10 @@ def show_payments():
                                 st.stop()
 
                             receipt_no = generate_receipt_no(supabase, tenant_id)
-                            loan_label = f"LN-{loan_id[:6]}"
+                            
+                            # ✅ FIXED: Keep the existing label instead of generating a new "LN-..." string
+                            # This prevents the numeric syntax error we saw earlier
+                            current_label = str(loan.get("loan_id_label", loan["sn"]))
 
                             # ✅ INSERT PAYMENT
                             supabase.table("payments").insert({
@@ -1660,12 +1666,13 @@ def show_payments():
 
                             # ✅ UPDATE LOAN
                             new_paid = paid + amount
-                            new_status = "CLOSED" if new_paid >= total else "ACTIVE"
+                            # If fully paid, mark as CLEARED to match your spreadsheet
+                            new_status = "CLEARED" if new_paid >= total else loan["status"]
 
                             supabase.table("loans").update({
-                                "amount_paid": new_paid,
+                                "amount_paid": float(new_paid),
                                 "status": new_status,
-                                "loan_id_label": loan_label
+                                "loan_id_label": current_label # Using the safe label
                             }).eq("id", loan_id).execute()
 
                             # ✅ RECEIPT
@@ -1683,7 +1690,7 @@ def show_payments():
                                 st.session_state["receipt_pdf"] = f.read()
                                 st.session_state["show_receipt"] = True
 
-                            st.success(f"✅ Payment recorded | Receipt: {receipt_no}")
+                            st.success(f"✅ Payment recorded | New Balance: {max(0, total-new_paid):,.0f}")
 
                             st.cache_data.clear()
                             st.rerun()
