@@ -1254,7 +1254,7 @@ def show_loans():
     # 1. LOAD DATA FROM SUPABASE
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
-    payments_df = get_cached_data("payments") # ✅ Loaded for math sync
+    payments_df = get_cached_data("payments") 
 
     # ✅ SAFETY (prevents future crashes)
     if loans_df is None: loans_df = pd.DataFrame()
@@ -1282,7 +1282,6 @@ def show_loans():
         payments_df["loan_id"] = payments_df["loan_id"].astype(str)
         payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
         pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
-        # Overwrite amount_paid with real sum from payments table
         loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
 
     # 1. Clean all numeric columns first
@@ -1296,22 +1295,23 @@ def show_loans():
     # 2. Force Recalculate Balance
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
     
-    # 🚨 CRITICAL: Standardize status to UPPER for comparison
+    # 🚨 CRITICAL FIX: Standardize status and use a PRIORITY shield
     loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
 
     # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
     def determine_status(row):
-        current = row["status"]
+        current_status = row["status"]
         
-        # Priority 1: If it's already BCF or PENDING in DB, DO NOT OVERWRITE
-        if current in ["BCF", "PENDING"]:
-            return current
+        # Priority 1: IF DB SAYS BCF OR PENDING, DO NOT OVERWRITE!
+        # This stops the code from changing "BCF" back to "ACTIVE" because of the balance
+        if current_status in ["BCF", "PENDING"]:
+            return current_status
         
-        # Priority 2: If balance is zero, it's CLEARED (unless it was BCF)
+        # Priority 2: If balance is zero, it's CLEARED
         if row["balance"] <= 0:
             return "CLEARED"
             
-        # Priority 3: Otherwise, it's ACTIVE
+        # Priority 3: Otherwise, it stays ACTIVE
         return "ACTIVE"
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
@@ -1321,7 +1321,6 @@ def show_loans():
 
     # 4. Constant SN & Cycle Management Logic
     if not loans_df.empty:
-        # Sort by date to ensure proper cycle calculation
         loans_df = loans_df.sort_values(by=["borrower_id", "start_date"])
         if "sn" not in loans_df.columns or loans_df["sn"].isnull().all():
             loans_df["sn"] = loans_df.groupby("borrower_id").cumcount() + 1
@@ -1339,37 +1338,34 @@ def show_loans():
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
     ])
+
     # ==============================
     # TAB: PORTFOLIO VIEW
     # ==============================
     with tab_view:
         search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
 
-        filtered_loans = loans_df.copy() # Use a copy to avoid view warnings
+        filtered_loans = loans_df.copy()
         if search_query:
             filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
 
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
-            # 1. Visible columns
             show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
             
-            # 2. UPDATED: Smart Row-Level Styling
             def style_entire_row(row):
-                val = str(row["status"]).upper()
-                # ACTIVE is now empty ("") so it stays neutral white
+                val = str(row["status"]).upper().strip()
                 color_map = {
                     "ACTIVE": "", 
-                    "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", # Soft Red
+                    "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", 
                     "CLOSED": "background-color: #f3f4f6; color: #374151;",
-                    "CLEARED": "background-color: #d1fae5; color: #065f46;", # Green
+                    "CLEARED": "background-color: #d1fae5; color: #065f46;", 
                     "BCF": "background-color: #ffedd5; color: #9a3412;" # Soft Orange
                 }
                 color = color_map.get(val, "")
                 return [color] * len(row) 
 
-            # 3. Apply formatting and styling
             styled_df = filtered_loans[show_cols].style.format({
                 "principal": "{:,.0f}", 
                 "total_repayable": "{:,.0f}", 
@@ -1377,8 +1373,9 @@ def show_loans():
             }).apply(style_entire_row, axis=1) 
 
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
+
     # ==============================
-    # TAB: NEW LOAN (COMPLETE & NUMERIC)
+    # TAB: NEW LOAN
     # ==============================
     with tab_add:
         if Active_borrowers.empty:
@@ -1395,7 +1392,6 @@ def show_loans():
                 amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
-                # RESTORED: Loan Type and Interest Rate row
                 l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
                 interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
@@ -1404,14 +1400,13 @@ def show_loans():
                 st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan"):
-                    # Generate pure numeric sequence for Supabase
                     next_sn_value = len(loans_df) + 1 
                     
                     loan_data = {
-                        "sn": next_sn_value,             # Numeric for DB harmony
-                        "loan_id_label": str(next_sn_value).zfill(5), # UI Style: 00001
+                        "sn": next_sn_value,
+                        "loan_id_label": str(next_sn_value).zfill(5),
                         "borrower_id": str(selected_id),
-                        "loan_type": l_type,             # ✅ ADDED BACK
+                        "loan_type": l_type,
                         "principal": float(amount),
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due),
@@ -1426,14 +1421,13 @@ def show_loans():
                         st.success(f"✅ Success! Loan {next_sn_value:05d} issued.")
                         st.cache_data.clear()
                         st.rerun()
+
     # ==============================
     # TAB: ACTIONS (ROLLOVER)
     # ==============================
     with tab_actions:
         st.markdown("<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>", unsafe_allow_html=True)
         
-        # 🚨 THE UPDATE: Allow BCF loans to be rolled over again if they have a balance
-        # This lets you bring Jan -> Feb -> March -> April
         eligible_loans = loans_df[
             (~loans_df["status"].isin(["CLOSED", "CLEARED"])) & 
             (loans_df["balance"] > 0)
@@ -1442,7 +1436,6 @@ def show_loans():
         if eligible_loans.empty:
             st.success("All loans brought up to date! ✨")
         else:
-            # Create a label that shows the Cycle No to help you track the progress
             roll_map = {
                 f"{row['borrower']} • Cycle {row['cycle_no']} • Bal: {row['balance']:,.0f}": row["id"] 
                 for _, row in eligible_loans.iterrows()
@@ -1454,7 +1447,6 @@ def show_loans():
             new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
 
             if st.button("🔥 Execute Next Rollover", use_container_width=True):
-                # --- AUTO-DATE CALCULATION ---
                 try:
                     old_due_date = pd.to_datetime(loan_to_roll['end_date'])
                 except:
@@ -1463,7 +1455,7 @@ def show_loans():
                 new_start = old_due_date.strftime("%Y-%m-%d")
                 new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # ✅ STEP 1: FORCE PARENT STATUS TO BCF (This keeps the chain going)
+                # ✅ STEP 1: FORCE PARENT STATUS TO BCF
                 supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
 
                 # ✅ STEP 2: CREATE THE NEW CHILD CYCLE
@@ -1477,19 +1469,18 @@ def show_loans():
                     "interest": calc_interest,
                     "total_repayable": current_unpaid + calc_interest,
                     "amount_paid": 0.0,
-                    "status": "PENDING", # Newest cycle always starts as PENDING
-                    "cycle_no": int(loan_to_roll['cycle_no']) + 1, # Increment Cycle
+                    "status": "PENDING", # Newest cycle starts as PENDING
+                    "cycle_no": int(loan_to_roll['cycle_no']) + 1,
                     "start_date": new_start,
                     "end_date": new_due,
                     "tenant_id": get_current_tenant()
                 }
 
-                new_cycle_df = pd.DataFrame([new_cycle_data])
-
-                if save_data("loans", new_cycle_df):
-                    st.cache_data.clear() # Clear cache to show the new "BCF" and "PENDING" rows
+                if save_data("loans", pd.DataFrame([new_cycle_data])):
+                    st.cache_data.clear() 
                     st.success(f"✅ Cycle {int(loan_to_roll['cycle_no'])} rolled to Cycle {int(loan_to_roll['cycle_no']) + 1}!")
                     st.rerun()
+
     # ==============================
     # TAB: MANAGE/EDIT
     # ==============================
@@ -1509,9 +1500,7 @@ def show_loans():
                     st.rerun()
 
             if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
-
                 supabase.table("loans").delete().eq("id", target_id).execute()
-
                 st.warning("Loan Deleted.")
                 st.cache_data.clear()
                 st.rerun()
