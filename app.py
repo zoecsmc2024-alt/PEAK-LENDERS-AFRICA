@@ -1455,8 +1455,18 @@ def show_loans():
                 new_start = old_due_date.strftime("%Y-%m-%d")
                 new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # ✅ STEP 1: FORCE PARENT STATUS TO BCF
-                supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
+                # ✅ STEP 1: FORCE PARENT STATUS TO BCF (RLS-SAFE)
+                # Properly indented to run inside the button click
+                parent_id = str(loan_to_roll['id'])
+
+                # Update locally first
+                loans_df.loc[loans_df["id"] == parent_id, "status"] = "BCF"
+
+                # Persist using your safe pipeline
+                save_data_saas("loans", loans_df)
+
+                # 🔍 DEBUG (Visible only during execution)
+                st.write(f"Updated Parent Loan {parent_id} → BCF")
 
                 # ✅ STEP 2: CREATE THE NEW CHILD CYCLE
                 calc_interest = current_unpaid * (new_interest_rate / 100)
@@ -1476,6 +1486,7 @@ def show_loans():
                     "tenant_id": get_current_tenant()
                 }
 
+                # Save the new record and refresh
                 if save_data("loans", pd.DataFrame([new_cycle_data])):
                     st.cache_data.clear() 
                     st.success(f"✅ Cycle {int(loan_to_roll['cycle_no'])} rolled to Cycle {int(loan_to_roll['cycle_no']) + 1}!")
