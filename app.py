@@ -1425,6 +1425,7 @@ def show_loans():
     # ==============================
     with tab_actions:
         st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover (Compound Logic)</h4>", unsafe_allow_html=True)
+        # We only allow rolling over loans that aren't already closed or cleared
         eligible_loans = loans_df[~loans_df["status"].isin(["CLOSED", "CLEARED"])]
 
         if eligible_loans.empty:
@@ -1439,10 +1440,11 @@ def show_loans():
 
             if st.button("🔥 Execute Rollover", use_container_width=True):
                 # --- AUTO-DATE CALCULATION ---
-                # 1. Convert the old due date to a datetime object
                 try:
+                    # 1. Convert the old due date to a datetime object
                     old_due_date = pd.to_datetime(loan_to_roll['end_date'])
                 except:
+                    # Fallback if date is corrupted
                     old_due_date = datetime.now()
                 
                 # 2. New Start Date = Old Due Date
@@ -1450,28 +1452,29 @@ def show_loans():
                 # 3. New Due Date = New Start Date + 30 Days
                 new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # Update OLD loan to BCF
+                # Update OLD loan to BCF (Brought Forward)
                 supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
 
-                # Compound: New Principal = Old Balance
+                # Compound Logic: New Principal = Old Balance
                 calc_interest = current_unpaid * (new_interest_rate / 100)
                 
-                new_cycle = pd.DataFrame([{
-                    "sn": loan_to_roll['sn'],               # Keep the numeric SN for grouping
-                    "loan_id_label": str(loan_to_roll['sn']).zfill(5), # Styled as 00001
+                new_cycle_data = {
+                    "sn": loan_to_roll['sn'],                               # Keep the numeric SN for grouping
+                    "loan_id_label": str(loan_to_roll['sn']).zfill(5),      # Styled as 00001
                     "borrower_id": loan_to_roll['borrower_id'],
                     "principal": current_unpaid,
                     "interest": calc_interest,
                     "total_repayable": current_unpaid + calc_interest,
                     "amount_paid": 0.0,
-                    "status": "ACTIVE",
+                    "status": "PENDING",                                    # ✅ CHANGED TO PENDING
                     "cycle_no": int(loan_to_roll['cycle_no']) + 1,
-                    "start_date": new_start,               # ✅ Auto-updated
-                    "end_date": new_due,                   # ✅ Auto-updated
+                    "start_date": new_start,                               # ✅ Auto-updated
+                    "end_date": new_due,                                   # ✅ Auto-updated
                     "tenant_id": get_current_tenant()
-                }])
+                }
 
-                if save_data("loans", new_cycle):
+                # Save as a list containing one dictionary
+                if save_data("loans", [new_cycle_data]):
                     st.success(f"✅ Rollover Complete! New Due Date: {new_due}")
                     st.cache_data.clear()
                     st.rerun()
