@@ -260,6 +260,10 @@ def run_auth_ui(supabase):
 # ==============================
 # 5. DATA LAYER (MERGED - NO DUPLICATES)
 # ==============================
+def safe_series(df, col, default=0):
+    if df is None or df.empty or col not in df.columns:
+        return pd.Series([default]*len(df) if df is not None else [], dtype=float)
+    return pd.to_numeric(df[col], errors="coerce").fillna(default)
 
 @st.cache_data(ttl=600)
 def get_cached_data(table_name):  # ✅ MAIN FUNCTION
@@ -1283,8 +1287,10 @@ def show_loans():
     loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
 
-    loans["cycle_no"] = loans.get("cycle_no", 1).fillna(1)
-
+    if "cycle_no" in loans.columns:
+    loans["cycle_no"] = pd.to_numeric(loans["cycle_no"], errors="coerce").fillna(1)
+else:
+    loans["cycle_no"] = 1
     loans["balance"] = (loans["total_repayable"] - loans["amount_paid"]).clip(lower=0)
 
     loans["status"] = loans.get("status","").astype(str).str.upper()
