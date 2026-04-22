@@ -1337,31 +1337,34 @@ def show_loans():
     # ==============================
     with tab_view:
 
-        # --- SEARCH (MATCHES PAYMENT PAGE UX) ---
-        search_query = st.text_input(
-            "🔍 Search Loan / Borrower",
-            placeholder="Type borrower name or loan ref...",
-            key="loan_search_main"
-        )
+    search_query = st.text_input(
+        "🔍 Search Loan / Borrower",
+        placeholder="Type borrower name or loan ref...",
+        key="loan_search_main"
+    )
 
-        # --- FILTER ---
-        if search_query and search_query.strip() != "":
-            filtered_loans = loans_df[
-                loans_df.apply(
-                    lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
-                    or search_query.lower() in str(r.get("loan_id_label", "")).lower()
-                    or search_query.lower() in str(r.get("id", "")).lower(),
-                    axis=1
-                )
-            ]
-        else:
-            filtered_loans = loans_df
+    if search_query and search_query.strip() != "":
+        filtered_loans = loans_df[
+            loans_df.apply(
+                lambda r: search_query.lower() in str(r.get("borrower", "")).lower()
+                or search_query.lower() in str(r.get("loan_id_label", "")).lower()
+                or search_query.lower() in str(r.get("id", "")).lower(),
+                axis=1
+            )
+        ]
+    else:
+        filtered_loans = loans_df
 
-        if filtered_loans.empty:
-            st.warning("No matching loans found.")
-            st.stop()
+    # ✅ HANDLE EMPTY SAFELY
+    if filtered_loans.empty:
+        st.warning("No matching loans found.")
+        st.info("👉 You can create a new loan from the 'New Loan' tab.")
+    
+    else:
+        # ==============================
+        # SAFE ZONE — ONLY RUN WHEN DATA EXISTS
+        # ==============================
 
-        # --- DISPLAY FORMAT (SAME AS PAYMENTS PAGE) ---
         def format_option(row):
             return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {row['balance']:,.0f}"
 
@@ -1380,19 +1383,18 @@ def show_loans():
         latest_info = loans_df[loans_df["id"] == raw_id].iloc[0]
 
         # ==============================
-        # 💎 METRIC CARDS (UPGRADED UI WITH STATUS COLORS)
+        # 💎 METRICS (NOW SAFE)
         # ==============================
         rec_val = float(latest_info.get('amount_paid', 0))
         total_rep = float(latest_info.get('total_repayable', 0))
         out_val = float(latest_info.get('balance', 0))
         stat_val = str(latest_info.get('status', 'N/A')).upper()
 
-        # Logic for Metric Color
-        stat_color = "#2B3F87" # Default Blue
-        if stat_val == "ACTIVE": stat_color = "#16a34a" # Green
-        elif stat_val == "OVERDUE": stat_color = "#dc2626" # Red
-        elif stat_val == "PENDING": stat_color = "#f59e0b" # Amber
-        elif stat_val == "CLOSED": stat_color = "#6b7280" # Gray
+        stat_color = "#2B3F87"
+        if stat_val == "ACTIVE": stat_color = "#16a34a"
+        elif stat_val == "OVERDUE": stat_color = "#dc2626"
+        elif stat_val == "PENDING": stat_color = "#f59e0b"
+        elif stat_val == "CLOSED": stat_color = "#6b7280"
 
         c1, c2, c3 = st.columns(3)
 
@@ -1404,7 +1406,7 @@ def show_loans():
             box-shadow: 0 4px 20px rgba(0,0,0,0.04);
         """
 
-        c1.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">RECEIVED</p><h3 style="margin:0; color:#0A192F;">UGX {rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
+        c1.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">RECEIVED</p><h3 style="margin:0;">UGX {rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
         c2.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">OUTSTANDING</p><h3 style="margin:0; color:#FF4B4B;">UGX {out_val:,.0f}</h3></div>""", unsafe_allow_html=True)
         c3.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">STATUS</p><h3 style="margin:0; color:{stat_color};">{stat_val}</h3></div>""", unsafe_allow_html=True)
 
