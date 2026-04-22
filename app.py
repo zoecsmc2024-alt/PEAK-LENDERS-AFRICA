@@ -1282,8 +1282,9 @@ def show_loans():
     # NORMALIZATION
     # ==============================
     def safe_num(col):
-        return pd.to_numeric(loans.get(col, 0), errors="coerce").fillna(0)
-
+        # Ensure we are working with a Series even if the column is missing
+        data = loans[col] if col in loans.columns else pd.Series([0] * len(loans))
+        return pd.to_numeric(data, errors="coerce").fillna(0)
     loans["principal"] = safe_num("principal")
     loans["interest"] = safe_num("interest")
     loans["total_repayable"] = safe_num("total_repayable")
