@@ -1368,17 +1368,17 @@ def show_loans():
                     last_id = loan_id_series.max()
                     new_id = int(last_id + 1) if pd.notna(last_id) else 1
 
-                    new_loan = pd.DataFrame([{
-                        "Loan_ID": new_id,
-                        "Borrower": selected_borrower,
-                        "Principal": float(amount),
-                        "Interest": float(interest),
-                        "Total_Repayable": float(total_due),
-                        "Amount_Paid": 0.0,
-                        "Status": "ACTIVE",
-                        "Start_Date": date_issued.strftime("%Y-%m-%d"),
-                        "End_Date": date_due.strftime("%Y-%m-%d")
-                    }])
+                   new_loan = pd.DataFrame([{
+                    "Loan_ID": new_id,
+                    "Borrower": selected_borrower,
+                    "Principal": float(amount),
+                    "Interest": float(interest),
+                    "Total_Repayable": float(total_due),
+                    "Amount_Paid": 0.0,
+                    "Status": "ACTIVE", # Standard status for DB constraints
+                    "Start_Date": date_issued.strftime("%Y-%m-%d"),
+                    "End_Date": date_due.strftime("%Y-%m-%d")
+                }])
 
                     updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
                     
