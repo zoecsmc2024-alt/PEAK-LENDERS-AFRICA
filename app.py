@@ -1365,7 +1365,7 @@ def show_loans():
         else:
             with st.form("loan_issue_form"):
 
-                selected_borrower = st.selectbox("Select Borrower", active_borrowers["Name"].unique())
+                selected_borrower = col1.selectbox("Select Borrower", active_borrowers["name"].unique())
                 amount = st.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = st.date_input("Start Date", value=datetime.now())
 
