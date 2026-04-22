@@ -1295,17 +1295,23 @@ def show_loans():
 
     # 2. Force Recalculate Balance
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
-    loans_df["status"] = loans_df["status"].astype(str).str.upper()
+    
+    # 🚨 CRITICAL: Standardize status to UPPER for comparison
+    loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
 
     # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
     def determine_status(row):
-        # If already BCF (Rolled Over) or PENDING, keep that status!
-        if row["status"] in ["BCF", "PENDING"]:
-            return row["status"]
-        # If balance is 0 and not rolled over, it is CLEARED
+        current = row["status"]
+        
+        # Priority 1: If it's already BCF or PENDING in DB, DO NOT OVERWRITE
+        if current in ["BCF", "PENDING"]:
+            return current
+        
+        # Priority 2: If balance is zero, it's CLEARED (unless it was BCF)
         if row["balance"] <= 0:
             return "CLEARED"
-        # Otherwise, it stays ACTIVE
+            
+        # Priority 3: Otherwise, it's ACTIVE
         return "ACTIVE"
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
