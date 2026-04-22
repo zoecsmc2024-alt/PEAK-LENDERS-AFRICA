@@ -1254,10 +1254,12 @@ def show_loans():
     # 1. LOAD DATA FROM SUPABASE
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
+    payments_df = get_cached_data("payments") # ✅ Loaded for math sync
 
     # ✅ SAFETY (prevents future crashes)
     if loans_df is None: loans_df = pd.DataFrame()
     if borrowers_df is None: borrowers_df = pd.DataFrame()
+    if payments_df is None: payments_df = pd.DataFrame()
 
     if not borrowers_df.empty:
         Active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
@@ -1271,11 +1273,19 @@ def show_loans():
         ])
 
     # ==============================
-    # 🔥 DATA STANDARDIZATION (CRITICAL)
+    # 🔥 DATA STANDARDIZATION & PAYMENT SYNC (CRITICAL)
     # ==============================
     loans_df["id"] = loans_df["id"].astype(str)
 
-    # 1. Clean all numeric columns first using pd.Series to avoid 'int' attribute errors
+    # ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
+    if not payments_df.empty and "loan_id" in payments_df.columns:
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
+        pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
+        # Overwrite amount_paid with real sum from payments table
+        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
+
+    # 1. Clean all numeric columns first
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
         if col in loans_df.columns:
@@ -1283,13 +1293,13 @@ def show_loans():
         else:
             loans_df[col] = 0.0
 
-    # 2. Force Recalculate Balance (Mathematical Truth)
+    # 2. Force Recalculate Balance
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
     loans_df["status"] = loans_df["status"].astype(str).str.upper()
 
-    # 3. Auto-Close fully paid loans
+    # 3. Auto-Close fully paid loans (Set to CLEARED for Green styling)
     closed_mask = loans_df["balance"] <= 0
-    loans_df.loc[closed_mask, "status"] = "CLOSED"
+    loans_df.loc[closed_mask, "status"] = "CLEARED"
     loans_df.loc[closed_mask, "balance"] = 0
 
     # 4. Constant SN & Cycle Management Logic
