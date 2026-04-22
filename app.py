@@ -1346,8 +1346,8 @@ def show_loans():
     # ➕ NEW LOAN
     # ==============================
     with tab_add:
-    if active_borrowers.empty:
-        st.info("💡 Tip: Activate a borrower in the 'Borrowers' section.")
+        if active_borrowers.empty:
+            st.info("💡 Tip: Activate a borrower in the 'Borrowers' section.")
     else:
         with st.form("loan_issue_form"):
             col1, col2 = st.columns(2)  
