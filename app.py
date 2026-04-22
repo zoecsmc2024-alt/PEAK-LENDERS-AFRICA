@@ -1466,15 +1466,18 @@ def show_loans():
                     "interest": calc_interest,
                     "total_repayable": current_unpaid + calc_interest,
                     "amount_paid": 0.0,
-                    "status": "PENDING",                                    # ✅ CHANGED TO PENDING
+                    "status": "PENDING",                                    # ✅ KEEPING PENDING
                     "cycle_no": int(loan_to_roll['cycle_no']) + 1,
                     "start_date": new_start,                               # ✅ Auto-updated
                     "end_date": new_due,                                   # ✅ Auto-updated
                     "tenant_id": get_current_tenant()
                 }
 
-                # Save as a list containing one dictionary
-                if save_data("loans", [new_cycle_data]):
+                # 🚨 THE FIX: Convert to DataFrame so save_data doesn't throw the 'list' error
+                new_cycle_df = pd.DataFrame([new_cycle_data])
+
+                # Save using the DataFrame instead of a list
+                if save_data("loans", new_cycle_df):
                     st.success(f"✅ Rollover Complete! New Due Date: {new_due}")
                     st.cache_data.clear()
                     st.rerun()
