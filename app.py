@@ -1352,7 +1352,7 @@ def show_loans():
     # 📊 PORTFOLIO
     # ==============================
     with tab1:
-        st.markdown("### 📊 Loan Movements (Full Lifecycle)")
+        st.markdown("### 📊 Loan Portfolio")
 
         if not loans.empty:
             cols_to_show = ["loan_id_label","borrower","cycle_no","principal","total_repayable","balance","status"]
