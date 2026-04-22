@@ -1249,7 +1249,7 @@ def show_loans():
     }
 
     [data-testid="stMetric"] {
-        background: #111;
+        background: #OD2E32;
         padding: 15px;
         border-radius: 12px;
     }
