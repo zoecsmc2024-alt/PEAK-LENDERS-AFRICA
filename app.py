@@ -1452,8 +1452,8 @@ def show_loans():
                 # 3. New Due Date = New Start Date + 30 Days
                 new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # Update OLD loan to BCF (Brought Forward)
-                supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
+                # ✅ SYNC FIX: Guarantee the Parent status update finishes
+                parent_sync = supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
 
                 # Compound Logic: New Principal = Old Balance
                 calc_interest = current_unpaid * (new_interest_rate / 100)
@@ -1478,8 +1478,9 @@ def show_loans():
 
                 # Save using the DataFrame instead of a list
                 if save_data("loans", new_cycle_df):
-                    st.success(f"✅ Rollover Complete! New Due Date: {new_due}")
+                    # 🔥 CLEAR CACHE AFTER ALL OPERATIONS TO SYNC STATUSES
                     st.cache_data.clear()
+                    st.success(f"✅ Rollover Complete! Cycle {int(loan_to_roll['cycle_no']) + 1} is now PENDING.")
                     st.rerun()
     # ==============================
     # TAB: MANAGE/EDIT
