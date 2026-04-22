@@ -1214,21 +1214,26 @@ def show_borrowers():
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
+
+# Note: Ensure 'supabase' client is initialized in your main app file
+# from supabase import create_client
+# supabase = create_client(url, key)
 
 # ==============================
-# 🔐 TENANT
+# 🔐 TENANT & STATE
 # ==============================
 def get_current_tenant():
     return st.session_state.get("tenant_id", "default")
 
-# ==============================
-# 💵 MAIN PAGE
-# ==============================
 def show_loans():
-    st.markdown("## 💼 Enterprise Loan Portfolio")
+    st.title("📊 Loan Portfolio Manager")
 
     tenant_id = get_current_tenant()
+    # Mocking session state for example; ensure this is loaded from Supabase in production
+    if "loans" not in st.session_state:
+        st.session_state.loans = pd.DataFrame()
+
     loans_df = st.session_state.get("loans", pd.DataFrame())
 
     # ======================
@@ -1236,35 +1241,42 @@ def show_loans():
     # ======================
     if loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "Loan_ID","Borrower","Principal","Interest",
-            "Total_Repayable","Amount_Paid",
-            "Start_Date","End_Date","Status"
+            "Loan_ID", "Borrower", "Principal", "Interest",
+            "Total_Repayable", "Amount_Paid",
+            "Start_Date", "End_Date", "Status"
         ])
 
+    # Normalize columns
     loans_df.columns = [c.replace(" ", "_") for c in loans_df.columns]
 
-    for col in ["Principal","Interest","Total_Repayable","Amount_Paid"]:
+    for col in ["Principal", "Interest", "Total_Repayable", "Amount_Paid"]:
         loans_df[col] = pd.to_numeric(loans_df.get(col, 0), errors="coerce").fillna(0)
 
     loans_df["Balance"] = (loans_df["Total_Repayable"] - loans_df["Amount_Paid"]).clip(lower=0)
-
-    today = pd.to_datetime(datetime.now().date())
+    
+    # Consistent date format for comparison
+    today = date.today()
 
     # ======================
     # STATUS ENGINE
     # ======================
     def get_status(row):
-        due = pd.to_datetime(row["End_Date"], errors="coerce")
+        try:
+            # Handle both string and datetime objects
+            due_date = pd.to_datetime(row["End_Date"]).date()
+        except:
+            return "Pending"
 
         if row["Amount_Paid"] >= row["Total_Repayable"]:
             return "Cleared"
-        if due and due < today:
+        if due_date < today:
             return "Overdue"
         if row["Amount_Paid"] == 0:
             return "BCF"
         return "Pending"
 
-    loans_df["Status"] = loans_df.apply(get_status, axis=1)
+    if not loans_df.empty:
+        loans_df["Status"] = loans_df.apply(get_status, axis=1)
 
     # ======================
     # KPI DASHBOARD
@@ -1272,7 +1284,7 @@ def show_loans():
     total_disbursed = loans_df["Principal"].sum()
     total_collected = loans_df["Amount_Paid"].sum()
     outstanding = loans_df["Balance"].sum()
-    overdue = loans_df[loans_df["Status"] == "Overdue"]["Balance"].sum()
+    overdue = loans_df[loans_df["Status"] == "Overdue"]["Balance"].sum() if not loans_df.empty else 0
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("💰 Disbursed", f"{total_disbursed:,.0f}")
@@ -1286,170 +1298,222 @@ def show_loans():
     # TABS
     # ======================
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 Portfolio",
-        "👤 Borrower View",
-        "💳 Payments",
-        "🔄 Rollover",
+        "📊 Portfolio", 
+        "👤 Borrower View", 
+        "➕ New Loan", 
+        "🔄 Rollover", 
         "⚙️ Admin"
     ])
 
-    # ======================
-    # 📊 PORTFOLIO TABLE
-    # ======================
+    # 📊 TAB 1: PORTFOLIO TABLE
     with tab1:
-
         def color_rows(row):
-            if row["Status"] == "Cleared":
-                return ['background-color:#00C853;color:white'] * len(row)
-            if row["Status"] == "BCF":
-                return ['background-color:#FFA726'] * len(row)
-            if row["Status"] == "Pending":
-                return ['background-color:#FFEB3B'] * len(row)
-            if row["Status"] == "Overdue":
-                return ['background-color:#FF1744;color:white'] * len(row)
-            return [''] * len(row)
+            colors = {
+                "Cleared": 'background-color:#00C853;color:white',
+                "BCF": 'background-color:#FFA726',
+                "Pending": 'background-color:#FFEB3B',
+                "Overdue": 'background-color:#FF1744;color:white'
+            }
+            return [colors.get(row["Status"], '')] * len(row)
 
-        st.dataframe(
-            loans_df.sort_values(["Loan_ID","Start_Date"])
-            .style
-            .format("{:,.0f}", subset=["Principal","Interest","Total_Repayable","Amount_Paid","Balance"])
-            .apply(color_rows, axis=1),
-            use_container_width=True,
-            hide_index=True
-        )
+        if not loans_df.empty:
+            st.dataframe(
+                loans_df.sort_values(["Loan_ID", "Start_Date"])
+                .style
+                .format("{:,.0f}", subset=["Principal", "Interest", "Total_Repayable", "Amount_Paid", "Balance"])
+                .apply(color_rows, axis=1),
+                use_container_width=True,
+                hide_index=True
+            )
+        else:
+            st.info("No loans recorded yet.")
 
-    # ======================
-    # 👤 BORROWER VIEW
-    # ======================
+    # 👤 TAB 2: BORROWER VIEW
     with tab2:
         if loans_df.empty:
-            st.info("No borrowers")
+            st.info("No borrowers found.")
         else:
             borrower = st.selectbox("Select Borrower", loans_df["Borrower"].unique())
             user_loans = loans_df[loans_df["Borrower"] == borrower]
 
-            st.subheader(f"{borrower} Portfolio")
-
-            st.metric("Total Borrowed", f"{user_loans['Principal'].sum():,.0f}")
-            st.metric("Total Paid", f"{user_loans['Amount_Paid'].sum():,.0f}")
-            st.metric("Outstanding", f"{user_loans['Balance'].sum():,.0f}")
+            st.subheader(f"{borrower}'s Portfolio")
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Borrowed", f"{user_loans['Principal'].sum():,.0f}")
+            m2.metric("Total Paid", f"{user_loans['Amount_Paid'].sum():,.0f}")
+            m3.metric("Outstanding", f"{user_loans['Balance'].sum():,.0f}")
 
             st.dataframe(user_loans.sort_values("Start_Date"), use_container_width=True)
 
-    # ======================
-    # 💳 PAYMENTS ENGINE
-    # ======================
+    # ➕ TAB 3: NEW LOAN
     with tab3:
-        st.subheader("Post Payment")
-
-        if loans_df.empty:
-            st.info("No loans available")
-        else:
-            loans_df["label"] = loans_df.apply(
-                lambda r: f"{r['Borrower']} | {r['Loan_ID']} | Bal:{r['Balance']:,.0f}",
-                axis=1
-            )
-
-            selected = st.selectbox("Select Loan", loans_df["label"])
-            idx = loans_df[loans_df["label"] == selected].index[0]
-
-            payment = st.number_input("Amount Paid", min_value=0)
-
-            if st.button("Submit Payment"):
-                loans_df.at[idx, "Amount_Paid"] += payment
-                st.session_state.loans = loans_df
-                st.success("Payment Recorded")
+        st.subheader("Create New Loan")
+        with st.form("loan_form"):
+            b_name = st.text_input("Borrower Name")
+            princ = st.number_input("Principal Amount", min_value=0.0, step=100.0)
+            rate = st.number_input("Interest Rate (%)", value=3.0)
+            days = st.number_input("Duration (days)", value=30)
+            
+            if st.form_submit_button("Create Loan"):
+                interest = princ * (rate / 100)
+                total = princ + interest
+                
+                new_loan = {
+                    "tenant_id": tenant_id,
+                    "Loan_ID": f"LN-{int(datetime.now().timestamp())}",
+                    "Borrower": b_name,
+                    "Principal": princ,
+                    "Interest": interest,
+                    "Total_Repayable": total,
+                    "Amount_Paid": 0,
+                    "Start_Date": str(today),
+                    "End_Date": str(today + timedelta(days=int(days))),
+                    "Status": "BCF"
+                }
+                
+                # Logic to save to Supabase would go here
+                # supabase.table("loans").insert(new_loan).execute()
+                
+                # Update session state for immediate feedback
+                st.session_state.loans = pd.concat([loans_df, pd.DataFrame([new_loan])], ignore_index=True)
+                st.success(f"Loan for {b_name} created!")
                 st.rerun()
 
-    # ======================
-    # 🔄 ROLLOVER ENGINE
-    # ======================
+    # 🔄 TAB 4: ROLLOVER ENGINE
     with tab4:
         st.subheader("Rollover Engine")
-
-        latest = loans_df.sort_values("Start_Date").groupby("Loan_ID").last().reset_index()
-        eligible = latest[(latest["Amount_Paid"] == 0) & (latest["Status"].isin(["BCF","Pending","Overdue"]))]
-
-        if eligible.empty:
-            st.info("No eligible loans")
-        else:
-            selected = st.selectbox("Select Loan", eligible["Borrower"])
-            row = eligible[eligible["Borrower"] == selected].iloc[0]
-
-            st.write(f"Current: {row['Total_Repayable']:,.0f}")
-
-            rate = st.slider("Rate", 0.01, 0.1, 0.03)
-
-            new_interest = row["Total_Repayable"] * rate
-            st.info(f"Next Cycle: {row['Total_Repayable']:,.0f} + {new_interest:,.0f}")
-
-            if st.button("Apply Rollover"):
-                new_row = {
-                    "Loan_ID": row["Loan_ID"],
-                    "Borrower": row["Borrower"],
-                    "Principal": row["Total_Repayable"],
-                    "Interest": new_interest,
-                    "Total_Repayable": row["Total_Repayable"] + new_interest,
-                    "Amount_Paid": 0,
-                    "Start_Date": datetime.now().strftime("%Y-%m-%d"),
-                    "End_Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-                    "tenant_id": tenant_id
-                }
-
-                st.session_state.loans = pd.concat([loans_df, pd.DataFrame([new_row])], ignore_index=True)
-                st.success("Rollover Complete")
-                st.rerun()
-
-    # ======================
-    # ⚙️ ADMIN
-    # ======================
-    with tab5:
-        st.subheader("System Controls")
-
-        if st.button("🔄 Auto Process All Rollovers"):
-            new_rows = []
-
+        if not loans_df.empty:
             latest = loans_df.sort_values("Start_Date").groupby("Loan_ID").last().reset_index()
+            eligible = latest[(latest["Amount_Paid"] == 0) & (latest["Status"] != "Cleared")]
 
-            for _, row in latest.iterrows():
-                if row["Amount_Paid"] == 0:
-                    new_rows.append({
+            if eligible.empty:
+                st.info("No eligible loans for rollover (only loans with 0 payments can be rolled over).")
+            else:
+                selected_b = st.selectbox("Select Loan to Rollover", eligible["Borrower"])
+                row = eligible[eligible["Borrower"] == selected_b].iloc[0]
+
+                st.write(f"Current Balance: **{row['Total_Repayable']:,.0f}**")
+                roll_rate = st.slider("Rollover Interest Rate", 0.01, 0.20, 0.03)
+
+                new_int = row["Total_Repayable"] * roll_rate
+                st.warning(f"New Loan: {row['Total_Repayable']:,.0f} + {new_int:,.0f} Interest")
+
+                if st.button("Apply Rollover"):
+                    new_entry = {
                         "Loan_ID": row["Loan_ID"],
                         "Borrower": row["Borrower"],
                         "Principal": row["Total_Repayable"],
-                        "Interest": row["Total_Repayable"] * 0.03,
-                        "Total_Repayable": row["Total_Repayable"] * 1.03,
+                        "Interest": new_int,
+                        "Total_Repayable": row["Total_Repayable"] + new_int,
                         "Amount_Paid": 0,
+                        "Start_Date": str(today),
+                        "End_Date": str(today + timedelta(days=30)),
+                        "tenant_id": tenant_id,
+                        "Status": "BCF"
+                    }
+                    st.session_state.loans = pd.concat([loans_df, pd.DataFrame([new_entry])], ignore_index=True)
+                    st.success("Rollover Applied")
+                    st.rerun()
+
+    # ======================
+
+    # ⚙️ ADMIN
+
+    # ======================
+
+    with tab5:
+
+        st.subheader("System Controls")
+
+
+
+        if st.button("🔄 Auto Process All Rollovers"):
+
+            new_rows = []
+
+
+
+            latest = loans_df.sort_values("Start_Date").groupby("Loan_ID").last().reset_index()
+
+
+
+            for _, row in latest.iterrows():
+
+                if row["Amount_Paid"] == 0:
+
+                    new_rows.append({
+
+                        "Loan_ID": row["Loan_ID"],
+
+                        "Borrower": row["Borrower"],
+
+                        "Principal": row["Total_Repayable"],
+
+                        "Interest": row["Total_Repayable"] * 0.03,
+
+                        "Total_Repayable": row["Total_Repayable"] * 1.03,
+
+                        "Amount_Paid": 0,
+
                         "Start_Date": datetime.now().strftime("%Y-%m-%d"),
+
                         "End_Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+
                         "tenant_id": tenant_id
+
                     })
 
+
+
             if new_rows:
+
                 st.session_state.loans = pd.concat([loans_df, pd.DataFrame(new_rows)], ignore_index=True)
+
                 st.success("All rollovers processed")
+
                 st.rerun()
 
+
+
             if loans_df.empty:
+
                 st.info("No loans")
+
                 return
 
+
+
         loans_df["label"] = loans_df.apply(
+
             lambda r: f"{r['Borrower']} • {r['Loan_ID']} • {r['Balance']:,.0f}",
+
             axis=1
+
         )
 
+
+
         selected = st.selectbox("Select Loan", loans_df["label"])
+
         row = loans_df[loans_df["label"] == selected].iloc[-1]
+
+
 
         new_status = st.selectbox("Status", ["BCF","Pending","Cleared"])
 
+
+
         if st.button("Update"):
+
             st.success("Updated (connect Supabase here)")
+
             st.rerun()
 
+
+
         if st.button("Delete Loan History"):
+
             st.warning("Deleted (connect Supabase here)")
+
             st.rerun()
 
             
