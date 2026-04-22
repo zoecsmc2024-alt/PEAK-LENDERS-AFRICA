@@ -1430,63 +1430,65 @@ def show_loans():
     # TAB: ACTIONS (ROLLOVER)
     # ==============================
     with tab_actions:
-        st.markdown("<h4 style='color: #0A192F;'>🔄 Loan Rollover (Compound Logic)</h4>", unsafe_allow_html=True)
-        # We only allow rolling over loans that aren't already closed or cleared
-        eligible_loans = loans_df[~loans_df["status"].isin(["CLOSED", "CLEARED"])]
+        st.markdown("<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>", unsafe_allow_html=True)
+        
+        # 🚨 THE UPDATE: Allow BCF loans to be rolled over again if they have a balance
+        # This lets you bring Jan -> Feb -> March -> April
+        eligible_loans = loans_df[
+            (~loans_df["status"].isin(["CLOSED", "CLEARED"])) & 
+            (loans_df["balance"] > 0)
+        ]
 
         if eligible_loans.empty:
-            st.success("All loans settled! ✨")
+            st.success("All loans brought up to date! ✨")
         else:
-            roll_map = {f"{row['borrower']} • {row['loan_id_label']} • Bal: {row['balance']:,.0f}": row["id"] for _, row in eligible_loans.iterrows()}
-            roll_sel = st.selectbox("Select Loan to Roll Over", list(roll_map.keys()))
+            # Create a label that shows the Cycle No to help you track the progress
+            roll_map = {
+                f"{row['borrower']} • Cycle {row['cycle_no']} • Bal: {row['balance']:,.0f}": row["id"] 
+                for _, row in eligible_loans.iterrows()
+            }
+            roll_sel = st.selectbox("Select Loan to Roll Forward", list(roll_map.keys()))
             loan_to_roll = eligible_loans[eligible_loans["id"] == roll_map[roll_sel]].iloc[0]
 
             current_unpaid = float(loan_to_roll['balance'])
             new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
 
-            if st.button("🔥 Execute Rollover", use_container_width=True):
+            if st.button("🔥 Execute Next Rollover", use_container_width=True):
                 # --- AUTO-DATE CALCULATION ---
                 try:
-                    # 1. Convert the old due date to a datetime object
                     old_due_date = pd.to_datetime(loan_to_roll['end_date'])
                 except:
-                    # Fallback if date is corrupted
                     old_due_date = datetime.now()
                 
-                # 2. New Start Date = Old Due Date
                 new_start = old_due_date.strftime("%Y-%m-%d")
-                # 3. New Due Date = New Start Date + 30 Days
                 new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # ✅ SYNC FIX: Guarantee the Parent status update finishes
-                parent_sync = supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
+                # ✅ STEP 1: FORCE PARENT STATUS TO BCF (This keeps the chain going)
+                supabase.table("loans").update({"status": "BCF"}).eq("id", loan_to_roll['id']).execute()
 
-                # Compound Logic: New Principal = Old Balance
+                # ✅ STEP 2: CREATE THE NEW CHILD CYCLE
                 calc_interest = current_unpaid * (new_interest_rate / 100)
                 
                 new_cycle_data = {
-                    "sn": loan_to_roll['sn'],                               # Keep the numeric SN for grouping
-                    "loan_id_label": str(loan_to_roll['sn']).zfill(5),      # Styled as 00001
+                    "sn": loan_to_roll['sn'],
+                    "loan_id_label": str(loan_to_roll['sn']).zfill(5),
                     "borrower_id": loan_to_roll['borrower_id'],
                     "principal": current_unpaid,
                     "interest": calc_interest,
                     "total_repayable": current_unpaid + calc_interest,
                     "amount_paid": 0.0,
-                    "status": "PENDING",                                    # ✅ KEEPING PENDING
-                    "cycle_no": int(loan_to_roll['cycle_no']) + 1,
-                    "start_date": new_start,                               # ✅ Auto-updated
-                    "end_date": new_due,                                   # ✅ Auto-updated
+                    "status": "PENDING", # Newest cycle always starts as PENDING
+                    "cycle_no": int(loan_to_roll['cycle_no']) + 1, # Increment Cycle
+                    "start_date": new_start,
+                    "end_date": new_due,
                     "tenant_id": get_current_tenant()
                 }
 
-                # 🚨 THE FIX: Convert to DataFrame so save_data doesn't throw the 'list' error
                 new_cycle_df = pd.DataFrame([new_cycle_data])
 
-                # Save using the DataFrame instead of a list
                 if save_data("loans", new_cycle_df):
-                    # 🔥 CLEAR CACHE AFTER ALL OPERATIONS TO SYNC STATUSES
-                    st.cache_data.clear()
-                    st.success(f"✅ Rollover Complete! Cycle {int(loan_to_roll['cycle_no']) + 1} is now PENDING.")
+                    st.cache_data.clear() # Clear cache to show the new "BCF" and "PENDING" rows
+                    st.success(f"✅ Cycle {int(loan_to_roll['cycle_no'])} rolled to Cycle {int(loan_to_roll['cycle_no']) + 1}!")
                     st.rerun()
     # ==============================
     # TAB: MANAGE/EDIT
