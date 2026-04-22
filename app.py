@@ -1212,7 +1212,7 @@ def show_borrowers():
                         st.session_state.pop("selected_borrower", None)
                         st.rerun()
 
-THE LAST THREE TAPS ARE NOT DISPLAYING ANYTHING:# ==============================
+# ==============================
 # 🔐 SAAS TENANT CONTEXT (HARDENED)
 # ==============================
 def get_current_tenant():
