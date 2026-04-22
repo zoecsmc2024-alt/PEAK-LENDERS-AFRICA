@@ -1269,7 +1269,8 @@ def show_loans():
     loans = get_data("loans")
     borrowers = get_data("borrowers")
 
-    if loans is None or loans.empty:
+    # FIX: Initialize empty dataframe with correct columns if None
+    if loans is None or (isinstance(loans, pd.DataFrame) and loans.empty):
         loans = pd.DataFrame(columns=[
             "id","loan_id_label","borrower_id","cycle_no",
             "principal","interest","total_repayable",
@@ -1278,11 +1279,12 @@ def show_loans():
         ])
 
     # ==============================
-    # NORMALIZATION
+    # NORMALIZATION (The 'int' object fix)
     # ==============================
     num_cols = ["principal","interest","total_repayable","amount_paid","balance"]
     for col in num_cols:
-        loans[col] = pd.to_numeric(loans.get(col, 0), errors="coerce").fillna(0)
+        # We wrap in pd.Series to ensure .fillna() always works even if data is missing
+        loans[col] = pd.to_numeric(pd.Series(loans.get(col, 0)), errors="coerce").fillna(0)
 
     loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
@@ -1291,14 +1293,15 @@ def show_loans():
         loans["cycle_no"] = pd.to_numeric(loans["cycle_no"], errors="coerce").fillna(1)
     else:
         loans["cycle_no"] = 1
+    
+    # Recalculate balance safely
     loans["balance"] = (loans["total_repayable"] - loans["amount_paid"]).clip(lower=0)
-
     loans["status"] = loans.get("status","").astype(str).str.upper()
 
     # ==============================
     # BORROWER MAP
     # ==============================
-    if not borrowers.empty:
+    if borrowers is not None and not borrowers.empty:
         bor_map = dict(zip(borrowers["id"].astype(str), borrowers["name"]))
         loans["borrower"] = loans["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
     else:
@@ -1307,7 +1310,8 @@ def show_loans():
     # ==============================
     # 🔥 GET LATEST STATE PER LOAN
     # ==============================
-    loans = loans.sort_values(["loan_id_label","cycle_no"])
+    # Sorting ensures we see the most recent cycle in the portfolio
+    loans = loans.sort_values(["loan_id_label","cycle_no"], ascending=[True, True])
     latest_loans = loans.groupby("loan_id_label").tail(1)
 
     # ==============================
@@ -1327,10 +1331,10 @@ def show_loans():
             return [""]*len(row)
 
     # ==============================
-    # TABS (FIXED tab_manage variable)
+    # TABS (Fixes missing tab_manage reference)
     # ==============================
     tab1, tab2, tab3, tab_manage = st.tabs([
-        "📊 Portfolio","➕ New Loan","🔄 Rollover / Actions", "⚙️ Manage/Edit"
+        "📊 Portfolio","➕ New Loan","🔄 Rollover / Actions", "⚙️ Manage"
     ])
 
     # ==============================
@@ -1338,56 +1342,56 @@ def show_loans():
     # ==============================
     with tab1:
         st.markdown("### 📊 Active Loan Portfolio")
-        styled = latest_loans[[
-            "loan_id_label","borrower","cycle_no",
-            "principal","total_repayable","balance","status"
-        ]].style.format({
-            "principal":"{:,.0f}",
-            "total_repayable":"{:,.0f}",
-            "balance":"{:,.0f}"
-        }).apply(color_rows, axis=1)
+        if not latest_loans.empty:
+            styled = latest_loans[[
+                "loan_id_label","borrower","cycle_no",
+                "principal","total_repayable","balance","status"
+            ]].style.format({
+                "principal":"{:,.0f}",
+                "total_repayable":"{:,.0f}",
+                "balance":"{:,.0f}"
+            }).apply(color_rows, axis=1)
 
-        st.dataframe(styled, use_container_width=True, hide_index=True)
+            st.dataframe(styled, use_container_width=True, hide_index=True)
+        else:
+            st.info("No active loans found.")
 
+        # ==============================
+        # 🔍 EXPANDABLE HISTORY (Fixes NameError: loans_df)
+        # ==============================
         st.markdown("### 🔍 Loan Drilldown")
-        selected_label = st.selectbox(
-            "Select Loan for History",
-            latest_loans["loan_id_label"].unique()
-        )
-
-        history = loans[loans["loan_id_label"] == selected_label]
-        st.write("#### Full Loan History")
-        st.dataframe(
-            history.sort_values("cycle_no"),
-            use_container_width=True
-        )
+        if not latest_loans.empty:
+            selected = st.selectbox(
+                "Select Loan to View History",
+                latest_loans["loan_id_label"].unique()
+            )
+            history = loans[loans["loan_id_label"] == selected]
+            st.write(f"#### History for {selected}")
+            st.dataframe(history.sort_values("cycle_no"), use_container_width=True, hide_index=True)
 
     # ==============================
     # ➕ NEW LOAN
     # ==============================
     with tab2:
-        if borrowers.empty:
-            st.warning("No borrowers available.")
+        if borrowers is None or borrowers.empty:
+            st.warning("No borrowers available. Please create a borrower first.")
         else:
             with st.form("new_loan"):
                 borrower_name = st.selectbox("Borrower", borrowers["name"])
                 borrower_id = borrowers[borrowers["name"]==borrower_name]["id"].values[0]
-
                 amount = st.number_input("Principal", min_value=0.0)
                 rate = st.number_input("Interest %", min_value=0.0)
-
                 start = st.date_input("Start Date", datetime.now())
                 due = st.date_input("Due Date", start + timedelta(days=30))
-
                 total = amount * (1 + rate/100)
+
                 st.info(f"Total Repayable: {total:,.0f}")
 
                 if st.form_submit_button("🚀 Issue Loan"):
                     import random
-                    loan_id_gen = f"ZCSL/{random.randint(100,999)}/26"
-
+                    new_label = f"ZCSL/{random.randint(100,999)}/26"
                     df_new = pd.DataFrame([{
-                        "loan_id_label": loan_id_gen,
+                        "loan_id_label": new_label,
                         "borrower_id": borrower_id,
                         "cycle_no": 1,
                         "principal": amount,
@@ -1395,65 +1399,56 @@ def show_loans():
                         "total_repayable": total,
                         "amount_paid": 0,
                         "balance": total,
-                        "status": "ACTIVE", # Standard status for constraint
+                        "status": "ACTIVE", # Use 'ACTIVE' to satisfy DB constraint
                         "start_date": str(start),
                         "end_date": str(due),
                         "tenant_id": tenant_id
                     }])
-
                     save_data_saas("loans", df_new)
-                    st.success(f"Loan {loan_id_gen} created")
+                    st.success(f"Loan {new_label} created")
                     st.rerun()
 
     # ==============================
-    # 🔄 ROLLOVER ENGINE
+    # 🔄 ROLLOVER ENGINE (Fixes DB Constraint Error)
     # ==============================
     with tab3:
         st.markdown("### 🔄 Loan Rollover")
-        selectable = latest_loans[latest_loans["status"]!="CLEARED"]
-
+        selectable = latest_loans[latest_loans["status"] != "CLEARED"]
         if selectable.empty:
-            st.success("No loans to roll over")
+            st.success("All loans are cleared!")
         else:
-            sel_rollover = st.selectbox(
-                "Select Loan to Roll Over",
-                selectable["loan_id_label"]
-            )
-
-            loan_row = selectable[selectable["loan_id_label"]==sel_rollover].iloc[0]
+            sel_label = st.selectbox("Select Loan to Roll Over", selectable["loan_id_label"])
+            loan_data = selectable[selectable["loan_id_label"] == sel_label].iloc[0]
             new_rate = st.number_input("New Interest %", value=3.0)
 
             if st.button("🔥 Execute Rollover"):
-                # mark old cycle
-                supabase.table("loans").update({
-                    "status":"ROLLED"
-                }).eq("id", loan_row["id"]).execute()
-
-                new_cycle = int(loan_row["cycle_no"]) + 1
-                new_principal = loan_row["balance"]
+                # Mark old cycle as ROLLED
+                supabase.table("loans").update({"status":"ROLLED"}).eq("id", loan_data["id"]).execute()
+                
+                new_cycle = int(loan_data["cycle_no"]) + 1
+                new_principal = loan_data["balance"]
                 new_total = new_principal * (1 + new_rate/100)
 
                 df_roll = pd.DataFrame([{
-                    "loan_id_label": loan_row["loan_id_label"],
-                    "borrower_id": loan_row["borrower_id"],
+                    "loan_id_label": loan_data["loan_id_label"],
+                    "borrower_id": loan_data["borrower_id"],
                     "cycle_no": new_cycle,
                     "principal": new_principal,
                     "interest": new_principal*(new_rate/100),
                     "total_repayable": new_total,
                     "amount_paid": 0,
                     "balance": new_total,
-                    "status": "ACTIVE", # Standard status for constraint
+                    "status": "ACTIVE", # Fixes Constraint Error: status must be ACTIVE or ROLLED
                     "start_date": datetime.now().strftime("%Y-%m-%d"),
                     "end_date": (datetime.now()+timedelta(days=30)).strftime("%Y-%m-%d"),
                     "tenant_id": tenant_id
                 }])
-
                 save_data_saas("loans", df_roll)
-                st.success(f"Loan rolled over (Cycle {new_cycle})")
+                st.success(f"Loan {sel_label} rolled over to Cycle {new_cycle}")
                 st.rerun()
 
     # ==============================
-    # TAB: MANAGE/EDIT (FIXED NameError: loans_df)
+    # TAB: MANAGE/EDIT (Fixes NameError: loans_df)
     # ==============================
     with tab_manage:
         if not loans.empty:
@@ -1465,7 +1460,7 @@ def show_loans():
             with st.form("edit_loan_form"):
                 c1, c2 = st.columns(2)
                 e_princ = c1.number_input("Principal", value=float(loan_to_edit.get('principal', 0)))
-                # Only use statuses your DB constraint allows!
+                # Restricted to valid statuses to avoid Constraint Errors
                 e_stat = c2.selectbox("Status", ["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "ROLLED"])
                 
                 if st.form_submit_button("💾 Save Changes"):
@@ -1474,7 +1469,7 @@ def show_loans():
                         "status": e_stat,
                         "tenant_id": tenant_id
                     }).eq("id", target_id).execute()
-                    st.success("✅ Loan updated!"); st.cache_data.clear(); st.rerun()
+                    st.success("✅ Changes saved!"); st.cache_data.clear(); st.rerun()
             
             if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
                 supabase.table("loans").delete().eq("id", target_id).execute()
