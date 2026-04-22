@@ -1239,8 +1239,7 @@ def show_loans():
     if not loans_df.empty:
         loans_df.columns = loans_df.columns.str.lower().str.strip()
 
-    st.write("Borrowers Columns:", borrowers_df.columns)
-    st.write("Borrowers Data:", borrowers_df.head())
+
 
     # ==============================
     # BORROWERS FIX
