@@ -1141,7 +1141,7 @@ def show_borrowers():
         if borrower_query.empty:
             st.warning("Borrower not found")
         else:
-            borrower = borrower_query.iloc[0]
+            borrower = borrower_query.iloc[0] if not df.empty else None if not df.empty else None
 
             with st.container(border=True):
                 c1, c2 = st.columns(2)
@@ -1230,11 +1230,41 @@ def show_loans():
     st.title("📊 Loan Portfolio Manager")
 
     tenant_id = get_current_tenant()
-    # Mocking session state for example; ensure this is loaded from Supabase in production
-    if "loans" not in st.session_state:
-        st.session_state.loans = pd.DataFrame()
 
-    loans_df = st.session_state.get("loans", pd.DataFrame())
+    # Mocking session state for example; ensure this is loaded from Supabase in production
+    def load_loans():
+        res = supabase.table("loans")\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+        return pd.DataFrame(res.data)
+
+    loans_df = load_loans()
+
+    st.markdown("""
+    <style>
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+
+    [data-testid="stMetric"] {
+        background: #111;
+        padding: 15px;
+        border-radius: 12px;
+    }
+
+    div[data-baseweb="select"] {
+        border-radius: 10px;
+    }
+
+    .stButton>button {
+        border-radius: 10px;
+        height: 45px;
+        font-weight: 600;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
     # ======================
     # CLEAN DATA
@@ -1328,55 +1358,77 @@ def show_loans():
         else:
             st.info("No loans recorded yet.")
 
-    # 👤 TAB 2: BORROWER VIEW
-    with tab2:
-        if loans_df.empty:
-            st.info("No borrowers found.")
-        else:
-            borrower = st.selectbox("Select Borrower", loans_df["Borrower"].unique())
-            user_loans = loans_df[loans_df["Borrower"] == borrower]
-
-            st.subheader(f"{borrower}'s Portfolio")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("Total Borrowed", f"{user_loans['Principal'].sum():,.0f}")
-            m2.metric("Total Paid", f"{user_loans['Amount_Paid'].sum():,.0f}")
-            m3.metric("Outstanding", f"{user_loans['Balance'].sum():,.0f}")
-
-            st.dataframe(user_loans.sort_values("Start_Date"), use_container_width=True)
-
-    # ➕ TAB 3: NEW LOAN
+    # ==============================
+    # ➕ TAB: NEW LOAN (ENTERPRISE)
+    # ==============================
     with tab3:
-        st.subheader("Create New Loan")
-        with st.form("loan_form"):
-            b_name = st.text_input("Borrower Name")
-            princ = st.number_input("Principal Amount", min_value=0.0, step=100.0)
-            rate = st.number_input("Interest Rate (%)", value=3.0)
+        st.subheader("➕ Issue New Loan")
+
+        # 🔽 LOAD BORROWERS FROM SUPABASE
+        borrowers_res = supabase.table("borrowers")\
+            .select("id,name,phone")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
+        borrowers_df = pd.DataFrame(borrowers_res.data)
+
+        if borrowers_df.empty:
+            st.warning("No borrowers found. Create borrowers first.")
+            st.stop()
+
+        # 🔍 SEARCHABLE DROPDOWN
+        borrowers_df["label"] = borrowers_df.apply(
+            lambda x: f"{x['name']} • {x['phone']}",
+            axis=1
+        )
+
+        selected_label = st.selectbox(
+            "Search Borrower",
+            borrowers_df["label"]
+        )
+
+        selected_row = borrowers_df[
+            borrowers_df["label"] == selected_label
+        ].iloc[0] if not loans_df.empty else None
+
+        st.markdown("### 💰 Loan Details")
+
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            principal = st.number_input("Principal", min_value=0.0)
+
+        with col2:
+            rate = st.number_input("Interest (%)", value=3.0)
+
+        with col3:
             days = st.number_input("Duration (days)", value=30)
-            
-            if st.form_submit_button("Create Loan"):
-                interest = princ * (rate / 100)
-                total = princ + interest
-                
-                new_loan = {
-                    "tenant_id": tenant_id,
-                    "Loan_ID": f"LN-{int(datetime.now().timestamp())}",
-                    "Borrower": b_name,
-                    "Principal": princ,
-                    "Interest": interest,
-                    "Total_Repayable": total,
-                    "Amount_Paid": 0,
-                    "Start_Date": str(today),
-                    "End_Date": str(today + timedelta(days=int(days))),
-                    "Status": "BCF"
-                }
-                
-                # Logic to save to Supabase would go here
-                # supabase.table("loans").insert(new_loan).execute()
-                
-                # Update session state for immediate feedback
-                st.session_state.loans = pd.concat([loans_df, pd.DataFrame([new_loan])], ignore_index=True)
-                st.success(f"Loan for {b_name} created!")
-                st.rerun()
+
+        if st.button("🚀 Create Loan", use_container_width=True):
+
+            interest = principal * (rate / 100)
+            total = principal + interest
+
+            new_loan = {
+                "tenant_id": tenant_id,
+                "loan_id": f"LN-{int(datetime.now().timestamp())}",
+                "borrower_id": selected_row["id"],  # 🔥 KEY FIX
+                "borrower": selected_row["name"],
+                "principal": principal,
+                "interest": interest,
+                "total_repayable": total,
+                "amount_paid": 0,
+                "balance": total,
+                "start_date": str(date.today()),
+                "end_date": str(date.today() + timedelta(days=int(days))),
+                "status": "BCF",
+                "cycle": 1
+            }
+
+            supabase.table("loans").insert(new_loan).execute()
+
+            st.success(f"Loan created for {selected_row['name']}")
+            st.rerun()
 
     # 🔄 TAB 4: ROLLOVER ENGINE
     with tab4:
@@ -1389,7 +1441,7 @@ def show_loans():
                 st.info("No eligible loans for rollover (only loans with 0 payments can be rolled over).")
             else:
                 selected_b = st.selectbox("Select Loan to Rollover", eligible["Borrower"])
-                row = eligible[eligible["Borrower"] == selected_b].iloc[0]
+                row = eligible[eligible["Borrower"] == selected_b].iloc[0] if not loans_df.empty else None
 
                 st.write(f"Current Balance: **{row['Total_Repayable']:,.0f}**")
                 roll_rate = st.slider("Rollover Interest Rate", 0.01, 0.20, 0.03)
@@ -1415,105 +1467,55 @@ def show_loans():
                     st.rerun()
 
     # ======================
-
     # ⚙️ ADMIN
-
     # ======================
-
     with tab5:
-
         st.subheader("System Controls")
 
-
-
         if st.button("🔄 Auto Process All Rollovers"):
-
             new_rows = []
-
-
 
             latest = loans_df.sort_values("Start_Date").groupby("Loan_ID").last().reset_index()
 
-
-
             for _, row in latest.iterrows():
-
                 if row["Amount_Paid"] == 0:
-
                     new_rows.append({
-
                         "Loan_ID": row["Loan_ID"],
-
                         "Borrower": row["Borrower"],
-
                         "Principal": row["Total_Repayable"],
-
                         "Interest": row["Total_Repayable"] * 0.03,
-
                         "Total_Repayable": row["Total_Repayable"] * 1.03,
-
                         "Amount_Paid": 0,
-
                         "Start_Date": datetime.now().strftime("%Y-%m-%d"),
-
                         "End_Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-
                         "tenant_id": tenant_id
-
                     })
 
-
-
             if new_rows:
-
                 st.session_state.loans = pd.concat([loans_df, pd.DataFrame(new_rows)], ignore_index=True)
-
                 st.success("All rollovers processed")
-
                 st.rerun()
 
-
-
-            if loans_df.empty:
-
-                st.info("No loans")
-
-                return
-
-
+        if loans_df.empty:
+            st.info("No loans")
+            return
 
         loans_df["label"] = loans_df.apply(
-
             lambda r: f"{r['Borrower']} • {r['Loan_ID']} • {r['Balance']:,.0f}",
-
             axis=1
-
         )
 
-
-
         selected = st.selectbox("Select Loan", loans_df["label"])
-
         row = loans_df[loans_df["label"] == selected].iloc[-1]
-
-
 
         new_status = st.selectbox("Status", ["BCF","Pending","Cleared"])
 
-
-
         if st.button("Update"):
-
             st.success("Updated (connect Supabase here)")
-
             st.rerun()
 
-
-
         if st.button("Delete Loan History"):
-
             st.warning("Deleted (connect Supabase here)")
-
             st.rerun()
 
             
@@ -1652,7 +1654,7 @@ def show_payments():
                 options = {format_loan(row): row["id"] for _, row in active_loans.iterrows()}
                 selected = st.selectbox("Select Loan", list(options.keys()))
                 loan_id = options[selected]
-                loan = active_loans[active_loans["id"] == loan_id].iloc[0]
+                loan = active_loans[active_loans["id"] == loan_id].iloc[0] if not df.empty else None if not df.empty else None
 
                 total = loan["total_repayable"]
                 paid = loan["amount_paid"]
@@ -2395,7 +2397,7 @@ def show_petty_cash():
                 selected_task = st.selectbox("Select Entry to Modify", options)
                 
                 sel_id = int(selected_task.split(" | ")[0].replace("ID: ", ""))
-                item = df[df["id"] == sel_id].iloc[0]
+                item = df[df["id"] == sel_id].iloc[0] if not df.empty else None if not df.empty else None
 
                 up_type = st.selectbox("Update Type", ["In", "Out"], index=0 if item["type"] == "In" else 1)
                 up_amt = st.number_input("Update Amount", value=float(item["amount"]), step=1000.0)
@@ -2637,7 +2639,7 @@ def show_overdue_tracker():
     st.markdown("<br>", unsafe_allow_html=True)
 
     try:
-        worst = overdue_df.sort_values("risk_score", ascending=False).iloc[0]
+        worst = overdue_df.sort_values("risk_score", ascending=False).iloc[0] if not df.empty else None if not df.empty else None
 
         st.markdown(f"""
         <div class="glass-card">
@@ -3389,7 +3391,7 @@ def show_ledger():
 
     selected_label = st.selectbox("Select Loan", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
-    loan_info = loans_df[loans_df["id"].astype(str) == raw_id].iloc[0]
+    loan_info = loans_df[loans_df["id"].astype(str) == raw_id].iloc[0] if not df.empty else None if not df.empty else None
 
     # ==============================
     # LEDGER TABLE
