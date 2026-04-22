@@ -1368,7 +1368,7 @@ def show_loans():
                     last_id = loan_id_series.max()
                     new_id = int(last_id + 1) if pd.notna(last_id) else 1
 
-                   new_loan = pd.DataFrame([{
+                new_loan = pd.DataFrame([{
                     "Loan_ID": new_id,
                     "Borrower": selected_borrower,
                     "Principal": float(amount),
