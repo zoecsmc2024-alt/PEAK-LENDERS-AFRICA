@@ -1230,6 +1230,7 @@ def show_loans():
 
     if borrowers_df is None:
         borrowers_df = pd.DataFrame()
+        
 
     # ✅ SAFE COLUMN NORMALIZATION
     if not borrowers_df.empty:
@@ -1238,11 +1239,14 @@ def show_loans():
     if not loans_df.empty:
         loans_df.columns = loans_df.columns.str.lower().str.strip()
 
+    st.write("Borrowers Columns:", borrowers_df.columns)
+    st.write("Borrowers Data:", borrowers_df.head())
+
     # ==============================
     # BORROWERS FIX
     # ==============================
     if not borrowers_df.empty and "status" in borrowers_df.columns:
-        active_borrowers = borrowers_df[borrowers_df["status"] == "active"]
+        active_borrowers = borrowers_df[borrowers_df["status"].astype(str).str.strip().str.lower() == "active"]
     else:
         active_borrowers = pd.DataFrame()
 
