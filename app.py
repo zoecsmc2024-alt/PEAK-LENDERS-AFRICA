@@ -1329,7 +1329,6 @@ def show_loans():
     # ======================
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📊 Portfolio", 
-        "👤 Borrower View", 
         "➕ New Loan", 
         "🔄 Rollover", 
         "⚙️ Admin"
@@ -1359,74 +1358,80 @@ def show_loans():
             st.info("No loans recorded yet.")
 
     # ==============================
-    # ➕ TAB: NEW LOAN (ENTERPRISE)
+    # ➕ TAB: NEW LOAN (FIXED)
     # ==============================
     with tab3:
         st.subheader("➕ Issue New Loan")
 
-        # 🔽 LOAD BORROWERS FROM SUPABASE
+        # 🔽 LOAD BORROWERS
         borrowers_res = supabase.table("borrowers")\
             .select("id,name,phone")\
             .eq("tenant_id", tenant_id)\
             .execute()
-
+        
         borrowers_df = pd.DataFrame(borrowers_res.data)
 
         if borrowers_df.empty:
             st.warning("No borrowers found. Create borrowers first.")
             st.stop()
 
-        # 🔍 SEARCHABLE DROPDOWN
-        borrowers_df["label"] = borrowers_df.apply(
-            lambda x: f"{x['name']} • {x['phone']}",
-            axis=1
-        )
+        borrowers_df["label"] = borrowers_df["name"] + " • " + borrowers_df["phone"]
 
-        selected_label = st.selectbox(
-            "Search Borrower",
-            borrowers_df["label"]
-        )
-
-        selected_row = borrowers_df[
-            borrowers_df["label"] == selected_label
-        ].iloc[0] if not loans_df.empty else None
+        # 🔍 SEARCH BORROWER
+        selected_label = st.selectbox("Search Borrower", borrowers_df["label"])
+        selected_row = borrowers_df[borrowers_df["label"] == selected_label].iloc[0]
 
         st.markdown("### 💰 Loan Details")
+        
+        # Row 1: Loan Type and Principal
+        c1, c2 = st.columns(2)
+        with c1:
+            loan_type = st.selectbox("Loan Type", ["Personal Loan", "Business Loan", "Emergency", "Salary Advance"])
+        with c2:
+            principal = st.number_input("Principal Amount", min_value=0.0, step=500.0)
 
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            principal = st.number_input("Principal", min_value=0.0)
-
-        with col2:
+        # Row 2: Rates and Duration
+        c3, c4, c5 = st.columns(3)
+        with c3:
             rate = st.number_input("Interest (%)", value=3.0)
+        with c4:
+            duration_days = st.number_input("Duration (days)", value=30)
+        with c5:
+            # Display interest amount for transparency
+            st.write(f"Interest: {principal * (rate/100):,.0f}")
 
-        with col3:
-            days = st.number_input("Duration (days)", value=30)
+        # Row 3: Dates
+        st.markdown("### 📅 Schedule")
+        d1, d2 = st.columns(2)
+        with d1:
+            start_date = st.date_input("Start Date", date.today())
+        with d2:
+            # Auto-calculate end date based on duration, but allow edit
+            calculated_end = start_date + timedelta(days=int(duration_days))
+            end_date = st.date_input("End Date", calculated_end)
 
         if st.button("🚀 Create Loan", use_container_width=True):
-
-            interest = principal * (rate / 100)
-            total = principal + interest
+            interest_amt = principal * (rate / 100)
+            total = principal + interest_amt
 
             new_loan = {
                 "tenant_id": tenant_id,
                 "loan_id": f"LN-{int(datetime.now().timestamp())}",
-                "borrower_id": selected_row["id"],  # 🔥 KEY FIX
+                "borrower_id": selected_row["id"],
                 "borrower": selected_row["name"],
+                "loan_type": loan_type,  # Saved Loan Type
                 "principal": principal,
-                "interest": interest,
+                "interest": interest_amt,
                 "total_repayable": total,
                 "amount_paid": 0,
                 "balance": total,
-                "start_date": str(date.today()),
-                "end_date": str(date.today() + timedelta(days=int(days))),
+                "start_date": str(start_date),
+                "end_date": str(end_date),
                 "status": "BCF",
                 "cycle": 1
             }
 
             supabase.table("loans").insert(new_loan).execute()
-
             st.success(f"Loan created for {selected_row['name']}")
             st.rerun()
 
