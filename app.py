@@ -1345,7 +1345,7 @@ def show_loans():
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ==============================
-    # TAB: NEW LOAN
+    # TAB: NEW LOAN (NUMERIC EDITION)
     # ==============================
     with tab_add:
         if Active_borrowers.empty:
@@ -1357,7 +1357,9 @@ def show_loans():
                 
                 borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
                 selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
-                selected_id = borrower_map[selected_name] # Defined here to prevent name errors
+                
+                # We fetch the selected ID safely here
+                selected_id = borrower_map.get(selected_name)
                 
                 amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
@@ -1367,16 +1369,15 @@ def show_loans():
                 total_due = amount + ((interest_rate / 100) * amount)
                 st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
-                # 🔥 HARDENED SAVE LOGIC (Properly Indented)
+                # 🔥 HARDENED SAVE LOGIC (Numeric Only)
                 if st.form_submit_button("🚀 Confirm & Issue Loan"):
-                    import random
-                    
-                    # Generate label string
-                    new_label = f"LN-{random.randint(1000, 9999)}"
+                    # 1. Generate numeric SN based on current count
+                    # This creates the 1, 2, 3 sequence the DB expects
+                    next_sn_value = len(loans_df) + 1 
                     
                     loan_data = {
-                        "sn": str(new_label),           # Force string for Supabase
-                        "loan_id_label": str(new_label),# Force string for Supabase
+                        "sn": next_sn_value,             # Pure number (No "LN-" prefix)
+                        "loan_id_label": str(next_sn_value).zfill(5), # Shows as 00001 in UI
                         "borrower_id": str(selected_id),
                         "principal": float(amount),
                         "interest": float((interest_rate/100)*amount),
@@ -1386,9 +1387,9 @@ def show_loans():
                         "tenant_id": str(st.session_state.get('tenant_id', 'default'))
                     }
                     
-                    # Attempt save to database
+                    # 2. Attempt save
                     if save_data("loans", pd.DataFrame([loan_data])):
-                        st.success(f"✅ Success! Created {new_label}")
+                        st.success(f"✅ Success! Loan #{next_sn_value:05d} issued.")
                         st.cache_data.clear()
                         st.rerun()
 
