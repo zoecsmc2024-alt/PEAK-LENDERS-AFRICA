@@ -1287,49 +1287,87 @@ def show_loans():
             hide_index=True
         )
 
-    # --- TAB 2: NEW LOAN ---
+    # --- TAB 2: NEW LOAN (Enhanced Layout) ---
     with tab2:
         st.markdown("### ➕ Create New Loan")
         
-        # Create three columns to center the form (ratio 1:2:1)
-        # This prevents the inputs from stretching across the whole screen
+        # Center the form using columns to prevent the "skinny" stretched look
         _, col_mid, _ = st.columns([1, 2, 1])
         
         with col_mid:
-            with st.container(border=True): # Adds a subtle frame around the form
-                with st.form("new_loan_form", clear_on_submit=True):
-                    borrower = st.text_input("Borrower Name", placeholder="Enter full name")
-                    principal = st.number_input("Principal Amount", min_value=0, step=1000)
+            with st.container(border=True):
+                borrower = st.text_input("Borrower Name")
+                principal = st.number_input("Principal Amount", min_value=0, step=1000)
+
+                if st.button("Create Loan", use_container_width=True):
+                    if principal > 0:
+                        rate = 0.03
+                        interest = principal * rate
+                        total = principal + interest
+
+                        new = pd.DataFrame([{
+                            "Loan_ID": int(loans_df["Loan_ID"].max() + 1) if not loans_df.empty else 1,
+                            "Borrower": borrower,
+                            "Principal": principal,
+                            "Interest": interest,
+                            "Total_Repayable": total,
+                            "Amount_Paid": 0,
+                            "Start_Date": datetime.now().strftime("%Y-%m-%d"),
+                            "End_Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                            "Status": "BCF",
+                            "tenant_id": tenant_id
+                        }])
+
+                        loans_df = pd.concat([loans_df, new], ignore_index=True)
+                        
+                        # Save Logic
+                        save_df = loans_df.copy()
+                        save_df.columns = [c.replace("_"," ") for c in save_df.columns]
+                        save_data("Loans", save_df)
+                        st.session_state.loans = loans_df
+
+                        st.success(f"Loan created for {borrower}")
+                        st.rerun()
+
+    # --- TAB 3: ROLLOVER (Manual Trigger) ---
+    with tab3:
+        st.markdown("### 🔄 Debt Rollover Engine")
+        # Logic: Find unique loans where latest entry is unpaid
+        latest_records = loans_df.sort_values("Start_Date").groupby("Loan_ID").last().reset_index()
+        eligible = latest_records[(latest_records["Amount_Paid"] == 0) & (latest_records["Status"].isin(["BCF", "Pending"]))]
+
+        if not eligible.empty:
+            selected_b = st.selectbox("Select Borrower to Roll Over", eligible["Borrower"].unique())
+            row = eligible[eligible["Borrower"] == selected_b].iloc[0]
+
+            with st.container(border=True):
+                st.write(f"**Current Total Repayable:** ₦{row['Total_Repayable']:,.0f}")
+                roll_rate = st.number_input("Interest Rate", value=0.03)
+                
+                new_p = row["Total_Repayable"]
+                new_i = new_p * roll_rate
+                
+                st.info(f"New Loan will be: ₦{new_p:,.0f} (Principal) + ₦{new_i:,.0f} (Interest)")
+
+                if st.button("Confirm & Roll Over"):
+                    rollover_entry = pd.DataFrame([{
+                        "Loan_ID": row["Loan_ID"],
+                        "Borrower": row["Borrower"],
+                        "Principal": new_p,
+                        "Interest": new_i,
+                        "Total_Repayable": new_p + new_i,
+                        "Amount_Paid": 0,
+                        "Start_Date": datetime.now().strftime("%Y-%m-%d"),
+                        "End_Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
+                        "Status": "BCF",
+                        "tenant_id": tenant_id
+                    }])
                     
-                    st.markdown("---") # Visual separator
-                    
-                    # Optional: Add a little preview of the interest before submitting
-                    rate = 0.03
-                    st.caption(f"Note: Interest will be calculated at {rate*100}% (₦{principal * rate:,.0f})")
-                    
-                    if st.form_submit_button("Confirm & Create Loan", use_container_width=True):
-                        if principal > 0 and borrower:
-                            interest = principal * rate
-                            new_id = int(loans_df["Loan_ID"].max() + 1) if not loans_df.empty else 1
-                            
-                            new_entry = {
-                                "Loan_ID": new_id,
-                                "Borrower": borrower,
-                                "Principal": principal,
-                                "Interest": interest,
-                                "Total_Repayable": principal + interest,
-                                "Amount_Paid": 0,
-                                "Start_Date": datetime.now().strftime("%Y-%m-%d"),
-                                "End_Date": (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"),
-                                "Status": "BCF",
-                                "tenant_id": tenant_id
-                            }
-                            
-                            # Insert logic here (e.g., supabase.table("loans").insert(new_entry).execute())
-                            st.success(f"Successfully created loan for {borrower}")
-                            st.rerun()
-                        else:
-                            st.error("Please fill in both the Borrower and Amount.")
+                    st.session_state.loans = pd.concat([loans_df, rollover_entry], ignore_index=True)
+                    st.success("Rollover created!")
+                    st.rerun()
+        else:
+            st.info("No eligible loans for rollover.")
     # --- TAB 3: ROLLOVER ENGINE (Your Critical Logic) ---
     with tab3:
         st.markdown("### Manual Rollover")
