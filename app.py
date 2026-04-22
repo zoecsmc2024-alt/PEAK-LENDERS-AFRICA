@@ -1431,8 +1431,8 @@ def show_loans():
                 st.rerun()
 
             if loans_df.empty:
-            st.info("No loans")
-            return
+                st.info("No loans")
+                return
 
         loans_df["label"] = loans_df.apply(
             lambda r: f"{r['Borrower']} • {r['Loan_ID']} • {r['Balance']:,.0f}",
