@@ -1360,86 +1360,86 @@ def show_loans():
             st.info("👉 You can create a new loan from the 'New Loan' tab.")
         
         else:
-     # ==============================
-     # SAFE ZONE — ONLY RUN WHEN DATA EXISTS
-     # ==============================
+            # ==============================
+            # SAFE ZONE — ONLY RUN WHEN DATA EXISTS
+            # ==============================
 
-        def format_option(row):
-            return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {row['balance']:,.0f}"
+            def format_option(row):
+                return f"{row['borrower']}  •  {row.get('loan_id_label','LN')}  •  UGX {row['balance']:,.0f}"
 
-        loan_map = {
-            format_option(row): str(row["id"])
-            for _, row in filtered_loans.iterrows()
-        }
-
-        selected_option = st.selectbox(
-            "Select Loan to Inspect",
-            list(loan_map.keys()),
-            key="inspect_sel_v6"
-        )
-
-        raw_id = loan_map[selected_option]
-        latest_info = loans_df[loans_df["id"] == raw_id].iloc[0]
-
-        # ==============================
-        # 💎 METRICS (NOW SAFE)
-        # ==============================
-        rec_val = float(latest_info.get('amount_paid', 0))
-        total_rep = float(latest_info.get('total_repayable', 0))
-        out_val = float(latest_info.get('balance', 0))
-        stat_val = str(latest_info.get('status', 'N/A')).upper()
-
-        stat_color = "#2B3F87"
-        if stat_val == "ACTIVE": stat_color = "#16a34a"
-        elif stat_val == "OVERDUE": stat_color = "#dc2626"
-        elif stat_val == "PENDING": stat_color = "#f59e0b"
-        elif stat_val == "CLOSED": stat_color = "#6b7280"
-
-        c1, c2, c3 = st.columns(3)
-
-        card_style = """
-            background: linear-gradient(135deg, #FFF9F5, #ffffff);
-            padding:20px;
-            border-radius:16px;
-            border:1px solid rgba(0,0,0,0.05);
-            box-shadow: 0 4px 20px rgba(0,0,0,0.04);
-        """
-
-        c1.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">RECEIVED</p><h3 style="margin:0;">UGX {rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
-        c2.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">OUTSTANDING</p><h3 style="margin:0; color:#FF4B4B;">UGX {out_val:,.0f}</h3></div>""", unsafe_allow_html=True)
-        c3.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">STATUS</p><h3 style="margin:0; color:{stat_color};">{stat_val}</h3></div>""", unsafe_allow_html=True)
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        # ==============================
-        # 📊 TABLE (POLISHED WITH DYNAMIC COLORS)
-        # ==============================
-        show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
-        
-        # Define the color mapping function
-        def style_status(val):
-            color_map = {
-                "ACTIVE": "background-color: #d1fae5; color: #065f46;",   # Soft Green
-                "PENDING": "background-color: #fef3c7; color: #92400e;",  # Soft Amber
-                "OVERDUE": "background-color: #fee2e2; color: #991b1b;",  # Soft Red
-                "CLOSED": "background-color: #f3f4f6; color: #374151;",   # Soft Gray
-                "ROLLED": "background-color: #e0e7ff; color: #3730a3;",   # Soft Indigo
-                "BCF": "background-color: #fae8ff; color: #86198f;"       # Soft Purple
+            loan_map = {
+                format_option(row): str(row["id"])
+                for _, row in filtered_loans.iterrows()
             }
-            return color_map.get(val, "")
 
-        # Apply styling to the dataframe - Using .map instead of .applymap
-        styled_df = filtered_loans[show_cols].style.format({
-            "principal": "{:,.0f}",
-            "total_repayable": "{:,.0f}",
-            "balance": "{:,.0f}"
-        }).map(style_status, subset=["status"])
+            selected_option = st.selectbox(
+                "Select Loan to Inspect",
+                list(loan_map.keys()),
+                key="inspect_sel_v6"
+            )
 
-        st.dataframe(
-            styled_df,
-            use_container_width=True,
-            hide_index=True
-        )
+            raw_id = loan_map[selected_option]
+            latest_info = loans_df[loans_df["id"] == raw_id].iloc[0]
+
+            # ==============================
+            # 💎 METRICS (NOW SAFE)
+            # ==============================
+            rec_val = float(latest_info.get('amount_paid', 0))
+            total_rep = float(latest_info.get('total_repayable', 0))
+            out_val = float(latest_info.get('balance', 0))
+            stat_val = str(latest_info.get('status', 'N/A')).upper()
+
+            stat_color = "#2B3F87"
+            if stat_val == "ACTIVE": stat_color = "#16a34a"
+            elif stat_val == "OVERDUE": stat_color = "#dc2626"
+            elif stat_val == "PENDING": stat_color = "#f59e0b"
+            elif stat_val == "CLOSED": stat_color = "#6b7280"
+
+            c1, c2, c3 = st.columns(3)
+
+            card_style = """
+                background: linear-gradient(135deg, #FFF9F5, #ffffff);
+                padding:20px;
+                border-radius:16px;
+                border:1px solid rgba(0,0,0,0.05);
+                box-shadow: 0 4px 20px rgba(0,0,0,0.04);
+            """
+
+            c1.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">RECEIVED</p><h3 style="margin:0;">UGX {rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
+            c2.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">OUTSTANDING</p><h3 style="margin:0; color:#FF4B4B;">UGX {out_val:,.0f}</h3></div>""", unsafe_allow_html=True)
+            c3.markdown(f"""<div style="{card_style}"><p style="font-size:11px; color:#888;">STATUS</p><h3 style="margin:0; color:{stat_color};">{stat_val}</h3></div>""", unsafe_allow_html=True)
+
+            st.markdown("<br>", unsafe_allow_html=True)
+
+            # ==============================
+            # 📊 TABLE (POLISHED WITH DYNAMIC COLORS)
+            # ==============================
+            show_cols = ["loan_id_label", "borrower", "principal", "total_repayable", "balance", "status"]
+            
+            # Define the color mapping function
+            def style_status(val):
+                color_map = {
+                    "ACTIVE": "background-color: #d1fae5; color: #065f46;",   # Soft Green
+                    "PENDING": "background-color: #fef3c7; color: #92400e;",  # Soft Amber
+                    "OVERDUE": "background-color: #fee2e2; color: #991b1b;",  # Soft Red
+                    "CLOSED": "background-color: #f3f4f6; color: #374151;",   # Soft Gray
+                    "ROLLED": "background-color: #e0e7ff; color: #3730a3;",   # Soft Indigo
+                    "BCF": "background-color: #fae8ff; color: #86198f;"       # Soft Purple
+                }
+                return color_map.get(val, "")
+
+            # Apply styling to the dataframe - Using .map instead of .applymap
+            styled_df = filtered_loans[show_cols].style.format({
+                "principal": "{:,.0f}",
+                "total_repayable": "{:,.0f}",
+                "balance": "{:,.0f}"
+            }).map(style_status, subset=["status"])
+
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True
+            )
 
     # ==============================
     # TAB: NEW LOAN
