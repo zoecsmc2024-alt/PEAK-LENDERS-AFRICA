@@ -1483,6 +1483,7 @@ def show_loans():
 import pandas as pd
 from datetime import datetime
 import uuid
+import streamlit as st # Added missing import
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
 
@@ -1581,7 +1582,8 @@ def show_payments():
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["amount"] = pd.to_numeric(payments_df.get("amount", 0), errors="coerce").fillna(0)
         payment_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
-        loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(0)
+        # We only sync if there is actually payment data to avoid wiping current values
+        loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(loans_df["amount_paid"])
 
     # ==============================
     # 📑 TABS
@@ -1592,7 +1594,6 @@ def show_payments():
     # ➕ TAB 1: RECORD PAYMENT
     # ==============================
     with tab1:
-        # Keep only ACTIVE and BCF loans so you can record payments for rolled-over loans too
         active_loans = loans_df[loans_df["status"].isin(["ACTIVE", "BCF"])].copy()
 
         if active_loans.empty:
@@ -1603,7 +1604,7 @@ def show_payments():
                 search = search.lower()
                 active_loans = active_loans[
                     active_loans.apply(lambda r: search in str(r.get("borrower", "")).lower() 
-                    or search in str(r.get("sn", "")).lower(), axis=1) # Search by SN instead
+                    or search in str(r.get("sn", "")).lower(), axis=1) 
                 ]
 
             if active_loans.empty:
@@ -1617,7 +1618,6 @@ def show_payments():
                 selected = st.selectbox("Select Loan", list(options.keys()))
                 loan_id = options[selected]
                 
-                # Fixed the 'if not df.empty' double-check that was causing errors
                 loan = active_loans[active_loans["id"] == loan_id].iloc[0]
 
                 total = float(loan["total_repayable"])
@@ -1634,25 +1634,21 @@ def show_payments():
                     date = st.date_input("Date", datetime.now())
                     submit = st.form_submit_button("Post Payment")
 
-                # ✅ OUTSIDE FORM
                 if submit:
                     if amount <= 0:
                         st.warning("Enter valid amount.")
                     else:
                         try:
                             tenant_id = st.session_state.get("tenant_id")
-
                             if not tenant_id:
                                 st.error("❌ Tenant not found. Please login again.")
                                 st.stop()
 
                             receipt_no = generate_receipt_no(supabase, tenant_id)
-                            
-                            # ✅ FIXED: Keep the existing label instead of generating a new "LN-..." string
-                            # This prevents the numeric syntax error we saw earlier
                             current_label = str(loan.get("loan_id_label", loan["sn"]))
 
-                            # ✅ INSERT PAYMENT
+                            # ✅ STEP 1: INSERT PAYMENT RECORD FIRST
+                            # This ensures the "Sync" logic at the top sees the money!
                             supabase.table("payments").insert({
                                 "receipt_no": receipt_no,
                                 "loan_id": loan_id,
@@ -1664,18 +1660,17 @@ def show_payments():
                                 "tenant_id": tenant_id
                             }).execute()
 
-                            # ✅ UPDATE LOAN
+                            # ✅ STEP 2: UPDATE THE LOAN MASTER RECORD
                             new_paid = paid + amount
-                            # If fully paid, mark as CLEARED to match your spreadsheet
                             new_status = "CLEARED" if new_paid >= total else loan["status"]
 
                             supabase.table("loans").update({
                                 "amount_paid": float(new_paid),
                                 "status": new_status,
-                                "loan_id_label": current_label # Using the safe label
+                                "loan_id_label": current_label
                             }).eq("id", loan_id).execute()
 
-                            # ✅ RECEIPT
+                            # ✅ STEP 3: PDF & STATE
                             file_path = f"/tmp/{receipt_no}.pdf"
                             generate_receipt_pdf({
                                 "Receipt No": receipt_no,
@@ -1691,21 +1686,19 @@ def show_payments():
                                 st.session_state["show_receipt"] = True
 
                             st.success(f"✅ Payment recorded | New Balance: {max(0, total-new_paid):,.0f}")
-
+                            
+                            # Clear cache to force a fresh pull of both tables
                             st.cache_data.clear()
                             st.rerun()
 
                         except Exception as e:
                             st.error(f"❌ {e}")
 
-        # ==============================
-        # 📥 DOWNLOAD RECEIPT
-        # ==============================
         if st.session_state.get("show_receipt"):
             st.download_button(
                 "📥 Download Latest Receipt",
                 data=st.session_state["receipt_pdf"],
-                file_name="receipt.pdf",
+                file_name=f"receipt_{datetime.now().strftime('%Y%m%d')}.pdf",
                 mime="application/pdf"
             )
 
@@ -1714,23 +1707,77 @@ def show_payments():
                 st.rerun()
 
     # ==============================
-    # 📜 TAB 2: HISTORY
+    # 📜 TAB 2: HISTORY (EDIT/DELETE ENABLED)
     # ==============================
     with tab2:
         if payments_df.empty:
             st.info("No payments yet.")
-            return
+        else:
+            df_hist = payments_df.copy()
+            
+            # Format for display
+            df_hist["amount_display"] = df_hist["amount"].apply(lambda x: f"UGX {x:,.0f}")
+            if "date" in df_hist.columns:
+                df_hist = df_hist.sort_values("date", ascending=False)
 
-        df = payments_df.copy()
+            cols = [c for c in ["date", "borrower", "amount_display", "method", "receipt_no"] if c in df_hist.columns]
+            st.dataframe(df_hist[cols], use_container_width=True, hide_index=True)
 
-        df["amount"] = pd.to_numeric(df.get("amount", 0), errors="coerce").fillna(0)
-        df["amount"] = df["amount"].apply(lambda x: f"UGX {x:,.0f}")
+            # --- 🛠️ PAYMENT MANAGEMENT SECTION ---
+            st.markdown("---")
+            st.markdown("### ⚙️ Manage Payments")
+            
+            # Select by Receipt Number
+            pay_map = {f"{row['receipt_no']} | {row['borrower']} | {row['amount_display']}": row['id'] for _, row in df_hist.iterrows()}
+            selected_pay_label = st.selectbox("Select Receipt to Modify", list(pay_map.keys()), key="pay_manage_select")
+            
+            target_pay_id = pay_map[selected_pay_label]
+            target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0]
 
-        if "date" in df.columns:
-            df = df.sort_values("date", ascending=False)
+            p_col1, p_col2 = st.columns(2)
 
-        cols = [c for c in ["date", "borrower", "amount", "method", "receipt_no"] if c in df.columns]
-        st.dataframe(df[cols], use_container_width=True, hide_index=True)
+            # 1. DELETE PAYMENT
+            if p_col1.button("🗑️ Delete Payment", use_container_width=True):
+                try:
+                    # Delete from Supabase
+                    supabase.table("payments").delete().eq("id", target_pay_id).execute()
+                    st.success(f"✅ Payment {target_pay['receipt_no']} deleted.")
+                    
+                    # 🔥 CRITICAL: Force cache clear so the "Sync" logic 
+                    # at the top of show_payments() recalculates the loan balance!
+                    st.cache_data.clear()
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Delete failed: {e}")
+
+            # 2. EDIT PAYMENT
+            if p_col2.button("📝 Edit Payment", use_container_width=True):
+                st.session_state["edit_pay_mode"] = True
+
+            if st.session_state.get("edit_pay_mode"):
+                with st.form("edit_payment_form"):
+                    st.info(f"Editing Receipt: {target_pay['receipt_no']}")
+                    new_amt = st.number_input("Correct Amount", value=float(target_pay['amount']))
+                    new_method = st.selectbox("Correct Method", ["Cash", "Mobile Money", "Bank"], 
+                                            index=["Cash", "Mobile Money", "Bank"].index(target_pay['method']))
+                    
+                    eb1, eb2 = st.columns(2)
+                    if eb1.form_submit_button("💾 Save Changes"):
+                        try:
+                            supabase.table("payments").update({
+                                "amount": new_amt,
+                                "method": new_method
+                            }).eq("id", target_pay_id).execute()
+                            
+                            st.session_state["edit_pay_mode"] = False
+                            st.cache_data.clear()
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Update failed: {e}")
+                    
+                    if eb2.form_submit_button("❌ Cancel"):
+                        st.session_state["edit_pay_mode"] = False
+                        st.rerun()
 # ==============================
 # 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
