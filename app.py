@@ -1354,8 +1354,10 @@ def show_loans():
             with st.form("loan_issue_form"):
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
+                
                 borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
                 selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
+                selected_id = borrower_map[selected_name] # Defined here to prevent name errors
                 
                 amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
@@ -1365,25 +1367,28 @@ def show_loans():
                 total_due = amount + ((interest_rate / 100) * amount)
                 st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
-                if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
+                # 🔥 HARDENED SAVE LOGIC (Properly Indented)
+                if st.form_submit_button("🚀 Confirm & Issue Loan"):
                     import random
-                    new_sn = f"{(len(loans_df) + 1):05d}"
+                    
+                    # Generate label string
+                    new_label = f"LN-{random.randint(1000, 9999)}"
+                    
                     loan_data = {
-                        "sn": new_sn,
-                        "loan_id_label": f"LN-{random.randint(1000, 9999)}",
-                        "borrower_id": borrower_map[selected_name],
+                        "sn": str(new_label),           # Force string for Supabase
+                        "loan_id_label": str(new_label),# Force string for Supabase
+                        "borrower_id": str(selected_id),
                         "principal": float(amount),
                         "interest": float((interest_rate/100)*amount),
                         "total_repayable": float(total_due),
                         "amount_paid": 0.0,
                         "status": "ACTIVE",
-                        "cycle_no": 1,
-                        "start_date": str(date_issued),
-                        "end_date": str(date_due),
-                        "tenant_id": get_current_tenant()
+                        "tenant_id": str(st.session_state.get('tenant_id', 'default'))
                     }
+                    
+                    # Attempt save to database
                     if save_data("loans", pd.DataFrame([loan_data])):
-                        st.success("✅ Loan issued!")
+                        st.success(f"✅ Success! Created {new_label}")
                         st.cache_data.clear()
                         st.rerun()
 
