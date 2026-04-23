@@ -2707,7 +2707,6 @@ import streamlit as st
 from datetime import datetime
 
 def show_payroll():
-
     # ==============================
     # 🔐 ACCESS CONTROL
     # ==============================
@@ -2723,22 +2722,26 @@ def show_payroll():
 
     tenant = st.session_state.get("tenant_id")
     if not tenant:
-        st.error("Session expired")
+        st.error("Session expired. Please log in again.")
         st.stop()
 
     # ==============================
-    # 📥 LOAD DATA
+    # 📥 LOAD DATA (With Safe Initialization)
     # ==============================
-    df = get_cached_data("payroll")
-
-    if df is not None and not df.empty:
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-    if df is None or df.empty:
-        df = pd.DataFrame()
-
-    if "tenant_id" in df.columns:
-        df = df[df["tenant_id"].astype(str) == str(tenant)]
+    # Initializing df as empty so 'df is not defined' errors stop happening
+    df = pd.DataFrame() 
+    
+    try:
+        raw_df = get_cached_data("payroll")
+        if raw_df is not None and not raw_df.empty:
+            raw_df.columns = raw_df.columns.str.strip().str.lower().str.replace(" ", "_")
+            # Filter by tenant
+            if "tenant_id" in raw_df.columns:
+                df = raw_df[raw_df["tenant_id"].astype(str) == str(tenant)].copy()
+            else:
+                df = raw_df.copy()
+    except Exception as e:
+        st.error(f"Error loading payroll data: {e}")
 
     # ==============================
     # 🧠 CALC ENGINE
@@ -2774,9 +2777,9 @@ def show_payroll():
     # 📊 SUMMARY CARDS
     # ==============================
     if not df.empty:
-        total_net = df["net_pay"].sum() if "net_pay" in df else 0
-        total_paye = df["paye"].sum() if "paye" in df else 0
-        total_nssf = df["nssf_15"].sum() if "nssf_15" in df else 0
+        total_net = df["net_pay"].sum() if "net_pay" in df.columns else 0
+        total_paye = df["paye"].sum() if "paye" in df.columns else 0
+        total_nssf = df["nssf_15"].sum() if "nssf_15" in df.columns else 0
 
         c1, c2, c3 = st.columns(3)
         c1.metric("💰 Total Net Payroll", f"UGX {total_net:,.0f}")
@@ -2788,106 +2791,118 @@ def show_payroll():
     # ==============================
     # 📑 TABS
     # ==============================
-    tab_process, tab_ledger, tab_logs = st.tabs(["💳 Process Payroll", "📜 Summary View", "📄 Detailed Ledger (Print)"])
+    tab_process, tab_ledger, tab_logs = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger", "📑 Detailed Logs"])
 
-    # (Process Payroll and Summary View sections remain unchanged from your original logic)
+    # ==============================
+    # 💳 PROCESS PAYROLL
+    # ==============================
+    with tab_process:
+        st.markdown("### 🧾 Salary Processing Engine")
+        with st.form("payroll_form", clear_on_submit=True):
+            name = st.text_input("Employee Name")
+            c1, c2, c3 = st.columns(3)
+            tin = c1.text_input("TIN")
+            role = c2.text_input("Designation")
+            mob = c3.text_input("Phone")
 
-    with tab_logs:
-        if not df.empty:
-            def fm(x):
-                try:
-                    return f"{int(float(x or 0)):,}"
-                except:
-                    return "0"
+            c4, c5 = st.columns(2)
+            acc = c4.text_input("Account No.")
+            nssf_input = c5.text_input("NSSF No.")
 
-            # 🖌️ CUSTOM CSS FOR PRINT & ELITE UI
+            st.markdown("#### 💵 Salary Inputs")
+            c6, c7, c8 = st.columns(3)
+            arrears_in = c6.number_input("Arrears", min_value=0.0)
+            basic_in = c7.number_input("Basic Salary", min_value=0.0)
+            absent_in = c8.number_input("Absent Deduction", min_value=0.0)
+
+            c9, c10 = st.columns(2)
+            advance_in = c9.number_input("Advance", min_value=0.0)
+            other_in = c10.number_input("Other Deductions", min_value=0.0)
+
+            preview = calc_engine(basic_in, arrears_in, absent_in, advance_in, other_in)
+
             st.markdown(f"""
-                <style>
-                    .pay-table {{ width: 100%; border-collapse: collapse; font-family: sans-serif; font-size: 11px; }}
-                    .pay-table th {{ background: {brand_color}; color: white; border: 1px solid #ddd; padding: 8px; text-align: center; }}
-                    .pay-table td {{ border: 1px solid #ddd; padding: 8px; }}
-                    .total-row {{ background: {brand_color}; color: white; font-weight: bold; }}
-                </style>
+            <div style="padding:15px;border-radius:10px;background:#F8FAFC;margin-top:10px;border:1px solid #E2E8F0;">
+                <b style="color:#1E293B;">💡 Live Salary Breakdown</b><br><br>
+                <span style="color:#64748B;">Gross:</span> UGX {preview['gross']:,} <br>
+                <span style="color:#64748B;">PAYE:</span> UGX {preview['paye']:,} <br>
+                <span style="color:#64748B;">NSSF (5%):</span> UGX {preview['n5']:,} <br>
+                <b style="color:#1E293B;">Net Pay: UGX {preview['net']:,}</b>
+            </div>
             """, unsafe_allow_html=True)
 
-            # 🛠️ BUILD THE DETAILED TABLE
-            header_html = f"""
-            <table class='pay-table'>
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Employee Details</th>
-                        <th>TIN / Acc / NSSF</th>
-                        <th>Arrears</th>
-                        <th>Basic</th>
-                        <th>Gross</th>
-                        <th>PAYE</th>
-                        <th>N5%</th>
-                        <th>Advance</th>
-                        <th>Net Pay</th>
-                        <th>N10%</th>
-                        <th>N15%</th>
-                    </tr>
-                </thead>
-                <tbody>
-            """
+            if st.form_submit_button("🚀 Process Payroll", use_container_width=True):
+                if name and basic_in > 0:
+                    payload = {
+                        "employee": name, "tin": tin, "designation": role,
+                        "mob_no": mob, "account_no": acc, "nssf_no": nssf_input,
+                        "arrears": arrears_in, "basic_salary": basic_in,
+                        "absent_deduction": absent_in, "gross_salary": preview["gross"],
+                        "paye": preview["paye"], "nssf_5": preview["n5"],
+                        "nssf_10": preview["n10"], "nssf_15": preview["n15"],
+                        "advance_drs": advance_in, "other_deductions": other_in,
+                        "net_pay": preview["net"], "lst": preview["lst"],
+                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "tenant_id": str(tenant)
+                    }
+                    if save_data("payroll", pd.DataFrame([payload])):
+                        st.success(f"✅ Payroll processed for {name}")
+                        st.cache_data.clear()
+                        st.rerun()
+                else:
+                    st.error("⚠️ Employee Name and Basic Salary are required.")
 
+    # ==============================
+    # 📜 PAYROLL LEDGER (SCANNABLE TABLE)
+    # ==============================
+    with tab_ledger:
+        if not df.empty:
+            st.dataframe(df[["employee", "designation", "gross_salary", "paye", "net_pay"]], use_container_width=True)
+        else:
+            st.info("No records found.")
+
+    # ==============================
+    # 📑 DETAILED LOGS & PRINTING
+    # ==============================
+    with tab_logs:
+        if not df.empty:
+            def fm(x): return f"{int(float(x or 0)):,}"
+            
             rows_html = ""
             for i, r in df.iterrows():
                 rows_html += f"""
                 <tr>
-                    <td style='text-align:center;'>{i+1}</td>
+                    <td>{i+1}</td>
                     <td><b>{r.get('employee','')}</b><br><small>{r.get('designation','-')}</small></td>
-                    <td><small>TIN: {r.get('tin','-')}<br>ACC: {r.get('account_no','-')}<br>NSSF: {r.get('nssf_no','-')}</small></td>
-                    <td style='text-align:right;'>{fm(r.get('arrears',0))}</td>
-                    <td style='text-align:right;'>{fm(r.get('basic_salary',0))}</td>
-                    <td style='text-align:right; font-weight:bold;'>{fm(r.get('gross_salary',0))}</td>
-                    <td style='text-align:right;'>{fm(r.get('paye',0))}</td>
-                    <td style='text-align:right;'>{fm(r.get('nssf_5',0))}</td>
-                    <td style='text-align:right;'>{fm(r.get('advance_drs',0))}</td>
-                    <td style='text-align:right; background:#E3F2FD; font-weight:bold;'>{fm(r.get('net_pay',0))}</td>
-                    <td style='text-align:right; background:#FFF9C4;'>{fm(r.get('nssf_10',0))}</td>
-                    <td style='text-align:right; background:#FFF9C4; font-weight:bold;'>{fm(r.get('nssf_15',0))}</td>
+                    <td>{fm(r.get('arrears',0))}</td>
+                    <td>{fm(r.get('basic_salary',0))}</td>
+                    <td><b>{fm(r.get('gross_salary',0))}</b></td>
+                    <td>{fm(r.get('paye',0))}</td>
+                    <td>{fm(r.get('nssf_5',0))}</td>
+                    <td style="background:#E3F2FD; font-weight:bold;">{fm(r.get('net_pay',0))}</td>
+                    <td style="background:#FFF9C4;">{fm(r.get('nssf_15',0))}</td>
                 </tr>
                 """
 
-            # 📈 GRAND TOTALS CALCULATION
-            t_arr = df["arrears"].sum()
-            t_bas = df["basic_salary"].sum()
-            t_gro = df["gross_salary"].sum()
-            t_paye = df["paye"].sum()
-            t_n5 = df["nssf_5"].sum()
-            t_adv = df["advance_drs"].sum()
-            t_net = df["net_pay"].sum()
-            t_n10 = df["nssf_10"].sum()
-            t_n15 = df["nssf_15"].sum()
-
-            footer_html = f"""
-                </tbody>
-                <tfoot>
-                    <tr class="total-row">
-                        <td colspan="3" style="text-align:center;">GRAND TOTALS</td>
-                        <td style="text-align:right;">{fm(t_arr)}</td>
-                        <td style="text-align:right;">{fm(t_bas)}</td>
-                        <td style="text-align:right;">{fm(t_gro)}</td>
-                        <td style="text-align:right;">{fm(t_paye)}</td>
-                        <td style="text-align:right;">{fm(t_n5)}</td>
-                        <td style="text-align:right;">{fm(t_adv)}</td>
-                        <td style="text-align:right;">{fm(t_net)}</td>
-                        <td style="text-align:right;">{fm(t_n10)}</td>
-                        <td style="text-align:right;">{fm(t_n15)}</td>
-                    </tr>
-                </tfoot>
+            full_html = f"""
+            <table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;">
+                <tr style="background:#f1f1f1;">
+                    <th>#</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th><th>PAYE</th><th>N5%</th><th>Net Pay</th><th>N15%</th>
+                </tr>
+                {rows_html}
             </table>
             """
-
-            if st.button("📥 Print Official Payroll", key="print_pay_btn", use_container_width=True):
-                st.components.v1.html("<script>window.print();</script>", height=0)
-
-            st.components.v1.html(header_html + rows_html + footer_html, height=600, scrolling=True)
+            st.components.v1.html(full_html, height=400, scrolling=True)
             
-        else:
-            st.info("No payroll records found to generate a ledger.")
+            if st.button("📥 Print Official Payroll"):
+                st.components.v1.html("<script>window.print();</script>", height=0)
+            
+            with st.expander("🗑️ Delete Record"):
+                to_delete = st.selectbox("Select Record to Remove", df["employee"].tolist())
+                if st.button("Confirm Delete"):
+                    # Logic to delete from database
+                    st.cache_data.clear()
+                    st.rerun()
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (FINAL)
 # ==========================================
