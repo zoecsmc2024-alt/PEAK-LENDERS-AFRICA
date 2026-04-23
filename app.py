@@ -1213,18 +1213,24 @@ def save_data_saas(table_name, df):
     return save_data(table_name, df)
 
 # ==============================
-# 13. LOANS MANAGEMENT PAGE
+# 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition - Banking Grade)
 # ==============================
 def show_loans():
+    """
+    Core engine for issuing and managing loan agreements.
+    Preserves Midnight Blue branding and Peachy Luxe themes.
+    """
     import uuid
     from datetime import datetime, timedelta
 
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
+    # 1. LOAD DATA FROM SUPABASE
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
     payments_df = get_cached_data("payments") 
 
+    # ✅ SAFETY (prevents future crashes)
     if loans_df is None: loans_df = pd.DataFrame()
     if borrowers_df is None: borrowers_df = pd.DataFrame()
     if payments_df is None: payments_df = pd.DataFrame()
@@ -1236,43 +1242,52 @@ def show_loans():
 
     if loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "id","sn","loan_id_label","loan_id_label","borrower_id","borrower",
-            "principal","interest","total_repayable","amount_paid","balance",
-            "status","start_date","end_date","cycle_no","tenant_id"
+            "id", "sn", "loan_id_label", "borrower_id", "borrower", "principal", "interest",
+            "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date", "cycle_no", "tenant_id"
         ])
 
+    # ==============================
+    # 🔥 DATA STANDARDIZATION & SMART SYNC
+    # ==============================
     loans_df["id"] = loans_df["id"].astype(str)
 
-    # ✅ 1. STABLE GROUPING LOGIC (Fixed for Parent-Child Threading)
-    if "loan_id_label" not in loans_df.columns:
-        loans_df["loan_id_label"] = loans_df["id"].astype(str)
-    
-    loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id"]).astype(str)
-
-    # ✅ 2. PAYMENTS & BALANCE SYNC
+    # ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["loan_id"] = payments_df["loan_id"].astype(str)
         payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
         pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
         loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
 
-    num_cols = ["principal","interest","total_repayable","amount_paid","balance"]
+    # 1. Clean all numeric columns first
+    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
-        loans_df[col] = pd.to_numeric(loans_df.get(col,0), errors="coerce").fillna(0)
+        if col in loans_df.columns:
+            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+        else:
+            loans_df[col] = 0.0
 
+    # 2. Force Recalculate Balance
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
-    # ✅ 3. AUTOMATIC STATUS ENGINE (Fixes the BCF/CLEARED issue)
+    # 🚨 CRITICAL FIX: Standardize status and use a PRIORITY shield
+    loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
+
+    # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
     def determine_status(row):
-        current_status = str(row["status"]).upper().strip()
-        # If it's already marked as rolled over (BCF), keep it that way
-        if current_status == "BCF":
-            return "BCF"
-        # If balance is 0, it's cleared
+        current_status = row["status"]
+        # Priority 1: IF DB SAYS BCF OR PENDING, DO NOT OVERWRITE!
+        if current_status in ["BCF", "PENDING"]:
+            return current_status
+        # Priority 2: If balance is zero, it's CLEARED
         if row["balance"] <= 0:
             return "CLEARED"
-        # Otherwise, if it's not BCF or CLEARED, it's ACTIVE (or PENDING if newly rolled)
-        return current_status if current_status in ["PENDING", "ACTIVE"] else "ACTIVE"
+        # Priority 3: Otherwise, it stays ACTIVE
+        return "ACTIVE"
+
+    loans_df["status"] = loans_df.apply(determine_status, axis=1)
+
+    # Ensure balance is zeroed for anything mathematically cleared
+    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
 
@@ -1298,90 +1313,96 @@ def show_loans():
     ])
 
     # ==============================
-    # PORTFOLIO VIEW
-    # ==============================
-    with tab_view:
-        search_query = st.text_input("🔍 Search Loan / Borrower")
+# UI TABS INITIALIZATION (Fixes NameError)
+# ==============================
+tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+    "📂 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
+])
 
-        filtered_loans = loans_df.copy()
-        if search_query:
-            filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
+# ==============================
+# TAB: PORTFOLIO VIEW
+# ==============================
+with tab_view:
+    search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
 
-        show_cols = [
-            "sn", "loan_id_label", "borrower", "cycle_no",
-            "principal", "total_repayable", "balance",
-            "start_date", "end_date", "status"
-        ]
+    filtered_loans = loans_df.copy()
+    if search_query:
+        filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
 
+    if filtered_loans.empty:
+        st.warning("No matching loans found.")
+    else:
+        show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
+        
         def style_entire_row(row):
             val = str(row["status"]).upper().strip()
             color_map = {
-                "ACTIVE":  "background-color: #e0f2fe; color: #075985; font-weight: 500;",
-                "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;",
-                "CLEARED": "background-color: #d1fae5; color: #065f46;",
-                "BCF":     "background-color: #ffedd5; color: #9a3412;",
-                "CLOSED":  "background-color: #f3f4f6; color: #374151;"
+                # 🔵 LUXE BLUE FOR ACTIVE (Midnight Trust Theme)
+                "ACTIVE": "background-color: #e0f2fe; color: #075985; font-weight: 500;", 
+                
+                "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", 
+                "CLOSED": "background-color: #f3f4f6; color: #374151;",
+                "CLEARED": "background-color: #d1fae5; color: #065f46;", 
+                "BCF": "background-color: #ffedd5; color: #9a3412;" # Soft Orange
             }
-            return [color_map.get(val, "")] * len(row)
+            color = color_map.get(val, "")
+            return [color] * len(row) 
 
         styled_df = filtered_loans[show_cols].style.format({
-            "principal": "{:,.0f}",
-            "total_repayable": "{:,.0f}",
+            "principal": "{:,.0f}", 
+            "total_repayable": "{:,.0f}", 
             "balance": "{:,.0f}"
-        }).apply(style_entire_row, axis=1)
+        }).apply(style_entire_row, axis=1) 
 
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
-    # ==============================
-    # TAB: NEW LOAN
-    # ==============================
-    with tab_add:
-        if Active_borrowers.empty:
-            st.info("💡 Tip: Activate a borrower first.")
-        else:
-            with st.form("loan_issue_form"):
-                st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
-                col1, col2 = st.columns(2)
-                
-                borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
-                selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
-                selected_id = borrower_map.get(selected_name)
-                
-                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
-                date_issued = col1.date_input("Start Date", value=datetime.now())
-                
-                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
-                date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
+# ==============================
+# TAB: NEW LOAN
+# ==============================
+with tab_add:
+    if Active_borrowers.empty:
+        st.info("💡 Tip: Activate a borrower first.")
+    else:
+        with st.form("loan_issue_form"):
+            st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
+            col1, col2 = st.columns(2)
+            
+            borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
+            selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
+            selected_id = borrower_map.get(selected_name)
+            
+            amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
+            date_issued = col1.date_input("Start Date", value=datetime.now())
+            
+            l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
+            interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
+            date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                total_due = amount + ((interest_rate / 100) * amount)
-                st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
+            total_due = amount + ((interest_rate / 100) * amount)
+            st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
-                if st.form_submit_button("🚀 Confirm & Issue Loan"):
-                    new_id = str(uuid.uuid4())
-                    next_sn_val = (loans_df["sn_rank"].max() if not loans_df.empty else 0) + 1
-                    
-                    loan_data = {
-                        "id": new_id,
-                        "loan_id_label": f"L-{next_sn_val:04d}",
-                        "loan_id_label": new_id, # First loan is its own group anchor
-                        "borrower_id": str(selected_id),
-                        "loan_type": l_type,
-                        "principal": float(amount),
-                        "interest": float((interest_rate/100)*amount),
-                        "total_repayable": float(total_due),
-                        "amount_paid": 0.0,
-                        "status": "ACTIVE",
-                        "start_date": str(date_issued),
-                        "end_date": str(date_due),
-                        "cycle_no": 1,
-                        "tenant_id": str(get_current_tenant())
-                    }
-                    
-                    if save_data_saas("loans", pd.DataFrame([loan_data])):
-                        st.success(f"✅ Success! Loan issued.")
-                        st.cache_data.clear()
-                        st.rerun()
+            if st.form_submit_button("🚀 Confirm & Issue Loan"):
+                next_sn_value = len(loans_df) + 1 
+                
+                loan_data = {
+                    "sn": next_sn_value,
+                    "loan_id_label": str(next_sn_value).zfill(5),
+                    "borrower_id": str(selected_id),
+                    "loan_type": l_type,
+                    "principal": float(amount),
+                    "interest": float((interest_rate/100)*amount),
+                    "total_repayable": float(total_due),
+                    "amount_paid": 0.0,
+                    "status": "ACTIVE",
+                    "start_date": str(date_issued),
+                    "end_date": str(date_due),
+                    "tenant_id": str(get_current_tenant())
+                }
+                
+                if save_data("loans", pd.DataFrame([loan_data])):
+                    st.success(f"✅ Success! Loan {next_sn_value:05d} issued.")
+                    st.cache_data.clear()
+                    st.rerun()
 
     # ==============================
     # TAB: ACTIONS (ROLLOVER)
@@ -1389,6 +1410,7 @@ def show_loans():
     with tab_actions:
         st.markdown("<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>", unsafe_allow_html=True)
         
+        # Filter for active loans that can be rolled
         eligible_loans = loans_df[
             (~loans_df["status"].isin(["CLOSED", "CLEARED", "BCF"])) & 
             (loans_df["balance"] > 0)
@@ -1398,7 +1420,7 @@ def show_loans():
             st.success("All loans brought up to date! ✨")
         else:
             roll_map = {
-                f"{row['borrower']} • {row['sn']} • Cycle {row['cycle_no']}": row["id"] 
+                f"{row['borrower']} • Cycle {row['cycle_no']} • Bal: {row['balance']:,.0f}": row["id"] 
                 for _, row in eligible_loans.iterrows()
             }
             roll_sel = st.selectbox("Select Loan to Roll Forward", list(roll_map.keys()))
@@ -1408,21 +1430,27 @@ def show_loans():
             new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
 
             if st.button("🔥 Execute Next Rollover", use_container_width=True):
-                old_due_date = pd.to_datetime(loan_to_roll['end_date'])
+                try:
+                    old_due_date = pd.to_datetime(loan_to_roll['end_date'])
+                except:
+                    old_due_date = datetime.now()
+                
                 new_start = old_due_date.strftime("%Y-%m-%d")
                 new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
 
-                # ✅ UPDATE PARENT STATUS
+                # ✅ STEP 1: FORCE PARENT STATUS TO BCF
                 parent_id = str(loan_to_roll['id'])
                 loans_df.loc[loans_df["id"] == parent_id, "status"] = "BCF"
+
+                # Persist the BCF change
                 save_data_saas("loans", loans_df)
 
-                # ✅ CREATE CHILD CYCLE
+                # ✅ STEP 2: CREATE THE NEW CHILD CYCLE
                 calc_interest = current_unpaid * (new_interest_rate / 100)
+                
                 new_cycle_data = {
-                    "id": str(uuid.uuid4()),
-                    "loan_id_label": loan_to_roll['loan_id_label'],
-                    "loan_id_label": loan_to_roll['loan_id_label'], # Keep the same group!
+                    "sn": loan_to_roll['sn'],
+                    "loan_id_label": str(loan_to_roll['sn']).zfill(5),
                     "borrower_id": loan_to_roll['borrower_id'],
                     "principal": current_unpaid,
                     "interest": calc_interest,
@@ -1435,36 +1463,31 @@ def show_loans():
                     "tenant_id": get_current_tenant()
                 }
 
-                if save_data_saas("loans", pd.DataFrame([new_cycle_data])):
+                if save_data("loans", pd.DataFrame([new_cycle_data])):
                     st.cache_data.clear() 
-                    st.success("✅ Rollover Successful!")
-                    st.rerun()
-
+                    st.success(f"✅ Cycle {int(loan_to_roll['cycle_no'])} rolled to Cycle {int(loan_to_roll['cycle_no']) + 1}!")
+                    st.rerun()    
+                    
     # ==============================
     # TAB: MANAGE/EDIT
     # ==============================
     with tab_manage:
         if not loans_df.empty:
-            edit_map = {f"{row['borrower']} • {row['loan_id_label']} (Cycle {row['cycle_no']})": row["id"] for _, row in loans_df.iterrows()}
+            edit_map = {f"{row['borrower']} • {row['loan_id_label']}": row["id"] for _, row in loans_df.iterrows()}
             target_id = edit_map[st.selectbox("Select Loan to Edit", list(edit_map.keys()))]
             loan_to_edit = loans_df[loans_df["id"] == target_id].iloc[0]
 
             with st.form("edit_loan_form"):
                 e_princ = st.number_input("Principal", value=float(loan_to_edit['principal']))
-                e_stat = st.selectbox("Status", ["ACTIVE", "PENDING", "CLOSED", "BCF", "CLEARED"], 
-                                      index=["ACTIVE", "PENDING", "CLOSED", "BCF", "CLEARED"].index(loan_to_edit['status']))
-                
+                e_stat = st.selectbox("Status", ["ACTIVE", "PENDING", "CLOSED", "OVERDUE", "BCF", "ROLLED"], index=0)
                 if st.form_submit_button("💾 Save Changes"):
-                    loans_df.loc[loans_df["id"] == target_id, ["principal", "status"]] = [e_princ, e_stat]
-                    save_data_saas("loans", loans_df)
+                    supabase.table("loans").update({"principal": e_princ, "status": e_stat}).eq("id", target_id).execute()
                     st.success("✅ Updated!")
                     st.cache_data.clear()
                     st.rerun()
 
             if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
-                # Using standard filtering for deletion to ensure it reflects in the save
-                loans_df = loans_df[loans_df["id"] != target_id]
-                save_data_saas("loans", loans_df)
+                supabase.table("loans").delete().eq("id", target_id).execute()
                 st.warning("Loan Deleted.")
                 st.cache_data.clear()
                 st.rerun()
