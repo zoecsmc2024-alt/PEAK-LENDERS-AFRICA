@@ -1289,26 +1289,26 @@ def show_loans():
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     if not loans_df.empty:
-        # 1. Clean data: Ensure numeric columns don't have NaNs that cause the crash
+        # 1. Clean Data: Handle the float NaN crash seen in image_ebb165
         loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
         
-        # 2. Sort by Borrower and Cycle so Parent/Child stay together
-        # This fixes the jump seen in image_eba982 where Cycle 5 was at the bottom
-        loans_df = loans_df.sort_values(by=["borrower", "cycle_no"], ascending=[True, True]).reset_index(drop=True)
-        
-        # 3. Create a "Thread SN": Every cycle of the same borrower's loan gets the SAME SN
-        # We base this on the very first start_date for that borrower
-        loans_df["first_date"] = loans_df.groupby("borrower")["start_date"].transform("min")
-        
-        # 4. Generate the SN based on the unique "first_date" groups
-        loans_df["sn"] = loans_df.groupby("first_date", sort=False).ngroup() + 1
-        
-        # 5. Visual Formatting (0001 style)
-        # Use a safe lambda to avoid the "float NaN" crash
-        loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}" if pd.notnull(x) else "0000")
+        # 2. Grouping Logic: Identify the "First Loan Date" for each borrower thread
+        # This ensures Cycle 1 and Cycle 5 share the same SN group
+        loans_df["thread_anchor"] = loans_df.groupby("borrower")["start_date"].transform("min")
 
-        # 6. Final Clean up (Drop the temporary column)
-        loans_df = loans_df.drop(columns=["first_date"])
+        # 3. Sort: Order by the anchor date (overall timeline) then by cycle
+        # This keeps Walter's family of loans together in the list
+        loans_df = loans_df.sort_values(by=["thread_anchor", "borrower", "cycle_no"]).reset_index(drop=True)
+
+        # 4. Generate SN: Assign a number based on the thread_anchor
+        # This makes sure all cycles of the same loan share one SN
+        loans_df["sn"] = loans_df.groupby("thread_anchor", sort=False).ngroup() + 1
+        
+        # 5. Format SN to 0001 style
+        loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}")
+
+        # 6. Cleanup: Remove temporary helper column
+        loans_df = loans_df.drop(columns=["thread_anchor"])
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
