@@ -2699,7 +2699,7 @@ def show_overdue_tracker():
             st.info("No selectable records.")
 
 # ==============================
-# 20. payroll MANAGEMENT PAGE (SAAS VERSION)
+# 20. PAYROLL MANAGEMENT PAGE (SAAS VERSION)
 # ==============================
 
 def show_payroll():
@@ -3829,7 +3829,7 @@ if __name__ == "__main__":
                 show_petty_cash()
             elif page == "Overdue Tracker":
                 show_overdue_tracker()
-            elif page == "payroll":
+            elif page == "Payroll":
                 show_payroll()
             elif page == "Reports":
                 show_reports() # This will now call your developed module
