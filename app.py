@@ -1172,7 +1172,8 @@ def save_data_saas(table_name, df):
 # ==============================
 def show_loans():
     import uuid
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, date
+    import pandas as pd
 
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
@@ -1183,7 +1184,7 @@ def show_loans():
     borrowers_df = get_data("borrowers")
     payments_df = get_data("payments")
 
-    # SAFETY
+    # SAFETY INITIALIZATION
     if loans_df is None: loans_df = pd.DataFrame()
     if borrowers_df is None: borrowers_df = pd.DataFrame()
     if payments_df is None: payments_df = pd.DataFrame()
@@ -1216,15 +1217,15 @@ def show_loans():
     for col in ["principal", "interest", "total_repayable", "amount_paid", "balance"]:
         loans_df[col] = pd.to_numeric(loans_df.get(col, 0), errors="coerce").fillna(0)
 
-    # ✅ THE FIX: Convert end_date from string to date objects
+    # ✅ THE FIX: Convert end_date from string to date objects for comparison
     if "end_date" in loans_df.columns:
         loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors='coerce').dt.date
 
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
-    # STATUS LOGIC
-    from datetime import date
-
+    # ==============================
+    # 🧠 STATUS LOGIC
+    # ==============================
     def determine_status(row):
         today = date.today()
         paid = row.get("amount_paid", 0)
@@ -1236,7 +1237,6 @@ def show_loans():
             return "CLEARED"
 
         # 🟠 LOGIC 2: BCF (Soft Orange)
-        # Now that end_date is a date object, this comparison will work!
         if end_date and today > end_date and paid == 0:
             return "BCF"
 
@@ -1246,30 +1246,10 @@ def show_loans():
     # Apply the status function
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
 
-    # Final logic cleanup: Ensure balance is 0 for Cleared loans
+    # Ensure balance is 0 for Cleared loans
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
-    def style_status(val):
-    if val == "CLEARED":
-        return "background-color: #C6F6D5; color: #22543D;" # Soft Green
-    elif val == "BCF":
-        return "background-color: #FEEBC8; color: #744210;" # Soft Orange
-    elif val == "PENDING":
-        return "background-color: #FED7D7; color: #822727;" # Soft Red
-    return ""
-
-    # How to display it in your view:
-    st.dataframe(loans_df.style.applymap(style_status, subset=['status']), use_container_width=True)
-
-    # Note: Use st.dataframe(loans_df.style.applymap(style_status, subset=['status'])) to display
-    # --- RETURN TO PREVIOUS MARGIN ---
-    # Apply the function to the dataframe
-    loans_df["status"] = loans_df.apply(determine_status, axis=1)
-    
-    # Final cleanup: If status is CLEARED, balance must be 0
-    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
-
-    # SORTING
+    # SORTING & SERIAL NUMBERS
     loans_df["cycle_no"] = pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce").fillna(1).astype(int)
     loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"]).reset_index(drop=True)
 
@@ -1281,23 +1261,24 @@ def show_loans():
         borrowers_df["id"] = borrowers_df["id"].astype(str)
         bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
         loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
+
     # ==============================
-    # ✅ TABS (ONLY ONCE, CLEAN)
+    # ✅ TABS
     # ==============================
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📂 Portfolio View","➕ New Loan","🛠️ Manage/Edit","⚙️ Actions"
     ])
 
     # ==============================
-    # 📂 PORTFOLIO
+    # 📂 PORTFOLIO VIEW
     # ==============================
     with tab_view:
         search_query = st.text_input("🔍 Search Loan / Borrower")
 
         filtered_loans = loans_df.copy()
         if search_query:
-            filtered_loans = loans_df[
-                loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)
+            filtered_loans = filtered_loans[
+                filtered_loans.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)
             ]
 
         show_cols = [
@@ -1309,14 +1290,14 @@ def show_loans():
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
+            # SOFT THEME COLOR LOGIC
             def style_entire_row(row):
                 val = str(row["status"]).upper().strip()
                 color_map = {
-                    "ACTIVE": "background-color: #e0f2fe; color: #075985;",
-                    "PENDING": "background-color: #fee2e2; color: #991b1b;",
-                    "CLOSED": "background-color: #f3f4f6;",
-                    "CLEARED": "background-color: #d1fae5;",
-                    "BCF": "background-color: #ffedd5;"
+                    "CLEARED": "background-color: #C6F6D5; color: #22543D;", # Soft Green
+                    "BCF":     "background-color: #FEEBC8; color: #744210;", # Soft Orange
+                    "PENDING": "background-color: #FED7D7; color: #822727;", # Soft Red
+                    "ACTIVE":  "background-color: #e0f2fe; color: #075985;"
                 }
                 return [color_map.get(val, "")] * len(row)
 
@@ -1327,7 +1308,6 @@ def show_loans():
             }).apply(style_entire_row, axis=1)
 
             st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
     # ==============================
     # ➕ NEW LOAN
     # ==============================
