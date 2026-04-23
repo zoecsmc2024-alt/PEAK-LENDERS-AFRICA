@@ -1364,15 +1364,15 @@ def show_loans():
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
 # ==============================
-# TAB: NEW LOAN
-# ==============================
-with tab_add:
-    if Active_borrowers.empty:
-        st.info("💡 Tip: Activate a borrower first.")
-    else:
-        with st.form("loan_issue_form"):
-            st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
-            col1, col2 = st.columns(2)
+    # TAB: NEW LOAN
+    # ==============================
+    with tab_add:
+        if Active_borrowers.empty:
+            st.info("💡 Tip: Activate a borrower first.")
+        else:
+            with st.form("loan_issue_form"):
+                st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
+                col1, col2 = st.columns(2)
             
             borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
             selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
