@@ -2707,6 +2707,9 @@ def show_payroll():
     Handles employee compensation, tax compliance (PAYE/LST), 
     and NSSF contributions. Includes a professional printable report.
     """
+    # 0. Early Initialization to prevent NameErrors
+    df = pd.DataFrame() 
+    
     # SaaS Access Control & Tenant Fetching
     if st.session_state.get("role") != "Admin":
         st.error("🔒 Restricted Access: Only Administrators can process payroll.")
@@ -2720,19 +2723,20 @@ def show_payroll():
 
     st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
 
-    # 1. SYNC COLUMNS
+    # 1. SYNC COLUMNS - Match lowercase table name 'payroll'
     df_raw = get_cached_data("payroll")
     required_columns = [
         "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
         "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
         "PAYE", "NSSF_5", "Advance_DRS", "Other_Deductions", "Net_Pay", 
-        "NSSF_10", "NSSF_15", "Date", "tenant_id" # Added tenant_id for SaaS tracking
+        "NSSF_10", "NSSF_15", "Date", "tenant_id" 
     ]
     
     if df_raw.empty:
         df_all = pd.DataFrame(columns=required_columns)
     else:
         df_all = df_raw.copy()
+        # Clean column headers (remove spaces for logic)
         df_all.columns = df_all.columns.str.strip().str.replace(" ", "_")
         for col in required_columns:
             if col not in df_all.columns: df_all[col] = 0
@@ -2751,23 +2755,20 @@ def show_payroll():
         # 2. Local Service Tax (LST) Logic
         lst = 100000 / 12 if gross > 1000000 else 0
         
-        # 3. NSSF Logic (Calculated but NOT subtracted from tax base)
+        # 3. NSSF Logic
         n5 = gross * 0.05
         n10 = gross * 0.10
         n15 = n5 + n10
         
-        # 4. --- THE EXCEL MATCHING PAYE LOGIC ---
-        # Based on your sheet: Tax = 25,000 + (30% * (Gross - 410,000))
+        # 4. PAYE Logic (Uganda Standard)
         paye = 0
         if gross > 410000:
             excess = gross - 410000
             paye = 25000 + (0.30 * excess)
         elif gross > 235000:
-            # Lower tier fallback
             paye = (gross - 235000) * 0.10
             
         # 5. Final Deductions & Net Pay
-        # Deductions = PAYE + LST + NSSF(5%) + Advance + Other
         total_deductions = paye + lst + n5 + float(advance) + float(other)
         net = gross - total_deductions
         
@@ -2779,7 +2780,6 @@ def show_payroll():
     tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 Payroll History"])
 
     with tab_process:
-        # ... [Your existing Form Code is preserved here] ...
         with st.form("new_payroll_form", clear_on_submit=True):
             st.markdown("<h4 style='color: #2B3F87;'>👤 Employee Details</h4>", unsafe_allow_html=True)
             name = st.text_input("Employee Name")
@@ -2801,16 +2801,16 @@ def show_payroll():
                         "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], "NSSF_15": calc['n15'],
                         "Advance_DRS": f_adv, "Other_Deductions": f_other, "Net_Pay": calc['net'],
                         "Date": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": str(tenant) # Tagging record for SaaS
+                        "tenant_id": str(tenant)
                     }])
-                    # --- THE CORRECTED SAVE LOGIC (SaaS Stable) ---
+                    
                     final_save_df = pd.concat([df_all, new_row], ignore_index=True)
                     final_save_df = final_save_df.fillna(0)
                     
-                    # Restore spaces for Google Sheets headers
+                    # Restore spaces for DB table / Sheets headers
                     final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
                     
-                    if save_data("Payroll", final_save_df):
+                    if save_data("payroll", final_save_df):
                         st.success(f"✅ Payroll for {name} saved successfully!")
                         st.rerun()
 
@@ -2823,7 +2823,7 @@ def show_payroll():
                 try: return f"{int(float(x)):,}" 
                 except: return "0"
 
-            # --- CALCULATE PAYROLL TOTALS ---
+            # Calculations
             t_arrears = df['Arrears'].sum()
             t_basic = df['Basic_Salary'].sum()
             t_gross = df['Gross_Salary'].sum()
@@ -2852,7 +2852,6 @@ def show_payroll():
                         <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(r['NSSF_15'])}</td>
                     </tr>"""
 
-            # --- ADD THE TOTALS ROW TO THE HTML ---
             rows_html += f"""
                 <tr style="background:#2B3F87; color:white; font-weight:bold;">
                     <td colspan="2" style="text-align:center; padding:12px; border:1px solid #ddd;">GRAND TOTALS</td>
@@ -2890,10 +2889,6 @@ def show_payroll():
                     </thead>
                     <tbody>{rows_html}</tbody>
                 </table>
-                <div style="margin-top:50px; display:flex; justify-content:space-around;">
-                    <p>___________________<br>Prepared By</p>
-                    <p>___________________<br>Approved By</p>
-                </div>
             </body>
             </html>
             """
@@ -2914,12 +2909,11 @@ def show_payroll():
                         sid = str(sel_opt.split("(ID: ")[1].replace(")", ""))
                         item = df[df['Payroll_ID'].astype(str) == sid].iloc[0]
                         st.text_input("Edit Name (Preview)", value=str(item['Employee']), disabled=True)
-                        st.info("Direct modification of payroll math is locked. Delete and re-process for errors.")
+                        st.info("Direct modification locked. Delete and re-process for errors.")
                         if st.button("🗑️ Delete This Record", use_container_width=True):
-                            # SaaS Delete: Update all_df but only affect specific tenant's data
                             df_new = df_all[df_all['Payroll_ID'].astype(str) != sid]
                             df_new.columns = [c.replace("_", " ") for c in df_new.columns]
-                            if save_data("Payroll", df_new):
+                            if save_data("payroll", df_new):
                                 st.warning("Payroll record deleted.")
                                 st.rerun()
                     except Exception as e:
