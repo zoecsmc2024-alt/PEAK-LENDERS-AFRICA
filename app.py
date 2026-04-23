@@ -1206,24 +1206,27 @@ def show_loans():
     loans_df["status"] = loans_df.get("status", "").astype(str).str.upper().str.strip()
 
     def determine_status(row):
-    current_status = row["status"]
-    balance = row["balance"]
-    paid = row["amount_paid"]
+        # Everything inside the function must be indented 4 spaces
+        current_status = row["status"]
+        balance = row["balance"]
+        paid = row["amount_paid"]
 
-    # 🛡️ Never touch BCF (historical truth)
-    if current_status == "BCF":
-        return "BCF"
+        # 🛡️ Never touch BCF (historical truth)
+        if current_status == "BCF":
+            return "BCF"
 
-    # ✅ Fully paid = CLEARED (highest truth)
-    if balance <= 0:
-        return "CLEARED"
+        # ✅ Fully paid = CLEARED (highest truth)
+        if balance <= 0:
+            return "CLEARED"
 
-    # 🟡 No payment yet → still pending
-    if paid == 0:
-        return "PENDING"
+        # 🟡 No payment yet → still pending
+        if paid == 0:
+            return "PENDING"
 
-    # 🔵 Partial payment → active loan
-    return "ACTIVE"
+        # 🔵 Partial payment → active loan
+        return "ACTIVE"
+
+    # Now move back to the previous indentation level to run the code
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
