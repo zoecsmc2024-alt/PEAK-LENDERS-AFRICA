@@ -1226,6 +1226,8 @@ def show_loans():
     # ==============================
     # 🧠 UPDATED STATUS LOGIC
     # ==============================
+    from datetime import date # Ensure this is imported
+
     def determine_status(row):
         today = date.today()
         paid = row.get("amount_paid", 0)
@@ -1238,12 +1240,10 @@ def show_loans():
             return "CLEARED"
 
         # 🔵 2. ACTIVE (Soft Blue) - Deadline passed, unpaid, but NOT yet rolled over
-        # This identifies loans ready for the rollover process.
         if end_date and today > end_date and paid == 0 and current_status != "BCF":
             return "ACTIVE"
 
         # 🟠 3. BCF (Soft Orange) - Already rolled over
-        # We preserve this if it was already marked BCF from your rollover script.
         if current_status == "BCF":
             return "BCF"
 
@@ -1298,26 +1298,26 @@ def show_loans():
             st.warning("No matching loans found.")
         else:
             # ==============================
-    # 🎨 UPDATED COLOR THEME
-    # ==============================
-    def style_entire_row(row):
-        val = str(row["status"]).upper().strip()
-        color_map = {
-            "CLEARED": "background-color: #C6F6D5; color: #22543D;", # Soft Green
-            "ACTIVE":  "background-color: #E0F2FE; color: #075985;", # Soft Blue (Running/Pre-rollover)
-            "BCF":     "background-color: #FEEBC8; color: #744210;", # Soft Orange (Post-rollover)
-            "PENDING": "background-color: #FED7D7; color: #822727;"  # Soft Red (Future)
-        }
-        return [color_map.get(val, "")] * len(row)
+            # 🎨 UPDATED COLOR THEME
+            # ==============================
+            def style_entire_row(row):
+                val = str(row["status"]).upper().strip()
+                color_map = {
+                    "CLEARED": "background-color: #C6F6D5; color: #22543D;", # Soft Green
+                    "ACTIVE":  "background-color: #E0F2FE; color: #075985;", # Soft Blue
+                    "BCF":     "background-color: #FEEBC8; color: #744210;", # Soft Orange
+                    "PENDING": "background-color: #FED7D7; color: #822727;"  # Soft Red
+                }
+                return [color_map.get(val, "")] * len(row)
 
-    # Update your display tab
-    styled_df = filtered_loans[show_cols].style.format({
-        "principal":"{:,.0f}",
-        "total_repayable":"{:,.0f}",
-        "balance":"{:,.0f}"
-    }).apply(style_entire_row, axis=1)
+            # Apply formatting and the row-level styling
+            styled_df = filtered_loans[show_cols].style.format({
+                "principal":"{:,.0f}",
+                "total_repayable":"{:,.0f}",
+                "balance":"{:,.0f}"
+            }).apply(style_entire_row, axis=1)
 
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
     # ==============================
     # ➕ NEW LOAN
     # ==============================
