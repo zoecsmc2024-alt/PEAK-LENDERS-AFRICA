@@ -19,7 +19,18 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import uuid
+import extra_streamlit_components as stx
 
+# Initialize cookie manager
+cookie_manager = stx.CookieManager()
+
+def restore_session():
+    # Use the initialized manager instead of 'cookies'
+    user_id = cookie_manager.get("user_id")
+    if user_id:
+        st.session_state["authenticated"] = True
+        st.session_state["user_id"] = user_id
+        st.session_state["tenant_id"] = cookie_manager.get("tenant_id")
 # ==============================
 # 🔒 SAFETY: Ensure supabase always exists
 # ==============================
