@@ -2699,38 +2699,34 @@ def show_overdue_tracker():
             st.info("No selectable records.")
 
 # ==============================
-# 20. PAYROLL MANAGEMENT PAGE (SAAS VERSION)
+# 20. PAYROLL MANAGEMENT PAGE (REBUILT)
 # ==============================
 
 def show_payroll():
     """
-    Handles employee compensation, tax compliance (PAYE/LST), 
-    and NSSF contributions. Includes a professional printable report.
+    Rebuilt Payroll Management: Handles Uganda tax compliance (PAYE/LST/NSSF)
+    with enhanced stability and professional printable reporting.
     """
-    # 0. Early Initialization to prevent NameErrors
+    # Early Initialization
     df = pd.DataFrame() 
+    tenant = st.session_state.get("tenant_id")
     
-    # SaaS Access Control & Tenant Fetching
+    # SaaS Access Control
     if st.session_state.get("role") != "Admin":
         st.error("🔒 Restricted Access: Only Administrators can process payroll.")
         return
 
-    # SaaS Security: Ensure tenant isolation
-    tenant = st.session_state.get("tenant_id")
     if not tenant:
         st.error("Session expired. Please log in.")
         st.stop()
 
-    st.markdown("<h2 style='color: #4A90E2;'>🧾 payroll Management</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #4A90E2; font-family: sans-serif;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
 
-    # 1. SYNC COLUMNS - Match lowercase table name 'payroll'
+    # 1. DATA SYNC & CLEANING
     df_raw = get_cached_data("payroll")
-
-    # 🚨 HARD CLEAN (prevents duplicate column crash from Supabase/cache)
-    if df_raw is None:
-        df_raw = pd.DataFrame()
+    if df_raw is None: df_raw = pd.DataFrame()
     
-    # Force drop any duplicate column names right at the source
+    # Remove duplicate columns and reset index immediately
     df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
     df_raw = df_raw.reset_index(drop=True)
 
@@ -2745,171 +2741,141 @@ def show_payroll():
         df_all = pd.DataFrame(columns=required_columns)
     else:
         df_all = df_raw.copy()
-
-        # Clean column headers (remove spaces for logic)
         df_all.columns = df_all.columns.str.strip().str.replace(" ", "_")
-
-        # 🚨 CRITICAL FIX: REMOVE DUPLICATE COLUMNS AFTER NORMALIZATION
         df_all = df_all.loc[:, ~df_all.columns.duplicated()]
-
-        # 🚨 RESET INDEX TO PREVENT REINDEX ERRORS
         df_all = df_all.reset_index(drop=True)
 
         for col in required_columns:
-            if col not in df_all.columns:
-                df_all[col] = 0
-
+            if col not in df_all.columns: df_all[col] = 0
         df_all = df_all.fillna(0)
 
-    # SaaS Filter: Filter data to only show this specific client/tenant
-    if "tenant_id" in df_all.columns:
-        df = df_all[df_all["tenant_id"].astype(str) == str(tenant)].copy()
-    else:
-        df = df_all.copy()
-
-    # 🚨 FINAL SAFETY CLEAN (prevents crashes in iterrows, HTML, CSV)
-    df = df.loc[:, ~df.columns.duplicated()]
+    # Filter for Tenant
+    df = df_all[df_all["tenant_id"].astype(str) == str(tenant)].copy() if "tenant_id" in df_all.columns else df_all.copy()
     df = df.reset_index(drop=True)
 
     def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
-        # 1. Gross Calculation
         gross = (float(basic) + float(arrears)) - float(absent_deduct)
-        
-        # 2. Local Service Tax (LST) Logic
         lst = 100000 / 12 if gross > 1000000 else 0
+        n5, n10 = gross * 0.05, gross * 0.10
         
-        # 3. NSSF Logic
-        n5 = gross * 0.05
-        n10 = gross * 0.10
-        n15 = n5 + n10
-        
-        # 4. PAYE Logic (Uganda Standard)
+        # Uganda PAYE Logic
         paye = 0
-        if gross > 410000:
-            excess = gross - 410000
-            paye = 25000 + (0.30 * excess)
-        elif gross > 235000:
-            paye = (gross - 235000) * 0.10
+        if gross > 410000: paye = 25000 + (0.30 * (gross - 410000))
+        elif gross > 235000: paye = (gross - 235000) * 0.10
             
-        # 5. Final Deductions & Net Pay
-        total_deductions = paye + lst + n5 + float(advance) + float(other)
-        net = gross - total_deductions
-        
-        return {
-            "gross": round(gross), "lst": round(lst), "n5": round(n5), 
-            "n10": round(n10), "n15": round(n15), "paye": round(paye), "net": round(net)
-        }
+        net = gross - (paye + lst + n5 + float(advance) + float(other))
+        return {"gross": round(gross), "lst": round(lst), "n5": round(n5), "n10": round(n10), "n15": round(n5+n10), "paye": round(paye), "net": round(net)}
 
-    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 payroll History"])
+    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 Payroll History"])
 
     with tab_process:
         with st.form("new_payroll_form", clear_on_submit=True):
-            st.markdown("<h4 style='color: #2B3F87;'>👤 Employee Details</h4>", unsafe_allow_html=True)
+            st.markdown("<h4 style='color: #2B3F87; font-family: sans-serif;'>👤 Employee Details</h4>", unsafe_allow_html=True)
             name = st.text_input("Employee Name")
-            c1, c2, c3 = st.columns(3); f_tin = c1.text_input("TIN"); f_desig = c2.text_input("Designation"); f_mob = c3.text_input("Mob No.")
-            c4, c5 = st.columns(2); f_acc = c4.text_input("Account No."); f_nssf_no = c5.text_input("NSSF No.")
-            st.write("---"); st.markdown("<h4 style='color: #2B3F87;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
-            c6, c7, c8 = st.columns(3); f_arrears = c6.number_input("ARREARS", min_value=0.0); f_basic = c7.number_input("SALARY (Basic)", min_value=0.0); f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
-            c9, c10 = st.columns(2); f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0); f_other = c10.number_input("Other Deductions", min_value=0.0)
+            c1, c2, c3 = st.columns(3)
+            f_tin = c1.text_input("TIN")
+            f_desig = c2.text_input("Designation")
+            f_mob = c3.text_input("Mob No.")
+            
+            c4, c5 = st.columns(2)
+            f_acc = c4.text_input("Account No.")
+            f_nssf_no = c5.text_input("NSSF No.")
+            
+            st.write("---")
+            st.markdown("<h4 style='color: #2B3F87; font-family: sans-serif;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
+            c6, c7, c8 = st.columns(3)
+            f_arrears = c6.number_input("ARREARS", min_value=0.0)
+            f_basic = c7.number_input("SALARY (Basic)", min_value=0.0)
+            f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
+            
+            c9, c10 = st.columns(2)
+            f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0)
+            f_other = c10.number_input("Other Deductions", min_value=0.0)
 
             if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
                 if name and f_basic > 0:
                     calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
-
-                    # 🚨 SAFE ID GENERATION (prevents duplicate ID issues)
-                    next_id = 1
-                    if not df_all.empty:
-                        try:
-                            next_id = int(pd.to_numeric(df_all["payroll_ID"], errors="coerce").max() + 1)
-                        except:
-                            next_id = len(df_all) + 1
+                    next_id = int(pd.to_numeric(df_all["payroll_ID"], errors="coerce").max() + 1) if not df_all.empty else 1
 
                     new_row = pd.DataFrame([{
-                        "payroll_ID": next_id,
-                        "Employee": name, "TIN": f_tin, "Designation": f_desig, "Mob_No": f_mob,
-                        "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
-                        "Basic_Salary": f_basic, "Absent_Deduction": f_absent,
-                        "Gross_Salary": calc['gross'], "LST": calc['lst'], "PAYE": calc['paye'],
-                        "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], "NSSF_15": calc['n15'],
-                        "Advance_DRS": f_adv, "Other_Deductions": f_other, "Net_Pay": calc['net'],
-                        "Date": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": str(tenant)
+                        "payroll_ID": next_id, "Employee": name, "TIN": f_tin, "Designation": f_desig, 
+                        "Mob_No": f_mob, "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
+                        "Basic_Salary": f_basic, "Absent_Deduction": f_absent, "Gross_Salary": calc['gross'], 
+                        "LST": calc['lst'], "PAYE": calc['paye'], "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], 
+                        "NSSF_15": calc['n15'], "Advance_DRS": f_adv, "Other_Deductions": f_other, 
+                        "Net_Pay": calc['net'], "Date": datetime.now().strftime("%Y-%m-%d"), "tenant_id": str(tenant)
                     }])
                     
-                    final_save_df = pd.concat([df_all, new_row], ignore_index=True)
-
-                    # 🚨 FINAL CLEAN BEFORE SAVE
-                    final_save_df = final_save_df.loc[:, ~final_save_df.columns.duplicated()]
-                    final_save_df = final_save_df.reset_index(drop=True)
-                    final_save_df = final_save_df.fillna(0)
-                    
-                    # Restore spaces for DB table / Sheets headers
+                    final_save_df = pd.concat([df_all, new_row], ignore_index=True).fillna(0)
                     final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
                     
                     if save_data("payroll", final_save_df):
-                        st.success(f"✅ payroll for {name} saved successfully!")
+                        st.success(f"✅ Payroll for {name} saved!")
                         st.rerun()
 
     with tab_logs:
         if not df.empty:
             p_col1, p_col2 = st.columns([4, 1])
-            p_col1.markdown(f"<h3 style='color: #4A90E2;'>{datetime.now().strftime('%B %Y')} Summary</h3>", unsafe_allow_html=True)
+            p_col1.markdown(f"<h3 style='color: #4A90E2; font-family: sans-serif;'>{datetime.now().strftime('%B %Y')} Summary</h3>", unsafe_allow_html=True)
             
             def fm(x): 
                 try: return f"{int(float(x)):,}" 
                 except: return "0"
 
-            # Calculations
-            t_arrears = df['Arrears'].sum()
-            t_basic = df['Basic_Salary'].sum()
-            t_gross = df['Gross_Salary'].sum()
-            t_paye = df['PAYE'].sum()
-            t_n5 = df['NSSF_5'].sum()
-            t_net = df['Net_Pay'].sum()
-            t_n10 = df['NSSF_10'].sum()
-            t_n15 = df['NSSF_15'].sum()
-
-            rows_html = ""
+            # Enhanced HTML Template with proper Headings
+            header_style = "background:#2B3F87; color:white; padding:10px; border:1px solid #ddd; font-size:11px;"
+            cell_style = "border:1px solid #ddd; padding:8px; font-size:11px; font-family: sans-serif;"
+            
+            rows_html = f"""
+            <thead>
+                <tr style="{header_style}">
+                    <th>S/N</th><th>Employee Details</th><th>TIN/NSSF/ACC</th><th>Arrears</th><th>Basic</th>
+                    <th>Gross</th><th>PAYE</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th>
+                </tr>
+            </thead>
+            <tbody>"""
+            
             for i, r in df.iterrows():
                 rows_html += f"""
-                    <tr>
-                        <td style='text-align:center; border:1px solid #ddd; padding: 10px;'>{i+1}</td>
-                        <td style='border:1px solid #ddd; padding: 10px;'>
-                            <div style="font-weight:bold; font-size:12px;">{r['Employee']}</div>
-                            <div style="font-size:10px; color:#555;">{r.get('Designation', '-')}</div>
-                        </td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Arrears'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Basic_Salary'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; font-weight:bold;'>{fm(r['Gross_Salary'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['PAYE'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['NSSF_5'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#E3F2FD; font-weight:bold;'>{fm(r['Net_Pay'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4;'>{fm(r['NSSF_10'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(r['NSSF_15'])}</td>
-                    </tr>"""
-
-            rows_html += f"""
-                <tr style="background:#2B3F87; color:white; font-weight:bold;">
-                    <td colspan="2" style="text-align:center; padding:12px; border:1px solid #ddd;">GRAND TOTALS</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_arrears)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_basic)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_gross)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_paye)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n5)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_net)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n10)}</td>
-                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n15)}</td>
+                <tr>
+                    <td style='{cell_style} text-align:center;'>{i+1}</td>
+                    <td style='{cell_style}'>
+                        <b>{r['Employee']}</b><br><small>{r.get('Designation', '-')}</small>
+                    </td>
+                    <td style='{cell_style} font-size:9px;'>
+                        TIN: {r.get('TIN','-')}<br>ACC: {r.get('Account_No','-')}<br>NSSF: {r.get('NSSF_No','-')}
+                    </td>
+                    <td style='{cell_style} text-align:right;'>{fm(r['Arrears'])}</td>
+                    <td style='{cell_style} text-align:right;'>{fm(r['Basic_Salary'])}</td>
+                    <td style='{cell_style} text-align:right; font-weight:bold;'>{fm(r['Gross_Salary'])}</td>
+                    <td style='{cell_style} text-align:right;'>{fm(r['PAYE'])}</td>
+                    <td style='{cell_style} text-align:right;'>{fm(r['NSSF_5'])}</td>
+                    <td style='{cell_style} text-align:right; background:#E3F2FD; font-weight:bold;'>{fm(r['Net_Pay'])}</td>
+                    <td style='{cell_style} text-align:right; background:#FFF9C4;'>{fm(r['NSSF_10'])}</td>
                 </tr>"""
 
-            printable_html = f"""<html><body><table style='width:100%; border-collapse:collapse;'><tbody>{rows_html}</tbody></table></body></html>"""
+            rows_html += f"""
+                <tr style="background:#2B3F87; color:white; font-weight:bold; font-family: sans-serif;">
+                    <td colspan="3" style="text-align:center; padding:12px;">GRAND TOTALS</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['Arrears'].sum())}</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['Basic_Salary'].sum())}</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['Gross_Salary'].sum())}</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['PAYE'].sum())}</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['NSSF_5'].sum())}</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['Net_Pay'].sum())}</td>
+                    <td style='text-align:right; padding:12px;'>{fm(df['NSSF_10'].sum())}</td>
+                </tr>
+            </tbody>"""
+
+            printable_html = f"""
+            <html><head><style>body{{font-family:sans-serif;}} table{{width:100%; border-collapse:collapse;}}</style></head>
+            <body><table>{rows_html}</table></body></html>"""
 
             if p_col2.button("📥 Print PDF", key="print_payroll_trigger"):
                 st.components.v1.html(printable_html + "<script>window.print();</script>", height=0)
 
             st.components.v1.html(printable_html, height=600, scrolling=True)
-
-            csv_text = df.to_csv(index=False).encode('utf-8')
-            st.download_button("📄 Download CSV Backup", data=csv_text, file_name="payroll_Zoe.csv", mime="text/csv")
+            st.download_button("📄 Download CSV", data=df.to_csv(index=False), file_name="payroll_export.csv")
             
             st.write("---")
             with st.expander("⚙️ Modify / Delete Record"):
