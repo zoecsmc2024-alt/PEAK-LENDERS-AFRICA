@@ -1301,7 +1301,7 @@ def show_loans():
     ])
 
     # ==============================
-    # VIEW
+    # PORTFOLIO VIEW
     # ==============================
     with tab_view:
         search_query = st.text_input("🔍 Search Loan / Borrower")
@@ -1310,8 +1310,33 @@ def show_loans():
         if search_query:
             filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
 
-        show_cols = ["sn","loan_id_label","borrower","cycle_no","principal","total_repayable","balance","start_date","end_date","status"]
-        st.dataframe(filtered_loans[show_cols], use_container_width=True, hide_index=True)
+        show_cols = [
+            "sn", "loan_id_label", "borrower", "cycle_no",
+            "principal", "total_repayable", "balance",
+            "start_date", "end_date", "status"
+        ]
+
+        def style_entire_row(row):
+            val = str(row["status"]).upper().strip()
+            color_map = {
+                "ACTIVE":  "background-color: #e0f2fe; color: #075985; font-weight: 500;",
+                "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;",
+                "CLEARED": "background-color: #d1fae5; color: #065f46;",
+                "BCF":     "background-color: #ffedd5; color: #9a3412;",
+                "CLOSED":  "background-color: #f3f4f6; color: #374151;"
+            }
+            return [color_map.get(val, "")] * len(row)
+
+        # ✅ FORMAT SN (Ensures the leading zeros appear in the table)
+        filtered_loans["sn"] = filtered_loans["sn"].apply(lambda x: f"{int(x):04d}")
+
+        styled_df = filtered_loans[show_cols].style.format({
+            "principal": "{:,.0f}",
+            "total_repayable": "{:,.0f}",
+            "balance": "{:,.0f}"
+        }).apply(style_entire_row, axis=1)
+
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ==============================
     # NEW LOAN
