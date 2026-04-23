@@ -1242,25 +1242,30 @@ def show_loans():
     loans_df["status"] = loans_df.get("status", "").astype(str).str.upper().str.strip()
 
     def determine_status(row):
-    current_status = row["status"]
-    balance = row["balance"]
-    paid = row["amount_paid"]
+        current_status = str(row["status"]).upper().strip()
+        balance = row["balance"]
+        paid = row["amount_paid"]
 
-    # 🛡️ Never touch BCF (historical truth)
-    if current_status == "BCF":
-        return "BCF"
+        # 🛡️ Priority 1: Never touch BCF (historical truth)
+        if current_status == "BCF":
+            return "BCF"
 
-    # ✅ Fully paid = CLEARED (highest truth)
-    if balance <= 0:
-        return "CLEARED"
+        # ✅ Priority 2: Fully paid = CLEARED (mathematical truth)
+        if balance <= 0:
+            return "CLEARED"
 
-    # 🟡 No payment yet → still pending
-    if paid == 0:
-        return "PENDING"
+        # 🟡 Priority 3: No payment yet → still pending
+        if paid == 0:
+            return "PENDING"
 
-    # 🔵 Partial payment → active loan
-    return "ACTIVE"
+        # 🔵 Priority 4: Partial payment → active loan
+        return "ACTIVE"
+
+    # --- OUTSIDE THE FUNCTION ---
+    # Now we actually APPLY the function to the dataframe
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
+
+    # Final safety: Ensure balance is exactly 0 for display if status is CLEARED
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     # SORTING
