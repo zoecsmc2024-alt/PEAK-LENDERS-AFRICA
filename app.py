@@ -2721,7 +2721,7 @@ def show_payroll():
     st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
 
     # 1. SYNC COLUMNS
-    df_raw = get_cached_data("Payroll")
+    df_raw = get_cached_data("payroll")
     required_columns = [
         "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
         "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
