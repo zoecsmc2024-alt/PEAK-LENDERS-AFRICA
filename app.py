@@ -1267,11 +1267,21 @@ def show_loans():
     loans_df["status"] = loans_df.get("status", "").astype(str).str.upper().str.strip()
 
     def determine_status(row):
-        if row["status"] in ["BCF","PENDING"]:
-            return row["status"]
-        if row["balance"] <= 0:
-            return "CLEARED"
-        return "ACTIVE"
+    current_status = row["status"]
+
+    # 🔥 ONLY protect BCF (not PENDING anymore)
+    if current_status == "BCF":
+        return current_status
+
+    # ✅ If fully paid → ALWAYS CLEARED
+    if row["balance"] <= 0:
+        return "CLEARED"
+
+    # 🟡 If still unpaid and was pending → keep pending
+    if current_status == "PENDING":
+        return "PENDING"
+
+    return "ACTIVE"
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
