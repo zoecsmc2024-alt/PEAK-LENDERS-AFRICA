@@ -1213,7 +1213,7 @@ def show_loans():
         loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
 
     # NUMERIC CLEAN
-    for col in ["principal","interest","total_repayable","amount_paid","balance"]:
+    for col in ["principal", "interest", "total_repayable", "amount_paid", "balance"]:
         loans_df[col] = pd.to_numeric(loans_df.get(col, 0), errors="coerce").fillna(0)
 
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
@@ -1224,32 +1224,34 @@ def show_loans():
     from datetime import date
 
     def determine_status(row):
-        # Everything inside the function MUST be indented 4 spaces
+        # Everything inside the function must be indented 4 spaces
         today = date.today()
-        amount_to_pay = row.get("amount_to_be_paid", 0)
         paid = row.get("amount_paid", 0)
-        payment_date = row.get("payment_date")
+        total = row.get("total_repayable", 0)
+        end_date = row.get("end_date")
 
         # ✅ Fully paid
-        if paid >= amount_to_pay:
+        if paid >= total:
             return "CLEARED"
 
         # 🔴 Overdue and unpaid → BCF
-        # Ensure payment_date is actually a date object for comparison
-        if payment_date and today > payment_date and paid == 0:
+        # Comparison requires end_date to be a date object
+        if end_date and today > end_date and paid == 0:
             return "BCF"
 
-        # 🟡 Not yet due → Pending
+        # 🟡 Not yet due or partially paid → Pending
         return "PENDING"
 
     # --- RETURN TO PREVIOUS MARGIN ---
-    # Now run the logic using the function defined above
+    # Apply the function to the dataframe
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
+    
+    # Final cleanup: If status is CLEARED, balance must be 0
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     # SORTING
     loans_df["cycle_no"] = pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce").fillna(1).astype(int)
-    loans_df = loans_df.sort_values(by=["loan_id_label","cycle_no"]).reset_index(drop=True)
+    loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"]).reset_index(drop=True)
 
     loans_df["sn_rank"] = pd.factorize(loans_df["loan_id_label"])[0] + 1
     loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
@@ -1259,7 +1261,6 @@ def show_loans():
         borrowers_df["id"] = borrowers_df["id"].astype(str)
         bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
         loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
-
     # ==============================
     # ✅ TABS (ONLY ONCE, CLEAN)
     # ==============================
