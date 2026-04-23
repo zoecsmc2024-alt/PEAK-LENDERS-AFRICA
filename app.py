@@ -1288,16 +1288,16 @@ def show_loans():
     # Ensure balance is zeroed for anything mathematically cleared
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
-    # 4. Constant SN & Cycle Management Logic
     if not loans_df.empty:
-        loans_df = loans_df.sort_values(by=["borrower_id", "start_date"])
-        if "sn" not in loans_df.columns or loans_df["sn"].isnull().all():
-            loans_df["sn"] = loans_df.groupby("borrower_id").cumcount() + 1
-            # This turns the 'sn' column into a 4-digit string with leading zeros
-            loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}" if pd.notnull(x) else x)
-        if "cycle_no" not in loans_df.columns or loans_df["cycle_no"].isnull().all():
-            loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
+    # Sort by date so the oldest loan is always 0001
+    loans_df = loans_df.sort_values(by=["start_date", "created_at"], ascending=True)
+    
+    # GLOBAL SERIAL NUMBER (0001, 0002, 0003 across all users)
+    loans_df["sn"] = range(1, len(loans_df) + 1)
+    loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}")
 
+    # INDIVIDUAL CYCLE NUMBER (1, 2, 3 per borrower)
+    loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
