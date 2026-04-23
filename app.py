@@ -1224,24 +1224,49 @@ def show_loans():
     from datetime import date
 
     def determine_status(row):
-        # Everything inside the function must be indented 4 spaces
+        """
+        Logic based on ledger requirements:
+        - CLEARED: Total paid >= Total repayable (Soft Green)
+        - BCF: Past deadline AND Zero payment (Soft Orange)
+        - PENDING: Deadline not passed OR Partial payment (Soft Red)
+        """
         today = date.today()
         paid = row.get("amount_paid", 0)
         total = row.get("total_repayable", 0)
         end_date = row.get("end_date")
 
-        # ✅ Fully paid
-        if paid >= total:
+        # ✅ LOGIC 1: CLEARED (Soft Green)
+        if paid >= total and total > 0:
             return "CLEARED"
 
-        # 🔴 Overdue and unpaid → BCF
-        # Comparison requires end_date to be a date object
+        # 🟠 LOGIC 2: BCF (Soft Orange)
+        # Passed deadline with zero money collected
         if end_date and today > end_date and paid == 0:
             return "BCF"
 
-        # 🟡 Not yet due or partially paid → Pending
+        # 🔴 LOGIC 3: PENDING (Soft Red)
+        # Still within time or has partial payments but not cleared
         return "PENDING"
 
+    # Apply the status function
+    loans_df["status"] = loans_df.apply(determine_status, axis=1)
+
+    # Final logic cleanup: Ensure balance is 0 for Cleared loans
+    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
+
+    # ==============================
+    # 🎨 COLOR MAPPING (SOFT THEME)
+    # ==============================
+    def style_status(val):
+        if val == "CLEARED":
+            return "background-color: #C6F6D5; color: #22543D;" # Soft Green
+        elif val == "BCF":
+            return "background-color: #FEEBC8; color: #744210;" # Soft Orange
+        elif val == "PENDING":
+            return "background-color: #FED7D7; color: #822727;" # Soft Red
+        return ""
+
+    # Note: Use st.dataframe(loans_df.style.applymap(style_status, subset=['status'])) to display
     # --- RETURN TO PREVIOUS MARGIN ---
     # Apply the function to the dataframe
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
