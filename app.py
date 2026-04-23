@@ -1297,8 +1297,13 @@ def show_loans():
         loans_df["loan_id_label"] = loans_df["loan_id_label"].astype(str)
         loans_df["thread_id"] = loans_df["loan_id_label"]
 
-    # ✅ SORT
-        loans_df = loans_df.sort_values(by=["thread_id", "cycle_no"]).reset_index(drop=True)
+    # 🚨 CRITICAL FIX: NUMERIC SORT
+        loans_df["loan_id_numeric"] = pd.to_numeric(loans_df["loan_id_label"], errors="coerce")
+
+    # ✅ SORT CORRECTLY
+        loans_df = loans_df.sort_values(
+            by=["loan_id_numeric", "cycle_no"]
+        ).reset_index(drop=True)
 
     # ✅ SN GENERATION
         loans_df["sn_rank"] = pd.factorize(loans_df["thread_id"])[0] + 1
@@ -1307,7 +1312,7 @@ def show_loans():
         loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
 
     # ✅ CLEANUP
-        loans_df = loans_df.drop(columns=["thread_id", "sn_rank"])
+        loans_df = loans_df.drop(columns=["thread_id", "sn_rank", "loan_id_numeric"])
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
