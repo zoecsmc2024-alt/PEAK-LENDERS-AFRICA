@@ -3807,65 +3807,62 @@ def show_dashboard_view():
 
 if __name__ == "__main__":
 
-    # Ensure defaults
-    if "logged_in" not in st.session_state:
-        st.session_state["logged_in"] = False
+    # ======================
+    # DEFAULT STATE
+    # ======================
+    if "authenticated" not in st.session_state:
+        st.session_state["authenticated"] = False
 
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
     # ======================
-    # 🔐 AUTH FLOW (ONLY ONCE)
+    # 🔐 AUTH FLOW
     # ======================
-    if not st.session_state["logged_in"]:
+    if not st.session_state["authenticated"]:
         st.session_state['theme_color'] = "#1E3A8A"
         apply_master_theme()
 
-        # ✅ ONLY CALL THIS ONCE
         run_auth_ui(supabase)
+        st.stop()   # 🔥 IMPORTANT (prevents fallthrough)
 
     # ======================
     # 🚀 MAIN APP
     # ======================
-    else:
-        try:
-            check_session_timeout()
+    try:
+        check_session_timeout()
 
-            # Sidebar
-            page = render_sidebar()
-            # Theme
-            apply_master_theme()
+        page = render_sidebar()
+        apply_master_theme()
 
-            # Views
-            if page == "Settings":
-                show_settings()
-            elif page == "Overview":
-                show_dashboard_view()
-            elif page == "Loans":
-                show_loans()
-            elif page == "Borrowers":
-                show_borrowers()
-            elif page == "Collateral":
-                show_collateral()
-            elif page == "Calendar":
-                show_calendar()
-            elif page == "Ledger":
-                show_ledger()
-            elif page == "Payments":
-                show_payments()
-            elif page == "Expenses":
-                show_expenses()
-            elif page == "Petty Cash":
-                show_petty_cash()
-            elif page == "Overdue Tracker":
-                show_overdue_tracker()
-            elif page == "Payroll":
-                show_payroll()
-            elif page == "Reports":
-                show_reports() # This will now call your developed module
-            else:
-                # This only shows if you add a new sidebar item without a function
-                st.info(f"The {page} module is coming online soon.")
-        except Exception as e:
+        if page == "Settings":
+            show_settings()
+        elif page == "Overview":
+            show_dashboard_view()
+        elif page == "Loans":
+            show_loans()
+        elif page == "Borrowers":
+            show_borrowers()
+        elif page == "Collateral":
+            show_collateral()
+        elif page == "Calendar":
+            show_calendar()
+        elif page == "Ledger":
+            show_ledger()
+        elif page == "Payments":
+            show_payments()
+        elif page == "Expenses":
+            show_expenses()
+        elif page == "Petty Cash":
+            show_petty_cash()
+        elif page == "Overdue Tracker":
+            show_overdue_tracker()
+        elif page == "Payroll":
+            show_payroll()
+        elif page == "Reports":
+            show_reports()
+        else:
+            st.info("Module coming online soon.")
 
-            st.error(f"Application Error: {e}")
+    except Exception as e:
+        st.error(f"Application Error: {e}")
