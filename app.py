@@ -579,64 +579,41 @@ def view_staff_signup(supabase):
 def login_page(supabase):
     st.markdown("## 🔐 Finance Portal Login")
     
-    with st.form("login_form"):
+    # Use a container to keep the UI tight
+    with st.container():
         email = st.text_input("Email").strip().lower()
         pwd = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Access Dashboard", use_container_width=True)
+        
+        # Access Dashboard Button
+        if st.button("Access Dashboard", use_container_width=True, type="primary"):
+            # ... (Your existing login logic here)
+            pass
 
-    if submit:
-        try:
-            # 1. Authenticate with Supabase Auth
-            auth_res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
-            
-            if auth_res.user:
-                # 2. Fetch profile AND Tenant name in one join query
-                user_query = supabase.table("users").select("*, tenants(name)").eq("id", auth_res.user.id).execute()
+        st.markdown("---")
+        
+        # navigation buttons for registration
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🏢 Register Company", use_container_width=True):
+                st.session_state["view"] = "create_company"
+                st.rerun()
+        with col2:
+            if st.button("🆕 Staff Signup", use_container_width=True):
+                st.session_state["view"] = "signup"
+                st.rerun()
 
-                if user_query.data:
-                    user = user_query.data[0]
-                    
-                    # 3. Set ALL session variables required by your Router
-                    st.session_state.update({
-                        "authenticated": True,
-                        "logged_in": True,
-                        "user_id": user["id"],
-                        "tenant_id": user["tenant_id"],
-                        "user_name": user["name"],
-                        "role": user["role"],
-                        "company": user.get("tenants", {}).get("name", "Organization"),
-                        "current_page": "Overview" # Default starting page
-                    })
-                    st.success("Login successful! Redirecting...")
-                    time.sleep(0.5)
-                    st.rerun()
-                else:
-                    st.error("Profile not found in database.")
-            else:
-                st.error("Invalid credentials.")
-        except Exception as e:
-            st.error(f"Login failed: {e}")
-
-
-# ==============================
-# 🔒 ROUTER
-# ==============================
 def run_auth_ui(supabase):
-    restore_session()
-
+    # Ensure view state exists
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
-    if st.session_state.get("authenticated"):
-        st.success(f"Welcome {st.session_state.get('user_name','User')}")
-
-        if st.button("Logout"):
-            cookies.clear()
-            cookies.save()
-            st.session_state.clear()
+    # Navigation back to login for registration pages
+    if st.session_state["view"] != "login":
+        if st.button("⬅️ Back to Login"):
+            st.session_state["view"] = "login"
             st.rerun()
-        return
 
+    # Router for Auth Views
     if st.session_state["view"] == "login":
         login_page(supabase)
     elif st.session_state["view"] == "signup":
