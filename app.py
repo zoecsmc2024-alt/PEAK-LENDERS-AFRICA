@@ -1290,29 +1290,34 @@ def show_loans():
 
     # 4. Constant SN & Cycle Management Logic
     if not loans_df.empty:
-        # ✅ STEP 1: PREVENT CRASHES (Fixes image_eca547 & image_ec21e4)
+        # ✅ STEP 1: FORCE DATA TYPES (Fixes image_ecacc4 & image_eca547)
+        # Ensure cycle_no is an integer and dates/names are treated as strings
         loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
+        loans_df["borrower"] = loans_df["borrower"].astype(str).fillna("Unknown")
+        loans_df["start_date_str"] = loans_df["start_date"].astype(str).fillna("2026-01-01")
         
-        # ✅ STEP 2: CREATE A STABLE THREAD ID
-        # We find the MINIMUM (first) start date for each borrower.
-        # We convert it to a string so we can combine it with the name without crashing.
-        loans_df["first_date"] = loans_df.groupby("borrower")["start_date"].transform("min").astype(str)
-        loans_df["thread_id"] = loans_df["borrower"] + "_" + loans_df["first_date"]
+        # ✅ STEP 2: CREATE A STABLE THREAD ANCHOR
+        # We find the earliest date for each borrower thread
+        loans_df["thread_anchor"] = loans_df.groupby("borrower")["start_date_str"].transform("min")
+        
+        # We combine them into a single string ID so they share one SN
+        loans_df["thread_id"] = loans_df["borrower"].str.cat(loans_df["thread_anchor"], sep="_")
 
         # ✅ STEP 3: SORTING
-        # Sort by the first date (oldest loans first), then borrower name, then cycle.
-        # This keeps Kamusiime Walter's Cycle 1 and Cycle 2 together.
-        loans_df = loans_df.sort_values(by=["first_date", "borrower", "cycle_no"]).reset_index(drop=True)
+        # Sort by the anchor date (overall timeline) and then cycle sequence
+        # This keeps Parent (Cycle 1) and Child (Cycle 2) perfectly stacked
+        loans_df = loans_df.sort_values(by=["thread_anchor", "borrower", "cycle_no"]).reset_index(drop=True)
 
         # ✅ STEP 4: GENERATE SERIAL NUMBER
-        # pd.factorize gives one unique number per "thread_id" (Loan family)
+        # pd.factorize is best for unique grouping without skips or '0000'
         loans_df["sn_rank"] = pd.factorize(loans_df["thread_id"])[0] + 1
         
-        # ✅ STEP 5: VISUAL FORMATTING
+        # ✅ STEP 5: VISUAL FORMATTING (0001 style)
         loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
 
         # ✅ STEP 6: CLEANUP
-        loans_df = loans_df.drop(columns=["first_date", "thread_id", "sn_rank"])
+        # Remove helper columns used for calculations
+        loans_df = loans_df.drop(columns=["thread_anchor", "thread_id", "sn_rank", "start_date_str"])
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
