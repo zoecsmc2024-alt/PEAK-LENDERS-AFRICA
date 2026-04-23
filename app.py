@@ -917,33 +917,38 @@ def render_sidebar():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-# ==============================
-# 🔐 LOGOUT (FIXED)
-# ==============================
-if st.session_state.get("authenticated"):
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-    if st.button("🚪 Logout", use_container_width=True):
+        # ==============================
+        # 🔐 LOGOUT (FIXED)
+        # ==============================
+        if st.session_state.get("authenticated"):
+            st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-        # 1. Clear browser persistence (IMPORTANT)
-        try:
-            clear_login_from_browser()  # if you added localStorage earlier
-        except:
-            pass
+            if st.button("🚪 Logout", use_container_width=True):
 
-        # 2. Fully clear session state
-        keys_to_keep = ["theme_color"]
-        for key in list(st.session_state.keys()):
-            if key not in keys_to_keep:
-                del st.session_state[key]
+            # 1. Clear browser persistence (IMPORTANT)
+            try:
+                clear_login_from_browser()  # if you added localStorage earlier
+            except:
+                pass
 
-        # 3. Force reset flags
-        st.session_state["logged_in"] = False
-        st.session_state["authenticated"] = False
+            # 2. Fully clear session state
+            keys_to_keep = ["theme_color"]
+            for key in list(st.session_state.keys()):
+                if key not in keys_to_keep:
+                    del st.session_state[key]
 
-        st.success("Logging out...")
-        time.sleep(0.5)
-        st.rerun()
+            # 3. Force reset flags
+            st.session_state["logged_in"] = False
+            st.session_state["authenticated"] = False
+
+            st.success("Logging out...")
+            time.sleep(0.5)
+            st.rerun()
+
+
+
+
 
 
 
