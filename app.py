@@ -2852,6 +2852,7 @@ def show_payroll():
                         <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(r['NSSF_15'])}</td>
                     </tr>"""
 
+            # --- ADD THE TOTALS ROW TO THE HTML ---
             rows_html += f"""
                 <tr style="background:#2B3F87; color:white; font-weight:bold;">
                     <td colspan="2" style="text-align:center; padding:12px; border:1px solid #ddd;">GRAND TOTALS</td>
