@@ -2725,6 +2725,15 @@ def show_payroll():
 
     # 1. SYNC COLUMNS - Match lowercase table name 'payroll'
     df_raw = get_cached_data("payroll")
+
+    # 🚨 HARD CLEAN (prevents duplicate column crash from Supabase/cache)
+    if df_raw is None:
+        df_raw = pd.DataFrame()
+    
+    # Force drop any duplicate column names right at the source
+    df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
+    df_raw = df_raw.reset_index(drop=True)
+
     required_columns = [
         "payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
         "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
@@ -2736,10 +2745,20 @@ def show_payroll():
         df_all = pd.DataFrame(columns=required_columns)
     else:
         df_all = df_raw.copy()
+
         # Clean column headers (remove spaces for logic)
         df_all.columns = df_all.columns.str.strip().str.replace(" ", "_")
+
+        # 🚨 CRITICAL FIX: REMOVE DUPLICATE COLUMNS AFTER NORMALIZATION
+        df_all = df_all.loc[:, ~df_all.columns.duplicated()]
+
+        # 🚨 RESET INDEX TO PREVENT REINDEX ERRORS
+        df_all = df_all.reset_index(drop=True)
+
         for col in required_columns:
-            if col not in df_all.columns: df_all[col] = 0
+            if col not in df_all.columns:
+                df_all[col] = 0
+
         df_all = df_all.fillna(0)
 
     # SaaS Filter: Filter data to only show this specific client/tenant
@@ -2747,6 +2766,10 @@ def show_payroll():
         df = df_all[df_all["tenant_id"].astype(str) == str(tenant)].copy()
     else:
         df = df_all.copy()
+
+    # 🚨 FINAL SAFETY CLEAN (prevents crashes in iterrows, HTML, CSV)
+    df = df.loc[:, ~df.columns.duplicated()]
+    df = df.reset_index(drop=True)
 
     def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
         # 1. Gross Calculation
@@ -2792,8 +2815,17 @@ def show_payroll():
             if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
                 if name and f_basic > 0:
                     calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
+
+                    # 🚨 SAFE ID GENERATION (prevents duplicate ID issues)
+                    next_id = 1
+                    if not df_all.empty:
+                        try:
+                            next_id = int(pd.to_numeric(df_all["payroll_ID"], errors="coerce").max() + 1)
+                        except:
+                            next_id = len(df_all) + 1
+
                     new_row = pd.DataFrame([{
-                        "payroll_ID": int(df_all["payroll_ID"].max() + 1) if not df_all.empty else 1,
+                        "payroll_ID": next_id,
                         "Employee": name, "TIN": f_tin, "Designation": f_desig, "Mob_No": f_mob,
                         "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
                         "Basic_Salary": f_basic, "Absent_Deduction": f_absent,
@@ -2805,6 +2837,10 @@ def show_payroll():
                     }])
                     
                     final_save_df = pd.concat([df_all, new_row], ignore_index=True)
+
+                    # 🚨 FINAL CLEAN BEFORE SAVE
+                    final_save_df = final_save_df.loc[:, ~final_save_df.columns.duplicated()]
+                    final_save_df = final_save_df.reset_index(drop=True)
                     final_save_df = final_save_df.fillna(0)
                     
                     # Restore spaces for DB table / Sheets headers
@@ -2865,33 +2901,8 @@ def show_payroll():
                     <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n15)}</td>
                 </tr>"""
 
-            printable_html = f"""
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: sans-serif; padding: 20px; }}
-                    table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
-                    th {{ background: #2B3F87; color: white; padding: 10px; border: 1px solid #ddd; }}
-                    @media print {{ @page {{ size: landscape; margin: 1cm; }} }}
-                </style>
-            </head>
-            <body>
-                <div style="text-align:center; border-bottom:3px solid #2B3F87; margin-bottom:20px;">
-                    <h1 style="color:#2B3F87;">ZOE CONSULTS SMC LTD</h1>
-                    <p><b>payroll REPORT - {datetime.now().strftime('%B %Y')}</b></p>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>S/N</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
-                            <th>P.A.Y.E</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th><th>NSSF(15%)</th>
-                        </tr>
-                    </thead>
-                    <tbody>{rows_html}</tbody>
-                </table>
-            </body>
-            </html>
-            """
+            printable_html = f"""<html><body><table style='width:100%; border-collapse:collapse;'><tbody>{rows_html}</tbody></table></body></html>"""
+
             if p_col2.button("📥 Print PDF", key="print_payroll_trigger"):
                 st.components.v1.html(printable_html + "<script>window.print();</script>", height=0)
 
@@ -2907,15 +2918,16 @@ def show_payroll():
                     sel_opt = st.selectbox("Select Record to Manage", pay_opts, key="payroll_edit_selectbox")
                     try:
                         sid = str(sel_opt.split("(ID: ")[1].replace(")", ""))
+                        # Final protection against reindexing crash during selection
                         item = df[df['payroll_ID'].astype(str) == sid].iloc[0]
-                        st.text_input("Edit Name (Preview)", value=str(item['Employee']), disabled=True)
                         st.info("Direct modification locked. Delete and re-process for errors.")
+                        
                         if st.button("🗑️ Delete This Record", use_container_width=True):
-                            # Corrected to filter from df_all so other tenants' data isn't lost
-                            df_final = df_all[df_all['payroll_ID'].astype(str) != sid].copy()
-                            # Restore spaces for DB table consistency
-                            df_final.columns = [c.replace("_", " ") for c in df_final.columns]
-                            if save_data("payroll", df_final):
+                            # Filter using df_all to preserve other tenants' data
+                            df_new = df_all[df_all['payroll_ID'].astype(str) != sid].copy()
+                            df_new.columns = [c.replace("_", " ") for c in df_new.columns]
+                            
+                            if save_data("payroll", df_new):
                                 st.warning("payroll record deleted.")
                                 st.rerun()
                     except Exception as e:
