@@ -1293,7 +1293,8 @@ def show_loans():
         loans_df = loans_df.sort_values(by=["borrower_id", "start_date"])
         if "sn" not in loans_df.columns or loans_df["sn"].isnull().all():
             loans_df["sn"] = loans_df.groupby("borrower_id").cumcount() + 1
-            loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{x:05d}")
+            # This turns the 'sn' column into a 4-digit string with leading zeros
+            loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}" if pd.notnull(x) else x)
         if "cycle_no" not in loans_df.columns or loans_df["cycle_no"].isnull().all():
             loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
 
