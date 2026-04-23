@@ -1288,27 +1288,33 @@ def show_loans():
     # Ensure balance is zeroed for anything mathematically cleared
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
+    # 4. Constant SN & Cycle Management Logic
     if not loans_df.empty:
-        # 1. Clean Data: Handle the float NaN crash seen in image_ebb165
+        # ✅ STEP 1: CRASH PROTECTION (Fixes image_ec21e4)
+        # Convert critical columns to strings/numbers safely to avoid NaN errors
+        loans_df["borrower"] = loans_df["borrower"].fillna("Unknown")
+        loans_df["start_date"] = loans_df["start_date"].fillna("2026-01-01")
         loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
-        
-        # 2. Grouping Logic: Identify the "First Loan Date" for each borrower thread
-        # This ensures Cycle 1 and Cycle 5 share the same SN group
+
+        # ✅ STEP 2: GROUPING ANCHOR
+        # We find the earliest date for each borrower to "anchor" their loan family
         loans_df["thread_anchor"] = loans_df.groupby("borrower")["start_date"].transform("min")
 
-        # 3. Sort: Order by the anchor date (overall timeline) then by cycle
-        # This keeps Walter's family of loans together in the list
+        # ✅ STEP 3: SORTING
+        # Sort by the anchor date so the oldest customers are at the top,
+        # but keep cycles (1, 2, 3) in order for each borrower
         loans_df = loans_df.sort_values(by=["thread_anchor", "borrower", "cycle_no"]).reset_index(drop=True)
 
-        # 4. Generate SN: Assign a number based on the thread_anchor
-        # This makes sure all cycles of the same loan share one SN
-        loans_df["sn"] = loans_df.groupby("thread_anchor", sort=False).ngroup() + 1
+        # ✅ STEP 4: GENERATE SERIAL NUMBER
+        # This assigns the same rank to all rows sharing the same 'thread_anchor'
+        # .factorize() is safer than .ngroup() for avoiding 0000 issues
+        loans_df["sn_rank"] = pd.factorize(loans_df["thread_anchor"])[0] + 1
         
-        # 5. Format SN to 0001 style
-        loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}")
+        # ✅ STEP 5: VISUAL FORMATTING
+        loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
 
-        # 6. Cleanup: Remove temporary helper column
-        loans_df = loans_df.drop(columns=["thread_anchor"])
+        # ✅ STEP 6: CLEANUP
+        loans_df = loans_df.drop(columns=["thread_anchor", "sn_rank"])
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
