@@ -2699,210 +2699,232 @@ def show_overdue_tracker():
             st.info("No selectable records.")
 
 # ==============================
-# 💣 BALLISTIC PAYROLL SYSTEM (ELITE UI)
+# 20. PAYROLL MANAGEMENT PAGE (SAAS VERSION)
 # ==============================
 
-import pandas as pd
-import streamlit as st
-from datetime import datetime
-
 def show_payroll():
-    # ==============================
-    # 🔐 ACCESS CONTROL
-    # ==============================
+    """
+    Handles employee compensation, tax compliance (PAYE/LST), 
+    and NSSF contributions. Includes a professional printable report.
+    """
+    # SaaS Access Control & Tenant Fetching
     if st.session_state.get("role") != "Admin":
-        st.error("🔒 Restricted Access: Admins only.")
+        st.error("🔒 Restricted Access: Only Administrators can process payroll.")
         return
 
-    brand_color = "#2B3F87"
-
-    st.markdown(f"""
-    <h2 style='color:{brand_color};'>💣 Payroll Intelligence System</h2>
-    """, unsafe_allow_html=True)
-
+    # SaaS Security: Ensure tenant isolation
     tenant = st.session_state.get("tenant_id")
     if not tenant:
-        st.error("Session expired. Please log in again.")
+        st.error("Session expired. Please log in.")
         st.stop()
 
-    # ==============================
-    # 📥 LOAD DATA (With Safe Initialization)
-    # ==============================
-    # Initializing df as empty so 'df is not defined' errors stop happening
-    df = pd.DataFrame() 
+    st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
+
+    # 1. SYNC COLUMNS
+    df_raw = get_cached_data("Payroll")
+    required_columns = [
+        "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
+        "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
+        "PAYE", "NSSF_5", "Advance_DRS", "Other_Deductions", "Net_Pay", 
+        "NSSF_10", "NSSF_15", "Date", "tenant_id" # Added tenant_id for SaaS tracking
+    ]
     
-    try:
-        raw_df = get_cached_data("payroll")
-        if raw_df is not None and not raw_df.empty:
-            raw_df.columns = raw_df.columns.str.strip().str.lower().str.replace(" ", "_")
-            # Filter by tenant
-            if "tenant_id" in raw_df.columns:
-                df = raw_df[raw_df["tenant_id"].astype(str) == str(tenant)].copy()
-            else:
-                df = raw_df.copy()
-    except Exception as e:
-        st.error(f"Error loading payroll data: {e}")
+    if df_raw.empty:
+        df_all = pd.DataFrame(columns=required_columns)
+    else:
+        df_all = df_raw.copy()
+        df_all.columns = df_all.columns.str.strip().str.replace(" ", "_")
+        for col in required_columns:
+            if col not in df_all.columns: df_all[col] = 0
+        df_all = df_all.fillna(0)
 
-    # ==============================
-    # 🧠 CALC ENGINE
-    # ==============================
-    def calc_engine(basic, arrears, absent, advance, other):
-        basic, arrears = float(basic or 0), float(arrears or 0)
-        absent, advance, other = float(absent or 0), float(advance or 0), float(other or 0)
+    # SaaS Filter: Filter data to only show this specific client/tenant
+    if "tenant_id" in df_all.columns:
+        df = df_all[df_all["tenant_id"].astype(str) == str(tenant)].copy()
+    else:
+        df = df_all.copy()
 
-        gross = (basic + arrears) - absent
+    def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
+        # 1. Gross Calculation
+        gross = (float(basic) + float(arrears)) - float(absent_deduct)
+        
+        # 2. Local Service Tax (LST) Logic
         lst = 100000 / 12 if gross > 1000000 else 0
-        n5, n10 = gross * 0.05, gross * 0.10
+        
+        # 3. NSSF Logic (Calculated but NOT subtracted from tax base)
+        n5 = gross * 0.05
+        n10 = gross * 0.10
         n15 = n5 + n10
-
+        
+        # 4. --- THE EXCEL MATCHING PAYE LOGIC ---
+        # Based on your sheet: Tax = 25,000 + (30% * (Gross - 410,000))
         paye = 0
         if gross > 410000:
-            paye = 25000 + (0.30 * (gross - 410000))
+            excess = gross - 410000
+            paye = 25000 + (0.30 * excess)
         elif gross > 235000:
+            # Lower tier fallback
             paye = (gross - 235000) * 0.10
-
-        net = gross - (paye + lst + n5 + advance + other)
-
+            
+        # 5. Final Deductions & Net Pay
+        # Deductions = PAYE + LST + NSSF(5%) + Advance + Other
+        total_deductions = paye + lst + n5 + float(advance) + float(other)
+        net = gross - total_deductions
+        
         return {
-            "gross": round(gross),
-            "paye": round(paye),
-            "n5": round(n5),
-            "n10": round(n10),
-            "n15": round(n15),
-            "net": round(net),
-            "lst": round(lst)
+            "gross": round(gross), "lst": round(lst), "n5": round(n5), 
+            "n10": round(n10), "n15": round(n15), "paye": round(paye), "net": round(net)
         }
 
-    # ==============================
-    # 📊 SUMMARY CARDS
-    # ==============================
-    if not df.empty:
-        total_net = df["net_pay"].sum() if "net_pay" in df.columns else 0
-        total_paye = df["paye"].sum() if "paye" in df.columns else 0
-        total_nssf = df["nssf_15"].sum() if "nssf_15" in df.columns else 0
+    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 Payroll History"])
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("💰 Total Net Payroll", f"UGX {total_net:,.0f}")
-        c2.metric("🏛 PAYE Tax", f"UGX {total_paye:,.0f}")
-        c3.metric("🛡 NSSF (15%)", f"UGX {total_nssf:,.0f}")
-
-    st.divider()
-
-    # ==============================
-    # 📑 TABS
-    # ==============================
-    tab_process, tab_ledger, tab_logs = st.tabs(["💳 Process Payroll", "📜 Payroll Ledger", "📑 Detailed Logs"])
-
-    # ==============================
-    # 💳 PROCESS PAYROLL
-    # ==============================
     with tab_process:
-        st.markdown("### 🧾 Salary Processing Engine")
-        with st.form("payroll_form", clear_on_submit=True):
+        # ... [Your existing Form Code is preserved here] ...
+        with st.form("new_payroll_form", clear_on_submit=True):
+            st.markdown("<h4 style='color: #2B3F87;'>👤 Employee Details</h4>", unsafe_allow_html=True)
             name = st.text_input("Employee Name")
-            c1, c2, c3 = st.columns(3)
-            tin = c1.text_input("TIN")
-            role = c2.text_input("Designation")
-            mob = c3.text_input("Phone")
+            c1, c2, c3 = st.columns(3); f_tin = c1.text_input("TIN"); f_desig = c2.text_input("Designation"); f_mob = c3.text_input("Mob No.")
+            c4, c5 = st.columns(2); f_acc = c4.text_input("Account No."); f_nssf_no = c5.text_input("NSSF No.")
+            st.write("---"); st.markdown("<h4 style='color: #2B3F87;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
+            c6, c7, c8 = st.columns(3); f_arrears = c6.number_input("ARREARS", min_value=0.0); f_basic = c7.number_input("SALARY (Basic)", min_value=0.0); f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
+            c9, c10 = st.columns(2); f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0); f_other = c10.number_input("Other Deductions", min_value=0.0)
 
-            c4, c5 = st.columns(2)
-            acc = c4.text_input("Account No.")
-            nssf_input = c5.text_input("NSSF No.")
-
-            st.markdown("#### 💵 Salary Inputs")
-            c6, c7, c8 = st.columns(3)
-            arrears_in = c6.number_input("Arrears", min_value=0.0)
-            basic_in = c7.number_input("Basic Salary", min_value=0.0)
-            absent_in = c8.number_input("Absent Deduction", min_value=0.0)
-
-            c9, c10 = st.columns(2)
-            advance_in = c9.number_input("Advance", min_value=0.0)
-            other_in = c10.number_input("Other Deductions", min_value=0.0)
-
-            preview = calc_engine(basic_in, arrears_in, absent_in, advance_in, other_in)
-
-            st.markdown(f"""
-            <div style="padding:15px;border-radius:10px;background:#F8FAFC;margin-top:10px;border:1px solid #E2E8F0;">
-                <b style="color:#1E293B;">💡 Live Salary Breakdown</b><br><br>
-                <span style="color:#64748B;">Gross:</span> UGX {preview['gross']:,} <br>
-                <span style="color:#64748B;">PAYE:</span> UGX {preview['paye']:,} <br>
-                <span style="color:#64748B;">NSSF (5%):</span> UGX {preview['n5']:,} <br>
-                <b style="color:#1E293B;">Net Pay: UGX {preview['net']:,}</b>
-            </div>
-            """, unsafe_allow_html=True)
-
-            if st.form_submit_button("🚀 Process Payroll", use_container_width=True):
-                if name and basic_in > 0:
-                    payload = {
-                        "employee": name, "tin": tin, "designation": role,
-                        "mob_no": mob, "account_no": acc, "nssf_no": nssf_input,
-                        "arrears": arrears_in, "basic_salary": basic_in,
-                        "absent_deduction": absent_in, "gross_salary": preview["gross"],
-                        "paye": preview["paye"], "nssf_5": preview["n5"],
-                        "nssf_10": preview["n10"], "nssf_15": preview["n15"],
-                        "advance_drs": advance_in, "other_deductions": other_in,
-                        "net_pay": preview["net"], "lst": preview["lst"],
-                        "date": datetime.now().strftime("%Y-%m-%d"),
-                        "tenant_id": str(tenant)
-                    }
-                    if save_data("payroll", pd.DataFrame([payload])):
-                        st.success(f"✅ Payroll processed for {name}")
-                        st.cache_data.clear()
+            if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
+                if name and f_basic > 0:
+                    calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
+                    new_row = pd.DataFrame([{
+                        "Payroll_ID": int(df_all["Payroll_ID"].max() + 1) if not df_all.empty else 1,
+                        "Employee": name, "TIN": f_tin, "Designation": f_desig, "Mob_No": f_mob,
+                        "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
+                        "Basic_Salary": f_basic, "Absent_Deduction": f_absent,
+                        "Gross_Salary": calc['gross'], "LST": calc['lst'], "PAYE": calc['paye'],
+                        "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], "NSSF_15": calc['n15'],
+                        "Advance_DRS": f_adv, "Other_Deductions": f_other, "Net_Pay": calc['net'],
+                        "Date": datetime.now().strftime("%Y-%m-%d"),
+                        "tenant_id": str(tenant) # Tagging record for SaaS
+                    }])
+                    # --- THE CORRECTED SAVE LOGIC (SaaS Stable) ---
+                    final_save_df = pd.concat([df_all, new_row], ignore_index=True)
+                    final_save_df = final_save_df.fillna(0)
+                    
+                    # Restore spaces for Google Sheets headers
+                    final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
+                    
+                    if save_data("Payroll", final_save_df):
+                        st.success(f"✅ Payroll for {name} saved successfully!")
                         st.rerun()
-                else:
-                    st.error("⚠️ Employee Name and Basic Salary are required.")
 
-    # ==============================
-    # 📜 PAYROLL LEDGER (SCANNABLE TABLE)
-    # ==============================
-    with tab_ledger:
-        if not df.empty:
-            st.dataframe(df[["employee", "designation", "gross_salary", "paye", "net_pay"]], use_container_width=True)
-        else:
-            st.info("No records found.")
-
-    # ==============================
-    # 📑 DETAILED LOGS & PRINTING
-    # ==============================
     with tab_logs:
         if not df.empty:
-            def fm(x): return f"{int(float(x or 0)):,}"
+            p_col1, p_col2 = st.columns([4, 1])
+            p_col1.markdown(f"<h3 style='color: #4A90E2;'>{datetime.now().strftime('%B %Y')} Summary</h3>", unsafe_allow_html=True)
             
+            def fm(x): 
+                try: return f"{int(float(x)):,}" 
+                except: return "0"
+
+            # --- CALCULATE PAYROLL TOTALS ---
+            t_arrears = df['Arrears'].sum()
+            t_basic = df['Basic_Salary'].sum()
+            t_gross = df['Gross_Salary'].sum()
+            t_paye = df['PAYE'].sum()
+            t_n5 = df['NSSF_5'].sum()
+            t_net = df['Net_Pay'].sum()
+            t_n10 = df['NSSF_10'].sum()
+            t_n15 = df['NSSF_15'].sum()
+
             rows_html = ""
             for i, r in df.iterrows():
                 rows_html += f"""
-                <tr>
-                    <td>{i+1}</td>
-                    <td><b>{r.get('employee','')}</b><br><small>{r.get('designation','-')}</small></td>
-                    <td>{fm(r.get('arrears',0))}</td>
-                    <td>{fm(r.get('basic_salary',0))}</td>
-                    <td><b>{fm(r.get('gross_salary',0))}</b></td>
-                    <td>{fm(r.get('paye',0))}</td>
-                    <td>{fm(r.get('nssf_5',0))}</td>
-                    <td style="background:#E3F2FD; font-weight:bold;">{fm(r.get('net_pay',0))}</td>
-                    <td style="background:#FFF9C4;">{fm(r.get('nssf_15',0))}</td>
-                </tr>
-                """
+                    <tr>
+                        <td style='text-align:center; border:1px solid #ddd; padding: 10px;'>{i+1}</td>
+                        <td style='border:1px solid #ddd; padding: 10px;'>
+                            <div style="font-weight:bold; font-size:12px;">{r['Employee']}</div>
+                            <div style="font-size:10px; color:#555;">{r.get('Designation', '-')}</div>
+                        </td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Arrears'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Basic_Salary'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; font-weight:bold;'>{fm(r['Gross_Salary'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['PAYE'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['NSSF_5'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#E3F2FD; font-weight:bold;'>{fm(r['Net_Pay'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4;'>{fm(r['NSSF_10'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(r['NSSF_15'])}</td>
+                    </tr>"""
 
-            full_html = f"""
-            <table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;">
-                <tr style="background:#f1f1f1;">
-                    <th>#</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th><th>PAYE</th><th>N5%</th><th>Net Pay</th><th>N15%</th>
-                </tr>
-                {rows_html}
-            </table>
+            rows_html += f"""
+                <tr style="background:#2B3F87; color:white; font-weight:bold;">
+                    <td colspan="2" style="text-align:center; padding:12px; border:1px solid #ddd;">GRAND TOTALS</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_arrears)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_basic)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_gross)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_paye)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n5)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_net)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n10)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n15)}</td>
+                </tr>"""
+
+            printable_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: sans-serif; padding: 20px; }}
+                    table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+                    th {{ background: #2B3F87; color: white; padding: 10px; border: 1px solid #ddd; }}
+                    @media print {{ @page {{ size: landscape; margin: 1cm; }} }}
+                </style>
+            </head>
+            <body>
+                <div style="text-align:center; border-bottom:3px solid #2B3F87; margin-bottom:20px;">
+                    <h1 style="color:#2B3F87;">ZOE CONSULTS SMC LTD</h1>
+                    <p><b>PAYROLL REPORT - {datetime.now().strftime('%B %Y')}</b></p>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>S/N</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
+                            <th>P.A.Y.E</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th><th>NSSF(15%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+                <div style="margin-top:50px; display:flex; justify-content:space-around;">
+                    <p>___________________<br>Prepared By</p>
+                    <p>___________________<br>Approved By</p>
+                </div>
+            </body>
+            </html>
             """
-            st.components.v1.html(full_html, height=400, scrolling=True)
+            if p_col2.button("📥 Print PDF", key="print_payroll_trigger"):
+                st.components.v1.html(printable_html + "<script>window.print();</script>", height=0)
+
+            st.components.v1.html(printable_html, height=600, scrolling=True)
+
+            csv_text = df.to_csv(index=False).encode('utf-8')
+            st.download_button("📄 Download CSV Backup", data=csv_text, file_name="Payroll_Zoe.csv", mime="text/csv")
             
-            if st.button("📥 Print Official Payroll"):
-                st.components.v1.html("<script>window.print();</script>", height=0)
-            
-            with st.expander("🗑️ Delete Record"):
-                to_delete = st.selectbox("Select Record to Remove", df["employee"].tolist())
-                if st.button("Confirm Delete"):
-                    # Logic to delete from database
-                    st.cache_data.clear()
-                    st.rerun()
+            st.write("---")
+            with st.expander("⚙️ Modify / Delete Record"):
+                pay_opts = [f"{r['Employee']} (ID: {r['Payroll_ID']})" for _, r in df.iterrows()]
+                if pay_opts:
+                    sel_opt = st.selectbox("Select Record to Manage", pay_opts, key="payroll_edit_selectbox")
+                    try:
+                        sid = str(sel_opt.split("(ID: ")[1].replace(")", ""))
+                        item = df[df['Payroll_ID'].astype(str) == sid].iloc[0]
+                        st.text_input("Edit Name (Preview)", value=str(item['Employee']), disabled=True)
+                        st.info("Direct modification of payroll math is locked. Delete and re-process for errors.")
+                        if st.button("🗑️ Delete This Record", use_container_width=True):
+                            # SaaS Delete: Update all_df but only affect specific tenant's data
+                            df_new = df_all[df_all['Payroll_ID'].astype(str) != sid]
+                            df_new.columns = [c.replace("_", " ") for c in df_new.columns]
+                            if save_data("Payroll", df_new):
+                                st.warning("Payroll record deleted.")
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"Selection error: {e}")
+        else:
+            st.info("No payroll records found for this period.")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (FINAL)
 # ==========================================
