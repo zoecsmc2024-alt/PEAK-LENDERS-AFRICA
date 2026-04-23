@@ -1290,34 +1290,24 @@ def show_loans():
 
     # 4. Constant SN & Cycle Management Logic
     if not loans_df.empty:
-        # ✅ STEP 1: FORCE DATA TYPES (Fixes image_ecacc4 & image_eca547)
-        # Ensure cycle_no is an integer and dates/names are treated as strings
         loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
         loans_df["borrower"] = loans_df["borrower"].astype(str).fillna("Unknown")
-        loans_df["start_date_str"] = loans_df["start_date"].astype(str).fillna("2026-01-01")
-        
-        # ✅ STEP 2: CREATE A STABLE THREAD ANCHOR
-        # We find the earliest date for each borrower thread
-        loans_df["thread_anchor"] = loans_df.groupby("borrower")["start_date_str"].transform("min")
-        
-        # We combine them into a single string ID so they share one SN
-        loans_df["thread_id"] = loans_df["borrower"].str.cat(loans_df["thread_anchor"], sep="_")
 
-        # ✅ STEP 3: SORTING
-        # Sort by the anchor date (overall timeline) and then cycle sequence
-        # This keeps Parent (Cycle 1) and Child (Cycle 2) perfectly stacked
-        loans_df = loans_df.sort_values(by=["thread_anchor", "borrower", "cycle_no"]).reset_index(drop=True)
+    # ✅ FIXED THREAD LOGIC
+        loans_df["loan_id_label"] = loans_df["loan_id_label"].astype(str)
+        loans_df["thread_id"] = loans_df["loan_id_label"]
 
-        # ✅ STEP 4: GENERATE SERIAL NUMBER
-        # pd.factorize is best for unique grouping without skips or '0000'
+    # ✅ SORT
+        loans_df = loans_df.sort_values(by=["thread_id", "cycle_no"]).reset_index(drop=True)
+
+    # ✅ SN GENERATION
         loans_df["sn_rank"] = pd.factorize(loans_df["thread_id"])[0] + 1
-        
-        # ✅ STEP 5: VISUAL FORMATTING (0001 style)
+
+    # ✅ FORMAT
         loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
 
-        # ✅ STEP 6: CLEANUP
-        # Remove helper columns used for calculations
-        loans_df = loans_df.drop(columns=["thread_anchor", "thread_id", "sn_rank", "start_date_str"])
+    # ✅ CLEANUP
+        loans_df = loans_df.drop(columns=["thread_id", "sn_rank"])
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
