@@ -927,8 +927,8 @@ def render_sidebar():
             if st.button("🚪 Logout", use_container_width=True):
 
             # 1. Clear browser persistence (IMPORTANT)
-            try:
-                clear_login_from_browser()  # if you added localStorage earlier
+                try:
+                    clear_login_from_browser()  # if you added localStorage earlier
             except:
                 pass
 
