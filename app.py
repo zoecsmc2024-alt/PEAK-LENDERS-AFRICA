@@ -19,6 +19,15 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import uuid
+from streamlit_cookies_manager import EncryptedCookieManager
+
+cookies = EncryptedCookieManager(
+    prefix="finance_app",
+    password="super_secret_key_123"
+)
+
+if not cookies.ready():
+    st.stop()
 # ==============================
 # 🔒 SAFETY: Ensure supabase always exists
 # ==============================
@@ -26,6 +35,12 @@ if "supabase" not in globals():
     supabase = None
 
 # 1. CORE DATA ENGINE (Must be at the top level)
+def restore_session():
+    if "authenticated" not in st.session_state:
+        if cookies.get("user_id"):
+            st.session_state["authenticated"] = True
+            st.session_state["user_id"] = cookies.get("user_id")
+            st.session_state["tenant_id"] = cookies.get("tenant_id")
 @st.cache_data(ttl=600)
 def get_cached_data_legacy(table_name):  # 🔥 renamed (NOT deleted)
     """Fetches and caches data from Supabase for all pages."""
@@ -483,101 +498,82 @@ def admin_company_registration(supabase):
 
     if st.button("Create Organization", use_container_width=True):
         try:
-            # Generate IDs and 14-digit Code
             tenant_id = str(uuid.uuid4())
-            company_code = str(random.randint(10**13, (10**14)-1))
 
-            # 1. Create Auth Account
             res = supabase.auth.sign_up({
                 "email": email,
                 "password": password
             })
 
-            # ✅ FIX: Validate response
             if not res or not res.user:
-                raise Exception(f"Signup failed: {res}")
+                raise Exception("Signup failed")
 
             user_id = res.user.id
 
-            # 2. Insert Tenant Row
-            tenant_res = supabase.table("tenants").insert({
+            # Create tenant
+            supabase.table("tenants").insert({
                 "id": tenant_id,
-                "name": company_name,
-                "company_code": company_code
+                "name": company_name
             }).execute()
 
-            if not tenant_res.data:
-                raise Exception("Failed to create tenant.")
+            time.sleep(1)
 
-            # 3. Create Admin Profile
-            profile_payload = {
+            # Create admin user
+            supabase.table("users").insert({
                 "id": user_id,
                 "name": admin_name,
                 "email": email,
                 "tenant_id": tenant_id,
                 "role": "Admin"
-            }
+            }).execute()
 
-            # ✅ Keep slight delay (Supabase consistency)
-            time.sleep(1)
-
-            profile_res = supabase.table("users").insert(profile_payload).execute()
-
-            if not profile_res.data:
-                raise Exception("Failed to create user profile.")
-
-            st.success(f"✅ Registered! YOUR LOGIN CODE: {company_code}")
-            st.info("Write this code down; your staff needs it to join.")
-
-            if st.button("Go to Login"):
-                st.session_state["view"] = "login"
-                st.rerun()
+            st.success("✅ Company created! Please login.")
+            st.session_state["view"] = "login"
+            st.rerun()
 
         except Exception as e:
-            st.error(f"Registration Error: {e}")
-
+            st.error(f"Error: {e}")
 
 # ==============================
 # 👥 STAFF SIGNUP
 # ==============================
 def view_staff_signup(supabase):
-    st.header("🆕 Join an Organization")
+    st.header("🆕 Join Organization")
     
     with st.form("staff_form"):
-        code = st.text_input("Company Code", help="Get this from your manager").strip()
-        name = st.text_input("Your Full Name")
+        company_name = st.text_input("Company Name").strip()
+        name = st.text_input("Your Name")
         email = st.text_input("Email").strip().lower()
-        pwd = st.text_input("Create Password", type="password")
+        pwd = st.text_input("Password", type="password")
         
-        submit = st.form_submit_button("Join Company", use_container_width=True)
+        submit = st.form_submit_button("Join", use_container_width=True)
 
     if submit:
         try:
-            # 1. Verify Company
-            tenant = supabase.table("tenants").select("id").eq("company_code", code).execute()
+            tenant = supabase.table("tenants") \
+                .select("id") \
+                .ilike("name", company_name) \
+                .execute()
 
             if not tenant.data:
-                st.error("Invalid Company Code.")
+                st.error("Company not found")
                 return
-            
-            t_id = tenant.data[0]['id']
 
-            # 2. Create Auth
+            t_id = tenant.data[0]["id"]
+
             res = supabase.auth.sign_up({
                 "email": email,
                 "password": pwd
             })
 
-            # ✅ FIX: Validate signup
             if not res or not res.user:
-                raise Exception(f"Signup failed: {res}")
+                raise Exception("Signup failed")
 
             user_id = res.user.id
 
-            # 3. Create Staff Profile
             time.sleep(1)
 
-            profile_res = supabase.table("users").insert({
+            supabase.table("users").insert({
                 "id": user_id,
                 "name": name,
                 "email": email,
@@ -585,15 +581,12 @@ def view_staff_signup(supabase):
                 "role": "Staff"
             }).execute()
 
-            if not profile_res.data:
-                raise Exception("Failed to create user profile.")
-
-            st.success("Account created! You can now log in.")
+            st.success("Account created! Login now.")
             st.session_state["view"] = "login"
             st.rerun()
 
         except Exception as e:
-            st.error(f"Signup failed: {e}")
+            st.error(f"Error: {e}")
 
 
 # ==============================
@@ -602,101 +595,83 @@ def view_staff_signup(supabase):
 def login_page(supabase):
     st.markdown("## 🔐 Finance Portal Login")
     
-    c_code = st.text_input("14-Digit Company Code", placeholder="e.g., 10293847561023").strip()
+    company_name = st.text_input("Company Name").strip()
     email = st.text_input("Email").strip().lower()
     pwd = st.text_input("Password", type="password")
 
-    if st.button("Access Dashboard", use_container_width=True, type="primary"):
+    if st.button("Access Dashboard", use_container_width=True):
         try:
-            # 1. Authenticate
+            # Authenticate
             auth_res = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": pwd
             })
 
             if not auth_res or not auth_res.user:
-                raise Exception("Authentication failed")
+                raise Exception("Invalid login")
 
             user_id = auth_res.user.id
-            user_email = auth_res.user.email
 
-            # 2. Fetch user + tenant (SAFE VERSION)
+            # Fetch user + tenant
             user_data = supabase.table("users") \
-                .select("*, tenants(company_code)") \
+                .select("*, tenants(name)") \
                 .eq("id", user_id) \
                 .execute()
 
-            # 🔥 AUTO-HEAL if ID mismatch
             if not user_data.data:
-                user_data = supabase.table("users") \
-                    .select("*, tenants(company_code)") \
-                    .eq("email", user_email) \
-                    .execute()
+                raise Exception("User not found")
 
-                if user_data.data:
-                    supabase.table("users") \
-                        .update({"id": user_id}) \
-                        .eq("email", user_email) \
-                        .execute()
+            user = user_data.data[0]
+            db_company = user.get("tenants", {}).get("name", "").lower()
 
-            if not user_data.data:
-                raise Exception("User profile not found")
+            if db_company != company_name.lower():
+                st.error("Company name mismatch")
+                return
 
-            user_data = user_data.data[0]
+            # ✅ SAVE SESSION
+            st.session_state.update({
+                "authenticated": True,
+                "user_id": user_id,
+                "tenant_id": user["tenant_id"],
+                "user_name": user["name"],
+                "role": user["role"]
+            })
 
-            db_code = str(user_data.get('tenants', {}).get('company_code'))
+            # ✅ SAVE COOKIE (PERSIST LOGIN)
+            cookies["user_id"] = user_id
+            cookies["tenant_id"] = user["tenant_id"]
+            cookies.save()
 
-            if db_code == c_code:
-                st.session_state.update({
-                    "authenticated": True,
-                    "logged_in": True,
-                    "user_id": user_id,
-                    "tenant_id": user_data['tenant_id'],
-                    "user_name": user_data['name'],
-                    "role": user_data['role']
-                })
-                st.rerun()
-            else:
-                st.error("Invalid Company Code for this account.")
-                supabase.auth.sign_out()
+            st.rerun()
 
         except Exception as e:
             st.error(f"Login failed: {e}")
-
-    st.divider()
-
-    col1, col2 = st.columns(2)
-    if col1.button("🏢 Register Company"):
-        st.session_state["view"] = "create_company"
-        st.rerun()
-
-    if col2.button("👥 Join as Staff"):
-        st.session_state["view"] = "signup"
-        st.rerun()
 
 
 # ==============================
 # 🔒 ROUTER
 # ==============================
 def run_auth_ui(supabase):
+    restore_session()
+
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
     if st.session_state.get("authenticated"):
-        st.success(f"Welcome back, {st.session_state.get('user_name', 'User')}! 🚀")
+        st.success(f"Welcome {st.session_state.get('user_name','User')}")
 
-        if st.button("Log Out", use_container_width=True):
+        if st.button("Logout"):
+            cookies.clear()
+            cookies.save()
             st.session_state.clear()
             st.rerun()
         return
 
-    current_view = st.session_state["view"]
-
-    if current_view == "login":
+    if st.session_state["view"] == "login":
         login_page(supabase)
-    elif current_view == "signup":
-        view_staff_signup(supabase)  # ✅ FIXED NAME
-    elif current_view == "create_company":
+    elif st.session_state["view"] == "signup":
+        view_staff_signup(supabase)
+    elif st.session_state["view"] == "create_company":
         admin_company_registration(supabase)
 def render_sidebar():
     # ==============================
