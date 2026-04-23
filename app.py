@@ -1236,7 +1236,7 @@ def show_loans():
 
     if loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "id","sn","loan_id_label","loan_group_id","borrower_id","borrower",
+            "id","sn","loan_id_label","loan_id_label","borrower_id","borrower",
             "principal","interest","total_repayable","amount_paid","balance",
             "status","start_date","end_date","cycle_no","tenant_id"
         ])
@@ -1244,10 +1244,10 @@ def show_loans():
     loans_df["id"] = loans_df["id"].astype(str)
 
     # ✅ 1. STABLE GROUPING LOGIC (Fixed for Parent-Child Threading)
-    if "loan_group_id" not in loans_df.columns:
-        loans_df["loan_group_id"] = loans_df["id"].astype(str)
+    if "loan_id_label" not in loans_df.columns:
+        loans_df["loan_id_label"] = loans_df["id"].astype(str)
     
-    loans_df["loan_group_id"] = loans_df["loan_group_id"].fillna(loans_df["id"]).astype(str)
+    loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id"]).astype(str)
 
     # ✅ 2. PAYMENTS & BALANCE SYNC
     if not payments_df.empty and "loan_id" in payments_df.columns:
@@ -1281,10 +1281,10 @@ def show_loans():
         loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
         
         # Sort so the entire "Loan Thread" stays together, and cycles are in order
-        loans_df = loans_df.sort_values(by=["loan_group_id", "cycle_no"]).reset_index(drop=True)
+        loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"]).reset_index(drop=True)
         
         # Create a visual SN based on the group
-        loans_df["sn_rank"] = pd.factorize(loans_df["loan_group_id"])[0] + 1
+        loans_df["sn_rank"] = pd.factorize(loans_df["loan_id_label"])[0] + 1
         loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
 
     # Borrower mapping
@@ -1364,7 +1364,7 @@ def show_loans():
                     loan_data = {
                         "id": new_id,
                         "loan_id_label": f"L-{next_sn_val:04d}",
-                        "loan_group_id": new_id, # First loan is its own group anchor
+                        "loan_id_label": new_id, # First loan is its own group anchor
                         "borrower_id": str(selected_id),
                         "loan_type": l_type,
                         "principal": float(amount),
@@ -1422,7 +1422,7 @@ def show_loans():
                 new_cycle_data = {
                     "id": str(uuid.uuid4()),
                     "loan_id_label": loan_to_roll['loan_id_label'],
-                    "loan_group_id": loan_to_roll['loan_group_id'], # Keep the same group!
+                    "loan_id_label": loan_to_roll['loan_id_label'], # Keep the same group!
                     "borrower_id": loan_to_roll['borrower_id'],
                     "principal": current_unpaid,
                     "interest": calc_interest,
