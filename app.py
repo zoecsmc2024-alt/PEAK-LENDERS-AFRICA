@@ -3370,26 +3370,28 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
 
 # ==============================
-# MAIN LEDGER FUNCTION (MERGED)
+# MAIN LEDGER FUNCTION (PRODUCTION READY)
 # ==============================
 def show_ledger():
-    st.markdown("<h2 style='color: #2B3F87;'>📘 Master Ledger</h2>", unsafe_allow_html=True)
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    st.markdown(f"<h2 style='color: {brand_color};'>📘 Master Ledger</h2>", unsafe_allow_html=True)
 
+    # 📥 LOAD DATA
     loans_df = get_cached_data("loans")
     payments_df = get_cached_data("payments")
+    borrowers_df = get_cached_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("💡 Your system is clear! No Active loans found.")
+        st.info("💡 Your system is clear! No active loans found.")
         return
 
+    # Normalize column names
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-
     if payments_df is not None and not payments_df.empty:
         payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    borrowers_df = get_cached_data("borrowers")
+    # Map Borrower Names
     bor_map = {}
-
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
         bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
@@ -3398,77 +3400,123 @@ def show_ledger():
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
 
     # ==============================
-    # SELECTION
+    # 🎯 SELECTION INTERFACE
     # ==============================
     loan_map = {
         f"ID: {r.get('loan_id_label', r['id'])} - {r['borrower']}": str(r["id"])
         for _, r in loans_df.iterrows()
     }
 
-    selected_label = st.selectbox("Select Loan", list(loan_map.keys()))
+    selected_label = st.selectbox("🎯 Select Loan Account", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
-    loan_info = loans_df[loans_df["id"].astype(str) == raw_id].iloc[0] if not df.empty else None if not df.empty else None
+    
+    # FIX: Corrected data check to avoid NameError 'df'
+    filtered_loan = loans_df[loans_df["id"].astype(str) == raw_id]
+    if filtered_loan.empty:
+        st.error("Loan data not found.")
+        return
+        
+    loan_info = filtered_loan.iloc[0]
 
     # ==============================
-    # LEDGER TABLE
+    # 📊 STATEMENT PREVIEW (LUXE VIEW)
     # ==============================
-    current_p = float(loan_info.get("principal", 0))
-    interest_amt = float(loan_info.get("interest", 0))
+    st.markdown("### 📑 Account Snapshot")
+    
+    p = float(loan_info.get("principal", 0))
+    i = float(loan_info.get("interest", 0))
+    total_due = p + i
+    paid = float(loan_info.get("amount_paid", 0))
+    bal = float(loan_info.get("balance", 0))
 
+    # Metric Cards
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Principal", f"UGX {p:,.0f}")
+    m2.metric("Total Interest", f"UGX {i:,.0f}")
+    m3.metric("Total Paid", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%}" if total_due > 0 else None)
+    m4.metric("Current Balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
+
+    # ==============================
+    # 📜 RUNNING LEDGER CALCULATION
+    # ==============================
     ledger_data = []
-    running = current_p + interest_amt
+    running_bal = p + i
 
+    # Entry 1: Disbursement
     ledger_data.append({
         "Date": str(loan_info.get("start_date", "-"))[:10],
-        "Description": "Disbursement",
-        "Debit": current_p,
-        "Credit": 0,
-        "Balance": running
+        "Description": "🏦 Disbursement",
+        "Debit (Due)": p,
+        "Credit (Paid)": 0,
+        "Balance": running_bal
     })
 
-    if interest_amt > 0:
+    # Entry 2: Interest Charge
+    if i > 0:
         ledger_data.append({
             "Date": str(loan_info.get("start_date", "-"))[:10],
-            "Description": "Interest",
-            "Debit": interest_amt,
-            "Credit": 0,
-            "Balance": running
+            "Description": "📈 Interest Applied",
+            "Debit (Due)": i,
+            "Credit (Paid)": 0,
+            "Balance": running_bal
         })
 
+    # Entry 3+: Repayments
     if payments_df is not None and not payments_df.empty:
-        rel = payments_df[payments_df["loan_id"].astype(str) == raw_id]
+        rel_payments = payments_df[payments_df["loan_id"].astype(str) == raw_id]
+        if not rel_payments.empty:
+            for _, p_row in rel_payments.iterrows():
+                amt = float(p_row.get("amount", 0))
+                running_bal -= amt
+                ledger_data.append({
+                    "Date": str(p_row.get("date", p_row.get("payment_date", "-")))[:10],
+                    "Description": "💰 Repayment Received",
+                    "Debit (Due)": 0,
+                    "Credit (Paid)": amt,
+                    "Balance": running_bal
+                })
 
-        for _, p in rel.iterrows():
-            amt = float(p.get("amount", 0))
-            running -= amt
-
-            ledger_data.append({
-                "Date": str(p.get("date", p.get("payment_date", "-")))[:10],
-                "Description": "Repayment",
-                "Debit": 0,
-                "Credit": amt,
-                "Balance": running
-            })
-
-    st.dataframe(pd.DataFrame(ledger_data), use_container_width=True)
+    # Render Styled Ledger
+    final_ledger_df = pd.DataFrame(ledger_data)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.dataframe(
+        final_ledger_df,
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "Debit (Due)": st.column_config.NumberColumn(format="%,d"),
+            "Credit (Paid)": st.column_config.NumberColumn(format="%,d"),
+            "Balance": st.column_config.NumberColumn(format="%,d"),
+        }
+    )
 
     st.markdown("---")
 
     # ==============================
-    # PDF DOWNLOAD
+    # 📄 PREMIUM DOWNLOAD SECTION
     # ==============================
-    if st.button("📄 Download Premium Statement"):
-        client_name = loan_info.get("borrower", "Unknown")
-        client_loans = loans_df[loans_df["borrower"] == client_name]
+    col_pre, col_btn = st.columns([2, 1])
+    
+    with col_pre:
+        st.write("Ready to provide this statement to your client?")
+        st.caption("Includes: Full Payment History, Company Letterhead, and Stamp Area.")
 
-        pdf = generate_pdf_statement(client_name, client_loans, payments_df)
+    with col_btn:
+        if st.button("✨ Generate PDF Statement", use_container_width=True):
+            client_name = loan_info.get("borrower", "Unknown")
+            client_loans = loans_df[loans_df["borrower"] == client_name]
 
-        st.download_button(
-            "⬇️ Download PDF",
-            pdf,
-            file_name=f"{client_name}_Statement.pdf",
-            mime="application/pdf"
-        )
+            with st.spinner("Compiling Ledger..."):
+                pdf = generate_pdf_statement(client_name, client_loans, payments_df)
+
+            st.download_button(
+                label="⬇️ Download Premium PDF",
+                data=pdf,
+                file_name=f"Statement_{client_name.replace(' ', '_')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 # ==============================
 # 22. SETTINGS & BRANDING (SAAS CONTROL CENTER)
 # ==============================
