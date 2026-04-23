@@ -1289,19 +1289,26 @@ def show_loans():
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     if not loans_df.empty:
-        # 1. Sort by Borrower and Cycle to keep Parent-Child logic together
+        # 1. Clean data: Ensure numeric columns don't have NaNs that cause the crash
+        loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
+        
+        # 2. Sort by Borrower and Cycle so Parent/Child stay together
+        # This fixes the jump seen in image_eba982 where Cycle 5 was at the bottom
         loans_df = loans_df.sort_values(by=["borrower", "cycle_no"], ascending=[True, True]).reset_index(drop=True)
         
-        # 2. Assign SN based on the GROUP (This gives the Parent and Child the same SN)
-        # We use transform('min') so every cycle of the same loan gets the first cycle's rank
-        loans_df["sn_raw"] = loans_df.groupby("borrower")["start_date"].transform("min")
-        loans_df["sn"] = loans_df.groupby("sn_raw", sort=False).ngroup() + 1
+        # 3. Create a "Thread SN": Every cycle of the same borrower's loan gets the SAME SN
+        # We base this on the very first start_date for that borrower
+        loans_df["first_date"] = loans_df.groupby("borrower")["start_date"].transform("min")
         
-        # 3. Format to 0001
-        loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}")
+        # 4. Generate the SN based on the unique "first_date" groups
+        loans_df["sn"] = loans_df.groupby("first_date", sort=False).ngroup() + 1
+        
+        # 5. Visual Formatting (0001 style)
+        # Use a safe lambda to avoid the "float NaN" crash
+        loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}" if pd.notnull(x) else "0000")
 
-        # 4. Cycle Management (Individual count per borrower)
-        loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
+        # 6. Final Clean up (Drop the temporary column)
+        loans_df = loans_df.drop(columns=["first_date"])
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
