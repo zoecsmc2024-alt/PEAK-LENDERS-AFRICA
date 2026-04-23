@@ -2911,9 +2911,11 @@ def show_payroll():
                         st.text_input("Edit Name (Preview)", value=str(item['Employee']), disabled=True)
                         st.info("Direct modification locked. Delete and re-process for errors.")
                         if st.button("🗑️ Delete This Record", use_container_width=True):
-                            df_new = df_all[df_all['payroll_ID'].astype(str) != sid]
-                            df_new.columns = [c.replace("_", " ") for c in df_new.columns]
-                            if save_data("payroll", df_new):
+                            # Corrected to filter from df_all so other tenants' data isn't lost
+                            df_final = df_all[df_all['payroll_ID'].astype(str) != sid].copy()
+                            # Restore spaces for DB table consistency
+                            df_final.columns = [c.replace("_", " ") for c in df_final.columns]
+                            if save_data("payroll", df_final):
                                 st.warning("payroll record deleted.")
                                 st.rerun()
                     except Exception as e:
