@@ -1595,7 +1595,7 @@ def show_payments():
     # ➕ TAB 1: RECORD PAYMENT
     # ==============================
     with tab1:
-        active_loans = loans_df[loans_df["status"].isin(["ACTIVE", "BCF"])].copy()
+        active_loans = loans_df[loans_df["status"].isin(["ACTIVE", "BCF", "PENDING"])].copy()
 
         if active_loans.empty:
             st.success("🎉 No active loans.")
