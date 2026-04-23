@@ -1288,7 +1288,7 @@ def show_loans():
         ).reset_index(drop=True)
 
         loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}" if pd.notnull(x) else "")
-        loans_df = loans_df.drop(columns=["sn_rank"])
+        loans_df = loans_df.drop(columns=["thread_id", "sn_rank", "loan_id_numeric"], errors="ignore")
 
     # Borrower mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
