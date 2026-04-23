@@ -1335,10 +1335,8 @@ def show_loans():
         loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
 
     # UI TABS
-    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
-    ])
-
+    tab_view, tab_new, tab_manage, tab_actions = st.tabs([
+    "📂 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"])
     # ==============================
     # TAB: PORTFOLIO VIEW
     # ==============================
