@@ -1287,9 +1287,7 @@ def show_loans():
             by=["loan_group_id","cycle_no"]
         ).reset_index(drop=True)
 
-        loans_df["sn_rank"] = pd.factorize(loans_df["loan_group_id"])[0] + 1
-        loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
-
+        loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}" if pd.notnull(x) else "")
         loans_df = loans_df.drop(columns=["sn_rank"])
 
     # Borrower mapping
