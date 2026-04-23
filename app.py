@@ -38,12 +38,7 @@ if "supabase" not in globals():
     supabase = None
 
 # 1. CORE DATA ENGINE (Must be at the top level)
-def restore_session():
-    if "authenticated" not in st.session_state:
-        if cookies.get("user_id"):
-            st.session_state["authenticated"] = True
-            st.session_state["user_id"] = cookies.get("user_id")
-            st.session_state["tenant_id"] = cookies.get("tenant_id")
+
 @st.cache_data(ttl=600)
 def get_cached_data_legacy(table_name):  # 🔥 renamed (NOT deleted)
     """Fetches and caches data from Supabase for all pages."""
