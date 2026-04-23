@@ -3370,11 +3370,28 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
 
 # ==============================
-# MAIN LEDGER FUNCTION (PRODUCTION READY)
+# MAIN LEDGER FUNCTION (BABY BLUE EDITION)
 # ==============================
 def show_ledger():
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    st.markdown(f"<h2 style='color: {brand_color};'>📘 Master Ledger</h2>", unsafe_allow_html=True)
+    # 🎨 THEME COLORS & FONTS
+    baby_blue = "#89CFF0"
+    st.markdown(f"""
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+            .ledger-header {{
+                font-family: 'Inter', sans-serif;
+                color: {baby_blue};
+                font-weight: 700;
+                letter-spacing: -0.5px;
+            }}
+            .snapshot-text {{
+                font-family: 'Inter', sans-serif;
+                font-weight: 600;
+                color: #555;
+            }}
+        </style>
+        <h2 class='ledger-header'>📘 Master Ledger</h2>
+    """, unsafe_allow_html=True)
 
     # 📥 LOAD DATA
     loans_df = get_cached_data("loans")
@@ -3410,7 +3427,7 @@ def show_ledger():
     selected_label = st.selectbox("🎯 Select Loan Account", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
     
-    # FIX: Corrected data check to avoid NameError 'df'
+    # Corrected data check to avoid NameError 'df'
     filtered_loan = loans_df[loans_df["id"].astype(str) == raw_id]
     if filtered_loan.empty:
         st.error("Loan data not found.")
@@ -3419,9 +3436,9 @@ def show_ledger():
     loan_info = filtered_loan.iloc[0]
 
     # ==============================
-    # 📊 STATEMENT PREVIEW (LUXE VIEW)
+    # 📊 STATEMENT PREVIEW (BABY BLUE SNAPSHOT)
     # ==============================
-    st.markdown("### 📑 Account Snapshot")
+    st.markdown("<h4 class='snapshot-text'>📑 Account Snapshot</h4>", unsafe_allow_html=True)
     
     p = float(loan_info.get("principal", 0))
     i = float(loan_info.get("interest", 0))
@@ -3429,7 +3446,7 @@ def show_ledger():
     paid = float(loan_info.get("amount_paid", 0))
     bal = float(loan_info.get("balance", 0))
 
-    # Metric Cards
+    # Metric Cards with Styled Font
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Principal", f"UGX {p:,.0f}")
     m2.metric("Total Interest", f"UGX {i:,.0f}")
@@ -3437,7 +3454,7 @@ def show_ledger():
     m4.metric("Current Balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
 
     # ==============================
-    # 📜 RUNNING LEDGER CALCULATION
+    # 📜 TRANSACTION HISTORY (LEDGER)
     # ==============================
     ledger_data = []
     running_bal = p + i
@@ -3445,7 +3462,7 @@ def show_ledger():
     # Entry 1: Disbursement
     ledger_data.append({
         "Date": str(loan_info.get("start_date", "-"))[:10],
-        "Description": "🏦 Disbursement",
+        "Description": "🏦 Loan Disbursement",
         "Debit (Due)": p,
         "Credit (Paid)": 0,
         "Balance": running_bal
@@ -3455,7 +3472,7 @@ def show_ledger():
     if i > 0:
         ledger_data.append({
             "Date": str(loan_info.get("start_date", "-"))[:10],
-            "Description": "📈 Interest Applied",
+            "Description": "📈 Monthly Interest Applied",
             "Debit (Due)": i,
             "Credit (Paid)": 0,
             "Balance": running_bal
@@ -3476,18 +3493,18 @@ def show_ledger():
                     "Balance": running_bal
                 })
 
-    # Render Styled Ledger
-    final_ledger_df = pd.DataFrame(ledger_data)
-    
+    # Render Modern Styled Ledger
     st.markdown("<br>", unsafe_allow_html=True)
     st.dataframe(
-        final_ledger_df,
+        pd.DataFrame(ledger_data),
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Debit (Due)": st.column_config.NumberColumn(format="%,d"),
-            "Credit (Paid)": st.column_config.NumberColumn(format="%,d"),
-            "Balance": st.column_config.NumberColumn(format="%,d"),
+            "Date": st.column_config.TextColumn("Date"),
+            "Description": st.column_config.TextColumn("Transaction Details"),
+            "Debit (Due)": st.column_config.NumberColumn("Debit (UGX)", format="%,d"),
+            "Credit (Paid)": st.column_config.NumberColumn("Credit (UGX)", format="%,d"),
+            "Balance": st.column_config.NumberColumn("Running Balance (UGX)", format="%,d"),
         }
     )
 
@@ -3496,27 +3513,30 @@ def show_ledger():
     # ==============================
     # 📄 PREMIUM DOWNLOAD SECTION
     # ==============================
-    col_pre, col_btn = st.columns([2, 1])
-    
-    with col_pre:
-        st.write("Ready to provide this statement to your client?")
-        st.caption("Includes: Full Payment History, Company Letterhead, and Stamp Area.")
+    # Container for Download Area with Baby Blue Border
+    st.markdown(f"""
+        <div style="border: 1px solid {baby_blue}55; padding: 1.5rem; border-radius: 12px; background-color: {baby_blue}10;">
+            <p style="font-family: 'Inter', sans-serif; font-weight: 600; margin-bottom: 5px;">Ready to share this ledger?</p>
+            <p style="font-family: 'Inter', sans-serif; font-size: 0.9rem; color: #666; margin-bottom: 15px;">
+                The premium PDF statement includes full history, company letterhead, and a formal stamp section.
+            </p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    with col_btn:
-        if st.button("✨ Generate PDF Statement", use_container_width=True):
-            client_name = loan_info.get("borrower", "Unknown")
-            client_loans = loans_df[loans_df["borrower"] == client_name]
+    if st.button("✨ Generate PDF Statement", use_container_width=True):
+        client_name = loan_info.get("borrower", "Unknown")
+        client_loans = loans_df[loans_df["borrower"] == client_name]
 
-            with st.spinner("Compiling Ledger..."):
-                pdf = generate_pdf_statement(client_name, client_loans, payments_df)
+        with st.spinner("Compiling Ledger..."):
+            pdf = generate_pdf_statement(client_name, client_loans, payments_df)
 
-            st.download_button(
-                label="⬇️ Download Premium PDF",
-                data=pdf,
-                file_name=f"Statement_{client_name.replace(' ', '_')}.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        st.download_button(
+            label=f"⬇️ Download PDF for {client_name}",
+            data=pdf,
+            file_name=f"Statement_{client_name.replace(' ', '_')}.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
 # ==============================
 # 22. SETTINGS & BRANDING (SAAS CONTROL CENTER)
 # ==============================
