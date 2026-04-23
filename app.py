@@ -1224,26 +1224,33 @@ def show_loans():
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
     # ==============================
-    # 🧠 STATUS LOGIC
+    # 🧠 UPDATED STATUS LOGIC
     # ==============================
     def determine_status(row):
         today = date.today()
         paid = row.get("amount_paid", 0)
         total = row.get("total_repayable", 0)
         end_date = row.get("end_date")
+        current_status = str(row.get("status", "")).upper().strip()
 
-        # ✅ LOGIC 1: CLEARED (Soft Green)
+        # ✅ 1. CLEARED (Soft Green) - Fully paid always wins
         if paid >= total and total > 0:
             return "CLEARED"
 
-        # 🟠 LOGIC 2: BCF (Soft Orange)
-        if end_date and today > end_date and paid == 0:
+        # 🔵 2. ACTIVE (Soft Blue) - Deadline passed, unpaid, but NOT yet rolled over
+        # This identifies loans ready for the rollover process.
+        if end_date and today > end_date and paid == 0 and current_status != "BCF":
+            return "ACTIVE"
+
+        # 🟠 3. BCF (Soft Orange) - Already rolled over
+        # We preserve this if it was already marked BCF from your rollover script.
+        if current_status == "BCF":
             return "BCF"
 
-        # 🔴 LOGIC 3: PENDING (Soft Red)
+        # 🔴 4. PENDING (Soft Red) - Running loan (future date)
         return "PENDING"
 
-    # Apply the status function
+    # Apply the logic
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
 
     # Ensure balance is 0 for Cleared loans
@@ -1290,24 +1297,27 @@ def show_loans():
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
-            # SOFT THEME COLOR LOGIC
-            def style_entire_row(row):
-                val = str(row["status"]).upper().strip()
-                color_map = {
-                    "CLEARED": "background-color: #C6F6D5; color: #22543D;", # Soft Green
-                    "BCF":     "background-color: #FEEBC8; color: #744210;", # Soft Orange
-                    "PENDING": "background-color: #FED7D7; color: #822727;", # Soft Red
-                    "ACTIVE":  "background-color: #e0f2fe; color: #075985;"
-                }
-                return [color_map.get(val, "")] * len(row)
+            # ==============================
+    # 🎨 UPDATED COLOR THEME
+    # ==============================
+    def style_entire_row(row):
+        val = str(row["status"]).upper().strip()
+        color_map = {
+            "CLEARED": "background-color: #C6F6D5; color: #22543D;", # Soft Green
+            "ACTIVE":  "background-color: #E0F2FE; color: #075985;", # Soft Blue (Running/Pre-rollover)
+            "BCF":     "background-color: #FEEBC8; color: #744210;", # Soft Orange (Post-rollover)
+            "PENDING": "background-color: #FED7D7; color: #822727;"  # Soft Red (Future)
+        }
+        return [color_map.get(val, "")] * len(row)
 
-            styled_df = filtered_loans[show_cols].style.format({
-                "principal":"{:,.0f}",
-                "total_repayable":"{:,.0f}",
-                "balance":"{:,.0f}"
-            }).apply(style_entire_row, axis=1)
+    # Update your display tab
+    styled_df = filtered_loans[show_cols].style.format({
+        "principal":"{:,.0f}",
+        "total_repayable":"{:,.0f}",
+        "balance":"{:,.0f}"
+    }).apply(style_entire_row, axis=1)
 
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
     # ==============================
     # ➕ NEW LOAN
     # ==============================
