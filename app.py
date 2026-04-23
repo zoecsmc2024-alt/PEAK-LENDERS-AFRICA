@@ -1289,17 +1289,18 @@ def show_loans():
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     if not loans_df.empty:
-        # 1. Sort by start_date FIRST, then by created_at to ensure true order
-        # This prevents "jumps" if rows were added out of order
-        loans_df = loans_df.sort_values(by=["start_date"], ascending=True).reset_index(drop=True)
+        # 1. Sort by Borrower and Cycle to keep Parent-Child logic together
+        loans_df = loans_df.sort_values(by=["borrower", "cycle_no"], ascending=[True, True]).reset_index(drop=True)
         
-        # 2. GLOBAL SERIAL NUMBER (Perfect sequence: 0001, 0002, 0003...)
-        # Using reset_index + 1 ensures no numbers are skipped in the display
-        loans_df["sn"] = range(1, len(loans_df) + 1)
+        # 2. Assign SN based on the GROUP (This gives the Parent and Child the same SN)
+        # We use transform('min') so every cycle of the same loan gets the first cycle's rank
+        loans_df["sn_raw"] = loans_df.groupby("borrower")["start_date"].transform("min")
+        loans_df["sn"] = loans_df.groupby("sn_raw", sort=False).ngroup() + 1
+        
+        # 3. Format to 0001
         loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{int(x):04d}")
 
-        # 3. INDIVIDUAL CYCLE NUMBER (1, 2, 3 per borrower)
-        # We sort by date within the group to make sure Cycle 1 is always the oldest
+        # 4. Cycle Management (Individual count per borrower)
         loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
     # 5. Borrower Mapping
     if not borrowers_df.empty and "borrower_id" in loans_df.columns:
