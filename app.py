@@ -1216,20 +1216,16 @@ def show_loans():
     for col in ["principal", "interest", "total_repayable", "amount_paid", "balance"]:
         loans_df[col] = pd.to_numeric(loans_df.get(col, 0), errors="coerce").fillna(0)
 
+    # ✅ THE FIX: Convert end_date from string to date objects
+    if "end_date" in loans_df.columns:
+        loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors='coerce').dt.date
+
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
     # STATUS LOGIC
-    loans_df["status"] = loans_df.get("status", "").astype(str).str.upper().str.strip()
-
     from datetime import date
 
     def determine_status(row):
-        """
-        Logic based on ledger requirements:
-        - CLEARED: Total paid >= Total repayable (Soft Green)
-        - BCF: Past deadline AND Zero payment (Soft Orange)
-        - PENDING: Deadline not passed OR Partial payment (Soft Red)
-        """
         today = date.today()
         paid = row.get("amount_paid", 0)
         total = row.get("total_repayable", 0)
@@ -1240,12 +1236,11 @@ def show_loans():
             return "CLEARED"
 
         # 🟠 LOGIC 2: BCF (Soft Orange)
-        # Passed deadline with zero money collected
+        # Now that end_date is a date object, this comparison will work!
         if end_date and today > end_date and paid == 0:
             return "BCF"
 
         # 🔴 LOGIC 3: PENDING (Soft Red)
-        # Still within time or has partial payments but not cleared
         return "PENDING"
 
     # Apply the status function
@@ -1254,17 +1249,17 @@ def show_loans():
     # Final logic cleanup: Ensure balance is 0 for Cleared loans
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
-    # ==============================
-    # 🎨 COLOR MAPPING (SOFT THEME)
-    # ==============================
     def style_status(val):
-        if val == "CLEARED":
-            return "background-color: #C6F6D5; color: #22543D;" # Soft Green
-        elif val == "BCF":
-            return "background-color: #FEEBC8; color: #744210;" # Soft Orange
-        elif val == "PENDING":
-            return "background-color: #FED7D7; color: #822727;" # Soft Red
-        return ""
+    if val == "CLEARED":
+        return "background-color: #C6F6D5; color: #22543D;" # Soft Green
+    elif val == "BCF":
+        return "background-color: #FEEBC8; color: #744210;" # Soft Orange
+    elif val == "PENDING":
+        return "background-color: #FED7D7; color: #822727;" # Soft Red
+    return ""
+
+    # How to display it in your view:
+    st.dataframe(loans_df.style.applymap(style_status, subset=['status']), use_container_width=True)
 
     # Note: Use st.dataframe(loans_df.style.applymap(style_status, subset=['status'])) to display
     # --- RETURN TO PREVIOUS MARGIN ---
