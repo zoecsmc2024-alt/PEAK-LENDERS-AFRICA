@@ -1342,39 +1342,41 @@ def show_loans():
     ])
 
     # ==============================
-    # TAB: PORTFOLIO VIEW
-    # ==============================
-    with tab_view:
-        search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
+# TAB: PORTFOLIO VIEW
+# ==============================
+with tab_view:
+    search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
 
-        filtered_loans = loans_df.copy()
-        if search_query:
-            filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
+    filtered_loans = loans_df.copy()
+    if search_query:
+        filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
 
-        if filtered_loans.empty:
-            st.warning("No matching loans found.")
-        else:
-            show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
-            
-            def style_entire_row(row):
-                val = str(row["status"]).upper().strip()
-                color_map = {
-                    "ACTIVE": "", 
-                    "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", 
-                    "CLOSED": "background-color: #f3f4f6; color: #374151;",
-                    "CLEARED": "background-color: #d1fae5; color: #065f46;", 
-                    "BCF": "background-color: #ffedd5; color: #9a3412;" # Soft Orange
-                }
-                color = color_map.get(val, "")
-                return [color] * len(row) 
+    if filtered_loans.empty:
+        st.warning("No matching loans found.")
+    else:
+        show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
+        
+        def style_entire_row(row):
+            val = str(row["status"]).upper().strip()
+            color_map = {
+                # 🔵 LUXE BLUE FOR ACTIVE (Midnight Trust Theme)
+                "ACTIVE": "background-color: #e0f2fe; color: #075985; font-weight: 500;", 
+                
+                "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", 
+                "CLOSED": "background-color: #f3f4f6; color: #374151;",
+                "CLEARED": "background-color: #d1fae5; color: #065f46;", 
+                "BCF": "background-color: #ffedd5; color: #9a3412;" # Soft Orange
+            }
+            color = color_map.get(val, "")
+            return [color] * len(row) 
 
-            styled_df = filtered_loans[show_cols].style.format({
-                "principal": "{:,.0f}", 
-                "total_repayable": "{:,.0f}", 
-                "balance": "{:,.0f}"
-            }).apply(style_entire_row, axis=1) 
+        styled_df = filtered_loans[show_cols].style.format({
+            "principal": "{:,.0f}", 
+            "total_repayable": "{:,.0f}", 
+            "balance": "{:,.0f}"
+        }).apply(style_entire_row, axis=1) 
 
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ==============================
     # TAB: NEW LOAN
