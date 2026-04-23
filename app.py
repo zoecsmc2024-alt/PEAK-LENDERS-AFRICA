@@ -705,20 +705,25 @@ def login_page(supabase):
 # 🔒 ROUTER
 # ==============================
 def run_auth_ui(supabase):
-    restore_login_from_browser()  # 🔥 IMPORTANT
+    restore_login_from_browser()
 
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
+    # ✅ IF LOGGED IN → SHOW APP
     if st.session_state.get("authenticated"):
         st.success(f"Welcome {st.session_state.get('user_name','User')}")
 
         if st.button("Logout"):
-            clear_login_from_browser()  # 🔥 CLEAR STORAGE
+            clear_login_from_browser()
             st.session_state.clear()
             st.rerun()
+
+        # 🔥 👉 THIS IS WHAT YOU WERE MISSING
+        show_main_app()   # <-- YOUR DASHBOARD FUNCTION
         return
 
+    # 🔐 AUTH SCREENS
     if st.session_state["view"] == "login":
         login_page(supabase)
     elif st.session_state["view"] == "signup":
