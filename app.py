@@ -1313,21 +1313,28 @@ def show_loans():
     ])
 
     # ==============================
-# UI TABS INITIALIZATION (Fixes NameError)
 # ==============================
-tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-    "📂 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
-])
+    # UI TABS INITIALIZATION
+    # ==============================
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+        "📂 Portfolio View","➕ New Loan","🛠️ Manage/Edit","⚙️ Actions"
+    ])
 
-# ==============================
-# TAB: PORTFOLIO VIEW
-# ==============================
-with tab_view:
-    search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
+    # ==============================
+    # PORTFOLIO VIEW
+    # ==============================
+    with tab_view:
+        search_query = st.text_input("🔍 Search Loan / Borrower")
 
-    filtered_loans = loans_df.copy()
-    if search_query:
-        filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
+        filtered_loans = loans_df.copy()
+        if search_query:
+            filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
+
+        show_cols = [
+            "sn", "loan_id_label", "borrower", "cycle_no",
+            "principal", "total_repayable", "balance",
+            "start_date", "end_date", "status"
+        ]
 
     if filtered_loans.empty:
         st.warning("No matching loans found.")
