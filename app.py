@@ -1221,28 +1221,29 @@ def show_loans():
     # STATUS LOGIC
     loans_df["status"] = loans_df.get("status", "").astype(str).str.upper().str.strip()
 
+    from datetime import date
+
     def determine_status(row):
-        # Everything inside the function must be indented 4 spaces
-        current_status = row["status"]
-        balance = row["balance"]
-        paid = row["amount_paid"]
+        # Everything inside the function MUST be indented 4 spaces
+        today = date.today()
+        amount_to_pay = row.get("amount_to_be_paid", 0)
+        paid = row.get("amount_paid", 0)
+        payment_date = row.get("payment_date")
 
-        # 🛡️ Never touch BCF (historical truth)
-        if current_status == "BCF":
-            return "BCF"
-
-        # ✅ Fully paid = CLEARED (highest truth)
-        if balance <= 0:
+        # ✅ Fully paid
+        if paid >= amount_to_pay:
             return "CLEARED"
 
-        # 🟡 No payment yet → still pending
-        if paid == 0:
-            return "PENDING"
+        # 🔴 Overdue and unpaid → BCF
+        # Ensure payment_date is actually a date object for comparison
+        if payment_date and today > payment_date and paid == 0:
+            return "BCF"
 
-        # 🔵 Partial payment → active loan
-        return "ACTIVE"
+        # 🟡 Not yet due → Pending
+        return "PENDING"
 
-    # Now move back to the previous indentation level to run the code
+    # --- RETURN TO PREVIOUS MARGIN ---
+    # Now run the logic using the function defined above
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
