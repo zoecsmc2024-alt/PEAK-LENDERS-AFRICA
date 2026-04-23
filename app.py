@@ -911,28 +911,26 @@ from datetime import datetime
 def show_borrowers():
 
     # ==============================
-    # 🎨 BRAND
+    # 🎨 BRANDING & THEME
     # ==============================
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f"<h2 style='color:{brand_color};'>🚀 Borrowers</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color:{brand_color};'>🚀 Borrowers Registry</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # 🔐 TENANT
+    # 🔐 TENANT SESSION CHECK
     # ==============================
     tenant_id = st.session_state.get("tenant_id")
     if not tenant_id:
-        st.error("Session expired")
+        st.error("Session expired. Please log in again.")
         st.stop()
 
     # ==============================
-    # 🧠 SAFE HELPERS (CORRECTLY NESTED)
+    # 🧠 SAFE HELPERS (INTERNAL)
     # ==============================
     def safe_df(df):
-        """Ensures we always have a DataFrame object to avoid 'NoneType' errors."""
         return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
     def safe_numeric(df, col, default=0.0):
-        """Standardizes columns to numeric Series, handling missing data safely."""
         if not isinstance(df, pd.DataFrame) or df.empty:
             return pd.Series(dtype="float64")
         if col in df.columns:
@@ -941,37 +939,30 @@ def show_borrowers():
             s = pd.Series([default] * len(df), index=df.index)
         return s.fillna(default)
 
-    def force_series(x, length=0, default=0):
-        """Guarantees a pandas Series output regardless of input type."""
-        if isinstance(x, pd.Series):
-            return x
-        return pd.Series([default] * length)
-
     # ==============================
-    # 📥 LOAD DATA
+    # 📥 LOAD & NORMALIZE DATA
     # ==============================
     borrowers_df = safe_df(get_cached_data("borrowers"))
     loans_df = safe_df(get_cached_data("loans"))
 
-    # Normalize columns
+    # Force lowercase column names for consistency
     for df in [borrowers_df, loans_df]:
         if not df.empty:
             df.columns = df.columns.str.strip().str.lower()
 
-    # Tenant filter
+    # Apply Tenant Filters
     if "tenant_id" in borrowers_df.columns:
         borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(tenant_id)]
-
     if "tenant_id" in loans_df.columns:
         loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
 
-    # Ensure borrower structure
-    for col in ["id", "name", "phone", "email", "status"]:
+    # Ensure required structural columns exist
+    for col in ["id", "name", "phone", "email", "status", "national_id", "next_of_kin"]:
         if col not in borrowers_df.columns:
             borrowers_df[col] = ""
 
     # ==============================
-    # 🔥 LOAN ENGINE (LINKED)
+    # 🔥 REAL-TIME RISK ENGINE
     # ==============================
     risk_map = {}
     if not loans_df.empty:
@@ -979,34 +970,31 @@ def show_borrowers():
         loans_df["due_date"] = pd.to_datetime(loans_df.get("due_date"), errors="coerce")
 
         today = pd.Timestamp.today()
+        # Calculate days overdue only for loans with a remaining balance
         loans_df["days_overdue"] = (today - loans_df["due_date"]).dt.days
         loans_df["days_overdue"] = loans_df["days_overdue"].apply(lambda x: x if x > 0 else 0)
         loans_df["is_overdue"] = (loans_df["days_overdue"] > 0) & (loans_df["balance"] > 0)
 
-        # Aggregate by borrower_id
+        # Aggregate risk metrics per borrower
         risk_df = loans_df.groupby("borrower_id").agg({
             "balance": "sum",
             "is_overdue": "sum",
             "days_overdue": "max"
         }).reset_index()
 
-        risk_df.rename(columns={
-            "balance": "exposure",
-            "is_overdue": "overdue_loans",
-            "days_overdue": "max_days"
-        }, inplace=True)
+        risk_df.rename(columns={"balance": "exposure", "is_overdue": "overdue_count", "days_overdue": "max_days"}, inplace=True)
 
-        def classify(row):
-            if row["overdue_loans"] == 0: return "🟢 Healthy"
+        def classify_risk(row):
+            if row["overdue_count"] == 0: return "🟢 Healthy"
             elif row["max_days"] <= 7: return "🟡 Watch"
             elif row["max_days"] <= 30: return "🟠 Risk"
             else: return "🔴 Critical"
 
-        risk_df["risk"] = risk_df.apply(classify, axis=1)
+        risk_df["risk_label"] = risk_df.apply(classify_risk, axis=1)
         risk_map = risk_df.set_index("borrower_id").to_dict("index")
 
     # ==============================
-    # 📑 UI TABS
+    # 📑 UI NAVIGATION
     # ==============================
     tab_view, tab_add = st.tabs(["📋 View Borrowers", "➕ Add Borrower"])
 
@@ -1024,35 +1012,27 @@ def show_borrowers():
             if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
                 if name and phone:
                     new_id = str(uuid.uuid4())
-                    t_id = st.session_state.get('tenant_id', 'test-tenant-123')
                     new_entry = pd.DataFrame([{
                         "id": new_id, "name": name, "phone": phone, "email": email,
                         "national_id": nid, "address": addr, "next_of_kin": nok,
-                        "status": "Active", "tenant_id": t_id 
+                        "status": "Active", "tenant_id": str(tenant_id)
                     }])
                     if save_data("borrowers", new_entry):
-                        st.success(f"✅ {name} registered!")
+                        st.success(f"✅ {name} registered successfully!")
                         st.rerun()
                 else:
-                    st.error("⚠️ Please fill in Name and Phone Number.")
+                    st.error("⚠️ Full Name and Phone Number are required.")
 
     with tab_view:
-        # ==============================
-        # 🔍 SEARCH
-        # ==============================
-        search = st.text_input("🔍 Search name / phone").lower()
+        # 🔍 SEARCH BAR
+        search = st.text_input("🔍 Search by name or phone...").lower()
 
-        # ==============================
-        # 📊 TABLE VIEW
-        # ==============================
+        # 📊 BEAUTIFIED TABLE
         if not borrowers_df.empty:
             df_to_show = borrowers_df.copy()
-            df_to_show["name"] = df_to_show["name"].astype(str)
-            df_to_show["phone"] = df_to_show["phone"].astype(str)
-            # Ensure new columns exist for string conversion
-            for col in ["national_id", "next_of_kin"]:
-                if col in df_to_show.columns:
-                    df_to_show[col] = df_to_show[col].astype(str)
+            # String conversion for search stability
+            for col in ["name", "phone", "national_id", "next_of_kin"]:
+                df_to_show[col] = df_to_show[col].astype(str)
 
             mask = (
                 df_to_show["name"].str.lower().str.contains(search, na=False) |
@@ -1063,103 +1043,96 @@ def show_borrowers():
             if not filtered_df.empty:
                 rows_html = ""
                 for i, r in filtered_df.reset_index().iterrows():
-                    bg_color = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                    zebra_striping = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
                     b_id = str(r.get("id", ""))
                     
-                    # Risk Logic
-                    risk = risk_map.get(b_id, {})
-                    risk_label = risk.get("risk", "🟢 Healthy")
+                    # Risk Badge Logic
+                    risk_data = risk_map.get(b_id, {})
+                    label = risk_data.get("risk_label", "🟢 Healthy")
                     
-                    if "🔴" in risk_label: color = "#dc2626"
-                    elif "🟠" in risk_label: color = "#ea580c"
-                    elif "🟡" in risk_label: color = "#f59e0b"
-                    else: color = "#16a34a"
+                    if "🔴" in label: badge_color = "#EF4444"
+                    elif "🟠" in label: badge_color = "#F97316"
+                    elif "🟡" in label: badge_color = "#F59E0B"
+                    else: badge_color = "#10B981"
 
                     rows_html += f"""
-                    <tr style="background-color: {bg_color}; border-bottom: 1px solid #ddd;">
-                        <td style="padding:12px;"><b>{r.get('name', 'Unknown')}</b></td>
-                        <td style="padding:12px;">{r.get('phone', 'N/A')}</td>
-                        <td style="padding:12px; font-size:11px; color:#666;">{r.get('national_id', 'N/A')}</td>
-                        <td style="padding:12px; font-size:11px;">{r.get('next_of_kin', 'N/A')}</td>
+                    <tr style="background-color: {zebra_striping}; border-bottom: 1px solid #E2E8F0;">
+                        <td style="padding:12px; font-weight:600; color:#1E293B;">{r['name']}</td>
+                        <td style="padding:12px;">{r['phone']}</td>
+                        <td style="padding:12px; font-family:monospace; color:#64748B;">{r['national_id']}</td>
+                        <td style="padding:12px; font-size:11px;">{r['next_of_kin']}</td>
                         <td style="padding:12px;">
-                            <span style="background:{color}; color:white; padding:3px 8px; border-radius:12px; font-size:11px;">
-                                {risk_label}
+                            <span style="background:{badge_color}; color:white; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600;">
+                                {label}
                             </span>
                         </td>
                         <td style="padding:12px; text-align:center;">
-                            <span style="background:{brand_color}; color:white; padding:3px 8px; border-radius:12px; font-size:10px;">
-                                {r.get('status', 'Active')}
+                            <span style="background:{brand_color}22; color:{brand_color}; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:700; border:1px solid {brand_color}44;">
+                                {str(r['status']).upper()}
                             </span>
                         </td>
                     </tr>"""
 
                 st.markdown(f"""
-                <div style='border:2px solid {brand_color}33; border-radius:10px; overflow:hidden; margin-top:20px;'>
-                    <table style='width:100%; border-collapse:collapse; font-family:sans-serif; font-size:13px;'>
+                <div style='border:1px solid #E2E8F0; border-radius:12px; overflow:hidden; margin-top:10px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);'>
+                    <table style='width:100%; border-collapse:collapse; font-family:Inter, sans-serif; font-size:13px;'>
                         <thead>
                             <tr style='background:{brand_color}; color:white; text-align:left;'>
-                                <th style='padding:12px;'>Borrower Name</th>
-                                <th style='padding:12px;'>Phone</th>
-                                <th style='padding:12px;'>National ID</th>
-                                <th style='padding:12px;'>Next of Kin</th>
-                                <th style='padding:12px;'>Risk Status</th>
-                                <th style='padding:12px; text-align:center;'>Status</th>
+                                <th style='padding:14px;'>Borrower Name</th>
+                                <th style='padding:14px;'>Phone</th>
+                                <th style='padding:14px;'>National ID</th>
+                                <th style='padding:14px;'>Next of Kin</th>
+                                <th style='padding:14px;'>Risk Status</th>
+                                <th style='padding:14px; text-align:center;'>Status</th>
                             </tr>
                         </thead>
                         <tbody>{rows_html}</tbody>
                     </table>
                 </div>""", unsafe_allow_html=True)
 
-                # ==============================
-                # 🖱️ SELECTION INTERACTION
-                # ==============================
+                # 🖱️ SELECTION & MANAGEMENT
                 st.write("")
                 selected_name = st.selectbox(
-                    "🎯 Select a borrower to manage profile:", 
-                    options=["-- Select --"] + filtered_df["name"].tolist()
+                    "🎯 Management Actions:", 
+                    options=["-- Select a borrower to edit/view profile --"] + filtered_df["name"].tolist()
                 )
-                if selected_name != "-- Select --":
+                if selected_name != "-- Select a borrower to edit/view profile --":
                     sel_id = filtered_df[filtered_df["name"] == selected_name]["id"].values[0]
                     st.session_state["selected_borrower"] = sel_id
                 
             else:
-                st.info("No borrowers found matching your search.")
+                st.info("No records match your search criteria.")
         else:
-            st.info("No borrowers registered yet.")
+            st.info("The registry is currently empty.")
 
     # ==============================
-    # 👤 BORROWER PROFILE PANEL
+    # 👤 BORROWER PROFILE PANEL (EXPANDED)
     # ==============================
     selected_id = st.session_state.get("selected_borrower")
 
     if selected_id:
         st.write("---")
-        st.markdown("## 👤 Borrower Profile")
+        st.markdown(f"### 👤 Profile Detail: {selected_id[:8]}")
 
         borrower_query = borrowers_df[borrowers_df["id"].astype(str) == str(selected_id)]
 
-        if borrower_query.empty:
-            st.warning("Borrower not found")
-        else:
-            borrower = borrower_query.iloc[0] if not df.empty else None if not df.empty else None
+        if not borrower_query.empty:
+            borrower = borrower_query.iloc[0]
 
             with st.container(border=True):
                 c1, c2 = st.columns(2)
-                name = c1.text_input("Name", borrower["name"])
-                phone = c2.text_input("Phone", borrower["phone"])
-                email = c1.text_input("Email", borrower["email"])
+                upd_name = c1.text_input("Name", borrower["name"])
+                upd_phone = c2.text_input("Phone", borrower["phone"])
+                upd_email = c1.text_input("Email", borrower["email"])
+                upd_nid = c2.text_input("National ID", borrower.get("national_id", ""))
                 
-                # New inputs for ID and Next of Kin
                 c3, c4 = st.columns(2)
-                nid = c3.text_input("National ID", borrower.get("national_id", ""))
-                nok = c4.text_input("Next of Kin", borrower.get("next_of_kin", ""))
+                upd_nok = c3.text_input("Next of Kin", borrower.get("next_of_kin", ""))
+                upd_addr = c4.text_input("Address", borrower.get("address", ""))
 
-                # ==============================
-                # 📊 LOANS LINKED (CLEAN VIEW)
-                # ==============================
+                # 📊 NESTED LOAN HISTORY
+                st.markdown("#### 💳 Loan Statement")
                 user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy()
-
-                st.markdown("### 📊 Loan History")
 
                 if not user_loans.empty:
                     st.dataframe(
@@ -1167,50 +1140,48 @@ def show_borrowers():
                         use_container_width=True,
                         hide_index=True,
                         column_config={
-                            "id": None, "tenant_id": None, "borrower_id": None, 
-                            "created_at": None, "type": None, "borrower_name": None,
-                            "status_new": None, "due_date": None, "days_overdue": None, "is_overdue": None,
-                            "national_id": None, "next_of_kin": None, # Hide in loan history
-
-                            "principal": st.column_config.NumberColumn("Principal", format="%,d"),
-                            "interest": st.column_config.NumberColumn("Interest", format="%,d"),
-                            "total_repayable": st.column_config.NumberColumn("Total Due", format="%,d"),
-                            "amount_paid": st.column_config.NumberColumn("Paid", format="%,d"),
-                            "balance": st.column_config.NumberColumn("Balance", format="%,d"),
-                            
-                            "start_date": st.column_config.DateColumn("Started"),
+                            "id": None, "tenant_id": None, "borrower_id": None, "borrower_name": None,
+                            "principal": st.column_config.NumberColumn("Principal", format="%,d UGX"),
+                            "balance": st.column_config.NumberColumn("Balance", format="%,d UGX"),
+                            "total_repayable": st.column_config.NumberColumn("Total Due", format="%,d UGX"),
+                            "start_date": st.column_config.DateColumn("Date Issued"),
                             "end_date": st.column_config.DateColumn("Due Date"),
                         }
                     )
                     
-                    # Export Button 
+                    # Statement Export
                     csv = user_loans.to_csv(index=False).encode('utf-8')
                     st.download_button(
-                        label="📥 Export Loan Statement (CSV)",
+                        label="📥 Download Statement (CSV)",
                         data=csv,
-                        file_name=f"Statement_{name.replace(' ', '_')}.csv",
+                        file_name=f"Statement_{upd_name.replace(' ', '_')}.csv",
                         mime="text/csv",
                     )
                 else:
-                    st.info("No loans found for this borrower")
-                # ==============================
-                # 🛠️ ACTIONS
-                # ==============================
-                st.write("---")
-                act_c1, act_c2 = st.columns(2)
+                    st.info("This borrower has no loan history.")
 
-                if act_c1.button("💾 Update Borrower", use_container_width=True):
-                    borrowers_df.loc[borrowers_df["id"].astype(str) == str(selected_id), ["name","phone","email"]] = [name, phone, email]
+                # 🛠️ ACTION BUTTONS
+                st.write("---")
+                act_c1, act_c2, act_c3 = st.columns([1, 1, 2])
+
+                if act_c1.button("💾 Save Changes", use_container_width=True):
+                    borrowers_df.loc[borrowers_df["id"].astype(str) == str(selected_id), 
+                        ["name","phone","email","national_id","next_of_kin","address"]] = \
+                        [upd_name, upd_phone, upd_email, upd_nid, upd_nok, upd_addr]
                     if save_data("borrowers", borrowers_df):
-                        st.success("Updated")
+                        st.success("Profile Updated")
                         st.rerun()
 
-                if act_c2.button("🗑️ Delete Borrower", use_container_width=True):
+                if act_c2.button("🗑️ Delete", use_container_width=True):
                     updated = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
                     if save_data("borrowers", updated):
-                        st.warning("Deleted")
+                        st.warning("Profile Removed")
                         st.session_state.pop("selected_borrower", None)
                         st.rerun()
+                
+                if act_c3.button("❌ Close Profile", use_container_width=True):
+                    st.session_state.pop("selected_borrower", None)
+                    st.rerun()
 
 # ==============================
 # 🔐 SAAS TENANT CONTEXT (HARDENED)
