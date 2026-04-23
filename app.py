@@ -2699,7 +2699,7 @@ def show_overdue_tracker():
             st.info("No selectable records.")
 
 # ==============================
-# 20. PAYROLL MANAGEMENT PAGE (SAAS VERSION)
+# 20. payroll MANAGEMENT PAGE (SAAS VERSION)
 # ==============================
 
 def show_payroll():
@@ -2721,12 +2721,12 @@ def show_payroll():
         st.error("Session expired. Please log in.")
         st.stop()
 
-    st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #4A90E2;'>🧾 payroll Management</h2>", unsafe_allow_html=True)
 
     # 1. SYNC COLUMNS - Match lowercase table name 'payroll'
     df_raw = get_cached_data("payroll")
     required_columns = [
-        "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
+        "payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
         "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
         "PAYE", "NSSF_5", "Advance_DRS", "Other_Deductions", "Net_Pay", 
         "NSSF_10", "NSSF_15", "Date", "tenant_id" 
@@ -2777,7 +2777,7 @@ def show_payroll():
             "n10": round(n10), "n15": round(n15), "paye": round(paye), "net": round(net)
         }
 
-    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 Payroll History"])
+    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 payroll History"])
 
     with tab_process:
         with st.form("new_payroll_form", clear_on_submit=True):
@@ -2793,7 +2793,7 @@ def show_payroll():
                 if name and f_basic > 0:
                     calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
                     new_row = pd.DataFrame([{
-                        "Payroll_ID": int(df_all["Payroll_ID"].max() + 1) if not df_all.empty else 1,
+                        "payroll_ID": int(df_all["payroll_ID"].max() + 1) if not df_all.empty else 1,
                         "Employee": name, "TIN": f_tin, "Designation": f_desig, "Mob_No": f_mob,
                         "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
                         "Basic_Salary": f_basic, "Absent_Deduction": f_absent,
@@ -2811,7 +2811,7 @@ def show_payroll():
                     final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
                     
                     if save_data("payroll", final_save_df):
-                        st.success(f"✅ Payroll for {name} saved successfully!")
+                        st.success(f"✅ payroll for {name} saved successfully!")
                         st.rerun()
 
     with tab_logs:
@@ -2878,7 +2878,7 @@ def show_payroll():
             <body>
                 <div style="text-align:center; border-bottom:3px solid #2B3F87; margin-bottom:20px;">
                     <h1 style="color:#2B3F87;">ZOE CONSULTS SMC LTD</h1>
-                    <p><b>PAYROLL REPORT - {datetime.now().strftime('%B %Y')}</b></p>
+                    <p><b>payroll REPORT - {datetime.now().strftime('%B %Y')}</b></p>
                 </div>
                 <table>
                     <thead>
@@ -2898,23 +2898,23 @@ def show_payroll():
             st.components.v1.html(printable_html, height=600, scrolling=True)
 
             csv_text = df.to_csv(index=False).encode('utf-8')
-            st.download_button("📄 Download CSV Backup", data=csv_text, file_name="Payroll_Zoe.csv", mime="text/csv")
+            st.download_button("📄 Download CSV Backup", data=csv_text, file_name="payroll_Zoe.csv", mime="text/csv")
             
             st.write("---")
             with st.expander("⚙️ Modify / Delete Record"):
-                pay_opts = [f"{r['Employee']} (ID: {r['Payroll_ID']})" for _, r in df.iterrows()]
+                pay_opts = [f"{r['Employee']} (ID: {r['payroll_ID']})" for _, r in df.iterrows()]
                 if pay_opts:
                     sel_opt = st.selectbox("Select Record to Manage", pay_opts, key="payroll_edit_selectbox")
                     try:
                         sid = str(sel_opt.split("(ID: ")[1].replace(")", ""))
-                        item = df[df['Payroll_ID'].astype(str) == sid].iloc[0]
+                        item = df[df['payroll_ID'].astype(str) == sid].iloc[0]
                         st.text_input("Edit Name (Preview)", value=str(item['Employee']), disabled=True)
                         st.info("Direct modification locked. Delete and re-process for errors.")
                         if st.button("🗑️ Delete This Record", use_container_width=True):
-                            df_new = df_all[df_all['Payroll_ID'].astype(str) != sid]
+                            df_new = df_all[df_all['payroll_ID'].astype(str) != sid]
                             df_new.columns = [c.replace("_", " ") for c in df_new.columns]
                             if save_data("payroll", df_new):
-                                st.warning("Payroll record deleted.")
+                                st.warning("payroll record deleted.")
                                 st.rerun()
                     except Exception as e:
                         st.error(f"Selection error: {e}")
@@ -3829,7 +3829,7 @@ if __name__ == "__main__":
                 show_petty_cash()
             elif page == "Overdue Tracker":
                 show_overdue_tracker()
-            elif page == "Payroll":
+            elif page == "payroll":
                 show_payroll()
             elif page == "Reports":
                 show_reports() # This will now call your developed module
