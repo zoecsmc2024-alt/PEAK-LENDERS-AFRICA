@@ -703,9 +703,6 @@ def login_page(supabase):
         except Exception as e:
             st.error(f"Login failed: {e}")
 
-# ==============================
-# 🔒 ROUTER
-# ==============================
 def run_auth_ui(supabase):
     restore_login_from_browser()
 
@@ -725,17 +722,13 @@ def run_auth_ui(supabase):
         return
 
     # ======================
-    # 🚀 LOGGED IN (DO NOTHING HERE)
+    # 🚀 LOGGED IN → DO NOTHING HERE
     # ======================
+    # IMPORTANT: NO RETURN HERE
+
     return
 
-    # 🔐 AUTH SCREENS
-    if st.session_state["view"] == "login":
-        login_page(supabase)
-    elif st.session_state["view"] == "signup":
-        view_staff_signup(supabase)
-    elif st.session_state["view"] == "create_company":
-        admin_company_registration(supabase)
+
 def render_sidebar():
     # ==============================
     # 1. FETCH TENANTS (UNCHANGED)
