@@ -1339,43 +1339,56 @@ def show_loans():
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     # ==============================
-    # NEW LOAN
+    # TAB: NEW LOAN
     # ==============================
     with tab_add:
-        if not Active_borrowers.empty:
+        if Active_borrowers.empty:
+            st.info("💡 Tip: Activate a borrower first.")
+        else:
             with st.form("loan_issue_form"):
+                st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
+                col1, col2 = st.columns(2)
+                
                 borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
-                selected_name = st.selectbox("Borrower", list(borrower_map.keys()))
-                selected_id = borrower_map[selected_name]
+                selected_name = col1.selectbox("Select Borrower", options=list(borrower_map.keys()))
+                selected_id = borrower_map.get(selected_name)
+                
+                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
+                date_issued = col1.date_input("Start Date", value=datetime.now())
+                
+                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
+                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
+                date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                amount = st.number_input("Amount", min_value=0)
-                rate = st.number_input("Interest %", min_value=0.0)
-                start = st.date_input("Start")
-                due = st.date_input("Due")
+                total_due = amount + ((interest_rate / 100) * amount)
+                st.info(f"Preview: Total Repayable will be {total_due:,.0f} UGX")
 
-                if st.form_submit_button("Create Loan"):
-                    group_id = str(uuid.uuid4())
-
-                    new = {
-                        "loan_group_id": group_id,
-                        "loan_id_label": str(len(loans_df)+1),
-                        "borrower_id": selected_id,
-                        "principal": amount,
-                        "interest": amount*(rate/100),
-                        "total_repayable": amount+(amount*(rate/100)),
-                        "amount_paid":0,
-                        "status":"ACTIVE",
-                        "cycle_no":1,
-                        "start_date":str(start),
-                        "end_date":str(due),
-                        "tenant_id":get_current_tenant()
+                # The submit button and logic MUST stay inside the 'with st.form' block
+                if st.form_submit_button("🚀 Confirm & Issue Loan"):
+                    next_sn_value = len(loans_df) + 1 
+                    
+                    loan_data = {
+                        "sn": next_sn_value,
+                        "loan_id_label": str(next_sn_value).zfill(5),
+                        "borrower_id": str(selected_id),
+                        "loan_type": l_type,
+                        "principal": float(amount),
+                        "interest": float((interest_rate/100)*amount),
+                        "total_repayable": float(total_due),
+                        "amount_paid": 0.0,
+                        "status": "ACTIVE",
+                        "start_date": str(date_issued),
+                        "end_date": str(date_due),
+                        "tenant_id": str(get_current_tenant())
                     }
-
-                    save_data("loans", pd.DataFrame([new]))
-                    st.rerun()
+                    
+                    if save_data("loans", pd.DataFrame([loan_data])):
+                        st.success(f"✅ Success! Loan {next_sn_value:05d} issued.")
+                        st.cache_data.clear()
+                        st.rerun()
 
     # ==============================
-    # ROLLOVER
+    # TAB: ACTIONS (ROLLOVER)
     # ==============================
     with tab_actions:
         eligible = loans_df[(loans_df["balance"]>0) & (~loans_df["status"].isin(["CLEARED","BCF"]))]
