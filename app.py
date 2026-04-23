@@ -19,15 +19,47 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 import uuid
-from streamlit_cookies_manager import EncryptedCookieManager
+import streamlit.components.v1 as components
 
-cookies = EncryptedCookieManager(
-    prefix="finance_app",
-    password="super_secret_key_123"
-)
+def save_login_to_browser(user_id, tenant_id):
+    components.html(f"""
+    <script>
+    localStorage.setItem("user_id", "{user_id}");
+    localStorage.setItem("tenant_id", "{tenant_id}");
+    </script>
+    """, height=0)
 
-if not cookies.ready():
-    st.stop()
+def clear_login_from_browser():
+    components.html("""
+    <script>
+    localStorage.removeItem("user_id");
+    localStorage.removeItem("tenant_id");
+    </script>
+    """, height=0)
+
+def restore_login_from_browser():
+    if "authenticated" not in st.session_state:
+        components.html("""
+        <script>
+        const user_id = localStorage.getItem("user_id");
+        const tenant_id = localStorage.getItem("tenant_id");
+
+        if (user_id && tenant_id) {
+            const url = new URL(window.location);
+            url.searchParams.set("user_id", user_id);
+            url.searchParams.set("tenant_id", tenant_id);
+            window.location.href = url.toString();
+        }
+        </script>
+        """, height=0)
+
+        # Read from query params
+        params = st.query_params
+        if "user_id" in params and "tenant_id" in params:
+            st.session_state["authenticated"] = True
+            st.session_state["user_id"] = params["user_id"]
+            st.session_state["tenant_id"] = params["tenant_id"]
+
 # ==============================
 # 🔒 SAFETY: Ensure supabase always exists
 # ==============================
@@ -35,12 +67,34 @@ if "supabase" not in globals():
     supabase = None
 
 # 1. CORE DATA ENGINE (Must be at the top level)
-def restore_session():
+def restore_session(supabase):
     if "authenticated" not in st.session_state:
-        if cookies.get("user_id"):
-            st.session_state["authenticated"] = True
-            st.session_state["user_id"] = cookies.get("user_id")
-            st.session_state["tenant_id"] = cookies.get("tenant_id")
+        session = st.session_state.get("auth_session")
+
+        if session:
+            try:
+                user = supabase.auth.get_user(session.access_token)
+
+                if user and user.user:
+                    user_id = user.user.id
+
+                    user_data = supabase.table("users") \
+                        .select("*") \
+                        .eq("id", user_id) \
+                        .execute()
+
+                    if user_data.data:
+                        u = user_data.data[0]
+
+                        st.session_state.update({
+                            "authenticated": True,
+                            "user_id": user_id,
+                            "tenant_id": u["tenant_id"],
+                            "user_name": u["name"],
+                            "role": u["role"]
+                        })
+            except:
+                pass
 @st.cache_data(ttl=600)
 def get_cached_data_legacy(table_name):  # 🔥 renamed (NOT deleted)
     """Fetches and caches data from Supabase for all pages."""
@@ -628,6 +682,8 @@ def login_page(supabase):
                 st.error("Company name mismatch")
                 return
 
+            # Assuming this is inside your "if password_matches:" block
+        
             # ✅ SAVE SESSION
             st.session_state.update({
                 "authenticated": True,
@@ -637,22 +693,19 @@ def login_page(supabase):
                 "role": user["role"]
             })
 
-            # ✅ SAVE COOKIE (PERSIST LOGIN)
-            cookies["user_id"] = user_id
-            cookies["tenant_id"] = user["tenant_id"]
-            cookies.save()
+            # 🔥 SAVE TO BROWSER (THIS FIXES REFRESH)
+            save_login_to_browser(user_id, user["tenant_id"])
 
             st.rerun()
 
         except Exception as e:
             st.error(f"Login failed: {e}")
 
-
 # ==============================
 # 🔒 ROUTER
 # ==============================
 def run_auth_ui(supabase):
-    restore_session()
+    restore_login_from_browser()  # 🔥 IMPORTANT
 
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
@@ -661,8 +714,7 @@ def run_auth_ui(supabase):
         st.success(f"Welcome {st.session_state.get('user_name','User')}")
 
         if st.button("Logout"):
-            cookies.clear()
-            cookies.save()
+            clear_login_from_browser()  # 🔥 CLEAR STORAGE
             st.session_state.clear()
             st.rerun()
         return
