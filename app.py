@@ -1423,75 +1423,74 @@ def show_loans():
                         st.rerun()
 
     # ==============================
-    # TAB: ACTIONS (ROLLOVER)
-    # ==============================
-    with tab_actions:
-        st.markdown("<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>", unsafe_allow_html=True)
-        
-        eligible_loans = loans_df[
-            (~loans_df["status"].isin(["CLOSED", "CLEARED"])) & 
-            (loans_df["balance"] > 0)
-        ]
+# TAB: ACTIONS (ROLLOVER)
+# ==============================
+with tab_actions:
+    st.markdown("<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>", unsafe_allow_html=True)
+    
+    eligible_loans = loans_df[
+        (~loans_df["status"].isin(["CLOSED", "CLEARED"])) & 
+        (loans_df["balance"] > 0)
+    ]
 
-        if eligible_loans.empty:
-            st.success("All loans brought up to date! ✨")
-        else:
-            roll_map = {
-                f"{row['borrower']} • Cycle {row['cycle_no']} • Bal: {row['balance']:,.0f}": row["id"] 
-                for _, row in eligible_loans.iterrows()
+    if eligible_loans.empty:
+        st.success("All loans brought up to date! ✨")
+    else:
+        roll_map = {
+            f"{row['borrower']} • Cycle {row['cycle_no']} • Bal: {row['balance']:,.0f}": row["id"] 
+            for _, row in eligible_loans.iterrows()
+        }
+        roll_sel = st.selectbox("Select Loan to Roll Forward", list(roll_map.keys()))
+        loan_to_roll = eligible_loans[eligible_loans["id"] == roll_map[roll_sel]].iloc[0]
+
+        current_unpaid = float(loan_to_roll['balance'])
+        new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
+
+        if st.button("🔥 Execute Next Rollover", use_container_width=True):
+            try:
+                old_due_date = pd.to_datetime(loan_to_roll['end_date'])
+            except:
+                old_due_date = datetime.now()
+            
+            new_start = old_due_date.strftime("%Y-%m-%d")
+            new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
+
+            # ✅ STEP 1: FORCE PARENT STATUS TO BCF (RLS-SAFE)
+            # Properly indented to run inside the button click
+            parent_id = str(loan_to_roll['id'])
+
+            # Update locally first
+            loans_df.loc[loans_df["id"] == parent_id, "status"] = "BCF"
+
+            # Persist using your safe pipeline
+            save_data_saas("loans", loans_df)
+
+            # 🔍 DEBUG (Visible only during execution)
+            st.write(f"Updated Parent Loan {parent_id} → BCF")
+
+            # ✅ STEP 2: CREATE THE NEW CHILD CYCLE
+            calc_interest = current_unpaid * (new_interest_rate / 100)
+            
+            new_cycle_data = {
+                "sn": loan_to_roll['sn'],
+                "loan_id_label": str(loan_to_roll['sn']).zfill(5),
+                "borrower_id": loan_to_roll['borrower_id'],
+                "principal": current_unpaid,
+                "interest": calc_interest,
+                "total_repayable": current_unpaid + calc_interest,
+                "amount_paid": 0.0,
+                "status": "PENDING", # Newest cycle starts as PENDING
+                "cycle_no": int(loan_to_roll['cycle_no']) + 1,
+                "start_date": new_start,
+                "end_date": new_due,
+                "tenant_id": get_current_tenant()
             }
-            roll_sel = st.selectbox("Select Loan to Roll Forward", list(roll_map.keys()))
-            loan_to_roll = eligible_loans[eligible_loans["id"] == roll_map[roll_sel]].iloc[0]
 
-            current_unpaid = float(loan_to_roll['balance'])
-            new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
-
-            if st.button("🔥 Execute Next Rollover", use_container_width=True):
-                try:
-                    old_due_date = pd.to_datetime(loan_to_roll['end_date'])
-                except:
-                    old_due_date = datetime.now()
-                
-                new_start = old_due_date.strftime("%Y-%m-%d")
-                new_due = (old_due_date + timedelta(days=30)).strftime("%Y-%m-%d")
-
-                # ✅ STEP 1: FORCE PARENT STATUS TO BCF (RLS-SAFE)
-                # Properly indented to run inside the button click
-                parent_id = str(loan_to_roll['id'])
-
-                # Update locally first
-                loans_df.loc[loans_df["id"] == parent_id, "status"] = "BCF"
-
-                # Persist using your safe pipeline
-                save_data_saas("loans", loans_df)
-
-                # 🔍 DEBUG (Visible only during execution)
-                st.write(f"Updated Parent Loan {parent_id} → BCF")
-
-                # ✅ STEP 2: CREATE THE NEW CHILD CYCLE
-                calc_interest = current_unpaid * (new_interest_rate / 100)
-                
-                new_cycle_data = {
-                    "sn": loan_to_roll['sn'],
-                    "loan_id_label": str(loan_to_roll['sn']).zfill(5),
-                    "borrower_id": loan_to_roll['borrower_id'],
-                    "principal": current_unpaid,
-                    "interest": calc_interest,
-                    "total_repayable": current_unpaid + calc_interest,
-                    "amount_paid": 0.0,
-                    "status": "PENDING", # Newest cycle starts as PENDING
-                    "cycle_no": int(loan_to_roll['cycle_no']) + 1,
-                    "start_date": new_start,
-                    "end_date": new_due,
-                    "tenant_id": get_current_tenant()
-                }
-
-                # Save the new record and refresh
-                if save_data("loans", pd.DataFrame([new_cycle_data])):
-                    st.cache_data.clear() 
-                    st.success(f"✅ Cycle {int(loan_to_roll['cycle_no'])} rolled to Cycle {int(loan_to_roll['cycle_no']) + 1}!")
-                    st.rerun()
-
+            # Save the new record and refresh
+            if save_data("loans", pd.DataFrame([new_cycle_data])):
+                st.cache_data.clear() 
+                st.success(f"✅ Cycle {int(loan_to_roll['cycle_no'])} rolled to Cycle {int(loan_to_roll['cycle_no']) + 1}!")
+                st.rerun()
     # ==============================
     # TAB: MANAGE/EDIT
     # ==============================
