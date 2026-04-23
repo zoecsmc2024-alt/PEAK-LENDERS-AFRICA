@@ -579,19 +579,53 @@ def view_staff_signup(supabase):
 def login_page(supabase):
     st.markdown("## 🔐 Finance Portal Login")
     
-    # Use a container to keep the UI tight
     with st.container():
+        # --- 🏢 ADDED COMPANY NAME FIELD ---
+        company_name = st.text_input("Business Name").strip()
         email = st.text_input("Email").strip().lower()
         pwd = st.text_input("Password", type="password")
         
         # Access Dashboard Button
         if st.button("Access Dashboard", use_container_width=True, type="primary"):
-            # ... (Your existing login logic here)
-            pass
+            if not company_name or not email or not pwd:
+                st.error("Please fill in all fields.")
+            else:
+                try:
+                    # 1. Auth check
+                    auth_res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
+                    
+                    if auth_res.user:
+                        # 2. Fetch profile + linked company name
+                        user_query = supabase.table("users").select("*, tenants(name)").eq("id", auth_res.user.id).execute()
+
+                        if user_query.data:
+                            user = user_query.data[0]
+                            db_company = user.get("tenants", {}).get("name", "").strip().lower()
+
+                            # 3. Security: Check if company matches input
+                            if db_company != company_name.lower():
+                                st.error(f"Membership Error: User not found in '{company_name}'")
+                                return
+
+                            # 4. Set Session (Crucial for the Router)
+                            st.session_state.update({
+                                "authenticated": True,
+                                "logged_in": True,
+                                "user_id": user["id"],
+                                "tenant_id": user["tenant_id"],
+                                "company": user.get("tenants", {}).get("name"),
+                                "current_page": "Overview"  # Sets default page
+                            })
+                            st.success("Access Granted!")
+                            st.rerun()
+                        else:
+                            st.error("Profile mismatch. Please contact admin.")
+                except Exception as e:
+                    st.error(f"Login failed: {e}")
 
         st.markdown("---")
         
-        # navigation buttons for registration
+        # Signup Navigation
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🏢 Register Company", use_container_width=True):
@@ -601,7 +635,6 @@ def login_page(supabase):
             if st.button("🆕 Staff Signup", use_container_width=True):
                 st.session_state["view"] = "signup"
                 st.rerun()
-
 def run_auth_ui(supabase):
     # Ensure view state exists
     if "view" not in st.session_state:
