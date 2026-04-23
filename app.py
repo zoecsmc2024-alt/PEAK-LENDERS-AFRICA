@@ -695,8 +695,10 @@ def login_page(supabase):
 
             # 🔥 SAVE TO BROWSER (THIS FIXES REFRESH)
             save_login_to_browser(user_id, user["tenant_id"])
-
+            st.session_state["authenticated"] = True
+            st.session_state["logged_in"] = True
             st.rerun()
+            
 
         except Exception as e:
             st.error(f"Login failed: {e}")
@@ -710,18 +712,22 @@ def run_auth_ui(supabase):
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
-    # ✅ IF LOGGED IN → SHOW APP
-    if st.session_state.get("authenticated"):
-        st.success(f"Welcome {st.session_state.get('user_name','User')}")
-
-        if st.button("Logout"):
-            clear_login_from_browser()
-            st.session_state.clear()
-            st.rerun()
-
-        # 🔥 👉 THIS IS WHAT YOU WERE MISSING
-        show_main_app()   # <-- YOUR DASHBOARD FUNCTION
+    # ======================
+    # 🔐 NOT LOGGED IN
+    # ======================
+    if not st.session_state.get("authenticated"):
+        if st.session_state["view"] == "login":
+            login_page(supabase)
+        elif st.session_state["view"] == "signup":
+            view_staff_signup(supabase)
+        elif st.session_state["view"] == "create_company":
+            admin_company_registration(supabase)
         return
+
+    # ======================
+    # 🚀 LOGGED IN (DO NOTHING HERE)
+    # ======================
+    return
 
     # 🔐 AUTH SCREENS
     if st.session_state["view"] == "login":
@@ -911,25 +917,35 @@ def render_sidebar():
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # ==============================
-        # 🔐 LOGOUT
-        # ==============================
-        if st.session_state.get("authenticated"):
-            st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+# ==============================
+# 🔐 LOGOUT (FIXED)
+# ==============================
+if st.session_state.get("authenticated"):
+    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 
-            if st.button("🚪 Logout", use_container_width=True):
-                st.session_state["logged_in"] = False
-                st.session_state["authenticated"] = False
+    if st.button("🚪 Logout", use_container_width=True):
 
-                for key in list(st.session_state.keys()):
-                    if key not in ["theme_color", "logged_in", "authenticated"]:
-                        del st.session_state[key]
+        # 1. Clear browser persistence (IMPORTANT)
+        try:
+            clear_login_from_browser()  # if you added localStorage earlier
+        except:
+            pass
 
-                st.success("Logging out...")
-                time.sleep(0.5)
-                st.rerun()
+        # 2. Fully clear session state
+        keys_to_keep = ["theme_color"]
+        for key in list(st.session_state.keys()):
+            if key not in keys_to_keep:
+                del st.session_state[key]
 
-    return selected_page
+        # 3. Force reset flags
+        st.session_state["logged_in"] = False
+        st.session_state["authenticated"] = False
+
+        st.success("Logging out...")
+        time.sleep(0.5)
+        st.rerun()
+
+
 
 # ==============================
 # 🚀 BORROWERS ENGINE (PRODUCTION)
