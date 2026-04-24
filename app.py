@@ -326,24 +326,46 @@ def get_cached_data(table_name):  # ✅ MAIN FUNCTION
 def save_data(table_name, dataframe):
     try:
         if supabase is None:
-            st.error("Database not connected")
+            st.error("❌ Database not connected")
             return False
 
         require_tenant()
 
         if dataframe is None or dataframe.empty:
+            st.error("❌ Nothing to save")
             return False
 
         dataframe["tenant_id"] = get_tenant_id()
-        records = dataframe.replace({np.nan: None}).to_dict("records")
-        
-        supabase.table(table_name).upsert(records).execute()
-        
-        st.cache_data.clear()
+
+        # 🔥 Clean data properly
+        clean_df = dataframe.replace({np.nan: None})
+        records = clean_df.to_dict("records")
+
+        # 🔍 DEBUG (remove later)
+        st.write("📦 Saving records:", records)
+
+        response = supabase.table(table_name).upsert(records).execute()
+
+        # 🔥 HARD VALIDATION
+        if hasattr(response, "error") and response.error:
+            st.error(f"❌ Supabase Error: {response.error}")
+            return False
+
+        if not hasattr(response, "data") or response.data is None:
+            st.error("❌ Save failed: No response data")
+            return False
+
+        if len(response.data) == 0:
+            st.warning("⚠️ No rows affected")
+            return False
+
+        # ✅ SUCCESS
+        st.success(f"✅ Saved {len(response.data)} record(s)")
+
         return True
 
     except Exception as e:
-        st.error(f"Database Save Error [{table_name}]: {e}")
+        st.error(f"🔥 Database Save Error [{table_name}]: {e}")
         return False
 
 
@@ -1346,7 +1368,7 @@ def show_loans():
                     next_sn = generate_next_sn(loans_df)
                     new_loan = {
                         "id": str(uuid.uuid4()),
-                        "loan_id_label": str(uuid.uuid4())[:8],
+                        "loan_id_label": f"LN-{generate_next_sn(loans_df)}"
                         "sn": next_sn,
                         "borrower_id": borrower_map[selected_name],
                         "loan_type": l_type,
