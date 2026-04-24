@@ -1231,24 +1231,23 @@ def get_current_tenant():
 # 🧠 DATABASE ADAPTER (MULTI-TENANT SAFE)
 # ==============================
 def get_data(table_name):
-    """Multi-tenant safe data fetch with auto-migration for old records"""
-    tenant_id = get_current_tenant()
-    df = get_cached_data(table_name)
+    """Multi-tenant safe data fetch with auto-migration for old records"""
+    tenant_id = get_current_tenant()
+    df = get_cached_data(table_name)
 
-    if df is not None and not df.empty:
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-        if "tenant_id" in df.columns:
-            df = df[df["tenant_id"].astype(str) == str(tenant_id)].copy()
-        else:
-            df["tenant_id"] = tenant_id
-    return df
+    if df is not None and not df.empty:
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+        if "tenant_id" in df.columns:
+            df = df[df["tenant_id"].astype(str) == str(tenant_id)].copy()
+        else:
+            df["tenant_id"] = tenant_id
+    return df
 
 def save_data_saas(table_name, df):
-    """Multi-tenant safe save with hard enforcement of boundaries"""
-    tenant_id = get_current_tenant()
-    df["tenant_id"] = str(tenant_id)
-    return save_data(table_name, df)
-
+    """Multi-tenant safe save with hard enforcement of boundaries"""
+    tenant_id = get_current_tenant()
+    df["tenant_id"] = str(tenant_id)
+    return save_data(table_name, df)
 # ==============================
 # 13. LOANS MANAGEMENT PAGE
 # ==============================
