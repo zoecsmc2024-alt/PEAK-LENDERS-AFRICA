@@ -1256,20 +1256,21 @@ def show_loans():
         by=["loan_id_label", "cycle_no"]
     ).reset_index(drop=True)
 
-    def generate_next_sn(loans_df):
-    if "sn" not in loans_df.columns or loans_df.empty:
-        return "0001"
+    # ✅ Helper function for serial numbers (Now properly nested)
+    def generate_next_sn(df_input):
+        if "sn" not in df_input.columns or df_input.empty:
+            return "0001"
 
-    # Convert safely to numbers
-    numeric_sn = pd.to_numeric(loans_df["sn"], errors="coerce")
+        # Convert safely to numbers
+        numeric_sn = pd.to_numeric(df_input["sn"], errors="coerce")
+        max_sn = numeric_sn.max()
 
-    max_sn = numeric_sn.max()
+        if pd.isna(max_sn):
+            return "0001"
 
-    if pd.isna(max_sn):
-        return "0001"
+        return str(int(max_sn) + 1).zfill(4)
 
-    return str(int(max_sn) + 1).zfill(4)
-    # 🧠 Borrower mapping (safe)
+    # 🧠 Borrower mapping (safe and correctly placed)
     if not borrowers_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
         bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
