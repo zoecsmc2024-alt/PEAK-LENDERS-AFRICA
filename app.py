@@ -1299,9 +1299,7 @@ def show_loans():
 
     # ✅ ALWAYS RECALCULATE BALANCE
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
-    # ==============================
-    # 🧠 FIXED STATUS LOGIC
-    # ==============================
+
     def determine_status(row):
         from datetime import date
         today = date.today()
