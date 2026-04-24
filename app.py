@@ -1383,7 +1383,7 @@ def show_loans():
                         "tenant_id": get_current_tenant()
                     }
                     save_data_saas("loans", pd.DataFrame([new_loan]))
-                    st.cache_data.clear() # CRITICAL for tab communication
+                    st.cache_data.clear() 
                     st.success(f"✅ {l_type} Loan {next_sn} created")
                     st.rerun()
         else:
