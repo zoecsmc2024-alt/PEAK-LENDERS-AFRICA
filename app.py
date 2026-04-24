@@ -1224,8 +1224,8 @@ def show_borrowers():
 # 🔐 SAAS TENANT CONTEXT (HARDENED)
 # ==============================
 def get_current_tenant():
-    """Returns current tenant_id from session (SaaS isolation layer)"""
-    return st.session_state.get("tenant_id", "default_tenant")
+    """Returns current tenant_id from session (SaaS isolation layer)"""
+    return st.session_state.get("tenant_id", "default_tenant")
 
 # ==============================
 # 🧠 DATABASE ADAPTER (MULTI-TENANT SAFE)
