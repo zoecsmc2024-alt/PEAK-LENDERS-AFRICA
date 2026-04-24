@@ -939,8 +939,8 @@ def show_borrowers():
     # ==============================
     # 📥 LOAD & NORMALIZE DATA
     # ==============================
-    borrowers_df = safe_df(get_cached_data("borrowers"))
-    loans_df = safe_df(get_cached_data("loans"))
+    borrowers_df = safe_df(get_data("borrowers"))
+    loans_df = safe_df(get_data("loans"))
 
     # Force lowercase column names for consistency
     for df in [borrowers_df, loans_df]:
@@ -948,16 +948,17 @@ def show_borrowers():
             df.columns = df.columns.str.strip().str.lower()
 
     # Apply Tenant Filters
+    # (Assuming tenant_id is defined in the outer scope of the function)
     if "tenant_id" in borrowers_df.columns:
         borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(tenant_id)]
     if "tenant_id" in loans_df.columns:
         loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
 
     # Ensure required structural columns exist
-    for col in ["id", "name", "phone", "email", "status", "national_id", "next_of_kin"]:
+    required_cols = ["id", "name", "phone", "email", "status", "national_id", "next_of_kin"]
+    for col in required_cols:
         if col not in borrowers_df.columns:
             borrowers_df[col] = ""
-
     # ==============================
     # 🔥 REAL-TIME RISK ENGINE
     # ==============================
@@ -1014,7 +1015,7 @@ def show_borrowers():
                         "national_id": nid, "address": addr, "next_of_kin": nok,
                         "status": "Active", "tenant_id": str(tenant_id)
                     }])
-                    if save_data("borrowers", new_entry):
+                    if save_data_saas("borrowers", new_entry):
                         st.success(f"✅ {name} registered successfully!")
                         st.rerun()
                 else:
@@ -1165,13 +1166,13 @@ def show_borrowers():
                     borrowers_df.loc[borrowers_df["id"].astype(str) == str(selected_id), 
                         ["name","phone","email","national_id","next_of_kin","address"]] = \
                         [upd_name, upd_phone, upd_email, upd_nid, upd_nok, upd_addr]
-                    if save_data("borrowers", borrowers_df):
+                    if save_data_saas("borrowers", borrowers_df):
                         st.success("Profile Updated")
                         st.rerun()
 
                 if act_c2.button("🗑️ Delete", use_container_width=True):
                     updated = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
-                    if save_data("borrowers", updated):
+                    if save_data_saas("borrowers", updated):
                         st.warning("Profile Removed")
                         st.session_state.pop("selected_borrower", None)
                         st.rerun()
