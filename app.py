@@ -1433,36 +1433,44 @@ def show_loans():
     with tab_actions:
         today = date.today()
 
-        # Ensure comparison is date-to-date
+        # 1. Ensure date type for comparison
         loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce").dt.date
 
-        # Properly indented: Filter only the most recent cycle for each SN
+        # 2. Get the LATEST cycle for every loan SN
+        # We sort by SN then Cycle (Highest first)
+        loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
         latest_loans = (
             loans_df
-            .sort_values(by=["sn", "cycle_no"], ascending=[True, False])
+            .sort_values(by=["sn", "cycle_no", "end_date"], ascending=[True, False, False])
             .drop_duplicates(subset=["sn"], keep="first")
         )
 
+        # 3. Filter: Must be PENDING, have a BALANCE, and be OVERDUE
+        # This will now correctly pick up Cycle 2, 3, etc., if they are the latest
         eligible_loans = latest_loans[
-            (latest_loans["status"] == "PENDING") &
+            (latest_loans["status"].fillna("").str.upper() == "PENDING") &
             (latest_loans["balance"] > 0) &
-            (latest_loans["end_date"] < today)
-        ]
+            (loans_df["end_date"].notna()) &
+            (loans_df["end_date"] < today)
+        ].copy()
 
         if not eligible_loans.empty:
             # Map the display string to the ID
             roll_options = {
-                f"{r['borrower']} | SN {r['sn']} | Cycle {r['cycle_no']} | UGX {r['balance']:,.0f}": r["id"]
+                f"{r['borrower']} | SN {r['sn']} | Cycle {r['cycle_no']} | Bal: {r['balance']:,.0f}": r["id"]
                 for _, r in eligible_loans.iterrows()
             }
             
-            sel = st.selectbox("Select Loan to Roll Over", list(roll_options.keys()))
+            sel = st.selectbox("Select Overdue Loan to Roll Over", list(roll_options.keys()))
             loan_id = roll_options[sel]
+            
+            # Extract the specific loan data
             loan = eligible_loans[eligible_loans["id"] == loan_id].iloc[0]
 
-            rate = st.number_input("New Interest %", value=3.0)
+            st.warning(f"⚠️ You are rolling over Cycle {loan['cycle_no']}. This will create Cycle {int(loan['cycle_no']) + 1}.")
+            rate = st.number_input("New Monthly Interest %", value=3.0, step=0.1)
 
-            if st.button("Execute Rollover", type="primary"):
+            if st.button("Confirm & Execute Rollover", type="primary"):
                 # 1. UPDATE OLD LOAN → BCF
                 update_payload = pd.DataFrame([{
                     "id": loan["id"],
