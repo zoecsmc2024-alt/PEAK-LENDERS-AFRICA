@@ -1382,13 +1382,16 @@ def show_loans():
                         "cycle_no": 1,
                         "tenant_id": get_current_tenant()
                     }
+                    # 1. Save to database
                     save_data_saas("loans", pd.DataFrame([new_loan]))
+                    
+                    # 2. Clear cache so the "Portfolio View" sees the new data
                     st.cache_data.clear() 
-                    st.success(f"✅ {l_type} Loan {next_sn} created")
+                    
+                    # 3. Show success and refresh the page
+                    st.success(f"✅ {l_type} Loan {next_sn} created for {selected_name}")
                     st.rerun()
-        else:
-            st.warning("No active borrowers available.")
-
+        
     # ==============================
     # ACTIONS / ROLLOVER
     # ==============================
