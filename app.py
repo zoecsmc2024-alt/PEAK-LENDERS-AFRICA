@@ -1433,7 +1433,7 @@ def show_loans():
     with tab_actions:
         # 🔥 FORCE RE-FETCH (Avoids the "New Loan not showing" bug)
         loans_df = get_data("loans") 
-        today = date.today()
+        prev_end = loan["end_date"]
 
         if loans_df is not None and not loans_df.empty:
             # 1. Clean Data Types immediately
