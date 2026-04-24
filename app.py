@@ -697,6 +697,7 @@ def login_page(supabase):
                                 "current_page": "Overview"  # Sets default page
                             })
                             st.success("Access Granted!")
+                            st.session_state["last_activity"] = datetime.now()
                             st.rerun()
                         else:
                             st.error("Profile mismatch. Please contact admin.")
