@@ -191,36 +191,31 @@ if supabase is None:
 def save_data(table_name, dataframe):
     try:
         if supabase is None:
-            st.error("Database not connected")
+            st.error("❌ Database not connected")
             return False
 
         require_tenant()
 
         if dataframe is None or dataframe.empty:
+            st.error("❌ Nothing to save")
             return False
 
         dataframe["tenant_id"] = get_tenant_id()
         records = dataframe.replace({np.nan: None}).to_dict("records")
 
-        supabase.table(table_name).upsert(records).execute()
+        response = supabase.table(table_name).upsert(records).execute()
+
+        # 🔥 SHOW RESPONSE
+        if hasattr(response, "data"):
+            st.success(f"✅ Saved {len(response.data)} record(s)")
+        else:
+            st.warning("⚠️ Save returned no data")
 
         return True
 
     except Exception as e:
-        st.error(f"Database Save Error [{table_name}]: {e}")
+        st.error(f"🔥 DATABASE SAVE ERROR [{table_name}]: {e}")
         return False
-
-def save_data_saas(table_name, df):
-    tenant_id = get_current_tenant()
-    df["tenant_id"] = str(tenant_id)
-
-    result = save_data(table_name, df)
-
-    # 🔥 Invalidate cache safely
-    st.session_state["data_version"] += 1
-
-    return result
-
 
 # ==============================
 # 3. MULTI-TENANT SESSION CORE
