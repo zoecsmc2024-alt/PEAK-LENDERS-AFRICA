@@ -1434,12 +1434,15 @@ def show_loans():
         today = date.today()
 
         # Ensure comparison is date-to-date
-        loans_df["end_date"] = pd.to_datetime(loans_df["end_date"]).dt.date
+        loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce").dt.date
 
-        eligible_loans = loans_df[
-            (loans_df["status"] == "PENDING") &
-            (loans_df["balance"] > 0) &
-            (loans_df["end_date"] < today)
+        # Properly indented: Filter only the most recent cycle for each SN
+        latest_loans = loans_df.sort_values("cycle_no").groupby("sn").tail(1)
+
+        eligible_loans = latest_loans[
+            (latest_loans["status"] == "PENDING") &
+            (latest_loans["balance"] > 0) &
+            (latest_loans["end_date"] < today)
         ]
 
         if not eligible_loans.empty:
@@ -1448,29 +1451,27 @@ def show_loans():
                 f"{r['borrower']} | SN {r['sn']} | Cycle {r['cycle_no']} | UGX {r['balance']:,.0f}": r["id"]
                 for _, r in eligible_loans.iterrows()
             }
-
+            
             sel = st.selectbox("Select Loan to Roll Over", list(roll_options.keys()))
             loan_id = roll_options[sel]
             loan = eligible_loans[eligible_loans["id"] == loan_id].iloc[0]
 
             rate = st.number_input("New Interest %", value=3.0)
 
-            if st.button("Execute Rollover"):
-                # ==============================
-                # 1. MARK OLD LOAN AS BCF
-                # ==============================
-                old_loan_update = loan.copy()
-                old_loan_update["status"] = "BCF"
-                
-                # Convert to DataFrame for the save function
-                old_df = pd.DataFrame([old_loan_update])
+            # Removed the duplicate/double button check
+            if st.button("Execute Rollover", type="primary"):
 
-                # 🔥 FORCE DATE SAFE CONVERSION (Fixed variable name to old_df)
-                for col in old_df.columns:
-                    if "date" in col:
-                        old_df[col] = old_df[col].astype(str)
-                
-                save_data_saas("loans", old_df)
+                # ==============================
+                # 1. UPDATE OLD LOAN → BCF (SAFE)
+                # ==============================
+                # We only update the status to prevent it from showing as 'Pending'
+                update_payload = pd.DataFrame([{
+                    "id": loan["id"],
+                    "status": "BCF",
+                    "tenant_id": get_current_tenant()
+                }])
+
+                save_data_saas("loans", update_payload)
 
                 # ==============================
                 # 2. CREATE NEW CYCLE
