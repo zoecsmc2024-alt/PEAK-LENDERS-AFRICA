@@ -1451,7 +1451,6 @@ def show_loans():
 
             # 3. FILTER FOR ELIGIBILITY
             # Logic: Must be PENDING, have money owed, and be past the due date
-            # We use .copy() to avoid SettingWithCopy warnings
             eligible_loans = latest_loans[
                 (latest_loans["status"].fillna("").str.upper() == "PENDING") &
                 (latest_loans["balance"] > 0) &
@@ -1477,8 +1476,21 @@ def show_loans():
                     # STEP 1: Mark current as BCF
                     supabase.table("loans").update({"status": "BCF"}).eq("id", loan["id"]).execute()
 
-                    # STEP 2: Create Next Cycle
+                    # STEP 2: Create Next Cycle (Indentation Fixed)
                     next_cycle = int(loan["cycle_no"]) + 1
+
+                    # ✅ FIX: derive new dates from previous loan (NOT today)
+                    prev_end = pd.to_datetime(loan["end_date"], errors="coerce")
+
+                    if pd.isna(prev_end):
+                        prev_end = today
+                    else:
+                        # Ensure we are working with a date object
+                        prev_end = prev_end.date() if hasattr(prev_end, 'date') else prev_end
+
+                    new_start = prev_end
+                    new_end = prev_end + timedelta(days=30)
+
                     new_loan_record = {
                         "id": str(uuid.uuid4()),
                         "loan_id_label": loan["loan_id_label"],
@@ -1490,8 +1502,8 @@ def show_loans():
                         "amount_paid": 0,
                         "status": "PENDING",
                         "cycle_no": next_cycle,
-                        "start_date": str(today),
-                        "end_date": str(today + timedelta(days=30)),
+                        "start_date": str(new_start),   # ✅ FIXED
+                        "end_date": str(new_end),       # ✅ FIXED
                         "tenant_id": get_current_tenant()
                     }
 
