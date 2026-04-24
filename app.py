@@ -1451,10 +1451,11 @@ def show_loans():
 
             # 3. FILTER FOR ELIGIBILITY
             # Logic: Must be PENDING, have money owed, and be past the due date
+            # We use .copy() to avoid SettingWithCopy warnings
             eligible_loans = latest_loans[
-                (latest_loans["status"].str.upper() == "PENDING") &
-                (latest_loans["balance"] > 1) & 
-                (latest_loans["end_date"] < today)
+                (latest_loans["status"].fillna("").str.upper() == "PENDING") &
+                (latest_loans["balance"] > 0) &
+                (latest_loans["end_date"] < today) # Ensures only overdue loans show
             ].copy()
 
             if not eligible_loans.empty:
