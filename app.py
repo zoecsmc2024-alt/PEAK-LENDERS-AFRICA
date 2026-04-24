@@ -1385,7 +1385,7 @@ def show_loans():
         )
 
     # ==============================
-    # ADD LOAN
+    # ➕ ADD LOAN
     # ==============================
     with tab_add:
         if not Active_borrowers.empty:
@@ -1422,81 +1422,70 @@ def show_loans():
                         "cycle_no": 1,
                         "tenant_id": get_current_tenant()
                     }
-                    # 1. Save to database
                     save_data_saas("loans", pd.DataFrame([new_loan]))
-                    
-                    # 2. Clear cache so the "Portfolio View" sees the new data
                     st.cache_data.clear() 
-                    
-                    # 3. Show success and refresh the page
                     st.success(f"✅ {l_type} Loan {next_sn} created for {selected_name}")
                     st.rerun()
-        
+
     # ==============================
-# ACTIONS / ROLLOVER (FIXED)
-# ==============================
-with tab_actions:
-    today = date.today()
+    # ⚙️ ACTIONS / ROLLOVER (FIXED INDENTATION)
+    # ==============================
+    with tab_actions:
+        today = date.today()
 
-    eligible_loans = loans_df[
-        (loans_df["status"] == "PENDING") &
-        (loans_df["balance"] > 0) &
-        (loans_df["end_date"] < today)
-    ]
+        # Ensure comparison is date-to-date
+        loans_df["end_date"] = pd.to_datetime(loans_df["end_date"]).dt.date
 
-    if not eligible_loans.empty:
+        eligible_loans = loans_df[
+            (loans_df["status"] == "PENDING") &
+            (loans_df["balance"] > 0) &
+            (loans_df["end_date"] < today)
+        ]
 
-        roll_map = {
-            f"{r['borrower']} | SN {r['sn']} | Cycle {r['cycle_no']} | UGX {r['balance']:,.0f}"
-            for _, r in eligible_loans.iterrows()
-        }
-
-        sel = st.selectbox("Select Loan to Roll Over", list(roll_map.keys()))
-        loan = eligible_loans[eligible_loans["id"] == roll_map[sel]].iloc[0]
-
-        rate = st.number_input("New Interest %", value=3.0)
-
-        if st.button("Execute Rollover"):
-
-            # ==============================
-            # 1. MARK OLD LOAN AS BCF
-            # ==============================
-            old_loan_update = loan.copy()
-            old_loan_update["status"] = "BCF"
-
-            save_data_saas("loans", pd.DataFrame([old_loan_update]))
-
-            # ==============================
-            # 2. CREATE NEW CYCLE
-            # ==============================
-            new_loan_record = {
-                "id": str(uuid.uuid4()),
-                "loan_id_label": loan["loan_id_label"],  # same loan group
-                "sn": loan["sn"],  # 🔥 reuse SN (CRITICAL)
-                "borrower_id": loan["borrower_id"],
-                "principal": float(loan["balance"]),
-                "interest": float(loan["balance"]) * rate / 100,
-                "total_repayable": float(loan["balance"]) * (1 + rate / 100),
-                "amount_paid": 0,
-                "status": "PENDING",
-                "cycle_no": int(loan["cycle_no"]) + 1,
-                "start_date": str(today),  # 🔥 FIXED (string)
-                "end_date": str(today + timedelta(days=30)),  # 🔥 FIXED
-                "tenant_id": get_current_tenant()
+        if not eligible_loans.empty:
+            # Map the display string to the ID
+            roll_options = {
+                f"{r['borrower']} | SN {r['sn']} | Cycle {r['cycle_no']} | UGX {r['balance']:,.0f}": r["id"]
+                for _, r in eligible_loans.iterrows()
             }
 
-            save_data_saas("loans", pd.DataFrame([new_loan_record]))
+            sel = st.selectbox("Select Loan to Roll Over", list(roll_options.keys()))
+            loan_id = roll_options[sel]
+            loan = eligible_loans[eligible_loans["id"] == loan_id].iloc[0]
 
-            # ==============================
-            # 3. SAFE CACHE INVALIDATION
-            # ==============================
-            st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
+            rate = st.number_input("New Interest %", value=3.0)
 
-            st.success(f"✅ Rolled Over → Cycle {int(loan['cycle_no']) + 1}")
-            st.rerun()
+            if st.button("Execute Rollover"):
+                # 1. MARK OLD LOAN AS BCF
+                old_loan_update = loan.to_frame().T.copy()
+                old_loan_update["status"] = "BCF"
+                save_data_saas("loans", old_loan_update)
 
-    else:
-        st.info("No overdue PENDING loans available for rollover.")
+                # 2. CREATE NEW CYCLE
+                new_loan_record = {
+                    "id": str(uuid.uuid4()),
+                    "loan_id_label": loan["loan_id_label"],
+                    "sn": loan["sn"],
+                    "borrower_id": loan["borrower_id"],
+                    "principal": float(loan["balance"]),
+                    "interest": float(loan["balance"]) * rate / 100,
+                    "total_repayable": float(loan["balance"]) * (1 + rate / 100),
+                    "amount_paid": 0,
+                    "status": "PENDING",
+                    "cycle_no": int(loan["cycle_no"]) + 1,
+                    "start_date": str(today),
+                    "end_date": str(today + timedelta(days=30)),
+                    "tenant_id": get_current_tenant()
+                }
+
+                save_data_saas("loans", pd.DataFrame([new_loan_record]))
+                
+                # 3. SYNC TABS
+                st.cache_data.clear()
+                st.success(f"✅ Rolled Over → Cycle {int(loan['cycle_no']) + 1}")
+                st.rerun()
+        else:
+            st.info("No overdue PENDING loans available for rollover.")
     # ==============================
     # EDIT / MANAGE
     # ==============================
