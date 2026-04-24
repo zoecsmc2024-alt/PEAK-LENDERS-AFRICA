@@ -1422,10 +1422,9 @@ def show_loans():
                     st.cache_data.clear() 
                     st.success(f"✅ {l_type} Loan {next_sn} created for {selected_name}")
                     st.rerun()
-
-    #==============================
-    #⚙️ ACTIONS / ROLLOVER (HARDENED)
-    #==============================
+   #==============================
+   #⚙️ ACTIONS / ROLLOVER (HARDENED)
+   #==============================
     with tab_actions:
         # 🔥 FORCE RE-FETCH (Avoids the "New Loan not showing" bug)
         loans_df = get_data("loans") 
