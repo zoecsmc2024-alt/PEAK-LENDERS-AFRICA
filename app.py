@@ -1348,6 +1348,7 @@ def show_loans():
                         # ✅ ADD THIS (CRITICAL)
                         "sn": next_sn,
                         "borrower_id": selected_id,
+                        "loan_type": loan_type,
                         "principal": amount,
                         "interest": amount * rate / 100,
                         "total_repayable": total,
