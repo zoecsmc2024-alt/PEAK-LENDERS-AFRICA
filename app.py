@@ -1510,7 +1510,7 @@ def show_loans():
                     save_data_saas("loans", pd.DataFrame([new_loan_record]))
                     
                     # STEP 3: Clear and Hard Rerun
-                    st.cache_data.clear()
+                    st.session_state["data_version"] += 1
                     st.success(f"✅ Success! Loan {loan['sn']} advanced to Cycle {next_cycle}")
                     st.rerun()
             else:
