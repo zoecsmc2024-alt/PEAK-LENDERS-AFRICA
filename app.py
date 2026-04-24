@@ -1437,7 +1437,11 @@ def show_loans():
         loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce").dt.date
 
         # Properly indented: Filter only the most recent cycle for each SN
-        latest_loans = loans_df.sort_values("cycle_no").groupby("sn").tail(1)
+        latest_loans = (
+            loans_df
+            .sort_values(by=["sn", "cycle_no"], ascending=[True, False])
+            .drop_duplicates(subset=["sn"], keep="first")
+        )
 
         eligible_loans = latest_loans[
             (latest_loans["status"] == "PENDING") &
@@ -1458,24 +1462,16 @@ def show_loans():
 
             rate = st.number_input("New Interest %", value=3.0)
 
-            # Removed the duplicate/double button check
             if st.button("Execute Rollover", type="primary"):
-
-                # ==============================
-                # 1. UPDATE OLD LOAN → BCF (SAFE)
-                # ==============================
-                # We only update the status to prevent it from showing as 'Pending'
+                # 1. UPDATE OLD LOAN → BCF
                 update_payload = pd.DataFrame([{
                     "id": loan["id"],
                     "status": "BCF",
                     "tenant_id": get_current_tenant()
                 }])
-
                 save_data_saas("loans", update_payload)
 
-                # ==============================
                 # 2. CREATE NEW CYCLE
-                # ==============================
                 new_loan_record = {
                     "id": str(uuid.uuid4()),
                     "loan_id_label": loan["loan_id_label"],
@@ -1491,12 +1487,9 @@ def show_loans():
                     "end_date": str(today + timedelta(days=30)),
                     "tenant_id": get_current_tenant()
                 }
-
                 save_data_saas("loans", pd.DataFrame([new_loan_record]))
                 
-                # ==============================
                 # 3. SYNC TABS
-                # ==============================
                 st.cache_data.clear()
                 st.success(f"✅ Rolled Over → Cycle {int(loan['cycle_no']) + 1}")
                 st.rerun()
