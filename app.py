@@ -1379,11 +1379,11 @@ def show_loans():
             use_container_width=True,
             hide_index=True
         )
-
-    # ==============================
-    # ➕ ADD LOAN
-    # ==============================
+    #==============================
+    #➕ ADD LOAN
+    #==============================
     with tab_add:
+                     
         if not Active_borrowers.empty:
             borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
             with st.form("loan_issue_form"):
@@ -1423,9 +1423,9 @@ def show_loans():
                     st.success(f"✅ {l_type} Loan {next_sn} created for {selected_name}")
                     st.rerun()
 
-    # ==============================
-    # ⚙️ ACTIONS / ROLLOVER (HARDENED)
-    # ==============================
+    #==============================
+    #⚙️ ACTIONS / ROLLOVER (HARDENED)
+    #==============================
     with tab_actions:
         # 🔥 FORCE RE-FETCH (Avoids the "New Loan not showing" bug)
         loans_df = get_data("loans") 
@@ -1514,9 +1514,9 @@ def show_loans():
                 st.write("✅ **All latest cycles are up to date.** (No overdue PENDING loans found)")
         else:
             st.warning("No loan data found to process rollovers.")
-    # ==============================
-    # EDIT / MANAGE
-    # ==============================
+    #==============================
+    #EDIT / MANAGE
+    #==============================
     with tab_manage:
         if not loans_df.empty:
             edit_map = {f"{row['borrower']} • {row['loan_id_label']}": row["id"] for _, row in loans_df.iterrows()}
