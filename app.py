@@ -1428,7 +1428,7 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # ⚙️ ACTIONS / ROLLOVER (FIXED INDENTATION)
+    # ⚙️ ACTIONS / ROLLOVER (FIXED)
     # ==============================
     with tab_actions:
         today = date.today()
@@ -1456,12 +1456,25 @@ def show_loans():
             rate = st.number_input("New Interest %", value=3.0)
 
             if st.button("Execute Rollover"):
+                # ==============================
                 # 1. MARK OLD LOAN AS BCF
-                old_loan_update = loan.to_frame().T.copy()
+                # ==============================
+                old_loan_update = loan.copy()
                 old_loan_update["status"] = "BCF"
-                save_data_saas("loans", old_loan_update)
+                
+                # Convert to DataFrame for the save function
+                old_df = pd.DataFrame([old_loan_update])
 
+                # 🔥 FORCE DATE SAFE CONVERSION (Fixed variable name to old_df)
+                for col in old_df.columns:
+                    if "date" in col:
+                        old_df[col] = old_df[col].astype(str)
+                
+                save_data_saas("loans", old_df)
+
+                # ==============================
                 # 2. CREATE NEW CYCLE
+                # ==============================
                 new_loan_record = {
                     "id": str(uuid.uuid4()),
                     "loan_id_label": loan["loan_id_label"],
@@ -1480,7 +1493,9 @@ def show_loans():
 
                 save_data_saas("loans", pd.DataFrame([new_loan_record]))
                 
+                # ==============================
                 # 3. SYNC TABS
+                # ==============================
                 st.cache_data.clear()
                 st.success(f"✅ Rolled Over → Cycle {int(loan['cycle_no']) + 1}")
                 st.rerun()
