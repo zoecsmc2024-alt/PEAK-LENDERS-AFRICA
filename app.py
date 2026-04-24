@@ -342,7 +342,7 @@ def save_data(table_name, dataframe):
         records = clean_df.to_dict("records")
 
         # 🔍 DEBUG (remove later)
-        st.write("📦 Saving records:", records)
+        #st.write("📦 Saving records:", records)
 
         response = supabase.table(table_name).upsert(records).execute()
 
