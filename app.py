@@ -1433,7 +1433,7 @@ def show_loans():
     with tab_actions:
         # 🔥 FORCE RE-FETCH (Avoids the "New Loan not showing" bug)
         loans_df = get_data("loans") 
-        prev_end = loan["end_date"]
+        today = date.today()
 
         if loans_df is not None and not loans_df.empty:
             # 1. Clean Data Types immediately
@@ -1476,7 +1476,7 @@ def show_loans():
                     # STEP 1: Mark current as BCF
                     supabase.table("loans").update({"status": "BCF"}).eq("id", loan["id"]).execute()
 
-                    # STEP 2: Create Next Cycle (Indentation Fixed)
+                    # STEP 2: Create Next Cycle
                     next_cycle = int(loan["cycle_no"]) + 1
 
                     # ✅ FIX: derive new dates from previous loan (NOT today)
@@ -1510,7 +1510,8 @@ def show_loans():
                     save_data_saas("loans", pd.DataFrame([new_loan_record]))
                     
                     # STEP 3: Clear and Hard Rerun
-                    st.session_state["data_version"] += 1
+                    st.cache_data.clear()
+                    st.session_state["data_version"] = st.session_state.get("data_version", 0) + 1
                     st.success(f"✅ Success! Loan {loan['sn']} advanced to Cycle {next_cycle}")
                     st.rerun()
             else:
