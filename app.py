@@ -1428,81 +1428,82 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # ⚙️ ACTIONS / ROLLOVER (FIXED)
+    # ⚙️ ACTIONS / ROLLOVER (HARDENED)
     # ==============================
     with tab_actions:
+        # 🔥 FORCE RE-FETCH (Avoids the "New Loan not showing" bug)
+        loans_df = get_data("loans") 
         today = date.today()
 
-        # 1. Ensure date type for comparison
-        loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce").dt.date
+        if loans_df is not None and not loans_df.empty:
+            # 1. Clean Data Types immediately
+            loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce").dt.date
+            loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
+            loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
 
-        # 2. Get the LATEST cycle for every loan SN
-        # We sort by SN then Cycle (Highest first)
-        loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
-        latest_loans = (
-            loans_df
-            .sort_values(by=["sn", "cycle_no", "end_date"], ascending=[True, False, False])
-            .drop_duplicates(subset=["sn"], keep="first")
-        )
+            # 2. ISOLATE LATEST CYCLES
+            # We sort so Cycle 4 is above Cycle 3, etc.
+            latest_loans = (
+                loans_df
+                .sort_values(by=["sn", "cycle_no"], ascending=[True, False])
+                .drop_duplicates(subset=["sn"], keep="first")
+            )
 
-        # 3. Filter: Must be PENDING, have a BALANCE, and be OVERDUE
-        # This will now correctly pick up Cycle 2, 3, etc., if they are the latest
-        eligible_loans = latest_loans[
-            (latest_loans["status"].fillna("").str.upper() == "PENDING") &
-            (latest_loans["balance"] > 0) &
-            (loans_df["end_date"].notna()) &
-            (loans_df["end_date"] < today)
-        ].copy()
+            # 3. FILTER FOR ELIGIBILITY
+            # Logic: Must be PENDING, have money owed, and be past the due date
+            eligible_loans = latest_loans[
+                (latest_loans["status"].str.upper() == "PENDING") &
+                (latest_loans["balance"] > 1) & 
+                (latest_loans["end_date"] < today)
+            ].copy()
 
-        if not eligible_loans.empty:
-            # Map the display string to the ID
-            roll_options = {
-                f"{r['borrower']} | SN {r['sn']} | Cycle {r['cycle_no']} | Bal: {r['balance']:,.0f}": r["id"]
-                for _, r in eligible_loans.iterrows()
-            }
-            
-            sel = st.selectbox("Select Overdue Loan to Roll Over", list(roll_options.keys()))
-            loan_id = roll_options[sel]
-            
-            # Extract the specific loan data
-            loan = eligible_loans[eligible_loans["id"] == loan_id].iloc[0]
-
-            st.warning(f"⚠️ You are rolling over Cycle {loan['cycle_no']}. This will create Cycle {int(loan['cycle_no']) + 1}.")
-            rate = st.number_input("New Monthly Interest %", value=3.0, step=0.1)
-
-            if st.button("Confirm & Execute Rollover", type="primary"):
-                # 1. UPDATE OLD LOAN → BCF
-                update_payload = pd.DataFrame([{
-                    "id": loan["id"],
-                    "status": "BCF",
-                    "tenant_id": get_current_tenant()
-                }])
-                save_data_saas("loans", update_payload)
-
-                # 2. CREATE NEW CYCLE
-                new_loan_record = {
-                    "id": str(uuid.uuid4()),
-                    "loan_id_label": loan["loan_id_label"],
-                    "sn": loan["sn"],
-                    "borrower_id": loan["borrower_id"],
-                    "principal": float(loan["balance"]),
-                    "interest": float(loan["balance"]) * rate / 100,
-                    "total_repayable": float(loan["balance"]) * (1 + rate / 100),
-                    "amount_paid": 0,
-                    "status": "PENDING",
-                    "cycle_no": int(loan["cycle_no"]) + 1,
-                    "start_date": str(today),
-                    "end_date": str(today + timedelta(days=30)),
-                    "tenant_id": get_current_tenant()
-                }
-                save_data_saas("loans", pd.DataFrame([new_loan_record]))
+            if not eligible_loans.empty:
+                # 4. PREPARE DROPDOWN
+                roll_options = {}
+                for _, r in eligible_loans.iterrows():
+                    label = f"📌 {r['borrower']} | SN: {r['sn']} | Cycle: {r['cycle_no']} | Bal: {r['balance']:,.0f}"
+                    roll_options[label] = r["id"]
                 
-                # 3. SYNC TABS
-                st.cache_data.clear()
-                st.success(f"✅ Rolled Over → Cycle {int(loan['cycle_no']) + 1}")
-                st.rerun()
+                sel = st.selectbox("Select Overdue Loan to Roll Over", list(roll_options.keys()), key="rollover_sel")
+                loan_id = roll_options[sel]
+                loan = eligible_loans[eligible_loans["id"] == loan_id].iloc[0]
+
+                st.info(f"Current State: Cycle {loan['cycle_no']} is overdue. Next will be Cycle {int(loan['cycle_no']) + 1}")
+                
+                rate = st.number_input("New Interest % for Rollover", value=3.0, step=0.1)
+
+                if st.button("Execute Rollover Now", type="primary"):
+                    # STEP 1: Mark current as BCF
+                    supabase.table("loans").update({"status": "BCF"}).eq("id", loan["id"]).execute()
+
+                    # STEP 2: Create Next Cycle
+                    next_cycle = int(loan["cycle_no"]) + 1
+                    new_loan_record = {
+                        "id": str(uuid.uuid4()),
+                        "loan_id_label": loan["loan_id_label"],
+                        "sn": loan["sn"],
+                        "borrower_id": loan["borrower_id"],
+                        "principal": float(loan["balance"]),
+                        "interest": float(loan["balance"]) * rate / 100,
+                        "total_repayable": float(loan["balance"]) * (1 + rate / 100),
+                        "amount_paid": 0,
+                        "status": "PENDING",
+                        "cycle_no": next_cycle,
+                        "start_date": str(today),
+                        "end_date": str(today + timedelta(days=30)),
+                        "tenant_id": get_current_tenant()
+                    }
+
+                    save_data_saas("loans", pd.DataFrame([new_loan_record]))
+                    
+                    # STEP 3: Clear and Hard Rerun
+                    st.cache_data.clear()
+                    st.success(f"✅ Success! Loan {loan['sn']} advanced to Cycle {next_cycle}")
+                    st.rerun()
+            else:
+                st.write("✅ **All latest cycles are up to date.** (No overdue PENDING loans found)")
         else:
-            st.info("No overdue PENDING loans available for rollover.")
+            st.warning("No loan data found to process rollovers.")
     # ==============================
     # EDIT / MANAGE
     # ==============================
