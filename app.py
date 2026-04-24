@@ -492,7 +492,7 @@ def create_session(user_data, remember_me=False):
     st.rerun()
 
 # ==============================
-# 8. SESSION SECURITY
+# 8. SESSION SECURITY (FIXED)
 # ==============================
 SESSION_TIMEOUT = 30
 
@@ -501,11 +501,26 @@ def check_session_timeout():
         return
 
     last = st.session_state.get("last_activity", datetime.now())
+
     if (datetime.now() - last) > timedelta(minutes=SESSION_TIMEOUT):
-        st.session_state.clear()
+        # ❌ DO NOT CLEAR EVERYTHING
+        # st.session_state.clear()
+
+        # ✅ Only remove auth-related keys
+        for key in [
+            "logged_in",
+            "authenticated",
+            "user_id",
+            "tenant_id",
+            "company",
+            "auth_session"
+        ]:
+            st.session_state.pop(key, None)
+
         st.warning("Session timed out. Please log in again.")
         st.stop()
 
+    # ✅ Update activity timestamp
     st.session_state["last_activity"] = datetime.now()
 
 # ==============================
