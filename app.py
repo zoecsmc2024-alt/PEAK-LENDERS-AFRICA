@@ -20,6 +20,24 @@ import pandas as pd
 from datetime import datetime
 import uuid
 import extra_streamlit_components as stx
+# ==============================
+# 🔄 RESTORE LOGIN SESSION
+# ==============================
+if "auth_session" in st.session_state:
+    try:
+        supabase.auth.set_session(
+            st.session_state["auth_session"].access_token,
+            st.session_state["auth_session"].refresh_token
+        )
+
+        user = supabase.auth.get_user()
+
+        if user and not st.session_state.get("logged_in"):
+            st.session_state["logged_in"] = True
+            st.session_state["authenticated"] = True
+
+    except:
+        pass
 
 if "data_version" not in st.session_state:
     st.session_state["data_version"] = 0
@@ -637,8 +655,13 @@ def login_page(supabase):
                     auth_res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
                     
                     if auth_res.user:
-                        # 2. Fetch profile + linked company name
-                        user_query = supabase.table("users").select("*, tenants(name)").eq("id", auth_res.user.id).execute()
+                        # ✅ SAVE SESSION (Now properly indented inside the 'if auth_res.user' block)
+                        st.session_state["auth_session"] = auth_res.session
+
+                        user_query = supabase.table("users")\
+                            .select("*, tenants(name)")\
+                            .eq("id", auth_res.user.id)\
+                            .execute()
 
                         if user_query.data:
                             user = user_query.data[0]
