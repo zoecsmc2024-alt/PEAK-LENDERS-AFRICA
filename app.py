@@ -21,9 +21,8 @@ from datetime import datetime
 import uuid
 import extra_streamlit_components as stx
 
-# Initialize cookie manager
-cookie_manager = stx.CookieManager()
-
+if "data_version" not in st.session_state:
+    st.session_state["data_version"] = 0
 def restore_session():
     # Use the initialized manager instead of 'cookies'
     user_id = cookie_manager.get("user_id")
@@ -39,21 +38,30 @@ if "supabase" not in globals():
 
 # 1. CORE DATA ENGINE (Must be at the top level)
 
-@st.cache_data(ttl=600)
-def get_cached_data_legacy(table_name):  # 🔥 renamed (NOT deleted)
-    """Fetches and caches data from Supabase for all pages."""
+@st.cache_data(show_spinner=False)
+def get_cached_data(table_name, version):
     try:
         if supabase is None:
             return pd.DataFrame()
 
-        # Use your existing supabase client connection here
-        response = supabase.table(table_name).select("*").execute()
-        return pd.DataFrame(response.data)
-    except Exception as e:
-        # This provides the error message you saw in your screenshots
-        st.error(f"Error fetching data from {table_name}: {e}")
+        require_tenant()
+        tenant_id = get_tenant_id()
+
+        res = supabase.table(table_name)\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
+        if res.data:
+            df = pd.DataFrame(res.data)
+            df.columns = df.columns.str.strip().str.lower()
+            return df
+
         return pd.DataFrame()
 
+    except Exception as e:
+        st.error(f"Database Fetch Error [{table_name}]: {e}")
+        return pd.DataFrame()
 # Move this to the absolute top to prevent "Set Page Config" errors
 st.set_page_config(
     page_title="Lending Manager Pro",
@@ -179,22 +187,39 @@ supabase = init_supabase()
 if supabase is None:
     st.warning("⚠️ Supabase not connected (some features may not work)")
 
-@st.cache_data(ttl=60, show_spinner=False)
-def get_cached_data(table_name):
-    if not table_name:
-        return []
 
+def save_data(table_name, dataframe):
     try:
-        response = supabase.table(table_name).select("*").execute()
+        if supabase is None:
+            st.error("Database not connected")
+            return False
 
-        if hasattr(response, "data") and response.data:
-            return response.data
+        require_tenant()
 
-        return []
+        if dataframe is None or dataframe.empty:
+            return False
+
+        dataframe["tenant_id"] = get_tenant_id()
+        records = dataframe.replace({np.nan: None}).to_dict("records")
+
+        supabase.table(table_name).upsert(records).execute()
+
+        return True
 
     except Exception as e:
-        print(f"[DATA ERROR] {table_name}: {e}")  # avoids UI spam
-        return []
+        st.error(f"Database Save Error [{table_name}]: {e}")
+        return False
+
+def save_data_saas(table_name, df):
+    tenant_id = get_current_tenant()
+    df["tenant_id"] = str(tenant_id)
+
+    result = save_data(table_name, df)
+
+    # 🔥 Invalidate cache safely
+    st.session_state["data_version"] += 1
+
+    return result
 
 
 # ==============================
