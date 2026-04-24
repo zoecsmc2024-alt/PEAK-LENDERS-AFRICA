@@ -1514,9 +1514,10 @@ def show_loans():
                 st.write("✅ **All latest cycles are up to date.** (No overdue PENDING loans found)")
         else:
             st.warning("No loan data found to process rollovers.")
-   #==============================
-   #EDIT / MANAGE
+
    #==============================
+   #EDIT / MANAGE
+   #==============================                          
     with tab_manage:
         if not loans_df.empty:
             edit_map = {f"{row['borrower']} • {row['loan_id_label']}": row["id"] for _, row in loans_df.iterrows()}
