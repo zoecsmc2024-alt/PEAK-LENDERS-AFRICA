@@ -1327,28 +1327,37 @@ def show_loans():
             borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
 
             with st.form("loan_issue_form"):
+                st.markdown("### 📝 Issue New Loan")
+                
                 selected_name = st.selectbox("Borrower", list(borrower_map.keys()))
                 selected_id = borrower_map[selected_name]
 
-                amount = st.number_input("Amount", 0)
-                rate = st.number_input("Interest %", 0.0)
-                start = st.date_input("Start Date", datetime.now())
-                end = st.date_input("Due Date", start + timedelta(days=30))
+                # ✅ NEW: Loan Type Selection
+                l_type = st.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Salary", "Other"])
+
+                col1, col2 = st.columns(2)
+                amount = col1.number_input("Principal Amount", min_value=0, step=50000)
+                rate = col2.number_input("Monthly Interest %", 0.0, step=0.5)
+                
+                start = col1.date_input("Start Date", datetime.now())
+                end = col2.date_input("Due Date", start + timedelta(days=30))
 
                 total = amount + (amount * rate / 100)
+                st.info(f"💡 Preview: Total Repayable will be {total:,.0f} UGX")
 
                 if st.form_submit_button("Create Loan"):
-                    # This logic must be indented inside the submit button block
+                    # 🔢 Generate the Serial Number inside the button click
                     next_sn = generate_next_sn(loans_df)
 
                     new_loan = {
                         "id": str(uuid.uuid4()),
                         # 🔐 Stable loan chain ID
                         "loan_id_label": str(uuid.uuid4())[:8],
-                        # ✅ ADD THIS (CRITICAL)
+                        # ✅ Stable Serial Number
                         "sn": next_sn,
                         "borrower_id": selected_id,
-                        "loan_type": loan_type,
+                        # ✅ Saved Loan Type
+                        "loan_type": l_type,
                         "principal": amount,
                         "interest": amount * rate / 100,
                         "total_repayable": total,
@@ -1360,8 +1369,10 @@ def show_loans():
                         "tenant_id": get_current_tenant()
                     }
 
+                    # 💾 Database Save
                     save_data_saas("loans", pd.DataFrame([new_loan]))
-                    st.success(f"Loan {next_sn} created")
+                    st.success(f"✅ {l_type} Loan {next_sn} created for {selected_name}")
+                    
                     st.cache_data.clear()
                     st.rerun()
         else:
