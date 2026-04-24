@@ -1368,7 +1368,7 @@ def show_loans():
                     next_sn = generate_next_sn(loans_df)
                     new_loan = {
                         "id": str(uuid.uuid4()),
-                        "loan_id_label": f"LN-{generate_next_sn(loans_df)}"
+                        "loan_id_label": f"LN-{next_sn}"",
                         "sn": next_sn,
                         "borrower_id": borrower_map[selected_name],
                         "loan_type": l_type,
