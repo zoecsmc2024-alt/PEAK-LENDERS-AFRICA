@@ -1215,47 +1215,65 @@ def show_loans():
     if "end_date" in loans_df.columns:
         loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors='coerce').dt.date
 
-    # ✅ ALWAYS RECALCULATE BALANCE (fixes your issue)
+    # ✅ ALWAYS RECALCULATE BALANCE
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
     # ==============================
     # 🧠 FIXED STATUS LOGIC
     # ==============================
     def determine_status(row):
+        from datetime import date
         today = date.today()
         paid = row.get("amount_paid", 0)
         total = row.get("total_repayable", 0)
-        end_date = row.get("end_date")
         current_db_status = str(row.get("status", "")).upper().strip()
 
-        # 🛡️ HARD LOCK BCF
+        # 🛡️ 1. Only manual rollover sets BCF
         if current_db_status == "BCF":
             return "BCF"
 
-        # ✅ CLEARED
+        # ✅ 2. Cleared
         if paid >= total and total > 0:
             return "CLEARED"
 
-        # 🔴 OVERDUE → BCF
-        if end_date and today > end_date and paid == 0:
-            return "BCF"
-
+        # 🟡 3. Everything else stays Pending
         return "PENDING"
 
+    # ✅ Apply status logic (Correctly Indented)
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
+
+    # ✅ Ensure cleared loans show zero balance
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
-    loans_df["cycle_no"] = pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce").fillna(1).astype(int)
-    loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"]).reset_index(drop=True)
+    # ✅ Ensure cycle_no is clean
+    loans_df["cycle_no"] = pd.to_numeric(
+        loans_df.get("cycle_no", 1),
+        errors="coerce"
+    ).fillna(1).astype(int)
 
-    loans_df["sn_rank"] = pd.factorize(loans_df["loan_id_label"])[0] + 1
-    loans_df["sn"] = loans_df["sn_rank"].apply(lambda x: f"{int(x):04d}")
+    # ✅ Sort properly
+    loans_df = loans_df.sort_values(
+        by=["loan_id_label", "cycle_no"]
+    ).reset_index(drop=True)
 
+    def generate_next_sn(loans_df):
+    if "sn" not in loans_df.columns or loans_df.empty:
+        return "0001"
+
+    # Convert safely to numbers
+    numeric_sn = pd.to_numeric(loans_df["sn"], errors="coerce")
+
+    max_sn = numeric_sn.max()
+
+    if pd.isna(max_sn):
+        return "0001"
+
+    return str(int(max_sn) + 1).zfill(4)
+    # 🧠 Borrower mapping (safe)
     if not borrowers_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
         bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
         loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
-
     # ==============================
     # TABS
     # ==============================
@@ -1319,9 +1337,15 @@ def show_loans():
                 total = amount + (amount * rate / 100)
 
                 if st.form_submit_button("Create Loan"):
-                    new = {
+                    # This logic must be indented inside the submit button block
+                    next_sn = generate_next_sn(loans_df)
+
+                    new_loan = {
                         "id": str(uuid.uuid4()),
-                        "loan_id_label": str(len(loans_df)+1).zfill(5),
+                        # 🔐 Stable loan chain ID
+                        "loan_id_label": str(uuid.uuid4())[:8],
+                        # ✅ ADD THIS (CRITICAL)
+                        "sn": next_sn,
                         "borrower_id": selected_id,
                         "principal": amount,
                         "interest": amount * rate / 100,
@@ -1334,17 +1358,25 @@ def show_loans():
                         "tenant_id": get_current_tenant()
                     }
 
-                    save_data_saas("loans", pd.DataFrame([new]))
-                    st.success("Loan created")
+                    save_data_saas("loans", pd.DataFrame([new_loan]))
+                    st.success(f"Loan {next_sn} created")
+                    st.cache_data.clear()
                     st.rerun()
+        else:
+            st.warning("No active borrowers available. Please activate a borrower first.")
 
     # ==============================
     # ROLLOVER (FIXED)
     # ==============================
     with tab_actions:
+        from datetime import date
+        today = date.today()
+
+        # Filter for loans that are PENDING, unpaid, and OVERDUE
         eligible_loans = loans_df[
-            (loans_df["status"] == "BCF") &
-            (loans_df["balance"] > 0)
+            (loans_df["status"] == "PENDING") & 
+            (loans_df["balance"] > 0) & 
+            (loans_df["end_date"] < today)
         ]
 
         if not eligible_loans.empty:
@@ -1353,34 +1385,47 @@ def show_loans():
                 for _, r in eligible_loans.iterrows()
             }
 
-            sel = st.selectbox("Select Loan", list(roll_map.keys()))
+            sel = st.selectbox("Select Loan to Roll Over", list(roll_map.keys()))
             loan = eligible_loans[eligible_loans["id"] == roll_map[sel]].iloc[0]
 
-            rate = st.number_input("New Interest %", 3.0)
+            rate = st.number_input("New Interest %", value=3.0)
 
-            if st.button("Rollover"):
+            if st.button("Execute Rollover"):
+                # 1. Update the OLD loan status to BCF (indented inside button)
                 loans_df.loc[loans_df["id"] == loan["id"], "status"] = "BCF"
-                save_data_saas("loans", loans_df)
+                
+                # Indented correctly now:
+                save_data_saas(
+                    "loans", 
+                    loans_df[loans_df["id"] == loan["id"]]
+                )
 
-                new = {
+                # 2. Create the NEW cycle loan record
+                new_loan_record = {
                     "id": str(uuid.uuid4()),
+                    # 🔐 Keep same loan chain
                     "loan_id_label": loan["loan_id_label"],
+                    # 🔥 CRITICAL: KEEP SAME SN
+                    "sn": loan["sn"],
                     "borrower_id": loan["borrower_id"],
                     "principal": loan["balance"],
                     "interest": loan["balance"] * rate / 100,
-                    "total_repayable": loan["balance"] * (1 + rate/100),
+                    "total_repayable": loan["balance"] * (1 + rate / 100),
                     "amount_paid": 0,
                     "status": "PENDING",
-                    "cycle_no": loan["cycle_no"] + 1,
-                    "start_date": str(date.today()),
-                    "end_date": str(date.today() + timedelta(days=30)),
+                    "cycle_no": int(loan["cycle_no"]) + 1,
+                    "start_date": str(today),
+                    "end_date": str(today + timedelta(days=30)),
                     "tenant_id": get_current_tenant()
                 }
 
-                save_data_saas("loans", pd.DataFrame([new]))
-                st.success("Rolled over")
+                # Save new record and Rerun
+                save_data_saas("loans", pd.DataFrame([new_loan_record]))
+                st.success(f"Successfully rolled over to Cycle {int(loan['cycle_no']) + 1}")
+                st.cache_data.clear()
                 st.rerun()
-
+        else:
+            st.info("No overdue PENDING loans available for rollover.")
     # ==============================
     # 🛠️ EDIT
     # ==============================
