@@ -1381,7 +1381,9 @@ def show_loans():
     # ==============================
     # TAB: PORTFOLIO VIEW
     # ==============================
-    tab_view, tab_add, tab_actions = st.tabs(["📂 Portfolio View", "➕ Add Loan", "⚙️ Actions"])
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
+        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
+    ])
     with tab_view:
         search_query = st.text_input("🔍 Search Loan / Borrower", key="loan_search_main")
 
