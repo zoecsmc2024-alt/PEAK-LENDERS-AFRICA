@@ -1207,73 +1207,31 @@ def save_data_saas(table_name, df):
 def show_loans():
     """
     Core engine for issuing and managing loan agreements.
-    Standardized to prevent NameError: 'safe_df' and KeyError: 'id'.
+    Preserves Midnight Blue branding and Peachy Luxe themes.
     """
-    import uuid
-    import pandas as pd
-    from datetime import date, timedelta
-
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
+    
+    # 1. LOAD DATA FROM SUPABASE
+    loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
+    payments_df = get_cached_data("payments") 
 
-    # ------------------------------
-    # 1. LOAD DATA (SOURCE OF TRUTH)
-    # ------------------------------
-    # We fetch raw data first to ensure variables exist before processing
-    loans_raw = get_cached_data("loans")
-    borrowers_raw = get_cached_data("borrowers")
-    payments_raw = get_cached_data("payments")
+    # ✅ SAFETY (prevents future crashes)
+    if loans_df is None: loans_df = pd.DataFrame()
+    if borrowers_df is None: borrowers_df = pd.DataFrame()
+    if payments_df is None: payments_df = pd.DataFrame()
 
-    # ------------------------------
-    # 2. INITIALIZE & STANDARDIZE (Prevents 'safe_df' or 'id' errors)
-    # ------------------------------
-    if loans_raw is None or loans_raw.empty:
+    if not borrowers_df.empty:
+        Active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
+    else:
+        Active_borrowers = pd.DataFrame()
+
+    if loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "id", "sn", "loan_id_label", "borrower_id", "borrower",
-            "principal", "interest", "total_repayable",
-            "amount_paid", "balance", "status",
-            "start_date", "end_date", "cycle_no"
+            "id", "sn", "loan_id_label", "borrower_id", "borrower", "principal", "interest",
+            "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date", "cycle_no"
         ])
-    else:
-        loans_df = loans_raw.copy()
 
-    # 🛡️ HARDEN ID COLUMN (Fixes Application Error: 'id')
-    if "id" not in loans_df.columns:
-        loans_df["id"] = [str(uuid.uuid4()) for _ in range(len(loans_df))]
-    else:
-        loans_df["id"] = loans_df["id"].astype(str)
-        mask = loans_df["id"].isna() | (loans_df["id"].str.strip() == "") | (loans_df["id"] == "nan")
-        if mask.any():
-            loans_df.loc[mask, "id"] = [str(uuid.uuid4()) for _ in range(mask.sum())]
-
-    # 3. SAFETY FOR OTHER TABLES
-    borrowers_df = borrowers_raw.copy() if borrowers_raw is not None else pd.DataFrame()
-    payments_df = payments_raw.copy() if payments_raw is not None else pd.DataFrame()
-
-    # 🛡️ HARDEN BORROWERS ID
-    if not borrowers_df.empty and all(col in borrowers_df.columns for col in ["id", "name"]):
-        if "id" not in borrowers_df.columns:
-            borrowers_df["id"] = [str(uuid.uuid4()) for _ in range(len(borrowers_df))]
-        else:
-            borrowers_df["id"] = borrowers_df["id"].astype(str)
-            mask = borrowers_df["id"].isna() | (borrowers_df["id"].str.strip() == "") | (borrowers_df["id"] == "nan")
-            if mask.any():
-                borrowers_df.loc[mask, "id"] = [str(uuid.uuid4()) for _ in range(mask.sum())]
-
-    # 🛡️ HARDEN PAYMENTS loan_id
-    if not payments_df.empty:
-        if "loan_id" not in payments_df.columns:
-            payments_df["loan_id"] = ""
-        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
-
-    # ------------------------------
-    # 4. ACTIVE BORROWERS FILTER
-    # ------------------------------
-    if not borrowers_df.empty and "status" in borrowers_df.columns:
-        Active_borrowers = borrowers_df[
-            borrowers_df["status"].astype(str).str.upper() == "ACTIVE"
-        ]
-    else:
-        Active_borrowers = pd.DataFrame(columns=["id", "name"])
 
     # ==============================
     # 🔥 DATA STANDARDIZATION & SMART SYNC (HARDENED)
