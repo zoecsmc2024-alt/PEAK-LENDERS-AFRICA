@@ -1571,7 +1571,7 @@ def show_loans():
     with tab_manage:
         if not loans_df.empty:
             # Added unique key to selectbox
-            edit_map = {f"{row['borrower']} • {row['loan_id_label']}": row["id"] for _, row in loans_df.iterrows()}
+            edit_map = {     f"{row.get('borrower', 'Unknown')} • {row.get('loan_id_label', 'N/A')}": row.get("id", "")     for _, row in loans_df.iterrows()     if "id" in loans_df.columns }
             selected_edit_label = st.selectbox("Select Loan to Edit", list(edit_map.keys()), key="edit_loan_selector")
             target_id = edit_map[selected_edit_label]
             loan_to_edit = loans_df[loans_df["id"] == target_id].iloc[0]
