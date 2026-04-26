@@ -652,7 +652,7 @@ def view_staff_signup(supabase):
 # 🔑 LOGIN PAGE
 # ==============================
 def login_page(supabase):
-    st.markdown("## 🔐 Finance Portal Login")
+    st.markdown("## PEAK-LENDERS AFRICA")
     
     with st.container():
         # --- 🏢 ADDED COMPANY NAME FIELD ---
