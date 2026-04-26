@@ -1378,14 +1378,12 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # ⚙️ ACTIONS / ROLLOVER (COMPOUND ENGINE - UI FIXED)
+    # ⚙️ ACTIONS / ROLLOVER (CLEAN UI)
     # ==============================
     with tab_actions:
         st.markdown("### 🔄 Compound Interest Engine")
 
         today = date.today()
-
-        # 🔥 ALWAYS PULL FRESH DATA (same as your logic intent)
         fresh_loans = get_data("loans")
 
         if fresh_loans is None or fresh_loans.empty:
@@ -1397,62 +1395,73 @@ def show_loans():
                     fresh_loans[col] = pd.to_numeric(fresh_loans[col], errors='coerce').fillna(0)
 
             # ==============================
-            # 🔍 STEP 1: SHOW LATEST CYCLES (VISIBLE DEBUG)
+            # 🧠 LATEST CYCLES
             # ==============================
             latest_cycles = (
                 fresh_loans.sort_values(by=["sn", "cycle_no"], ascending=[True, False])
                 .drop_duplicates(subset=["sn"], keep="first")
             )
 
-            st.markdown("#### 📌 Latest Loan Cycles (What system sees)")
-            st.dataframe(
-                latest_cycles[[
-                    "sn","loan_id_label","borrower_id","cycle_no",
-                    "balance","end_date","status"
-                ]],
-                use_container_width=True,
-                hide_index=True
-            )
-
             # ==============================
-            # 🎯 STEP 2: FILTER TARGETS
+            # 🎯 ELIGIBLE LOANS
             # ==============================
             targets = latest_cycles[
                 (latest_cycles["balance"] > 0) &
-                (pd.to_datetime(latest_cycles["end_date"]).dt.date < today)
+                (pd.to_datetime(latest_cycles["end_date"]).dt.date <= today)
             ].copy()
 
-            st.markdown("#### 🎯 Loans Eligible For Rollover")
+            # ==============================
+            # 📊 SUMMARY CARDS (NEW CLEAN UI)
+            # ==============================
+            col1, col2, col3 = st.columns(3)
 
+            col1.metric("📂 Total Active Loans", len(latest_cycles))
+            col2.metric("⚠️ Eligible for Rollover", len(targets))
+            col3.metric("💰 Total Outstanding", f"{int(latest_cycles['balance'].sum()):,}")
+
+            st.markdown("---")
+
+            # ==============================
+            # 🎯 ELIGIBLE DISPLAY (CLEAN)
+            # ==============================
             if targets.empty:
-                st.info("No loans currently require a rollover cycle.")
+                st.success("✅ All loans are up to date. No rollover needed.")
             else:
-                st.success(f"{len(targets)} loan(s) ready for compounding")
+                st.warning(f"⚠️ {len(targets)} loan(s) require rollover")
+
+                # cleaner table
+                show_cols = [
+                    "loan_id_label", "cycle_no", "balance", "end_date"
+                ]
 
                 st.dataframe(
-                    targets[[
-                        "sn","loan_id_label","borrower_id",
-                        "cycle_no","balance","end_date"
-                    ]],
+                    targets[show_cols].rename(columns={
+                        "loan_id_label": "Loan",
+                        "cycle_no": "Cycle",
+                        "balance": "Balance",
+                        "end_date": "Due Date"
+                    }).style.format({
+                        "Balance": "{:,.0f}"
+                    }),
                     use_container_width=True,
                     hide_index=True
                 )
 
                 # ==============================
-                # ⚠️ CONFIRMATION UI (NEW)
+                # 🚀 ACTION AREA
                 # ==============================
-                confirm = st.checkbox("✅ I confirm I want to compound these loans")
+                st.markdown("### 🚀 Execute Rollover")
 
-                if st.button("🚀 Execute Monthly Rollover", use_container_width=True, disabled=not confirm):
+                confirm = st.checkbox("I confirm to compound all eligible loans")
+
+                if st.button("🔄 Run Monthly Rollover", disabled=not confirm, use_container_width=True):
                     try:
                         new_rows_list = []
                         count = 0
 
                         for _, r in targets.iterrows():
-                            # STEP 1: Archive old row as BCF
                             supabase.table("loans").update({"status": "BCF"}).eq("id", r["id"]).execute()
 
-                            # STEP 2: THE MATH (UNCHANGED)
                             old_p = float(r.get('principal', 0))
                             old_i = float(r.get('interest', 0))
 
@@ -1460,12 +1469,11 @@ def show_loans():
                             new_month_interest = new_basis * 0.03
                             compounded_total = new_basis + new_month_interest
 
-                            # STEP 3: DATE MATH (UNCHANGED)
                             orig_end_ts = pd.to_datetime(r['end_date'], errors='coerce')
                             new_start = orig_end_ts.date() if not pd.isna(orig_end_ts) else today
                             new_end = new_start + timedelta(days=30)
 
-                            new_loan_record = {
+                            new_rows_list.append({
                                 "id": str(uuid.uuid4()),
                                 "loan_id_label": r["loan_id_label"],
                                 "sn": r["sn"],
@@ -1479,21 +1487,24 @@ def show_loans():
                                 "start_date": str(new_start),
                                 "end_date": str(new_end),
                                 "tenant_id": get_current_tenant()
-                            }
+                            })
 
-                            new_rows_list.append(new_loan_record)
                             count += 1
 
                         if new_rows_list:
-                            new_entries_df = pd.DataFrame(new_rows_list)
-                            save_data_saas("loans", new_entries_df)
-
+                            save_data_saas("loans", pd.DataFrame(new_rows_list))
                             st.cache_data.clear()
-                            st.success(f"✅ Compounding Successful! Advanced {count} loans.")
+                            st.success(f"✅ {count} loan(s) rolled over successfully.")
                             st.rerun()
 
                     except Exception as e:
-                        st.error(f"🚨 Rollover Error: {str(e)}")
+                        st.error(f"🚨 Error: {str(e)}")
+
+            # ==============================
+            # 🔍 OPTIONAL DEBUG (COLLAPSIBLE)
+            # ==============================
+            with st.expander("🔍 Debug View (Advanced)"):
+                st.dataframe(latest_cycles, use_container_width=True)
     # ==============================
     # EDIT/MANAGE
     # ==============================
