@@ -1642,7 +1642,11 @@ def show_payments():
     if loans_df.empty:
         st.info("ℹ️ No loans available.")
         return
+    loans_df["id"] = loans_df["id"].astype(str)
+    borrowers_df["id"] = borrowers_df["id"].astype(str)
 
+    if "loan_id" in payments_df.columns:
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
     # ==============================
     # 🛡️ NORMALIZATION
     # ==============================
