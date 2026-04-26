@@ -1235,88 +1235,98 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # ⚙️ ACTIONS / ROLLOVER (COMPOUND ENGINE)
-    # ==============================
-    with tab_actions:
-        st.markdown("---") 
-        # 🔥 FORCE RE-FETCH
-        loans_df = get_data("loans") 
-        today = date.today()
+# ⚙️ ACTIONS / ROLLOVER (COMPOUND ENGINE)
+# ==============================
+with tab_actions:
+    st.markdown("---") 
+    # 🔥 FORCE RE-FETCH
+    loans_df = get_data("loans") 
+    today = date.today()
 
-        if st.button("🔄 Execute Monthly Rollover (Compound All Overdue)", use_container_width=True):
-            try: 
-                # 1. FORCE NUMERIC
-                money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
-                for col in money_cols:
-                    if col in loans_df.columns:
-                        loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
+    if st.button("🔄 Execute Monthly Rollover (Compound All Overdue)", use_container_width=True):
+        try: 
+            # 1. FORCE NUMERIC
+            money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
+            for col in money_cols:
+                if col in loans_df.columns:
+                    loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
 
-                # 2. ISOLATE OVERDUE TARGETS
-                latest_cycles = (
-                    loans_df.sort_values(by=["sn", "cycle_no"], ascending=[True, False])
-                    .drop_duplicates(subset=["sn"], keep="first")
-                )
+            # 2. ISOLATE OVERDUE TARGETS
+            latest_cycles = (
+                loans_df.sort_values(by=["sn", "cycle_no"], ascending=[True, False])
+                .drop_duplicates(subset=["sn"], keep="first")
+            )
+            
+            targets = latest_cycles[
+                (latest_cycles["status"].str.upper() == "PENDING") &
+                (latest_cycles["balance"] > 0) &
+                (pd.to_datetime(latest_cycles["end_date"]).dt.date < today)
+            ].copy()
+
+            if targets.empty:
+                st.info("No loans currently require a rollover cycle.")
+            else:
+                new_rows_list = []
+                count = 0
                 
-                targets = latest_cycles[
-                    (latest_cycles["status"].str.upper() == "PENDING") &
-                    (latest_cycles["balance"] > 0) &
-                    (pd.to_datetime(latest_cycles["end_date"]).dt.date < today)
-                ].copy()
+                for _, r in targets.iterrows():
+                    # STEP 1: Archive old row
+                    supabase.table("loans").update({"status": "BCF"}).eq("id", r["id"]).execute()
 
-                if targets.empty:
-                    st.info("No loans currently require a rollover cycle.")
-                else:
-                    new_rows_list = []
-                    count = 0
+                    # STEP 2: THE ULTIMATE MATH FIX
+                    old_p = float(r.get('principal', 0))
+                    old_i = float(r.get('interest', 0))
                     
-                    for _, r in targets.iterrows():
-                        # STEP 1: Archive old row
-                        supabase.table("loans").update({"status": "BCF"}).eq("id", r["id"]).execute()
+                    # New Basis = Old P + Old I
+                    new_basis = old_p + old_i
+                    # Use local rate if available or default to 3%
+                    current_rate = rate if 'rate' in locals() else 0.03
+                    new_month_interest = new_basis * (current_rate / 100 if current_rate > 1 else current_rate)
+                    compounded_total = new_basis + new_month_interest
+                    
+                    # STEP 3: DATE MATH (FIXED FOR CALENDAR ACCURACY)
+                    # Convert to pandas timestamp for advanced offset logic
+                    orig_end_ts = pd.to_datetime(r['end_date'], errors='coerce')
+                    
+                    if pd.isna(orig_end_ts):
+                        new_start = today
+                    else:
+                        # We start exactly where the last one ended
+                        new_start = orig_end_ts.date()
 
-                        # STEP 2: THE ULTIMATE MATH FIX
-                        old_p = float(r.get('principal', 0))
-                        old_i = float(r.get('interest', 0))
-                        
-                        # New Basis = Old P + Old I
-                        new_basis = old_p + old_i
-                        # Use local rate if available or default to 3%
-                        current_rate = rate if 'rate' in locals() else 0.03
-                        new_month_interest = new_basis * (current_rate / 100 if current_rate > 1 else current_rate)
-                        compounded_total = new_basis + new_month_interest
-                        
-                        # STEP 3: DATE MATH
-                        orig_end = pd.to_datetime(r['end_date'], errors='coerce')
-                        new_start = orig_end.date() if pd.notna(orig_end) else today
-                        new_end = new_start + timedelta(days=30)
+                    # Use DateOffset(months=1) instead of 30 days to keep the "Day of Month" consistent
+                    # e.g., Jan 08 -> Feb 08 -> March 08
+                    calculated_end = pd.to_datetime(new_start) + pd.DateOffset(months=1)
+                    new_end = calculated_end.date()
 
-                        new_loan_record = {
-                            "id": str(uuid.uuid4()),
-                            "loan_id_label": r["loan_id_label"],
-                            "sn": r["sn"],
-                            "borrower_id": r["borrower_id"],
-                            "principal": new_basis,          
-                            "interest": new_month_interest,  
-                            "total_repayable": compounded_total,
-                            "amount_paid": 0,
-                            "status": "PENDING",
-                            "cycle_no": int(r["cycle_no"]) + 1,
-                            "start_date": str(new_start),
-                            "end_date": str(new_end),
-                            "tenant_id": get_current_tenant()
-                        }
-                        
-                        new_rows_list.append(new_loan_record)
-                        count += 1
+                    new_loan_record = {
+                        "id": str(uuid.uuid4()),
+                        "loan_id_label": r["loan_id_label"],
+                        "sn": r["sn"],
+                        "borrower_id": r["borrower_id"],
+                        "principal": new_basis,          
+                        "interest": new_month_interest,  
+                        "total_repayable": compounded_total,
+                        "amount_paid": 0,
+                        "status": "PENDING",
+                        "cycle_no": int(r["cycle_no"]) + 1,
+                        "start_date": str(new_start),
+                        "end_date": str(new_end),
+                        "tenant_id": get_current_tenant()
+                    }
+                    
+                    new_rows_list.append(new_loan_record)
+                    count += 1
 
-                    if new_rows_list:
-                        new_entries_df = pd.DataFrame(new_rows_list)
-                        save_data_saas("loans", new_entries_df)
-                        st.success(f"✅ Compounding Successful! Advanced {count} loans to next cycle.")
-                        st.cache_data.clear() 
-                        st.rerun()
+                if new_rows_list:
+                    new_entries_df = pd.DataFrame(new_rows_list)
+                    save_data_saas("loans", new_entries_df)
+                    st.success(f"✅ Compounding Successful! Advanced {count} loans to next cycle.")
+                    st.cache_data.clear() 
+                    st.rerun()
 
-            except Exception as e:
-                st.error(f"🚨 Rollover Error: {str(e)}")
+        except Exception as e:
+            st.error(f"🚨 Rollover Error: {str(e)}")
 
     # ==============================
     # EDIT / MANAGE
