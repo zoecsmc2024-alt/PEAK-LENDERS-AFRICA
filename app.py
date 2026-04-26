@@ -1261,7 +1261,7 @@ def show_loans():
             borrowers_df["status"].astype(str).str.upper() == "ACTIVE"
         ]
     else:
-        active_borrowers = pd.DataFrame()
+        active_borrowers = pd.DataFrame(columns=["id", "name"])
 
     # ==============================
     # 🔥 DATA STANDARDIZATION & SMART SYNC (HARDENED)
