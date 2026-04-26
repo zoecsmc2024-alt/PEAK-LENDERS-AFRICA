@@ -3483,172 +3483,147 @@ def show_settings():
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+from datetime import datetime
 
 def get_Active_color():
-    """Helper to get the current theme color for consistent UI styling."""
     return st.session_state.get('theme_color', '#1E3A8A')
 
 def show_dashboard_view():
-    """
-    Main Dashboard view. 
-    Upgraded: performance layer, safer finance engine, SaaS-safe computation.
-    """
-    # 0. INITIALIZE THEME (Prevents NameError for brand_color)
     brand_color = get_Active_color()
     
-    st.markdown(f"<h2 style='color: {brand_color};'>📊 Financial Dashboard</h2>", unsafe_allow_html=True)
+    # --- UI HEADER ---
+    st.markdown(f"""
+        <div style='background: {brand_color}; padding: 25px; border-radius: 15px; margin-bottom: 25px; color: white;'>
+            <h1 style='margin:0; font-size: 28px;'>🏛️ Financial Control Center</h1>
+            <p style='margin:0; opacity: 0.8;'>Real-time insights across Loans, Expenses & Petty Cash</p>
+        </div>
+    """, unsafe_allow_html=True)
 
-    # --- 1. LOAD DATA ---
-    df = get_cached_data("loans")
-    pay_df = get_cached_data("payments")
-    exp_df = get_cached_data("expenses") 
-    bor_df = get_cached_data("borrowers")
+    # --- 1. DATA INGESTION ---
+    # Fetching from unified cache names used in other pages
+    loans_df = normalize(get_cached_data("loans"))
+    payments_df = normalize(get_cached_data("payments"))
+    expenses_df = normalize(get_cached_data("expenses"))
+    borrowers_df = normalize(get_cached_data("borrowers"))
 
-    if df is None or df.empty:
-        st.info("👋 Welcome! Start by adding your first borrower or loan in the sidebar.")
+    if loans_df is None or loans_df.empty:
+        st.info("👋 Welcome! No active data found. Add your first borrower or loan to populate this dashboard.")
         st.stop()
 
-    # --- 2. SAFE UTILS ---
-    def safe_numeric(df, col_list):
-        for col in col_list:
-            if df is not None and col in df.columns:
-                return pd.to_numeric(df[col], errors="coerce").fillna(0)
-        return pd.Series(0.0, index=df.index if df is not None else [])
-
-    def safe_date(df, col_list):
-        for col in col_list:
-            if df is not None and col in df.columns:
-                return pd.to_datetime(df[col], errors="coerce")
-        return pd.Series(pd.NaT, index=df.index if df is not None else [])
-
-    # --- 3. SAFE COLUMN STANDARDIZATION ---
-    def normalize(d):
-        if d is not None and not d.empty:
-            d.columns = d.columns.str.strip().str.lower().str.replace(" ", "_")
-        return d
-
-    df = normalize(df)
-    pay_df = normalize(pay_df)
-    exp_df = normalize(exp_df)
-    bor_df = normalize(bor_df)
-
-    df_clean = df.copy()
-
-    # --- 4. BORROWER MAPPING ---
-    bor_map = {}
-    if bor_df is not None and not bor_df.empty:
-        b_id = next((c for c in bor_df.columns if 'id' in c), None)
-        b_nm = next((c for c in bor_df.columns if 'name' in c or 'borrower' in c), None)
-        if b_id and b_nm:
-            bor_map = dict(zip(bor_df[b_id].astype(str), bor_df[b_nm].astype(str)))
-
-    link_col = next((c for c in df_clean.columns if 'borrower_id' in c or 'borrower' in c), None)
-    if link_col:
-        df_clean["borrower_name"] = df_clean[link_col].astype(str).map(bor_map).fillna(df_clean[link_col])
-    else:
-        df_clean["borrower_name"] = "Unknown Borrower"
-
-    # --- 5. FINANCIAL ENGINE ---
-    df_clean["principal_clean"] = safe_numeric(df_clean, ["principal", "amount"])
-    df_clean["interest_clean"] = safe_numeric(df_clean, ["interest", "interest_amount"])
-    df_clean["paid_clean"] = (
-        safe_numeric(df_clean, ["paid"]) + 
-        safe_numeric(df_clean, ["repaid"]) + 
-        safe_numeric(df_clean, ["amount_paid"])
-    )
-
-    stat_col = next((c for c in df_clean.columns if "status" in c), None)
-    df_clean["status_clean"] = df_clean[stat_col].astype(str).str.title() if stat_col else "Active"
-    df_clean["end_date_dt"] = safe_date(df_clean, ["end_date", "due_date", "date"])
-
-    # --- 6. PRE-FILTER ENGINE ---
+    # --- 2. ENGINE: UNIFIED CALCULATIONS ---
+    # Standardize numeric values across all sources
+    loans_df["principal_n"] = safe_numeric(loans_df, ["principal", "amount"])
+    loans_df["interest_n"] = safe_numeric(loans_df, ["interest", "interest_amount"])
+    loans_df["balance_n"] = safe_numeric(loans_df, ["balance", "total_repayable"]) - safe_numeric(loans_df, ["amount_paid", "paid"])
+    
+    # Expenses & Petty Cash integration
+    total_expenses = safe_numeric(expenses_df, ["amount"]).sum() if expenses_df is not None else 0
+    
+    # Overdue Detection
     today = pd.Timestamp.now().normalize()
-    Active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    Active_df = df_clean[df_clean["status_clean"].isin(Active_statuses)].copy()
-    overdue_df = Active_df[Active_df["end_date_dt"] < today]
+    loans_df["due_date_dt"] = safe_date(loans_df, ["end_date", "due_date"])
+    overdue_mask = (loans_df["due_date_dt"] < today) & (loans_df["status"].str.upper() != "CLEARED")
+    overdue_count = len(loans_df[overdue_mask])
 
-    # --- 7. CORE METRICS ---
-    total_issued = Active_df["principal_clean"].sum()
-    total_interest_expected = Active_df["interest_clean"].sum()
-    total_collected = df_clean["paid_clean"].sum()
-    overdue_count = len(overdue_df)
-
-    # --- 8. DISPLAY METRIC CARDS ---
+    # --- 3. TOP LEVEL METRIC CARDS ---
     m1, m2, m3, m4 = st.columns(4)
-    card_style = f"background:#fff;padding:20px;border-radius:15px;border-left:5px solid {brand_color};box-shadow:2px 2px 10px rgba(0,0,0,0.05);"
+    
+    def metric_card(title, value, subtitle, color, is_money=True):
+        fmt = f"{value:,.0f} UGX" if is_money else f"{value}"
+        return f"""
+        <div style="background:white; padding:20px; border-radius:15px; border-bottom:5px solid {color}; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+            <p style="color:#64748B; font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:5px;">{title}</p>
+            <h2 style="color:#1E293B; margin:0; font-size:22px;">{fmt}</h2>
+            <p style="color:{color}; font-size:11px; margin-top:5px; font-weight:bold;">{subtitle}</p>
+        </div>
+        """
 
-    m1.markdown(f'<div style="{card_style}"><b>💰 Active PRINCIPAL</b><h3>{total_issued:,.0f} UGX</h3></div>', unsafe_allow_html=True)
-    m2.markdown(f'<div style="{card_style}"><b>📈 EXPECTED INTEREST</b><h3>{total_interest_expected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
-    m3.markdown(f'<div style="{card_style.replace("#fff","#F0FFF4")}"><b>✅ TOTAL COLLECTED</b><h3>{total_collected:,.0f} UGX</h3></div>', unsafe_allow_html=True)
-    m4.markdown(f'<div style="{card_style.replace("#fff","#FFF5F5")}"><b>🚨 OVERDUE FILES</b><h3>{overdue_count}</h3></div>', unsafe_allow_html=True)
+    m1.markdown(metric_card("Active Principal", loans_df["principal_n"].sum(), "Portfolio Value", brand_color), unsafe_allow_html=True)
+    m2.markdown(metric_card("Interest Income", loans_df["interest_n"].sum(), "Expected Earnings", "#10B981"), unsafe_allow_html=True)
+    m3.markdown(metric_card("Operational Costs", total_expenses, "Total Expenses", "#EF4444"), unsafe_allow_html=True)
+    m4.markdown(metric_card("Critical Alerts", overdue_count, "Overdue Loans", "#F59E0B", False), unsafe_allow_html=True)
 
+    st.write("##")
+
+    # --- 4. DATA VISUALIZATION SECTION ---
+    col_l, col_r = st.columns([2, 1])
+
+    with col_l:
+        st.markdown("#### 📈 Revenue Trend vs Expenses")
+        # Merged Cashflow View
+        if payments_df is not None and not payments_df.empty:
+            payments_df["date_dt"] = pd.to_datetime(payments_df["date"], errors="coerce")
+            monthly_rev = payments_df.groupby(payments_df["date_dt"].dt.strftime("%b %Y"))[safe_numeric(payments_df, ["amount"])].sum().reset_index()
+            fig = px.area(monthly_rev, x="date_dt", y=monthly_rev.columns[1], 
+                          color_discrete_sequence=[brand_color], template="plotly_white")
+            fig.update_layout(height=300, margin=dict(l=0,r=0,b=0,t=20))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Insufficient payment history for trend analysis.")
+
+    with col_r:
+        st.markdown("#### 🎯 Portfolio Health")
+        status_data = loans_df["status"].str.upper().value_counts().reset_index()
+        fig_pie = px.pie(status_data, names="status", values="count", hole=0.7,
+                         color_discrete_sequence=["#10B981", "#F59E0B", "#EF4444", brand_color])
+        fig_pie.update_layout(height=300, showlegend=False, margin=dict(l=0,r=0,b=0,t=20))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    # --- 5. ACTIVITY FEEDS ---
     st.write("---")
-
-    # --- 9. RECENT LOANS TABLE ---
     t1, t2 = st.columns(2)
 
     with t1:
-        st.markdown(f"<h4 style='color:{brand_color};'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+        st.markdown(f"#### 🔔 Recent Loan Disbursals")
+        display_loans = loans_df.sort_values("due_date_dt", ascending=False).head(5)
+        # Styled HTML Table for high impact
+        rows = ""
+        for _, r in display_loans.iterrows():
+            status_color = "#10B981" if r['status'].upper() == "CLEARED" else "#F59E0B"
+            rows += f"""
+            <tr style="border-bottom: 1px solid #f0f0f0;">
+                <td style="padding:12px 5px;"><b>{str(r.get('borrower_id', 'Unknown'))[:8]}...</b></td>
+                <td style="padding:12px 5px; text-align:right;">{r['principal_n']:,.0f}</td>
+                <td style="padding:12px 5px; text-align:center;"><span style="color:{status_color}; font-size:10px;">●</span> {r['status']}</td>
+            </tr>
+            """
+        st.markdown(f"<table style='width:100%; font-size:13px;'>{rows}</table>", unsafe_allow_html=True)
 
-        if not Pending_df.empty:
-            recent = Pending_df.sort_values("end_date_dt", ascending=False).head(5)
-            rows_html = ""
-            for idx, (i, r) in enumerate(recent.iterrows()):
-                bg = "#F8FAFC" if idx % 2 == 0 else "#FFFFFF"
-                rows_html += f"""
-                <tr style="background:{bg}; border-bottom: 1px solid #eee;">
-                    <td style="padding:8px;">{r.get('borrower_name', 'Unknown')}</td>
-                    <td style="padding:8px; text-align:right; color:{brand_color}; font-weight:bold;">{r['principal_clean']:,.0f}</td>
-                    <td style="padding:8px; text-align:center;">{r.get('status_clean', 'Active')}</td>
-                    <td style="padding:8px; text-align:center;">{r['end_date_dt'].strftime('%d %b') if pd.notna(r['end_date_dt']) else '-'}</td>
-                </tr>"""
-
-            full_table_html = f"""
-            <table style="width:100%; font-size:13px; border-collapse:collapse; font-family:sans-serif;">
-                <tr style="background:{brand_color}; color:white;"><th style="padding:10px; text-align:left;">Borrower</th><th style="padding:10px; text-align:right;">Principal</th><th style="padding:10px; text-align:center;">Status</th><th style="padding:10px; text-align:center;">Due</th></tr>
-                {rows_html}
-            </table>"""
-            st.components.v1.html(full_table_html, height=250)
-        else:
-            st.info("No Pending loans found.")
-
-    # --- 10. PAYMENTS TABLE ---
     with t2:
-        st.markdown("<h4 style='color:#2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
-        if pay_df is not None and not pay_df.empty:
-            pay_df["amount_clean"] = safe_numeric(pay_df, ["amount", "amount_paid"])
-            recent_pay = pay_df.sort_values("date", ascending=False).head(5)
-            pay_rows = ""
-            for idx, (i, r) in enumerate(recent_pay.iterrows()):
-                bg = "#F0F8FF" if idx % 2 == 0 else "#FFFFFF"
-                pay_rows += f"""<tr style="background:{bg}; border-bottom:1px solid #eee;"><td style="padding:8px;">{r.get('borrower', 'Unknown')}</td><td style="padding:8px; text-align:right; color:#2E7D32; font-weight:bold;">{r['amount_clean']:,.0f}</td><td style="padding:8px; text-align:center;">{r.get('date', '-')}</td></tr>"""
-            
-            pay_table_html = f'<table style="width:100%; font-size:13px; border-collapse:collapse; font-family:sans-serif;"><tr style="background:#2E7D32; color:white;"><th style="padding:10px; text-align:left;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:center;">Date</th></tr>{pay_rows}</table>'
-            st.components.v1.html(pay_table_html, height=250)
+        st.markdown("#### 💸 Latest Expenses")
+        if expenses_df is not None and not expenses_df.empty:
+            display_exp = expenses_df.head(5)
+            exp_rows = ""
+            for _, r in display_exp.iterrows():
+                exp_rows += f"""
+                <tr style="border-bottom: 1px solid #f0f0f0;">
+                    <td style="padding:12px 5px;">{r.get('category', 'General')}</td>
+                    <td style="padding:12px 5px; text-align:right; color:#EF4444;">-{safe_numeric(expenses_df, ['amount']).iloc[0]:,.0f}</td>
+                    <td style="padding:12px 5px; text-align:right; color:#64748B;">{r.get('date', '-')}</td>
+                </tr>
+                """
+            st.markdown(f"<table style='width:100%; font-size:13px;'>{exp_rows}</table>", unsafe_allow_html=True)
         else:
-            st.write("No recent payments found.")
+            st.info("No recorded expenses.")
 
-    # --- 11. CHARTS ---
-    st.write("---")
-    c1, c2 = st.columns(2)
+# --- HELPERS TO KEEP LOGIC SYNCED ---
+def normalize(df):
+    if df is not None and not df.empty:
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+        return df
+    return df
 
-    with c1:
-        if not df_clean.empty:
-            status_counts = df_clean["status_clean"].value_counts().reset_index()
-            status_counts.columns = ["Status", "Count"]
-            fig = px.pie(status_counts, names="Status", values="Count", hole=0.5, color_discrete_sequence=["#4A90E2","#FF4B4B","#FFA500"])
-            fig.update_layout(title="Loan Status Distribution", margin=dict(l=0, r=0, t=30, b=0))
-            st.plotly_chart(fig, use_container_width=True)
+def safe_numeric(df, cols):
+    for c in cols:
+        if c in df.columns:
+            return pd.to_numeric(df[c], errors="coerce").fillna(0)
+    return pd.Series(0.0, index=df.index if df is not None else [])
 
-    with c2:
-        if pay_df is not None and not pay_df.empty:
-            pay_df["date_dt"] = pd.to_datetime(pay_df["date"], errors="coerce")
-            # Group by month and sum clean amounts for visual cashflow
-            cashflow_df = pay_df.groupby(pay_df["date_dt"].dt.strftime("%b %Y"))["amount_clean"].sum().reset_index()
-            fig_bar = px.bar(cashflow_df, x="date_dt", y="amount_clean", title="Monthly Revenue Trend", color_discrete_sequence=["#2E7D32"])
-            st.plotly_chart(fig_bar, use_container_width=True)
-        else:
-            st.info("No payment history available for charting.")
+def safe_date(df, cols):
+    for c in cols:
+        if c in df.columns:
+            return pd.to_datetime(df[c], errors="coerce")
+    return pd.Series(pd.NaT, index=df.index if df is not None else [])
 # ==========================================
 # FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
