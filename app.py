@@ -1593,7 +1593,7 @@ def show_loans():
                     st.rerun()
 
             if st.button("🗑️ Delete Loan Permanently", use_container_width=True, key=f"del_{target_id}"):
-                supabase.table("loans").delete().eq("id", target_id).execute()
+                if target_id:     supabase.table("loans").delete().eq("id", target_id).execute()
                 st.warning("Loan Deleted.")
                 st.cache_data.clear()
                 st.rerun()
