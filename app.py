@@ -1209,28 +1209,59 @@ def show_loans():
     Core engine for issuing and managing loan agreements.
     Preserves Midnight Blue branding and Peachy Luxe themes.
     """
+
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
-    
-    # 1. LOAD DATA FROM SUPABASE
+
+    # ------------------------------
+    # 1. LOAD DATA (SOURCE OF TRUTH)
+    # ------------------------------
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
-    payments_df = get_cached_data("payments") 
+    payments_df = get_cached_data("payments")
 
-    # ✅ SAFETY (prevents future crashes)
-    if loans_df is None: loans_df = pd.DataFrame()
-    if borrowers_df is None: borrowers_df = pd.DataFrame()
-    if payments_df is None: payments_df = pd.DataFrame()
-
-    if not borrowers_df.empty:
-        Active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
-    else:
-        Active_borrowers = pd.DataFrame()
-
-    if loans_df.empty:
+    # ------------------------------
+    # 2. SAFETY FALLBACKS
+    # ------------------------------
+    if loans_df is None or loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "id", "sn", "loan_id_label", "borrower_id", "borrower", "principal", "interest",
-            "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date", "cycle_no"
+            "id", "sn", "loan_id_label", "borrower_id", "borrower",
+            "principal", "interest", "total_repayable",
+            "amount_paid", "balance", "status",
+            "start_date", "end_date", "cycle_no"
         ])
+
+    if borrowers_df is None:
+        borrowers_df = pd.DataFrame()
+
+    if payments_df is None:
+        payments_df = pd.DataFrame()
+
+    # ------------------------------
+    # 3. ENSURE CORE COLUMNS EXIST
+    # ------------------------------
+    if "id" not in loans_df.columns:
+        loans_df["id"] = [str(uuid.uuid4()) for _ in range(len(loans_df))]
+
+    # Normalize critical columns safely
+    required_cols = [
+        "loan_id_label", "borrower_id", "principal",
+        "total_repayable", "amount_paid", "balance",
+        "status", "cycle_no"
+    ]
+
+    for col in required_cols:
+        if col not in loans_df.columns:
+            loans_df[col] = 0 if col in ["principal", "total_repayable", "amount_paid", "balance"] else ""
+
+    # ------------------------------
+    # 4. ACTIVE BORROWERS FILTER
+    # ------------------------------
+    if not borrowers_df.empty and "status" in borrowers_df.columns:
+        active_borrowers = borrowers_df[
+            borrowers_df["status"].astype(str).str.upper() == "ACTIVE"
+        ]
+    else:
+        active_borrowers = pd.DataFrame()
 
     # ==============================
     # 🔥 DATA STANDARDIZATION & SMART SYNC (HARDENED)
