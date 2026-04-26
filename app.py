@@ -1574,7 +1574,7 @@ def show_loans():
             edit_map = {     f"{row.get('borrower', 'Unknown')} • {row.get('loan_id_label', 'N/A')}": row.get("id", "")     for _, row in loans_df.iterrows()     if "id" in loans_df.columns }
             selected_edit_label = st.selectbox("Select Loan to Edit", list(edit_map.keys()), key="edit_loan_selector")
             target_id = edit_map[selected_edit_label]
-            loan_to_edit = loans_df[loans_df["id"] == target_id].iloc[0]
+            loan_match = loans_df[loans_df.get("id", "") == target_id] if loan_match.empty:     st.error("⚠️ Loan record missing or corrupted.")     st.stop()  loan_to_edit = loan_match.iloc[0]
 
             # Unique key for form and its internal widgets
             with st.form(key=f"edit_form_{target_id}"):
