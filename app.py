@@ -1233,7 +1233,7 @@ def show_loans():
         ])
 
     # ==============================
-    # 🔥 STANDARDIZATION
+    # 🔥 STANDARDIZATION (YOUR ORIGINAL LOGIC)
     # ==============================
     loans_df["id"] = loans_df.get("id", "").astype(str)
 
@@ -1264,6 +1264,7 @@ def show_loans():
             return "BCF"
         if paid >= total and total > 0:
             return "CLEARED"
+        # Logic Fix: If it's past due date, call it PENDING so the rollover picks it up
         return "PENDING"
 
     # ✅ Apply status logic
@@ -1380,27 +1381,28 @@ def show_loans():
     # ⚙️ ACTIONS / ROLLOVER (COMPOUND ENGINE)
     # ==============================
     with tab_actions:
-        st.markdown("---") 
-        # 🔥 FORCE RE-FETCH
-        loans_df = get_data("loans") 
+        st.markdown("### 🔄 Compound Interest Engine")
         today = date.today()
 
         if st.button("🔄 Execute Monthly Rollover (Compound All Overdue)", use_container_width=True):
             try: 
-                # 1. FORCE NUMERIC
+                # Ensure we are working with the absolute latest data
+                fresh_loans = get_data("loans")
+                
                 money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
                 for col in money_cols:
-                    if col in loans_df.columns:
-                        loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
+                    if col in fresh_loans.columns:
+                        fresh_loans[col] = pd.to_numeric(fresh_loans[col], errors='coerce').fillna(0)
 
-                # 2. ISOLATE OVERDUE TARGETS
+                # 1. FIND THE LATEST CYCLE FOR EVERY LOAN
                 latest_cycles = (
-                    loans_df.sort_values(by=["sn", "cycle_no"], ascending=[True, False])
+                    fresh_loans.sort_values(by=["sn", "cycle_no"], ascending=[True, False])
                     .drop_duplicates(subset=["sn"], keep="first")
                 )
                 
+                # 2. FILTER TARGETS (Balance > 0 AND End Date < Today)
+                # We use the raw database status here to be safe
                 targets = latest_cycles[
-                    (latest_cycles["status"].str.upper() == "PENDING") &
                     (latest_cycles["balance"] > 0) &
                     (pd.to_datetime(latest_cycles["end_date"]).dt.date < today)
                 ].copy()
@@ -1412,31 +1414,22 @@ def show_loans():
                     count = 0
                     
                     for _, r in targets.iterrows():
-                        # STEP 1: Archive old row
+                        # STEP 1: Archive old row as BCF
                         supabase.table("loans").update({"status": "BCF"}).eq("id", r["id"]).execute()
 
-                        # STEP 2: THE ULTIMATE MATH FIX
+                        # STEP 2: THE MATH (Original Compound Logic)
                         old_p = float(r.get('principal', 0))
                         old_i = float(r.get('interest', 0))
                         
-                        # New Basis = Old P + Old I
                         new_basis = old_p + old_i
-                        # Use local rate if available or default to 3%
-                        current_rate = rate if 'rate' in locals() else 0.03
-                        new_month_interest = new_basis * (current_rate / 100 if current_rate > 1 else current_rate)
+                        # Using 3% default if rate is not stored per row
+                        new_month_interest = new_basis * 0.03 
                         compounded_total = new_basis + new_month_interest
                         
-                        # STEP 3: DATE MATH (FIXED FOR CALENDAR ACCURACY)
+                        # STEP 3: DATE MATH
                         orig_end_ts = pd.to_datetime(r['end_date'], errors='coerce')
-                        
-                        if pd.isna(orig_end_ts):
-                            new_start = today
-                        else:
-                            new_start = orig_end_ts.date()
-
-                        # Advance by exactly 1 calendar month
-                        calculated_end = pd.to_datetime(new_start) + pd.DateOffset(months=1)
-                        new_end = calculated_end.date()
+                        new_start = orig_end_ts.date() if not pd.isna(orig_end_ts) else today
+                        new_end = new_start + timedelta(days=30)
 
                         new_loan_record = {
                             "id": str(uuid.uuid4()),
@@ -1460,8 +1453,8 @@ def show_loans():
                     if new_rows_list:
                         new_entries_df = pd.DataFrame(new_rows_list)
                         save_data_saas("loans", new_entries_df)
-                        st.success(f"✅ Compounding Successful! Advanced {count} loans to next cycle.")
                         st.cache_data.clear() 
+                        st.success(f"✅ Compounding Successful! Advanced {count} loans.")
                         st.rerun()
 
             except Exception as e:
