@@ -1237,16 +1237,33 @@ def show_loans():
         loans_df = loans_raw.copy()
 
     # 🛡️ HARDEN ID COLUMN (Fixes Application Error: 'id')
-    # If the database record is missing an 'id', we generate one to prevent crashes
     if "id" not in loans_df.columns:
         loans_df["id"] = [str(uuid.uuid4()) for _ in range(len(loans_df))]
     else:
-        # Ensure all IDs are strings and fill any NaNs
-        loans_df["id"] = loans_df["id"].astype(str).replace("nan", str(uuid.uuid4()))
+        loans_df["id"] = loans_df["id"].astype(str)
+        mask = loans_df["id"].isna() | (loans_df["id"].str.strip() == "") | (loans_df["id"] == "nan")
+        if mask.any():
+            loans_df.loc[mask, "id"] = [str(uuid.uuid4()) for _ in range(mask.sum())]
 
     # 3. SAFETY FOR OTHER TABLES
     borrowers_df = borrowers_raw.copy() if borrowers_raw is not None else pd.DataFrame()
     payments_df = payments_raw.copy() if payments_raw is not None else pd.DataFrame()
+
+    # 🛡️ HARDEN BORROWERS ID
+    if not borrowers_df.empty and all(col in borrowers_df.columns for col in ["id", "name"]):
+        if "id" not in borrowers_df.columns:
+            borrowers_df["id"] = [str(uuid.uuid4()) for _ in range(len(borrowers_df))]
+        else:
+            borrowers_df["id"] = borrowers_df["id"].astype(str)
+            mask = borrowers_df["id"].isna() | (borrowers_df["id"].str.strip() == "") | (borrowers_df["id"] == "nan")
+            if mask.any():
+                borrowers_df.loc[mask, "id"] = [str(uuid.uuid4()) for _ in range(mask.sum())]
+
+    # 🛡️ HARDEN PAYMENTS loan_id
+    if not payments_df.empty:
+        if "loan_id" not in payments_df.columns:
+            payments_df["loan_id"] = ""
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
 
     # ------------------------------
     # 4. ACTIVE BORROWERS FILTER
