@@ -1476,7 +1476,7 @@ def show_loans():
                     next_cycle = int(loan["cycle_no"]) + 1
 
                     # ✅ FIX: derive new dates from previous loan (NOT today)
-                    prev_end = pd.to_datetime(loan["end_date"], errors="coerce")
+                    orig_end = pd.to_datetime(r['End_Date'], errors='coerce')
 
                     if pd.isna(prev_end):
                         prev_end = today
@@ -1484,8 +1484,10 @@ def show_loans():
                         # Ensure we are working with a date object
                         prev_end = prev_end.date() if hasattr(prev_end, 'date') else prev_end
 
-                    new_start = prev_end
-                    new_end = prev_end + timedelta(days=30)
+                        
+                        new_start = orig_end if pd.notna(orig_end) else datetime.now()
+                        new_end = new_start + pd.DateOffset(months=1)
+
 
                     new_loan_record = {
                         "id": str(uuid.uuid4()),
