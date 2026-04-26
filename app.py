@@ -1232,152 +1232,69 @@ def show_loans():
             "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date", "cycle_no"
         ])
 
-
     # ==============================
-    # 🔥 DATA STANDARDIZATION & SMART SYNC (HARDENED)
+    # 🔥 DATA STANDARDIZATION & SMART SYNC (FIXED)
     # ==============================
-
-    import pandas as pd
-    from datetime import date
-
-    # ------------------------------
-    # 0. BASIC SANITY
-    # ------------------------------
-    loans_df = loans_df.copy()
-    payments_df = payments_df.copy()
-
-    # Ensure IDs are strings
     loans_df["id"] = loans_df["id"].astype(str)
-    loans_df["borrower_id"] = loans_df.get("borrower_id", "").astype(str)
 
-    if not payments_df.empty:
+    # ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
+    if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
+        pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
+        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
 
-    # ------------------------------
-    # 1. NUMERIC CLEANUP
-    # ------------------------------
+    # 1. Clean all numeric columns first
     num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
-
     for col in num_cols:
         if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+            loans_df[col] = pd.to_numeric(pd.Series(loans_df[col]), errors="coerce").fillna(0)
         else:
             loans_df[col] = 0.0
 
-    if not payments_df.empty and "amount" in payments_df.columns:
-        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
-
-    # ------------------------------
-    # 2. DATE STANDARDIZATION
-    # ------------------------------
-    date_cols = ["start_date", "end_date"]
-
-    for col in date_cols:
-        if col in loans_df.columns:
-            loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
-
-    # ------------------------------
-    # 3. PAYMENT SYNC (SOURCE OF TRUTH)
-    # ------------------------------
-    if not payments_df.empty and "loan_id" in payments_df.columns:
-        pay_sums = payments_df.groupby("loan_id")["amount"].sum()
-        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
-
-    # ------------------------------
-    # 4. BALANCE RECOMPUTE (STRICT)
-    # ------------------------------
+    # 2. Force Recalculate Balance
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
+    
+    # 🚨 CRITICAL FIX: Standardize status and use a PRIORITY shield
+    loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
 
-    # ------------------------------
-    # 5. STATUS STANDARDIZATION
-    # ------------------------------
-    loans_df["status"] = loans_df.get("status", "ACTIVE").astype(str).str.upper().str.strip()
-
+    # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
     def determine_status(row):
         current_status = row["status"]
-
-        # 🛡️ PROTECT DB STATES
+        
+        # Priority 1: IF DB SAYS BCF OR PENDING, DO NOT OVERWRITE!
+        # This stops the code from changing "BCF" back to "ACTIVE" because of the balance
         if current_status in ["BCF", "PENDING"]:
             return current_status
-
-        # ✅ AUTO LOGIC
+        
+        # Priority 2: If balance is zero, it's CLEARED
         if row["balance"] <= 0:
             return "CLEARED"
-
+            
+        # Priority 3: Otherwise, it stays ACTIVE
         return "ACTIVE"
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
-
-    # Force zero balance if cleared
+    
+    # Ensure balance is zeroed for anything mathematically cleared
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
-    # ------------------------------
-    # 6. CYCLE CLEANUP
-    # ------------------------------
-    loans_df["cycle_no"] = (
-        pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce")
-        .fillna(1)
-        .astype(int)
-    )
+    # 4. Constant SN & Cycle Management Logic
+    if not loans_df.empty:
+        loans_df = loans_df.sort_values(by=["borrower_id", "start_date"])
+        if "sn" not in loans_df.columns or loans_df["sn"].isnull().all():
+            loans_df["sn"] = loans_df.groupby("borrower_id").cumcount() + 1
+            loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{x:05d}")
+        if "cycle_no" not in loans_df.columns or loans_df["cycle_no"].isnull().all():
+            loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
 
-    # ------------------------------
-    # 7. SORTING (CRITICAL ORDER)
-    # ------------------------------
-    loans_df = loans_df.sort_values(
-        by=["loan_id_label", "cycle_no"]
-    ).reset_index(drop=True)
+    # 5. Borrower Mapping
+    if not borrowers_df.empty and "borrower_id" in loans_df.columns:
+        borrowers_df['id'] = borrowers_df['id'].astype(str)
+        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
+        loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
 
-    # ------------------------------
-    # 8. SN GENERATION (CHOOSE ONE)
-    # ------------------------------
-
-    # ✅ OPTION A: GLOBAL SN (RECOMMENDED)
-    loans_df["sn"] = (loans_df.index + 1).astype(str).str.zfill(4)
-
-    # ------------------------------
-    # 9. BORROWER NAME MAPPING
-    # ------------------------------
-    if not borrowers_df.empty:
-        bor_map = dict(zip(
-            borrowers_df["id"].astype(str),
-            borrowers_df["name"]
-        ))
-        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
-
-    # ------------------------------
-    # 10. UI GROUPING (SEPARATORS)
-    # ------------------------------
-    loans_df["__group_break"] = loans_df["loan_id_label"].ne(
-        loans_df["loan_id_label"].shift()
-    )
-
-    # ------------------------------
-    # 11. FINAL COLUMN ORDER (SAFE)
-    # ------------------------------
-    preferred_order = [
-        "sn", "loan_id_label", "borrower", "cycle_no",
-        "principal", "total_repayable", "amount_paid",
-        "balance", "start_date", "end_date", "status"
-    ]
-
-    loans_df = loans_df[[col for col in preferred_order if col in loans_df.columns] + ["__group_break"]]
-
-    def style_rows(row):
-        base = ""
-
-        # STATUS COLORS
-        if row["status"] == "BCF":
-            base = "background-color: #fce5cd; color: #b45f06;"
-        elif row["status"] == "PENDING":
-            base = "background-color: #f4cccc; color: #990000;"
-        elif row["status"] == "CLEARED":
-            base = "background-color: #d9ead3; color: #274e13;"
-
-        # GROUP SEPARATOR
-        if row["__group_break"]:
-            base += " border-top: 3px solid black;"
-
-        return [base] * len(row)
+    
 
     # ==============================
     # TAB: PORTFOLIO VIEW
