@@ -987,10 +987,10 @@ def show_borrowers():
             df.columns = df.columns.str.strip().str.lower()
 
     # Apply Tenant Filters
-    # (Assuming tenant_id is defined in the outer scope of the function)
-    if "tenant_id" in borrowers_df.columns:
+    tenant_id = get_current_tenant() # Ensure we fetch the actual ID
+    if not borrowers_df.empty and "tenant_id" in borrowers_df.columns:
         borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(tenant_id)]
-    if "tenant_id" in loans_df.columns:
+    if not loans_df.empty and "tenant_id" in loans_df.columns:
         loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
 
     # Ensure required structural columns exist
@@ -998,6 +998,22 @@ def show_borrowers():
     for col in required_cols:
         if col not in borrowers_df.columns:
             borrowers_df[col] = ""
+
+    # ==============================
+    # 🔗 THE NAME FIX: DATA LINKAGE
+    # ==============================
+    if not borrowers_df.empty and not loans_df.empty:
+        # Clean the ID columns to ensure perfect matching (removes hidden spaces/type issues)
+        borrowers_df["id"] = borrowers_df["id"].astype(str).str.strip()
+        loans_df["borrower_id"] = loans_df["borrower_id"].astype(str).str.strip()
+        
+        # Create the mapping dictionary
+        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+        
+        # Apply the name to the loans table
+        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown Borrower")
+    else:
+        loans_df["borrower"] = "Unknown"
     # ==============================
     # 🔥 REAL-TIME RISK ENGINE
     # ==============================
