@@ -1571,10 +1571,21 @@ def show_loans():
     with tab_manage:
         if not loans_df.empty:
             # Added unique key to selectbox
-            edit_map = {     f"{row.get('borrower', 'Unknown')} • {row.get('loan_id_label', 'N/A')}": row.get("id", "")     for _, row in loans_df.iterrows()     if "id" in loans_df.columns }
+            edit_map = {
+                f"{row.get('borrower', 'Unknown')} • {row.get('loan_id_label', 'N/A')}": row.get("id", "") 
+                for _, row in loans_df.iterrows() if "id" in loans_df.columns
+            }
+            
             selected_edit_label = st.selectbox("Select Loan to Edit", list(edit_map.keys()), key="edit_loan_selector")
             target_id = edit_map[selected_edit_label]
-            loan_match = loans_df[loans_df.get("id", "") == target_id] if loan_match.empty:     st.error("⚠️ Loan record missing or corrupted.")     st.stop()  loan_to_edit = loan_match.iloc[0]
+            
+            loan_match = loans_df[loans_df.get("id", "") == target_id]
+            
+            if loan_match.empty:
+                st.error("⚠️ Loan record missing or corrupted.")
+                st.stop()
+                
+            loan_to_edit = loan_match.iloc[0]
 
             # Unique key for form and its internal widgets
             with st.form(key=f"edit_form_{target_id}"):
@@ -1593,10 +1604,11 @@ def show_loans():
                     st.rerun()
 
             if st.button("🗑️ Delete Loan Permanently", use_container_width=True, key=f"del_{target_id}"):
-                if target_id:     supabase.table("loans").delete().eq("id", target_id).execute()
-                st.warning("Loan Deleted.")
-                st.cache_data.clear()
-                st.rerun()
+                if target_id:
+                    supabase.table("loans").delete().eq("id", target_id).execute()
+                    st.warning("Loan Deleted.")
+                    st.cache_data.clear()
+                    st.rerun()
     
             
 import pandas as pd
