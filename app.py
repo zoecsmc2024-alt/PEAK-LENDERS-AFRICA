@@ -1257,11 +1257,11 @@ def show_loans():
     # 4. ACTIVE BORROWERS FILTER
     # ------------------------------
     if not borrowers_df.empty and "status" in borrowers_df.columns:
-        active_borrowers = borrowers_df[
+        Active_borrowers = borrowers_df[
             borrowers_df["status"].astype(str).str.upper() == "ACTIVE"
         ]
     else:
-        active_borrowers = pd.DataFrame(columns=["id", "name"])
+        Active_borrowers = pd.DataFrame(columns=["id", "name"])
 
     # ==============================
     # 🔥 DATA STANDARDIZATION & SMART SYNC (HARDENED)
