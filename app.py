@@ -1278,25 +1278,23 @@ def show_loans():
     # Ensure balance is zeroed for anything mathematically cleared
     loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
-    # 4. Constant SN & Cycle Management Logic
-    if not loans_df.empty:
-        loans_df = loans_df.sort_values(by=["borrower_id", "start_date"])
-        if "sn" not in loans_df.columns or loans_df["sn"].isnull().all():
-            loans_df["sn"] = loans_df.groupby("borrower_id").cumcount() + 1
-            loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{x:05d}")
-        if "cycle_no" not in loans_df.columns or loans_df["cycle_no"].isnull().all():
-            loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
+    loans_df["status"] = loans_df.apply(determine_status, axis=1)
+    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
+    loans_df["cycle_no"] = pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce").fillna(1).astype(int)
+    loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"]).reset_index(drop=True)
 
-    # 5. Borrower Mapping
-    if not borrowers_df.empty and "borrower_id" in loans_df.columns:
-        borrowers_df['id'] = borrowers_df['id'].astype(str)
-        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
-        loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+    def generate_next_sn(df_input):
+        if "sn" not in df_input.columns or df_input.empty: return "0001"
+        numeric_sn = pd.to_numeric(df_input["sn"], errors="coerce")
+        max_sn = numeric_sn.max()
+        return str(int(max_sn) + 1).zfill(4) if not pd.isna(max_sn) else "0001"
 
-    # UI TABS
-    tab_view, tab_add, tab_manage, tab_actions = st.tabs([
-        "📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"
-    ])
+    if not borrowers_df.empty:
+        bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
+        loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
+
+    tab_view, tab_add, tab_manage, tab_actions = st.tabs(["📂 Portfolio View","➕ New Loan","🛠️ Manage/Edit","⚙️ Actions"])
+    
 
     # ==============================
     # TAB: PORTFOLIO VIEW
