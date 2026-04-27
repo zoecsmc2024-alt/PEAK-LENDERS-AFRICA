@@ -1457,10 +1457,25 @@ def show_loans():
     save_ready_df = loans_df.copy()
 
     for col in ["start_date", "end_date"]:
-        save_ready_df[col] = pd.to_datetime(
-            save_ready_df[col],
-            errors="coerce"
-        ).dt.strftime("%Y-%m-%d")
+        if col in save_ready_df.columns:
+            save_ready_df[col] = pd.to_datetime(
+                save_ready_df[col], 
+                errors="coerce"
+            ).dt.strftime("%Y-%m-%d")
+
+    # UUID SAFE CLEANUP
+    uuid_cols = [
+        "id",
+        "borrower_id",
+        "parent_loan_id",
+        "tenant_id"
+    ]
+
+    for col in uuid_cols:
+        if col in save_ready_df.columns:
+            save_ready_df[col] = save_ready_df[col].replace("", None)
+            save_ready_df[col] = save_ready_df[col].replace("nan", None)
+            save_ready_df[col] = save_ready_df[col].replace("None", None)
 
     save_data_saas("loans", save_ready_df)
 
