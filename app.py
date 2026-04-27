@@ -1263,7 +1263,7 @@ def show_loans():
     if payments_df is None:
         payments_df = pd.DataFrame()
 
-        # ------------------------------
+    # ------------------------------
     # REQUIRED DEFAULTS
     # ------------------------------
     required_defaults = {
@@ -1351,7 +1351,6 @@ def show_loans():
     loans_df["id"] = loans_df["id"].astype(str).str.strip()
     loans_df["parent_loan_id"] = loans_df["parent_loan_id"].astype(str).str.strip()
 
-    # existing max SN
     existing_nums = []
     for val in loans_df["sn"]:
         if isinstance(val, str) and val.startswith("LN-"):
@@ -1362,17 +1361,14 @@ def show_loans():
 
     next_sn_val = max(existing_nums, default=0)
 
-    # 🔥 Build lookup from FINAL STATE ONLY (not incremental)
-    id_to_sn = {
-        row["id"]: row["sn"]
-        for _, row in loans_df.iterrows()
-        if isinstance(row["sn"], str) and row["sn"].startswith("LN-")
-    }
+    id_to_sn = {}
 
     changed = True
     iterations = 0
 
-    # 🔁 FIXED POINT ITERATION (solves chain dependency order issues)
+    # 🔥 FIX: ensure parent-first resolution stability
+    loans_df = loans_df.sort_values(by=["parent_loan_id", "start_date", "id"], na_position="last").reset_index(drop=True)
+
     while changed and iterations < 10:
         changed = False
         iterations += 1
@@ -1383,14 +1379,12 @@ def show_loans():
             current_sn = loans_df.at[i, "sn"]
             parent_id = loans_df.at[i, "parent_loan_id"]
 
-            # already valid → ensure map consistency
+            # keep valid SNs
             if isinstance(current_sn, str) and current_sn.startswith("LN-"):
-                if id_to_sn.get(current_id) != current_sn:
-                    id_to_sn[current_id] = current_sn
-                    changed = True
+                id_to_sn[current_id] = current_sn
                 continue
 
-            # inherit from parent chain (not just direct lookup)
+            # inherit safely
             parent_sn = id_to_sn.get(parent_id)
 
             if parent_sn and isinstance(parent_sn, str) and parent_sn.startswith("LN-"):
@@ -1399,22 +1393,25 @@ def show_loans():
                 changed = True
                 continue
 
-            # assign new SN only if truly orphan
+            # assign new SN only if orphan
             next_sn_val += 1
             new_sn = f"LN-{next_sn_val:04d}"
             loans_df.at[i, "sn"] = new_sn
             id_to_sn[current_id] = new_sn
             changed = True
 
-    # ------------------------------
-    # STATUS LOGIC (ROBUST)
-    # ------------------------------
+    # ==============================
+    # STATUS LOGIC (CLEAN ISOLATION FIX)
+    # ==============================
     loans_df["status"] = "CLEARED"
     loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
 
-    for sn_val, grp in loans_df.groupby("sn", dropna=False):
+    # 🔥 FIX: exclude cleared loans from chain logic
+    active_df = loans_df[loans_df["balance"] > 0].copy()
 
-        open_grp = grp[grp["balance"] > 0]
+    for sn_val, grp in active_df.groupby("sn", dropna=False):
+
+        open_grp = grp.copy()
 
         if open_grp.empty:
             continue
@@ -1441,7 +1438,7 @@ def show_loans():
         ] = "ACTIVE" if latest_cycle == 1 else "PENDING"
 
     # ------------------------------
-    # FINAL SORT (DISPLAY ONLY)
+    # FINAL SORT (DISPLAY ONLY - NO STATE IMPACT)
     # ------------------------------
     loans_df = loans_df.sort_values(
         by=["sn", "cycle_no", "start_date"],
