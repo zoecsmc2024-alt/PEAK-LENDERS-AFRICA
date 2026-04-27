@@ -1189,28 +1189,23 @@ def get_current_tenant():
 # 🧠 DATABASE ADAPTER (MULTI-TENANT SAFE)
 # ==============================
 def get_data(table_name):
-    tenant_id = get_current_tenant()
+    tenant_id = str(get_current_tenant()).strip()
     df = get_cached_data(table_name)
 
-    st.write("SESSION TENANT:", tenant_id)
+    if df is None:
+        return pd.DataFrame()
 
-    if df is not None and not df.empty:
-        st.write("ALL ROWS:")
-        st.dataframe(df)
+    if df.empty:
+        return df
 
-        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-        if "tenant_id" in df.columns and tenant_id:
-            df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
+    if "tenant_id" in df.columns:
+        df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
 
-            df = df[
-                df["tenant_id"] == str(tenant_id).strip()
-            ].copy()
+        df = df[df["tenant_id"] == tenant_id].copy()
 
-            st.write("FILTERED ROWS:")
-            st.dataframe(df)
-
-    return df
+    return df.reset_index(drop=True)
 
 def save_data_saas(table_name, df):
     tenant_id = get_current_tenant()
