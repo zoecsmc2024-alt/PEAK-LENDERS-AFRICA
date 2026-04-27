@@ -1354,7 +1354,6 @@ def show_loans():
     )
 
     def determine_status(row):
-
         if row["status"] in ["BCF", "PENDING"]:
             return row["status"]
 
@@ -1396,8 +1395,6 @@ def show_loans():
     next_sn_val = max(existing_nums, default=0)
 
     for i in loans_df.index:
-
-        current_id = str(loans_df.at[i, "id"]).strip()
         parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
         current_sn = str(loans_df.at[i, "sn"]).strip()
 
@@ -1405,13 +1402,11 @@ def show_loans():
         # ROLLOVER LOAN
         # --------------------------
         if parent_id != "":
-
             parent_match = loans_df[
                 loans_df["id"].astype(str) == parent_id
             ]
 
             if not parent_match.empty:
-
                 parent_sn = str(
                     parent_match.iloc[0]["sn"]
                 ).strip()
@@ -1423,7 +1418,6 @@ def show_loans():
         # NEW LOAN
         # --------------------------
         if not str(loans_df.at[i, "sn"]).startswith("LN-"):
-
             next_sn_val += 1
             loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
 
@@ -1449,7 +1443,6 @@ def show_loans():
     # BORROWER NAME MAP
     # ------------------------------
     if not borrowers_df.empty:
-
         borrowers_df["id"] = borrowers_df["id"].astype(str)
 
         bor_map = dict(
@@ -1467,13 +1460,11 @@ def show_loans():
     # ACTIVE BORROWERS
     # ------------------------------
     if not borrowers_df.empty and "status" in borrowers_df.columns:
-
         Active_borrowers = borrowers_df[
             borrowers_df["status"]
             .astype(str)
             .str.upper() == "ACTIVE"
         ]
-
     else:
         Active_borrowers = pd.DataFrame(
             columns=["id", "name"]
@@ -1489,7 +1480,15 @@ def show_loans():
     # ------------------------------
     # SAVE CLEAN DATA
     # ------------------------------
-    save_ready_df = loans_df.copy()  for col in ["start_date", "end_date"]:     if col in save_ready_df.columns:         save_ready_df[col] = pd.to_datetime(             save_ready_df[col],             errors="coerce"         ).dt.strftime("%Y-%m-%d")  save_data_saas("loans", save_ready_df)
+    save_ready_df = loans_df.copy()
+    for col in ["start_date", "end_date"]:
+        if col in save_ready_df.columns:
+            save_ready_df[col] = pd.to_datetime(
+                save_ready_df[col],
+                errors="coerce"
+            ).dt.strftime("%Y-%m-%d")
+
+    save_data_saas("loans", save_ready_df)
 
     # ==============================
     # TABS
