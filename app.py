@@ -1338,29 +1338,21 @@ def show_loans():
         loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
-    # ==============================
-    # 🧠 FIXED STATUS LOGIC
-    # ==============================
+    # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
     def determine_status(row):
-        today = date.today()
-        paid = row.get("amount_paid", 0)
-        total = row.get("total_repayable", 0)
-        end_date = row.get("end_date")
-        current_db_status = str(row.get("status", "")).upper().strip()
-
-        # 🛡️ HARD LOCK BCF
-        if current_db_status == "BCF":
-            return "BCF"
-
-        # ✅ CLEARED
-        if paid >= total and total > 0:
+        current_status = row["status"]
+        
+        # Priority 1: IF DB SAYS BCF OR PENDING, DO NOT OVERWRITE!
+        # This stops the code from changing "BCF" back to "ACTIVE" because of the balance
+        if current_status in ["BCF", "PENDING"]:
+            return current_status
+        
+        # Priority 2: If balance is zero, it's CLEARED
+        if row["balance"] <= 0:
             return "CLEARED"
-
-        # 🔴 OVERDUE → BCF
-        if end_date and today > end_date and paid == 0:
-            return "BCF"
-
-        return "PENDING"
+            
+        # Priority 3: Otherwise, it stays ACTIVE
+        return "ACTIVE"
 
     # ------------------------------
     # 7. SORTING (CRITICAL ORDER)
