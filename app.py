@@ -1341,7 +1341,7 @@ def show_loans():
     # ------------------------------
     # SMART STATUS LOGIC (CHAIN AWARE)
     # ------------------------------
-    # Normalize status strings first
+    # Standardize for comparison
     loans_df["status"] = (
         loans_df["status"]
         .astype(str)
@@ -1349,34 +1349,52 @@ def show_loans():
         .str.upper()
     )
 
-    # Default: If balance is zero, it's CLEARED
-    loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
+    # Priority: Paid loans are always CLEARED
+    loans_df.loc[
+        loans_df["balance"] <= 0,
+        "status"
+    ] = "CLEARED"
 
-    # Process each loan family by SN (Serial Number)
-    for sn_val, grp in loans_df.groupby("sn"):
-        # Look only at rows that still have a balance
-        grp_open = grp[grp["balance"] > 0].copy()
+    # Chain processing: Group by Serial Number (SN) to find rollovers
+    for sn_val, grp in loans_df.sort_values("cycle_no").groupby("sn"):
+
+        # Filter for rows in this family that still have a balance
+        grp_open = grp[
+            grp["balance"] > 0
+        ].copy()
 
         if grp_open.empty:
             continue
 
-        # Identify the latest cycle among the unpaid rows
+        # The 'Child' is the one with the highest cycle number
         latest_idx = grp_open["cycle_no"].idxmax()
 
-        # All earlier unpaid rows in this chain must become BCF
+        # All previous links in the chain (Parents) become BCF
         earlier_idx = grp_open.index.difference([latest_idx])
 
         if len(earlier_idx) > 0:
-            loans_df.loc[earlier_idx, "status"] = "BCF"
+            loans_df.loc[
+                earlier_idx,
+                "status"
+            ] = "BCF"
 
-        # Handle the latest unpaid row's status
-        latest_cycle = loans_df.loc[latest_idx, "cycle_no"]
+        # Define the state of the newest link
+        latest_cycle = loans_df.loc[
+            latest_idx,
+            "cycle_no"
+        ]
 
         if latest_cycle == 1:
-            loans_df.loc[latest_idx, "status"] = "ACTIVE"
+            loans_df.loc[
+                latest_idx,
+                "status"
+            ] = "ACTIVE"
         else:
-            # If it's a rollover (Cycle 2+), it starts as PENDING
-            loans_df.loc[latest_idx, "status"] = "PENDING"
+            # If it's a rollover (Cycle 2+), it remains PENDING until processed
+            loans_df.loc[
+                latest_idx,
+                "status"
+            ] = "PENDING"
 
     # ------------------------------
     # 7. SORTING (CRITICAL ORDER)
@@ -1679,11 +1697,9 @@ def show_loans():
         ]
 
         if eligible_loans.empty:
-
             st.success("All loans brought up to date! ✨")
 
         else:
-
             roll_map = {
                 f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal {row['balance']:,.0f}":
                 row["id"]
@@ -1723,12 +1739,20 @@ def show_loans():
                 new_start = old_due
                 new_due = old_due + timedelta(days=30)
 
-                loans_df.loc[
-                    loans_df["id"] == parent_id,
-                    "status"
-                ] = "BCF"
+                # --- Corrected Indentation for Status Check ---
+                current_status = str(
+                    loan_to_roll["status"]
+                ).strip().upper()
+
+                # Only pending loans become BCF when pushed forward
+                if current_status == "PENDING":
+                    loans_df.loc[
+                        loans_df["id"] == parent_id,
+                        "status"
+                    ] = "BCF"
 
                 save_data_saas("loans", loans_df)
+                # ----------------------------------------------
 
                 unpaid = float(
                     loan_to_roll["balance"]
@@ -1740,7 +1764,7 @@ def show_loans():
 
                 new_row = {
                     "id": str(uuid.uuid4()),
-                    "sn": "",
+                    "sn": "",  # Handled by your serial engine
                     "loan_id_label": "",
                     "parent_loan_id": parent_id,
                     "borrower_id": loan_to_roll["borrower_id"],
