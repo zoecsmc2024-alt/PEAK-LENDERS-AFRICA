@@ -1576,6 +1576,7 @@ def show_loans():
                     ):
                         st.success("✅ Loan issued.")
                         st.cache_data.clear()
+                        st.session_state.pop("loans", None)
                         st.rerun()
     # ==============================
     # TAB ACTIONS
