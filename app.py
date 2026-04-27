@@ -1507,7 +1507,7 @@ def show_loans():
             def style_entire_row(row):
                 val = str(row["status"]).upper().strip()
                 color_map = {
-                    "ACTIVE": "",
+                    "ACTIVE": "background-color:#dbeafe;color:#1e40af;font-weight:bold;",
                     "PENDING": "background-color:#fee2e2;color:#991b1b;font-weight:bold;",
                     "CLEARED": "background-color:#d1fae5;color:#065f46;",
                     "BCF": "background-color:#ffedd5;color:#9a3412;",
