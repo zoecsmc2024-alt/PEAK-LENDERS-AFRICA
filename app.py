@@ -1370,15 +1370,21 @@ def show_loans():
 
         filtered_loans = loans_df.copy()
         if search_query:
-            filtered_loans = loans_df[loans_df.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)]
+            # Optimized search logic
+            filtered_loans = filtered_loans[
+                filtered_loans.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)
+            ]
 
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
+            # Define columns to display
             show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "balance", "start_date", "end_date", "status"]
             
             def style_entire_row(row):
+                # We use row.get() or ensure 'status' is in the dataframe being styled
                 val = str(row["status"]).upper().strip()
+                
                 color_map = {
                     "ACTIVE": "", 
                     "PENDING": "background-color: #fee2e2; color: #991b1b; font-weight: bold;", 
@@ -1386,17 +1392,30 @@ def show_loans():
                     "CLEARED": "background-color: #d1fae5; color: #065f46;", 
                     "BCF": "background-color: #ffedd5; color: #9a3412;" 
                 }
-                color = color_map.get(val, "")
-                return [color] * len(row) 
+                
+                style = color_map.get(val, "")
+                return [style] * len(row)
 
-            styled_df = filtered_loans[show_cols].style.format({
-                "principal": "{:,.0f}", 
-                "total_repayable": "{:,.0f}", 
-                "balance": "{:,.0f}"
-            }).apply(style_entire_row, axis=1) 
+            # Apply styling to the dataframe
+            # IMPORTANT: We keep all columns during styling so "status" is available to the function,
+            # then we filter the view using show_cols inside the Styler.
+            styled_df = (
+                filtered_loans.style
+                .apply(style_entire_row, axis=1)
+                .format({
+                    "principal": "{:,.0f}", 
+                    "total_repayable": "{:,.0f}", 
+                    "balance": "{:,.0f}"
+                })
+            )
 
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
-
+            # Display ONLY the specific columns in the UI
+            st.dataframe(
+                styled_df, 
+                column_order=show_cols, 
+                use_container_width=True, 
+                hide_index=True
+            )
     # ==============================
     # TAB: NEW LOAN
     # ==============================
