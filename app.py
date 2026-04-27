@@ -1306,130 +1306,56 @@ def show_loans():
         "balance"
     ] = 0
 
-    # ======================================
-    # 4. STABLE LN SERIALS (ROLL-OVER SAFE)
-    # SN = Permanent Family Serial      -> LN-0001
-    # loan_id_label = Visible Loan No   -> 0001
-    # Rollovers inherit same SN + same loan_id_label
-    # cycle_no = 1,2,3...
-    # ======================================
+    # ------------------------------
+    # 6. CYCLE CLEANUP
+    # ------------------------------
+    loans_df["cycle_no"] = (
+        pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce")
+        .fillna(1)
+        .astype(int)
+    )
 
-    if not loans_df.empty:
+    # ------------------------------
+    # 7. SORTING (CRITICAL ORDER)
+    # ------------------------------
+    loans_df = loans_df.sort_values(
+        by=["loan_id_label", "cycle_no"]
+    ).reset_index(drop=True)
 
-        # ----------------------------------
-        # Ensure proper date sorting
-        # ----------------------------------
-        loans_df["start_date"] = pd.to_datetime(
-            loans_df["start_date"],
-            errors="coerce"
-        )
+    # ------------------------------
+    # 8. SN GENERATION (CHOOSE ONE)
+    # ------------------------------
 
-        loans_df = loans_df.sort_values(
-            by=["start_date", "id"]
-        ).reset_index(drop=True)
+    # ✅ OPTION A: GLOBAL SN (RECOMMENDED)
+    loans_df["sn"] = (loans_df.index + 1).astype(str).str.zfill(4)
 
-        # ----------------------------------
-        # Ensure columns exist
-        # ----------------------------------
-        if "sn" not in loans_df.columns:
-            loans_df["sn"] = ""
+    # ------------------------------
+    # 9. BORROWER NAME MAPPING
+    # ------------------------------
+    if not borrowers_df.empty:
+        bor_map = dict(zip(
+            borrowers_df["id"].astype(str),
+            borrowers_df["name"]
+        ))
+        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
 
-        loans_df["sn"] = (
-            loans_df["sn"]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-        )
+    # ------------------------------
+    # 10. UI GROUPING (SEPARATORS)
+    # ------------------------------
+    loans_df["__group_break"] = loans_df["loan_id_label"].ne(
+        loans_df["loan_id_label"].shift()
+    )
 
-        # ----------------------------------
-        # Detect highest existing LN serial
-        # ----------------------------------
-        existing_nums = []
+    # ------------------------------
+    # 11. FINAL COLUMN ORDER (SAFE)
+    # ------------------------------
+    preferred_order = [
+        "sn", "loan_id_label", "borrower", "cycle_no",
+        "principal", "total_repayable", "amount_paid",
+        "balance", "start_date", "end_date", "status"
+    ]
 
-        for val in loans_df["sn"]:
-            if val.startswith("LN-"):
-                try:
-                    existing_nums.append(
-                        int(val.replace("LN-", ""))
-                    )
-                except:
-                    pass
-
-        next_sn_val = max(existing_nums, default=0)
-
-        # ----------------------------------
-        # ASSIGN SERIALS
-        # If rollover:
-        #   loan_id_label contains parent number like 0001
-        #   convert to parent SN => LN-0001
-        # Else:
-        #   create new SN
-        # ----------------------------------
-        for i in loans_df.index:
-
-            parent_ref = str(
-                loans_df.at[i, "loan_id_label"]
-            ).strip()
-
-            current_sn = str(
-                loans_df.at[i, "sn"]
-            ).strip()
-
-            # ------------------------------
-            # ROLLOVER LOAN
-            # parent label like 0001
-            # ------------------------------
-            if parent_ref.isdigit() and len(parent_ref) == 4:
-
-                loans_df.at[i, "sn"] = f"LN-{parent_ref}"
-
-            # ------------------------------
-            # NEW LOAN
-            # ------------------------------
-            elif not current_sn.startswith("LN-"):
-
-                next_sn_val += 1
-                loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
-
-        # ----------------------------------
-        # CYCLE NUMBER
-        # Count occurrences inside family
-        # ----------------------------------
-        loans_df["cycle_no"] = (
-            loans_df.groupby("sn")
-            .cumcount() + 1
-        )
-
-        # ----------------------------------
-        # FINAL LOAN LABEL
-        # Always numeric part only
-        # LN-0001 -> 0001
-        # ----------------------------------
-        loans_df["loan_id_label"] = (
-            loans_df["sn"]
-            .str.replace("LN-", "", regex=False)
-            .str.zfill(4)
-        )
-
-    # ======================================
-    # 5. BORROWER MAPPING
-    # ======================================
-    if not borrowers_df.empty and "borrower_id" in loans_df.columns:
-        borrowers_df["id"] = borrowers_df["id"].astype(str)
-
-        bor_map = dict(
-            zip(
-                borrowers_df["id"],
-                borrowers_df["name"]
-            )
-        )
-
-        loans_df["borrower"] = (
-            loans_df["borrower_id"]
-            .astype(str)
-            .map(bor_map)
-            .fillna("Unknown")
-        )
+    loans_df = loans_df[[col for col in preferred_order if col in loans_df.columns] + ["__group_break"]]
 
     # ==============================
     # TAB: PORTFOLIO VIEW
