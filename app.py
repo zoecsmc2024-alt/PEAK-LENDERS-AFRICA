@@ -1340,90 +1340,52 @@ def show_loans():
     ).clip(lower=0)
 
     # ------------------------------
-    # SMART STATUS LOGIC (FINAL TRUE FIX)
+    # SMART STATUS LOGIC (CHAIN AWARE - GLOBAL SYNC)
     # ------------------------------
 
-    # Clean columns
-    loans_df["sn"] = (
-        loans_df["sn"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
+    # 1. Standardize All Columns
+    loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
+    loans_df["status"] = loans_df["status"].astype(str).str.strip().str.upper()
+    
+    loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
+    loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
 
-    loans_df["status"] = (
-        loans_df["status"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
+    # 2. Set Baseline: All unpaid loans start as ACTIVE (temporarily)
+    # This prevents them from being stuck in BCF from a previous state
+    loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
+    
+    # 3. Priority: Paid = CLEARED
+    loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
 
-    loans_df["cycle_no"] = pd.to_numeric(
-        loans_df["cycle_no"],
-        errors="coerce"
-    ).fillna(1).astype(int)
-
-    loans_df["balance"] = pd.to_numeric(
-        loans_df["balance"],
-        errors="coerce"
-    ).fillna(0)
-
-    # Priority 1: Paid = cleared
-    loans_df.loc[
-        loans_df["balance"] <= 0,
-        "status"
-    ] = "CLEARED"
-
-    # Process each loan family by Serial Number
+    # 4. Process each family (SN) to define BCF and PENDING
     for sn_val, grp in loans_df.groupby("sn"):
-
-        # Isolate unpaid rows in this specific chain
-        grp_open = grp[
-            grp["balance"] > 0
-        ].copy()
+        # We only care about the links in the chain that still have a debt
+        grp_open = grp[grp["balance"] > 0].copy()
 
         if grp_open.empty:
             continue
 
-        # Choose TRUE latest by the highest cycle number
+        # Find the actual maximum cycle currently open in this family
         max_cycle = grp_open["cycle_no"].max()
+        
+        # Identify the index of that specific newest loan
+        latest_idx = grp_open[grp_open["cycle_no"] == max_cycle].index[0]
 
-        latest_rows = grp_open[
-            grp_open["cycle_no"] == max_cycle
-        ]
+        # Identify all other open loans in this family (The "Parents")
+        earlier_indices = grp_open.index.difference([latest_idx])
 
-        # Select the specific index for the newest link
-        latest_idx = latest_rows.index[0]
-
-        # All other unpaid rows in this chain = BCF (Brought Cash Forward)
-        earlier_idx = grp_open.index.difference([latest_idx])
-
-        if len(earlier_idx) > 0:
-            loans_df.loc[
-                earlier_idx,
-                "status"
-            ] = "BCF"
-
-        # Determine the newest row's status
-        if max_cycle == 1:
-            loans_df.loc[
-                latest_idx,
-                "status"
-            ] = "ACTIVE"
+        # UPDATE ORIGINAL DATAFRAME
+        if not earlier_indices.empty:
+            loans_df.at[latest_idx, "status"] = "PENDING" if max_cycle > 1 else "ACTIVE"
+            loans_df.loc[earlier_indices, "status"] = "BCF"
         else:
-            # Rollovers (Cycle 2+) are PENDING until processed
-            loans_df.loc[
-                latest_idx,
-                "status"
-            ] = "PENDING"
+            # Only one open loan exists in the family
+            loans_df.at[latest_idx, "status"] = "ACTIVE" if max_cycle == 1 else "PENDING"
 
     # ------------------------------
     # 7. SORTING (CRITICAL ORDER)
     # ------------------------------
-    # Sort by label so families stay together, then by cycle
-    loans_df = loans_df.sort_values(
-        by=["loan_id_label", "cycle_no"]
-    ).reset_index(drop=True)
+    loans_df = loans_df.sort_values(by=["sn", "cycle_no"]).reset_index(drop=True)
 
     # ==============================
     # SERIAL ENGINE
