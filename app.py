@@ -1233,66 +1233,130 @@ def show_loans():
         ])
 
     # ==============================
-    # 🔥 DATA STANDARDIZATION & SMART SYNC (FIXED)
-    # ==============================
-    loans_df["id"] = loans_df["id"].astype(str)
+# 🔥 DATA STANDARDIZATION & SMART SYNC (FIXED + STABLE LN SERIALS)
+# ==============================
 
-    # ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
-    if not payments_df.empty and "loan_id" in payments_df.columns:
-        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
-        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
-        pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
-        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
+loans_df["id"] = loans_df["id"].astype(str)
 
-    # 1. Clean all numeric columns first
-    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
-    for col in num_cols:
-        if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(pd.Series(loans_df[col]), errors="coerce").fillna(0)
-        else:
-            loans_df[col] = 0.0
+# ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
+if not payments_df.empty and "loan_id" in payments_df.columns:
+    payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+    payments_df["amount"] = pd.to_numeric(
+        payments_df["amount"], errors="coerce"
+    ).fillna(0)
 
-    # 2. Force Recalculate Balance
-    loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
-    
-    # 🚨 CRITICAL FIX: Standardize status and use a PRIORITY shield
-    loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
+    pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
+    loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
 
-    # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
-    def determine_status(row):
-        current_status = row["status"]
-        
-        # Priority 1: IF DB SAYS BCF OR PENDING, DO NOT OVERWRITE!
-        # This stops the code from changing "BCF" back to "ACTIVE" because of the balance
-        if current_status in ["BCF", "PENDING"]:
-            return current_status
-        
-        # Priority 2: If balance is zero, it's CLEARED
-        if row["balance"] <= 0:
-            return "CLEARED"
-            
-        # Priority 3: Otherwise, it stays ACTIVE
-        return "ACTIVE"
+# ======================================
+# 1. CLEAN ALL NUMERIC COLUMNS
+# ======================================
+num_cols = [
+    "principal",
+    "interest",
+    "total_repayable",
+    "amount_paid",
+    "balance"
+]
 
-    loans_df["status"] = loans_df.apply(determine_status, axis=1)
-    
-    # Ensure balance is zeroed for anything mathematically cleared
-    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
+for col in num_cols:
+    if col in loans_df.columns:
+        loans_df[col] = pd.to_numeric(
+            loans_df[col], errors="coerce"
+        ).fillna(0)
+    else:
+        loans_df[col] = 0.0
 
-    # 4. Constant SN & Cycle Management Logic
-    if not loans_df.empty:
-        loans_df = loans_df.sort_values(by=["borrower_id", "start_date"])
-        if "sn" not in loans_df.columns or loans_df["sn"].isnull().all():
-            loans_df["sn"] = loans_df.groupby("borrower_id").cumcount() + 1
-            loans_df["sn"] = loans_df["sn"].apply(lambda x: f"{x:05d}")
-        if "cycle_no" not in loans_df.columns or loans_df["cycle_no"].isnull().all():
-            loans_df["cycle_no"] = loans_df.groupby("borrower_id").cumcount() + 1
+# ======================================
+# 2. FORCE RECALCULATE BALANCE
+# ======================================
+loans_df["balance"] = (
+    loans_df["total_repayable"] - loans_df["amount_paid"]
+).clip(lower=0)
 
-    # 5. Borrower Mapping
-    if not borrowers_df.empty and "borrower_id" in loans_df.columns:
-        borrowers_df['id'] = borrowers_df['id'].astype(str)
-        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
-        loans_df['borrower'] = loans_df['borrower_id'].astype(str).map(bor_map).fillna("Unknown")
+# ======================================
+# 3. SMART STATUS LOGIC
+# ======================================
+loans_df["status"] = (
+    loans_df["status"]
+    .astype(str)
+    .str.upper()
+    .str.strip()
+)
+
+def determine_status(row):
+    current_status = row["status"]
+
+    # Protect manual states
+    if current_status in ["BCF", "PENDING"]:
+        return current_status
+
+    # Fully paid
+    if row["balance"] <= 0:
+        return "CLEARED"
+
+    # Otherwise active
+    return "ACTIVE"
+
+loans_df["status"] = loans_df.apply(determine_status, axis=1)
+
+# Ensure cleared = zero balance
+loans_df.loc[
+    loans_df["status"] == "CLEARED",
+    "balance"
+] = 0
+
+# ======================================
+# 4. STABLE CHRONOLOGICAL LN SERIALS
+# LN-0001, LN-0002, LN-0003...
+# ======================================
+if not loans_df.empty:
+
+    # Sort oldest first
+    loans_df["start_date"] = pd.to_datetime(
+        loans_df["start_date"],
+        errors="coerce"
+    )
+
+    loans_df = loans_df.sort_values(
+        by=["start_date", "id"]
+    ).reset_index(drop=True)
+
+    # Always rebuild SN sequentially
+    loans_df["sn"] = range(1, len(loans_df) + 1)
+    loans_df["sn"] = loans_df["sn"].apply(
+        lambda x: f"LN-{x:04d}"
+    )
+
+    # ==================================
+    # Borrower Loan Cycle Number
+    # 1st loan = cycle 1
+    # 2nd loan = cycle 2
+    # ==================================
+    loans_df["cycle_no"] = (
+        loans_df.groupby("borrower_id")
+        .cumcount() + 1
+    )
+
+# ======================================
+# 5. BORROWER MAPPING
+# ======================================
+if not borrowers_df.empty and "borrower_id" in loans_df.columns:
+    borrowers_df["id"] = borrowers_df["id"].astype(str)
+
+    bor_map = dict(
+        zip(
+            borrowers_df["id"],
+            borrowers_df["name"]
+        )
+    )
+
+    loans_df["borrower"] = (
+        loans_df["borrower_id"]
+        .astype(str)
+        .map(bor_map)
+        .fillna("Unknown")
+    )
 
     
 
