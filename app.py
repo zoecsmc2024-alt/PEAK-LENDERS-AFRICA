@@ -1353,32 +1353,49 @@ def show_loans():
 
     # 2. IDENTIFY PARENTS & CHILDREN (Family Loop)
     # We iterate through each unique Serial Number (LN-XXXX)
-    for sn_val in loans_df["sn"].unique():
-        # Get indices of all UNPAID loans in this specific family
-        family_indices = loans_df[
-            (loans_df["sn"] == sn_val) & 
-            (loans_df["balance"] > 0)
-        ].index.tolist()
+    for sn_val in unique_sns:
 
-        if not family_indices:
-            continue
+    unpaid_family_indices = loans_df[
+        (loans_df["sn"] == sn_val) &
+        (loans_df["balance"] > 0)
+    ].index.tolist()
 
-        # Find the index with the highest cycle number in this family
-        latest_idx = loans_df.loc[family_indices, "cycle_no"].idxmax()
-        max_cycle = loans_df.at[latest_idx, "cycle_no"]
+    if not unpaid_family_indices:
+        continue
 
-        # ALL OTHER indices in this family become BCF (The "Parents")
-        parent_indices = [i for i in family_indices if i != latest_idx]
-        
-        if parent_indices:
-            loans_df.loc[parent_indices, "status"] = "BCF"
+    family_rows = loans_df.loc[
+        unpaid_family_indices
+    ].sort_values(
+        by=["cycle_no", "start_date", "id"]
+    )
 
-        # The NEWEST link in the chain (The "Child")
-        if max_cycle == 1:
-            loans_df.at[latest_idx, "status"] = "ACTIVE"
-        else:
-            # Any cycle above 1 is a rollover and must be PENDING
-            loans_df.at[latest_idx, "status"] = "PENDING"
+    latest_idx = family_rows.index[-1]
+
+    max_cycle = int(
+        loans_df.at[latest_idx, "cycle_no"]
+    )
+
+    parent_indices = [
+        i for i in unpaid_family_indices
+        if i != latest_idx
+    ]
+
+    if parent_indices:
+        loans_df.loc[
+            parent_indices,
+            "status"
+        ] = "BCF"
+
+    if max_cycle > 1:
+        loans_df.at[
+            latest_idx,
+            "status"
+        ] = "PENDING"
+    else:
+        loans_df.at[
+            latest_idx,
+            "status"
+        ] = "ACTIVE"
 
     # ------------------------------
     # 7. FINAL SORT & SAVE (PREVENTS UUID ERROR)
