@@ -1463,6 +1463,71 @@ def show_loans():
     ])
 
     # ==============================
+    # TAB VIEW
+    # ==============================
+    with tab_view:
+        search_query = st.text_input(
+            "🔍 Search Loan / Borrower",
+            key="loan_search_main"
+        )
+
+        # Create a local copy for filtering
+        filtered_loans = loans_df.copy() if not loans_df.empty else pd.DataFrame()
+
+        if not filtered_loans.empty and search_query:
+            filtered_loans = filtered_loans[
+                filtered_loans.apply(
+                    lambda r: search_query.lower() in str(r).lower(),
+                    axis=1
+                )
+            ]
+
+        if filtered_loans.empty:
+            st.warning("No matching loans found.")
+        else:
+            show_cols = [
+                "sn",
+                "loan_id_label",
+                "borrower",
+                "cycle_no",
+                "principal",
+                "total_repayable",
+                "balance",
+                "start_date",
+                "end_date",
+                "status"
+            ]
+
+            def style_entire_row(row):
+                val = str(row["status"]).upper().strip()
+                color_map = {
+                    "ACTIVE": "",
+                    "PENDING": "background-color:#fee2e2;color:#991b1b;font-weight:bold;",
+                    "CLEARED": "background-color:#d1fae5;color:#065f46;",
+                    "BCF": "background-color:#ffedd5;color:#9a3412;",
+                    "CLOSED": "background-color:#f3f4f6;color:#374151;"
+                }
+                style = color_map.get(val, "")
+                return [style] * len(row)
+
+            # Apply styling and currency formatting
+            styled_df = (
+                filtered_loans.style
+                .apply(style_entire_row, axis=1)
+                .format({
+                    "principal": "{:,.0f}",
+                    "total_repayable": "{:,.0f}",
+                    "balance": "{:,.0f}"
+                })
+            )
+
+            st.dataframe(
+                styled_df,
+                column_order=show_cols,
+                use_container_width=True,
+                hide_index=True
+            )
+    # ==============================       
     # TAB ADD LOAN
     # ==============================
     with tab_add:
