@@ -1307,36 +1307,78 @@ def show_loans():
     ] = 0
 
     # ======================================
-    # 4. STABLE CHRONOLOGICAL LN SERIALS
-    # LN-0001, LN-0002, LN-0003...
-    # ======================================
-    if not loans_df.empty:
+# 4. STABLE LN SERIALS (ROLL-OVER SAFE)
+# SN = Loan Family Number
+# Cycle No = Rollover Count
+# ======================================
+if not loans_df.empty:
 
-        # Sort oldest first
-        loans_df["start_date"] = pd.to_datetime(
-            loans_df["start_date"],
-            errors="coerce"
-        )
+    # Ensure date
+    loans_df["start_date"] = pd.to_datetime(
+        loans_df["start_date"],
+        errors="coerce"
+    )
 
-        loans_df = loans_df.sort_values(
-            by=["start_date", "id"]
-        ).reset_index(drop=True)
+    # Sort oldest first
+    loans_df = loans_df.sort_values(
+        by=["start_date", "id"]
+    ).reset_index(drop=True)
 
-        # Always rebuild SN sequentially
-        loans_df["sn"] = range(1, len(loans_df) + 1)
-        loans_df["sn"] = loans_df["sn"].apply(
-            lambda x: f"LN-{x:04d}"
-        )
+    # ----------------------------------
+    # Keep existing SN values
+    # Only create SN for fresh loans
+    # ----------------------------------
+    if "sn" not in loans_df.columns:
+        loans_df["sn"] = ""
 
-        # ==================================
-        # Borrower Loan Cycle Number
-        # 1st loan = cycle 1
-        # 2nd loan = cycle 2
-        # ==================================
-        loans_df["cycle_no"] = (
-            loans_df.groupby("borrower_id")
-            .cumcount() + 1
-        )
+    loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
+
+    # Find highest existing LN number
+    existing_nums = []
+
+    for val in loans_df["sn"]:
+        if val.startswith("LN-"):
+            try:
+                existing_nums.append(
+                    int(val.replace("LN-", ""))
+                )
+            except:
+                pass
+
+    next_sn = max(existing_nums, default=0)
+
+    # ----------------------------------
+    # Assign SN row by row
+    # ----------------------------------
+    for i in loans_df.index:
+
+        current_sn = loans_df.at[i, "sn"]
+
+        # Already has SN -> keep it
+        if current_sn.startswith("LN-"):
+            continue
+
+        # Detect rollover from parent label
+        parent_ref = str(
+            loans_df.at[i, "loan_id_label"]
+        ).strip()
+
+        if parent_ref.startswith("LN-"):
+            # Inherit parent SN
+            loans_df.at[i, "sn"] = parent_ref
+
+        else:
+            # Brand new loan gets new SN
+            next_sn += 1
+            loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
+
+    # ----------------------------------
+    # Cycle Number within each SN family
+    # ----------------------------------
+    loans_df["cycle_no"] = (
+        loans_df.groupby("sn")
+        .cumcount() + 1
+    )
 
     # ======================================
     # 5. BORROWER MAPPING
