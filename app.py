@@ -1294,16 +1294,16 @@ def show_loans():
     payments_df = payments_df.copy()
 
     # ------------------------------
-# TYPE CLEANUP
-# ------------------------------
-loans_df["id"] = loans_df["id"].astype(str)
-loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
-loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str)
+    # TYPE CLEANUP
+    # ------------------------------
+    loans_df["id"] = loans_df["id"].astype(str)
+    loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
+    loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str)
 
-if not payments_df.empty and "loan_id" in payments_df.columns:
-    payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+    if not payments_df.empty and "loan_id" in payments_df.columns:
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
 
-# ------------------------------
+    # ------------------------------
     # NUMERIC CLEANUP
     # ------------------------------
     for col in [
