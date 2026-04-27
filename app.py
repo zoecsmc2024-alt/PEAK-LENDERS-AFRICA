@@ -1489,7 +1489,7 @@ def show_loans():
     # ------------------------------
     # SAVE CLEAN DATA
     # ------------------------------
-    save_data_saas("loans", loans_df)
+    save_ready_df = loans_df.copy()  for col in ["start_date", "end_date"]:     if col in save_ready_df.columns:         save_ready_df[col] = pd.to_datetime(             save_ready_df[col],             errors="coerce"         ).dt.strftime("%Y-%m-%d")  save_data_saas("loans", save_ready_df)
 
     # ==============================
     # TABS
