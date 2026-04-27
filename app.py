@@ -1351,57 +1351,51 @@ def show_loans():
     # Priority: Fully paid is always CLEARED
     loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
 
+    # Get unique serials to iterate through families
+    unique_sns = loans_df["sn"].unique()
+
     # 2. IDENTIFY PARENTS & CHILDREN (Family Loop)
-    # We iterate through each unique Serial Number (LN-XXXX)
     for sn_val in unique_sns:
+        # --- EVERYTHING BELOW IS NOW PROPERLY INDENTED INSIDE THE LOOP ---
+        unpaid_family_indices = loans_df[
+            (loans_df["sn"] == sn_val) & 
+            (loans_df["balance"] > 0)
+        ].index.tolist()
 
-    unpaid_family_indices = loans_df[
-        (loans_df["sn"] == sn_val) &
-        (loans_df["balance"] > 0)
-    ].index.tolist()
+        if not unpaid_family_indices:
+            continue
 
-    if not unpaid_family_indices:
-        continue
+        # Sort within the family to find the absolute newest link
+        family_rows = loans_df.loc[unpaid_family_indices].sort_values(
+            by=["cycle_no", "start_date", "id"]
+        )
 
-    family_rows = loans_df.loc[
-        unpaid_family_indices
-    ].sort_values(
-        by=["cycle_no", "start_date", "id"]
-    )
+        latest_idx = family_rows.index[-1]
+        max_cycle = int(loans_df.at[latest_idx, "cycle_no"])
 
-    latest_idx = family_rows.index[-1]
+        # Identify Parent Indices (all unpaid rows that AREN'T the latest)
+        parent_indices = [i for i in unpaid_family_indices if i != latest_idx]
 
-    max_cycle = int(
-        loans_df.at[latest_idx, "cycle_no"]
-    )
+        # Update Parent rows to BCF
+        if parent_indices:
+            loans_df.loc[parent_indices, "status"] = "BCF"
 
-    parent_indices = [
-        i for i in unpaid_family_indices
-        if i != latest_idx
-    ]
-
-    if parent_indices:
-        loans_df.loc[
-            parent_indices,
-            "status"
-        ] = "BCF"
-
-    if max_cycle > 1:
-        loans_df.at[
-            latest_idx,
-            "status"
-        ] = "PENDING"
-    else:
-        loans_df.at[
-            latest_idx,
-            "status"
-        ] = "ACTIVE"
+        # Update Latest row to PENDING (if rollover) or ACTIVE (if new)
+        if max_cycle > 1:
+            loans_df.at[latest_idx, "status"] = "PENDING"
+        else:
+            loans_df.at[latest_idx, "status"] = "ACTIVE"
+        # --- END OF LOOP ---
 
     # ------------------------------
-    # 7. FINAL SORT & SAVE (PREVENTS UUID ERROR)
+    # 7. FINAL SORTING (CRITICAL FOR PORTFOLIO VIEW)
     # ------------------------------
-    # Sorting ensures LN-0008 Cycle 1, 2, and 3 stay together
-    loans_df = loans_df.sort_values(by=["sn", "cycle_no"]).reset_index(drop=True)
+    loans_df = loans_df.sort_values(
+        by=["sn", "cycle_no"], 
+        ascending=[True, True]
+    ).reset_index(drop=True)
+
+
     # ==============================
     # SERIAL ENGINE
     # ==============================
