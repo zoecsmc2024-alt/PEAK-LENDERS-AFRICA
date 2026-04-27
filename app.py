@@ -1209,102 +1209,137 @@ def show_loans():
     Core engine for issuing and managing loan agreements.
     Preserves Midnight Blue branding and Peachy Luxe themes.
     """
+
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
-    
-    # 1. LOAD DATA FROM SUPABASE
+
+    # ------------------------------
+    # 1. LOAD DATA (SOURCE OF TRUTH)
+    # ------------------------------
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
-    payments_df = get_cached_data("payments") 
+    payments_df = get_cached_data("payments")
 
-    # ✅ SAFETY (prevents future crashes)
-    if loans_df is None: loans_df = pd.DataFrame()
-    if borrowers_df is None: borrowers_df = pd.DataFrame()
-    if payments_df is None: payments_df = pd.DataFrame()
-
-    if not borrowers_df.empty:
-        Active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
-    else:
-        Active_borrowers = pd.DataFrame()
-
-    if loans_df.empty:
+    # ------------------------------
+    # 2. SAFETY FALLBACKS
+    # ------------------------------
+    if loans_df is None or loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "id", "sn", "loan_id_label", "borrower_id", "borrower", "principal", "interest",
-            "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date", "cycle_no"
+            "id", "sn", "loan_id_label", "borrower_id", "borrower",
+            "principal", "interest", "total_repayable",
+            "amount_paid", "balance", "status",
+            "start_date", "end_date", "cycle_no"
         ])
 
-    # ==============================
-    # 🔥 DATA STANDARDIZATION & SMART SYNC (FIXED + STABLE LN SERIALS)
-    # ==============================
+    if borrowers_df is None:
+        borrowers_df = pd.DataFrame()
 
-    loans_df["id"] = loans_df["id"].astype(str)
+    if payments_df is None:
+        payments_df = pd.DataFrame()
 
-    # ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
-    if not payments_df.empty and "loan_id" in payments_df.columns:
-        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
-        payments_df["amount"] = pd.to_numeric(
-            payments_df["amount"], errors="coerce"
-        ).fillna(0)
+    # ------------------------------
+    # 3. ENSURE CORE COLUMNS EXIST
+    # ------------------------------
+    if "id" not in loans_df.columns:
+        loans_df["id"] = [str(uuid.uuid4()) for _ in range(len(loans_df))]
 
-        pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
-        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
-
-    # ======================================
-    # 1. CLEAN ALL NUMERIC COLUMNS
-    # ======================================
-    num_cols = [
-        "principal",
-        "interest",
-        "total_repayable",
-        "amount_paid",
-        "balance"
+    # Normalize critical columns safely
+    required_cols = [
+        "loan_id_label", "borrower_id", "principal",
+        "total_repayable", "amount_paid", "balance",
+        "status", "cycle_no"
     ]
+
+    for col in required_cols:
+        if col not in loans_df.columns:
+            loans_df[col] = 0 if col in ["principal", "total_repayable", "amount_paid", "balance"] else ""
+
+    # ------------------------------
+    # 4. ACTIVE BORROWERS FILTER
+    # ------------------------------
+    if not borrowers_df.empty and "status" in borrowers_df.columns:
+        Active_borrowers = borrowers_df[
+            borrowers_df["status"].astype(str).str.upper() == "ACTIVE"
+        ]
+    else:
+        Active_borrowers = pd.DataFrame(columns=["id", "name"])
+
+    # ==============================
+    # 🔥 DATA STANDARDIZATION & SMART SYNC (HARDENED)
+    # ==============================
+
+    import pandas as pd
+    from datetime import date
+
+    # ------------------------------
+    # 0. BASIC SANITY
+    # ------------------------------
+    loans_df = loans_df.copy()
+    payments_df = payments_df.copy()
+
+    # Ensure IDs are strings
+    loans_df["id"] = loans_df["id"].astype(str)
+    loans_df["borrower_id"] = loans_df.get("borrower_id", "").astype(str)
+
+    if not payments_df.empty:
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+
+    # ------------------------------
+    # 1. NUMERIC CLEANUP
+    # ------------------------------
+    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
 
     for col in num_cols:
         if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(
-                loans_df[col], errors="coerce"
-            ).fillna(0)
+            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
         else:
             loans_df[col] = 0.0
 
-    # ======================================
-    # 2. FORCE RECALCULATE BALANCE
-    # ======================================
-    loans_df["balance"] = (
-        loans_df["total_repayable"] - loans_df["amount_paid"]
-    ).clip(lower=0)
+    if not payments_df.empty and "amount" in payments_df.columns:
+        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
 
-    # ======================================
-    # 3. SMART STATUS LOGIC
-    # ======================================
-    loans_df["status"] = (
-        loans_df["status"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
+    # ------------------------------
+    # 2. DATE STANDARDIZATION
+    # ------------------------------
+    date_cols = ["start_date", "end_date"]
+
+    for col in date_cols:
+        if col in loans_df.columns:
+            loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
+
+    # ------------------------------
+    # 3. PAYMENT SYNC (SOURCE OF TRUTH)
+    # ------------------------------
+    if not payments_df.empty and "loan_id" in payments_df.columns:
+        pay_sums = payments_df.groupby("loan_id")["amount"].sum()
+        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
+
+    # ------------------------------
+    # 4. BALANCE RECOMPUTE (STRICT)
+    # ------------------------------
+    loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
+
+    # ------------------------------
+    # 5. STATUS STANDARDIZATION
+    # ------------------------------
+    loans_df["status"] = loans_df.get("status", "ACTIVE").astype(str).str.upper().str.strip()
 
     def determine_status(row):
         current_status = row["status"]
 
-        # Protect manual states
+        # 🛡️ PROTECT DB STATES
         if current_status in ["BCF", "PENDING"]:
             return current_status
 
-        # Fully paid
+        # ✅ AUTO LOGIC
         if row["balance"] <= 0:
             return "CLEARED"
 
-        # Otherwise active
         return "ACTIVE"
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
 
-    # Ensure cleared = zero balance
-    loans_df.loc[
-        loans_df["status"] == "CLEARED",
-        "balance"
-    ] = 0
+    # Force zero balance if cleared
+    loans_df.loc[loans_df["status"] == "CLEARED", "balance"] = 0
 
     # ------------------------------
     # 6. CYCLE CLEANUP
@@ -1323,8 +1358,10 @@ def show_loans():
     ).reset_index(drop=True)
 
     # ------------------------------
-    # 8. SN GENERATION
+    # 8. SN GENERATION (CHOOSE ONE)
     # ------------------------------
+
+    # ✅ OPTION A: GLOBAL SN (RECOMMENDED)
     loans_df["sn"] = (loans_df.index + 1).astype(str).str.zfill(4)
 
     # ------------------------------
@@ -1335,7 +1372,7 @@ def show_loans():
             borrowers_df["id"].astype(str),
             borrowers_df["name"]
         ))
-        loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
+        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
 
     # ------------------------------
     # 10. UI GROUPING (SEPARATORS)
@@ -1354,7 +1391,6 @@ def show_loans():
     ]
 
     loans_df = loans_df[[col for col in preferred_order if col in loans_df.columns] + ["__group_break"]]
-
     # ==============================
     # TAB: PORTFOLIO VIEW
     # ==============================
