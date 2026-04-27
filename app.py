@@ -1338,32 +1338,29 @@ def show_loans():
         loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
-    # ------------------------------
-    # STATUS
-    # ------------------------------
-    loans_df["status"] = (
-        loans_df["status"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
-
+    # ==============================
+    # 🧠 FIXED STATUS LOGIC
+    # ==============================
     def determine_status(row):
+        today = date.today()
+        paid = row.get("amount_paid", 0)
+        total = row.get("total_repayable", 0)
+        end_date = row.get("end_date")
+        current_db_status = str(row.get("status", "")).upper().strip()
 
-        if row["status"] in ["BCF", "PENDING"]:
-            return row["status"]
+        # 🛡️ HARD LOCK BCF
+        if current_db_status == "BCF":
+            return "BCF"
 
-        if row["balance"] <= 0:
+        # ✅ CLEARED
+        if paid >= total and total > 0:
             return "CLEARED"
 
-        return "ACTIVE"
+        # 🔴 OVERDUE → BCF
+        if end_date and today > end_date and paid == 0:
+            return "BCF"
 
-    loans_df["status"] = loans_df.apply(determine_status, axis=1)
-
-    loans_df.loc[
-        loans_df["status"] == "CLEARED",
-        "balance"
-    ] = 0
+        return "PENDING"
 
     # ------------------------------
     # 7. SORTING (CRITICAL ORDER)
