@@ -1345,21 +1345,16 @@ def show_loans():
     ).clip(lower=0)
 
     # ==============================
-    # SERIAL ENGINE (FIXED CHAIN)
+    # SERIAL ENGINE (BULLETPROOF CHAIN RESOLVER)
     # ==============================
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
+    loans_df["id"] = loans_df["id"].astype(str).str.strip()
+    loans_df["parent_loan_id"] = loans_df["parent_loan_id"].astype(str).str.strip()
 
-    # 🔥 CRITICAL: sort so parents come before children
-    loans_df = loans_df.sort_values(
-        by=["parent_loan_id", "start_date", "id"],
-        na_position="last"
-    ).reset_index(drop=True)
-
-    id_to_sn = {}
-
+    # existing max SN
     existing_nums = []
     for val in loans_df["sn"]:
-        if val.startswith("LN-"):
+        if isinstance(val, str) and val.startswith("LN-"):
             try:
                 existing_nums.append(int(val.replace("LN-", "")))
             except:
@@ -1367,28 +1362,49 @@ def show_loans():
 
     next_sn_val = max(existing_nums, default=0)
 
-    for i in loans_df.index:
-        current_id = loans_df.at[i, "id"]
-        current_sn = str(loans_df.at[i, "sn"]).strip().upper()
-        parent_id = loans_df.at[i, "parent_loan_id"]
+    # 🔥 Build lookup from FINAL STATE ONLY (not incremental)
+    id_to_sn = {
+        row["id"]: row["sn"]
+        for _, row in loans_df.iterrows()
+        if isinstance(row["sn"], str) and row["sn"].startswith("LN-")
+    }
 
-        # ✅ Always register valid SNs in map
-        if current_sn.startswith("LN-"):
-            id_to_sn[current_id] = current_sn
-            continue
+    changed = True
+    iterations = 0
 
-        # ✅ Inherit from parent (now guaranteed to exist earlier)
-        if parent_id in id_to_sn:
-            parent_sn = id_to_sn[parent_id]
-            loans_df.at[i, "sn"] = parent_sn
-            id_to_sn[current_id] = parent_sn
-            continue
+    # 🔁 FIXED POINT ITERATION (solves chain dependency order issues)
+    while changed and iterations < 10:
+        changed = False
+        iterations += 1
 
-        # ✅ Assign new SN
-        next_sn_val += 1
-        new_sn = f"LN-{next_sn_val:04d}"
-        loans_df.at[i, "sn"] = new_sn
-        id_to_sn[current_id] = new_sn
+        for i in loans_df.index:
+
+            current_id = loans_df.at[i, "id"]
+            current_sn = loans_df.at[i, "sn"]
+            parent_id = loans_df.at[i, "parent_loan_id"]
+
+            # already valid → ensure map consistency
+            if isinstance(current_sn, str) and current_sn.startswith("LN-"):
+                if id_to_sn.get(current_id) != current_sn:
+                    id_to_sn[current_id] = current_sn
+                    changed = True
+                continue
+
+            # inherit from parent chain (not just direct lookup)
+            parent_sn = id_to_sn.get(parent_id)
+
+            if parent_sn and isinstance(parent_sn, str) and parent_sn.startswith("LN-"):
+                loans_df.at[i, "sn"] = parent_sn
+                id_to_sn[current_id] = parent_sn
+                changed = True
+                continue
+
+            # assign new SN only if truly orphan
+            next_sn_val += 1
+            new_sn = f"LN-{next_sn_val:04d}"
+            loans_df.at[i, "sn"] = new_sn
+            id_to_sn[current_id] = new_sn
+            changed = True
 
     # ------------------------------
     # STATUS LOGIC (ROBUST)
