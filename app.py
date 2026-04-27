@@ -232,7 +232,7 @@ def save_data(table_name, dataframe):
         tenant_id = st.session_state.get("tenant_id")
 
         if dataframe is None or dataframe.empty:
-            st.error("❌ Nothing to save")
+            st.error
             return False
 
         # Prepare for Supabase (handle NaNs for JSON compatibility)
@@ -360,7 +360,7 @@ def save_data(table_name, dataframe):
         require_tenant()
 
         if dataframe is None or dataframe.empty:
-            st.error("❌ Nothing to save")
+            st.error
             return False
 
         # Ensure every row is tagged with the correct tenant
