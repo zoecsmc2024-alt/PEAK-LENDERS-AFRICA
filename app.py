@@ -1340,53 +1340,51 @@ def show_loans():
     ).clip(lower=0)
 
     # ------------------------------
-    # SMART STATUS LOGIC (CHAIN AWARE - GLOBAL SYNC)
+    # SMART STATUS LOGIC (GLOBAL FAMILY SYNC)
     # ------------------------------
-
-    # 1. Standardize All Columns
-    loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
+    # 1. RESET BASELINES: Clear old tags that might be stuck in the DB
     loans_df["status"] = loans_df["status"].astype(str).str.strip().str.upper()
     
-    loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
-    loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
-
-    # 2. Set Baseline: All unpaid loans start as ACTIVE (temporarily)
-    # This prevents them from being stuck in BCF from a previous state
+    # Temporarily set all unpaid loans to ACTIVE to ensure a fresh start
     loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
     
-    # 3. Priority: Paid = CLEARED
+    # Priority: Fully paid is always CLEARED
     loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
 
-    # 4. Process each family (SN) to define BCF and PENDING
-    for sn_val, grp in loans_df.groupby("sn"):
-        # We only care about the links in the chain that still have a debt
-        grp_open = grp[grp["balance"] > 0].copy()
+    # 2. IDENTIFY PARENTS & CHILDREN (Family Loop)
+    # We iterate through each unique Serial Number (LN-XXXX)
+    for sn_val in loans_df["sn"].unique():
+        # Get indices of all UNPAID loans in this specific family
+        family_indices = loans_df[
+            (loans_df["sn"] == sn_val) & 
+            (loans_df["balance"] > 0)
+        ].index.tolist()
 
-        if grp_open.empty:
+        if not family_indices:
             continue
 
-        # Find the actual maximum cycle currently open in this family
-        max_cycle = grp_open["cycle_no"].max()
+        # Find the index with the highest cycle number in this family
+        latest_idx = loans_df.loc[family_indices, "cycle_no"].idxmax()
+        max_cycle = loans_df.at[latest_idx, "cycle_no"]
+
+        # ALL OTHER indices in this family become BCF (The "Parents")
+        parent_indices = [i for i in family_indices if i != latest_idx]
         
-        # Identify the index of that specific newest loan
-        latest_idx = grp_open[grp_open["cycle_no"] == max_cycle].index[0]
+        if parent_indices:
+            loans_df.loc[parent_indices, "status"] = "BCF"
 
-        # Identify all other open loans in this family (The "Parents")
-        earlier_indices = grp_open.index.difference([latest_idx])
-
-        # UPDATE ORIGINAL DATAFRAME
-        if not earlier_indices.empty:
-            loans_df.at[latest_idx, "status"] = "PENDING" if max_cycle > 1 else "ACTIVE"
-            loans_df.loc[earlier_indices, "status"] = "BCF"
+        # The NEWEST link in the chain (The "Child")
+        if max_cycle == 1:
+            loans_df.at[latest_idx, "status"] = "ACTIVE"
         else:
-            # Only one open loan exists in the family
-            loans_df.at[latest_idx, "status"] = "ACTIVE" if max_cycle == 1 else "PENDING"
+            # Any cycle above 1 is a rollover and must be PENDING
+            loans_df.at[latest_idx, "status"] = "PENDING"
 
     # ------------------------------
-    # 7. SORTING (CRITICAL ORDER)
+    # 7. FINAL SORT & SAVE (PREVENTS UUID ERROR)
     # ------------------------------
+    # Sorting ensures LN-0008 Cycle 1, 2, and 3 stay together
     loans_df = loans_df.sort_values(by=["sn", "cycle_no"]).reset_index(drop=True)
-
     # ==============================
     # SERIAL ENGINE
     # ==============================
