@@ -1366,14 +1366,12 @@ def show_loans():
     ] = 0
 
     # ------------------------------
-    # 🔗 PARENT-CHILD ATTACHMENT SORTING
+    # 7. SORTING (CRITICAL ORDER)
     # ------------------------------
-    # We sort by 'sn' so all cycles of the same loan stay together,
-    # then by 'cycle_no' so Cycle 1 is always above Cycle 2.
     loans_df = loans_df.sort_values(
-        by=["sn", "cycle_no"], 
-        ascending=[True, True]
+        by=["loan_id_label", "cycle_no"]
     ).reset_index(drop=True)
+
     # ==============================
     # SERIAL ENGINE
     # ==============================
