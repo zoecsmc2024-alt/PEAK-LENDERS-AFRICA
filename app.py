@@ -1192,14 +1192,25 @@ def get_data(table_name):
     tenant_id = get_current_tenant()
     df = get_cached_data(table_name)
 
+    st.write("SESSION TENANT:", tenant_id)
+
     if df is not None and not df.empty:
+        st.write("ALL ROWS:")
+        st.dataframe(df)
+
         df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
 
         if "tenant_id" in df.columns and tenant_id:
-            df = df[df["tenant_id"].astype(str) == str(tenant_id)].copy()
+            df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
+
+            df = df[
+                df["tenant_id"] == str(tenant_id).strip()
+            ].copy()
+
+            st.write("FILTERED ROWS:")
+            st.dataframe(df)
 
     return df
-
 
 def save_data_saas(table_name, df):
     tenant_id = get_current_tenant()
