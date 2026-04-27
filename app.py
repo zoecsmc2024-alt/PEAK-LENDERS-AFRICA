@@ -1308,77 +1308,55 @@ def show_loans():
 
     # ======================================
     # 4. STABLE LN SERIALS (ROLL-OVER SAFE)
-    # SN = Loan Family Number
-    # Cycle No = Rollover Count
     # ======================================
     if not loans_df.empty:
+        # Ensure dates are proper for sorting
+        loans_df["start_date"] = pd.to_datetime(loans_df["start_date"], errors="coerce")
+        
+        # Sort oldest first to ensure serials are assigned in order of creation
+        loans_df = loans_df.sort_values(by=["start_date", "id"]).reset_index(drop=True)
 
-        # Ensure date
-        loans_df["start_date"] = pd.to_datetime(
-            loans_df["start_date"],
-            errors="coerce"
-        )
-
-        # Sort oldest first
-        loans_df = loans_df.sort_values(
-            by=["start_date", "id"]
-        ).reset_index(drop=True)
-
-        # ----------------------------------
-        # Keep existing SN values
-        # Only create SN for fresh loans
-        # ----------------------------------
+        # Initialize SN if missing
         if "sn" not in loans_df.columns:
             loans_df["sn"] = ""
-
         loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
 
-        # Find highest existing LN number
+        # Step A: Identify the next available new SN number
         existing_nums = []
-
         for val in loans_df["sn"]:
             if val.startswith("LN-"):
                 try:
-                    existing_nums.append(
-                        int(val.replace("LN-", ""))
-                    )
-                except:
-                    pass
+                    existing_nums.append(int(val.replace("LN-", "")))
+                except: pass
+        next_sn_val = max(existing_nums, default=0)
 
-        next_sn = max(existing_nums, default=0)
-
-        # ----------------------------------
-        # Assign SN row by row
-        # ----------------------------------
+        # Step B: Assign Serials row by row
         for i in loans_df.index:
-
-            current_sn = loans_df.at[i, "sn"]
-
-            # Already has SN -> keep it
-            if current_sn.startswith("LN-"):
-                continue
-
-            # Detect rollover from parent label
-            parent_ref = str(
-                loans_df.at[i, "loan_id_label"]
-            ).strip()
-
+            parent_ref = str(loans_df.at[i, "loan_id_label"]).strip()
+            
+            # 1. If it's a ROLLOVER (Parent ref starts with LN-)
             if parent_ref.startswith("LN-"):
-                # Inherit parent SN
-                loans_df.at[i, "sn"] = parent_ref
+                loans_df.at[i, "sn"] = parent_ref  # Inherit Parent's SN
+            
+            # 2. If it's a FRESH loan (doesn't have an LN- serial yet)
+            elif not str(loans_df.at[i, "sn"]).startswith("LN-"):
+                next_sn_val += 1
+                loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
 
+        # Step C: Calculate Cycle Number
+        # Groups by SN and counts occurrences in chronological order
+        loans_df["cycle_no"] = loans_df.groupby("sn").cumcount() + 1
+
+        # Step D: Final Loan ID Label Logic
+        # Cycle 1 = "LN-0001", Cycle 2 = "0001", Cycle 3 = "0002"...
+        def generate_label(row):
+            if row["cycle_no"] == 1:
+                return row["sn"]
             else:
-                # Brand new loan gets new SN
-                next_sn += 1
-                loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
+                # Returns the sequence number (Cycle - 1) padded to 4 digits
+                return f"{(row['cycle_no'] - 1):04d}"
 
-        # ----------------------------------
-        # Cycle Number within each SN family
-        # ----------------------------------
-        loans_df["cycle_no"] = (
-            loans_df.groupby("sn")
-            .cumcount() + 1
-        )
+        loans_df["loan_id_label"] = loans_df.apply(generate_label, axis=1)
     # ======================================
     # 5. BORROWER MAPPING
     # ======================================
