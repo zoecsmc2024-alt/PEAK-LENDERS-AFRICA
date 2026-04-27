@@ -1328,7 +1328,6 @@ def show_loans():
         loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
 
     # ------------------------------
-    # ------------------------------
     # PAYMENT SYNC
     # ------------------------------
     if not payments_df.empty and "loan_id" in payments_df.columns:
@@ -1340,56 +1339,75 @@ def show_loans():
     ).clip(lower=0)
 
     # ------------------------------
-    # SMART STATUS LOGIC (GLOBAL FAMILY SYNC)
+    # SMART STATUS LOGIC (ROBUST FAMILY VERSION)
     # ------------------------------
-    # 1. RESET BASELINES: Clear old tags that might be stuck in the DB
-    loans_df["status"] = loans_df["status"].astype(str).str.strip().str.upper()
-    
-    # Temporarily set all unpaid loans to ACTIVE to ensure a fresh start
+    # Clean fields
+    loans_df["sn"] = (
+        loans_df["sn"].astype(str).str.strip().str.upper()
+    )
+    loans_df["status"] = (
+        loans_df["status"].astype(str).str.strip().str.upper()
+    )
+    loans_df["cycle_no"] = pd.to_numeric(
+        loans_df["cycle_no"], errors="coerce"
+    ).fillna(1).astype(int)
+    loans_df["balance"] = pd.to_numeric(
+        loans_df["balance"], errors="coerce"
+    ).fillna(0)
+
+    # Start fresh: Defaults to CLEARED, sets open loans to ACTIVE
+    loans_df["status"] = "CLEARED"
     loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
-    
-    # Priority: Fully paid is always CLEARED
-    loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
 
-    # Get unique serials to iterate through families
-    unique_sns = loans_df["sn"].unique()
+    # Process each SN family
+    for sn_val, grp in loans_df.groupby("sn"):
+        # --- PROPERLY INDENTED INSIDE THE LOOP ---
+        # Only check open loans within this family
+        open_grp = grp[grp["balance"] > 0].copy()
 
-    # 2. IDENTIFY PARENTS & CHILDREN (Family Loop)
-    for sn_val in unique_sns:
-        # --- EVERYTHING BELOW IS NOW PROPERLY INDENTED INSIDE THE LOOP ---
-        unpaid_family_indices = loans_df[
-            (loans_df["sn"] == sn_val) & 
-            (loans_df["balance"] > 0)
-        ].index.tolist()
-
-        if not unpaid_family_indices:
+        if open_grp.empty:
             continue
 
-        # Sort within the family to find the absolute newest link
-        family_rows = loans_df.loc[unpaid_family_indices].sort_values(
+        # Sort oldest -> newest within the family
+        open_grp = open_grp.sort_values(
             by=["cycle_no", "start_date", "id"]
         )
 
-        latest_idx = family_rows.index[-1]
-        max_cycle = int(loans_df.at[latest_idx, "cycle_no"])
+        # Latest row = the current "Child" loan
+        latest_row = open_grp.iloc[-1]
+        latest_id = latest_row["id"]
+        latest_cycle = int(latest_row["cycle_no"])
 
-        # Identify Parent Indices (all unpaid rows that AREN'T the latest)
-        parent_indices = [i for i in unpaid_family_indices if i != latest_idx]
+        # Older rows = BCF (Brought Cash Forward)
+        older_ids = open_grp.iloc[:-1]["id"].tolist()
 
-        # Update Parent rows to BCF
-        if parent_indices:
-            loans_df.loc[parent_indices, "status"] = "BCF"
+        if older_ids:
+            loans_df.loc[
+                loans_df["id"].isin(older_ids),
+                "status"
+            ] = "BCF"
 
-        # Update Latest row to PENDING (if rollover) or ACTIVE (if new)
-        if max_cycle > 1:
-            loans_df.at[latest_idx, "status"] = "PENDING"
+        # Latest row status determination
+        if latest_cycle == 1:
+            loans_df.loc[
+                loans_df["id"] == latest_id,
+                "status"
+            ] = "ACTIVE"
         else:
-            loans_df.at[latest_idx, "status"] = "ACTIVE"
+            # Rollovers (Cycle 2+) are PENDING
+            loans_df.loc[
+                loans_df["id"] == latest_id,
+                "status"
+            ] = "PENDING"
         # --- END OF LOOP ---
 
     # ------------------------------
     # 7. FINAL SORTING (CRITICAL FOR PORTFOLIO VIEW)
     # ------------------------------
+    # This keeps LN-0008 Cycle 1, 2, and 3 attached visually
+    loans_df = loans_df.sort_values(
+        by=["sn", "cycle_no"]
+    ).reset_index(drop=True)
     loans_df = loans_df.sort_values(
         by=["sn", "cycle_no"], 
         ascending=[True, True]
