@@ -1306,19 +1306,25 @@ def show_loans():
     # ------------------------------
     # NUMERIC CLEANUP
     # ------------------------------
-    for col in [
-        "principal",
-        "interest",
-        "total_repayable",
-        "amount_paid",
-        "balance"
-    ]:
+    for col in ["principal", "interest", "total_repayable"]:
         loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
 
+    # Ensure critical columns always exist
+    if "amount_paid" not in loans_df.columns:
+        loans_df["amount_paid"] = 0
+
+    if "balance" not in loans_df.columns:
+        loans_df["balance"] = 0
+
+    if "cycle_no" not in loans_df.columns:
+        loans_df["cycle_no"] = 1  # default safe fallback
+
+    loans_df["amount_paid"] = pd.to_numeric(loans_df["amount_paid"], errors="coerce").fillna(0)
+    loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
+    loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1).astype(int)
+
     if not payments_df.empty and "amount" in payments_df.columns:
-        payments_df["amount"] = pd.to_numeric(
-            payments_df["amount"], errors="coerce"
-        ).fillna(0)
+        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
 
     # ------------------------------
     # DATE CLEANUP
@@ -1329,7 +1335,7 @@ def show_loans():
     # ------------------------------
     # PAYMENT SYNC
     # ------------------------------
-    loans_df["amount_paid"] = 0  # ✅ ensure column always exists
+    loans_df["amount_paid"] = 0
 
     if not payments_df.empty and "loan_id" in payments_df.columns:
         pay_sums = payments_df.groupby("loan_id")["amount"].sum()
@@ -1340,12 +1346,14 @@ def show_loans():
     ).clip(lower=0)
 
     # ==============================
-    # SERIAL ENGINE (STABLE VERSION)
+    # SERIAL ENGINE (STABLE)
     # ==============================
-    # Clean SN format first (don't reassign existing valid ones)
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
 
-    # Extract valid existing numbers to find the global ceiling
+    # Build quick lookup for parents (faster + stable)
+    id_to_sn = dict(zip(loans_df["id"], loans_df["sn"]))
+
+    # Get max existing SN
     existing_nums = []
     for val in loans_df["sn"]:
         if val.startswith("LN-"):
@@ -1356,88 +1364,78 @@ def show_loans():
 
     next_sn_val = max(existing_nums, default=0)
 
+    # Assign SNs safely
     for i in loans_df.index:
-        current_sn = str(loans_df.at[i, "sn"]).strip().upper()
-        parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
+        current_sn = loans_df.at[i, "sn"]
+        parent_id = loans_df.at[i, "parent_loan_id"]
 
-        # ✅ If SN already valid → NEVER TOUCH IT (Prevents shifting IDs)
-        if current_sn.startswith("LN-"):
+        # Keep valid SN
+        if isinstance(current_sn, str) and current_sn.startswith("LN-"):
             continue
 
-        # ✅ Try inherit from parent for rollovers
-        if parent_id != "":
-            parent_match = loans_df[loans_df["id"] == parent_id]
-            if not parent_match.empty:
-                parent_sn = str(parent_match.iloc[0]["sn"]).strip()
-                if parent_sn.startswith("LN-"):
-                    loans_df.at[i, "sn"] = parent_sn
-                    continue
+        # Inherit from parent if possible
+        if parent_id in id_to_sn:
+            parent_sn = str(id_to_sn[parent_id]).strip().upper()
+            if parent_sn.startswith("LN-"):
+                loans_df.at[i, "sn"] = parent_sn
+                continue
 
-        # ✅ Only assign NEW SN if it's a fresh loan without a valid parent
+        # Assign new SN
         next_sn_val += 1
-        loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
+        new_sn = f"LN-{next_sn_val:04d}"
+        loans_df.at[i, "sn"] = new_sn
+        id_to_sn[loans_df.at[i, "id"]] = new_sn  # update map
 
     # ------------------------------
-    # SMART STATUS LOGIC (NOW CORRECT)
+    # STATUS LOGIC (ROBUST)
     # ------------------------------
-    loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
     loans_df["status"] = "CLEARED"
     loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
 
-    # Process each SN family separately
-    for sn_val, grp in loans_df.groupby("sn"):
-        # Only open loans within this specific family
-        open_grp = grp[grp["balance"] > 0].copy()
+    for sn_val, grp in loans_df.groupby("sn", dropna=False):
+
+        open_grp = grp[grp["balance"] > 0]
 
         if open_grp.empty:
             continue
 
-        # Sort within family to find the absolute latest row
+        # Safer sort (handles missing dates)
         open_grp = open_grp.sort_values(
-            by=["cycle_no", "start_date", "id"]
+            by=["cycle_no", "start_date", "id"],
+            na_position="last"
         )
 
         latest_row = open_grp.iloc[-1]
         latest_id = latest_row["id"]
         latest_cycle = int(latest_row["cycle_no"])
 
-        older_ids = open_grp.iloc[:-1]["id"].tolist()
+        older_ids = open_grp.iloc[:-1]["id"]
 
-        # Mark all unpaid historical links as BCF
-        if older_ids:
-            loans_df.loc[
-                loans_df["id"].isin(older_ids),
-                "status"
-            ] = "BCF"
+        # Mark historical unpaid as BCF
+        loans_df.loc[
+            loans_df["id"].isin(older_ids),
+            "status"
+        ] = "BCF"
 
-        # Mark the current active link
-        if latest_cycle == 1:
-            loans_df.loc[
-                loans_df["id"] == latest_id,
-                "status"
-            ] = "ACTIVE"
-        else:
-            # Multi-cycle loans (Cycle 2+) are PENDING until processed
-            loans_df.loc[
-                loans_df["id"] == latest_id,
-                "status"
-            ] = "PENDING"
+        # Mark latest
+        loans_df.loc[
+            loans_df["id"] == latest_id,
+            "status"
+        ] = "ACTIVE" if latest_cycle == 1 else "PENDING"
 
     # ------------------------------
-    # FINAL SORT
+    # FINAL SORT (DISPLAY ONLY)
     # ------------------------------
     loans_df = loans_df.sort_values(
-        by=["sn", "cycle_no"],
-        ascending=[True, True]
+        by=["sn", "cycle_no", "start_date"],
+        na_position="last"
     ).reset_index(drop=True)
 
     # ------------------------------
     # LABELS
     # ------------------------------
     loans_df["loan_id_label"] = (
-        loans_df["sn"]
-        .str.replace("LN-", "", regex=False)
-        .str.zfill(4)
+        loans_df["sn"].str.replace("LN-", "", regex=False).str.zfill(4)
     )
 
     # ------------------------------
@@ -1445,22 +1443,17 @@ def show_loans():
     # ------------------------------
     if not borrowers_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
-        bor_map = dict(zip(
-            borrowers_df["id"],
-            borrowers_df["name"]
-        ))
-        loans_df["borrower"] = loans_df["borrower_id"].map(
-            bor_map
-        ).fillna("Unknown")
+
+        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+
+        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
 
     # ------------------------------
     # ACTIVE BORROWERS
     # ------------------------------
     if not borrowers_df.empty and "status" in borrowers_df.columns:
         Active_borrowers = borrowers_df[
-            borrowers_df["status"]
-            .astype(str)
-            .str.upper() == "ACTIVE"
+            borrowers_df["status"].astype(str).str.upper() == "ACTIVE"
         ]
     else:
         Active_borrowers = pd.DataFrame(columns=["id", "name"])
