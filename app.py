@@ -1341,7 +1341,15 @@ def show_loans():
     # ------------------------------
     # SMART STATUS LOGIC (CHAIN AWARE)
     # ------------------------------
-    # Standardize status strings
+    # Normalize serial numbers
+    loans_df["sn"] = (
+        loans_df["sn"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    # Normalize status
     loans_df["status"] = (
         loans_df["status"]
         .astype(str)
@@ -1349,30 +1357,27 @@ def show_loans():
         .str.upper()
     )
 
-    # Ensure cycle_no is numeric
+    # Numeric safety
     loans_df["cycle_no"] = pd.to_numeric(
-        loans_df["cycle_no"],
+        loans_df["cycle_no"], 
         errors="coerce"
     ).fillna(1).astype(int)
 
-    # Ensure balance is numeric
     loans_df["balance"] = pd.to_numeric(
-        loans_df["balance"],
+        loans_df["balance"], 
         errors="coerce"
     ).fillna(0)
 
-    # Priority 1: Fully paid loans are CLEARED
+    # Cleared loans always take priority
     loans_df.loc[
-        loans_df["balance"] <= 0,
+        loans_df["balance"] <= 0, 
         "status"
     ] = "CLEARED"
 
-    # ------------------------------
-    # PROCESS EACH LOAN FAMILY (SN)
-    # ------------------------------
+    # Process each family (all cycles sharing the same SN)
     for sn_val, grp in loans_df.groupby("sn"):
 
-        # Only look at unpaid rows in this chain
+        # Isolate rows in this chain that still have a balance
         grp_open = grp[
             grp["balance"] > 0
         ].copy()
@@ -1380,41 +1385,36 @@ def show_loans():
         if grp_open.empty:
             continue
 
-        # Sort cycles properly and get newest child
-        grp_open = grp_open.sort_values(
-            by="cycle_no"
-        )
+        # Sort by cycle so we know which is the newest child
+        grp_open = grp_open.sort_values(by="cycle_no")
 
         latest_idx = grp_open.index[-1]
-
-        # Older unpaid rows in the chain become BCF (Brought Cash Forward)
         earlier_idx = grp_open.index[:-1]
 
-        if len(earlier_idx) > 0:
+        # Any unpaid older cycles are marked as BCF (Brought Cash Forward)
+        if not earlier_idx.empty:
             loans_df.loc[
-                earlier_idx,
+                earlier_idx, 
                 "status"
             ] = "BCF"
 
-        # ------------------------------
-        # NEWEST OPEN LOAN STATUS
-        # ------------------------------
+        # Determine the status of the current newest link
         latest_cycle = int(
             loans_df.loc[
-                latest_idx,
+                latest_idx, 
                 "cycle_no"
             ]
         )
 
         if latest_cycle == 1:
             loans_df.loc[
-                latest_idx,
+                latest_idx, 
                 "status"
             ] = "ACTIVE"
         else:
-            # Rollovers (Cycle 2+) remain PENDING for review
+            # Rollovers start as PENDING until approved/processed
             loans_df.loc[
-                latest_idx,
+                latest_idx, 
                 "status"
             ] = "PENDING"
 
