@@ -1173,104 +1173,187 @@ def show_borrowers():
                     st.rerun()
 
 # ==============================
-# 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition)
+# 🔐 SAAS TENANT CONTEXT (HARDENED)
+# ==============================
+def get_current_tenant():
+    """Returns current tenant_id from session (SaaS isolation layer)"""
+    return st.session_state.get("tenant_id", "default_tenant")
+
+# ==============================
+# 🧠 DATABASE ADAPTER (MULTI-TENANT SAFE)
+# ==============================
+def get_data(table_name):
+    """Multi-tenant safe data fetch with auto-migration for old records"""
+    tenant_id = get_current_tenant()
+    df = get_cached_data(table_name)
+
+    if df is not None and not df.empty:
+        df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+        if "tenant_id" in df.columns:
+            df = df[df["tenant_id"].astype(str) == str(tenant_id)].copy()
+        else:
+            df["tenant_id"] = tenant_id
+    return df
+
+def save_data_saas(table_name, df):
+    """Multi-tenant safe save with hard enforcement of boundaries"""
+    tenant_id = get_current_tenant()
+    df["tenant_id"] = str(tenant_id)
+    return save_data(table_name, df)
+
+# ==============================
+# 13. LOANS MANAGEMENT PAGE (SaaS Luxe Edition - Banking Grade)
 # ==============================
 def show_loans():
+    """
+    Core engine for issuing and managing loan agreements.
+    Preserves Midnight Blue branding and Peachy Luxe themes.
+    """
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
     
-    # 1. LOAD DATA
+    # 1. LOAD DATA FROM SUPABASE
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
     payments_df = get_cached_data("payments") 
 
-    # ✅ STEP 1: HARDENED DATA NORMALIZATION
-    # This prevents the 'id' NameError by ensuring columns are clean and present
-    def sanitize_df(df, fallback_cols):
-        if df is None or df.empty:
-            return pd.DataFrame(columns=fallback_cols)
-        # Force column names to lowercase and strip whitespace
-        df.columns = [str(c).strip().lower() for c in df.columns]
-        return df
+    # ✅ SAFETY (prevents future crashes)
+    if loans_df is None: loans_df = pd.DataFrame()
+    if borrowers_df is None: borrowers_df = pd.DataFrame()
+    if payments_df is None: payments_df = pd.DataFrame()
 
-    loan_fallbacks = ["id", "loan_id_label", "borrower_id", "principal", "total_repayable", "status"]
-    loans_df = sanitize_df(loans_df, loan_fallbacks)
-    borrowers_df = sanitize_df(borrowers_df, ["id", "name", "status"])
-    payments_df = sanitize_df(payments_df, ["id", "loan_id", "amount"])
-
-    # ✅ STEP 2: ENSURE 'ID' EXISTS
-    # If the database skipped 'id', we create it from index to prevent crashes
-    if "id" not in loans_df.columns:
-        loans_df["id"] = loans_df.index.astype(str)
+    if not borrowers_df.empty:
+        Active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
     else:
-        loans_df["id"] = loans_df["id"].astype(str)
+        Active_borrowers = pd.DataFrame()
+
+    if loans_df.empty:
+        loans_df = pd.DataFrame(columns=[
+            "id", "sn", "loan_id_label", "borrower_id", "borrower", "principal", "interest",
+            "total_repayable", "amount_paid", "balance", "status", "start_date", "end_date", "cycle_no"
+        ])
 
     # ==============================
-    # 🔥 DATA STANDARDIZATION & SMART SYNC
+    # 🔥 DATA STANDARDIZATION & SMART SYNC (FIXED + STABLE LN SERIALS)
     # ==============================
 
-    # ✅ SYNC PAYMENTS → LOANS
+    loans_df["id"] = loans_df["id"].astype(str)
+
+    # ✅ SYNC PAYMENTS → LOANS (Mathematical Source of Truth)
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["loan_id"] = payments_df["loan_id"].astype(str)
-        payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
+        payments_df["amount"] = pd.to_numeric(
+            payments_df["amount"], errors="coerce"
+        ).fillna(0)
 
         pay_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
         loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
 
+    # ======================================
     # 1. CLEAN ALL NUMERIC COLUMNS
-    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
+    # ======================================
+    num_cols = [
+        "principal",
+        "interest",
+        "total_repayable",
+        "amount_paid",
+        "balance"
+    ]
+
     for col in num_cols:
         if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+            loans_df[col] = pd.to_numeric(
+                loans_df[col], errors="coerce"
+            ).fillna(0)
         else:
             loans_df[col] = 0.0
 
+    # ======================================
     # 2. FORCE RECALCULATE BALANCE
-    loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
+    # ======================================
+    loans_df["balance"] = (
+        loans_df["total_repayable"] - loans_df["amount_paid"]
+    ).clip(lower=0)
 
+    # ======================================
     # 3. SMART STATUS LOGIC
-    if "status" in loans_df.columns:
-        loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
-    else:
-        loans_df["status"] = "ACTIVE"
+    # ======================================
+    loans_df["status"] = (
+        loans_df["status"]
+        .astype(str)
+        .str.upper()
+        .str.strip()
+    )
 
     def determine_status(row):
-        curr = row["status"]
-        if curr in ["BCF", "PENDING"]: return curr
-        return "CLEARED" if row["balance"] <= 0 else "ACTIVE"
+        current_status = row["status"]
+
+        # Protect manual states
+        if current_status in ["BCF", "PENDING"]:
+            return current_status
+
+        # Fully paid
+        if row["balance"] <= 0:
+            return "CLEARED"
+
+        # Otherwise active
+        return "ACTIVE"
 
     loans_df["status"] = loans_df.apply(determine_status, axis=1)
 
+    # Ensure cleared = zero balance
+    loans_df.loc[
+        loans_df["status"] == "CLEARED",
+        "balance"
+    ] = 0
+
+    # ------------------------------
     # 6. CYCLE CLEANUP
+    # ------------------------------
     loans_df["cycle_no"] = (
         pd.to_numeric(loans_df.get("cycle_no", 1), errors="coerce")
-        .fillna(1).astype(int)
+        .fillna(1)
+        .astype(int)
     )
 
+    # ------------------------------
     # 7. SORTING (CRITICAL ORDER)
-    if "loan_id_label" in loans_df.columns:
-        loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"]).reset_index(drop=True)
+    # ------------------------------
+    loans_df = loans_df.sort_values(
+        by=["loan_id_label", "cycle_no"]
+    ).reset_index(drop=True)
 
+    # ------------------------------
     # 8. SN GENERATION
+    # ------------------------------
     loans_df["sn"] = (loans_df.index + 1).astype(str).str.zfill(4)
 
+    # ------------------------------
     # 9. BORROWER NAME MAPPING
+    # ------------------------------
     if not borrowers_df.empty:
-        bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
+        bor_map = dict(zip(
+            borrowers_df["id"].astype(str),
+            borrowers_df["name"]
+        ))
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
 
+    # ------------------------------
+    # 10. UI GROUPING (SEPARATORS)
+    # ------------------------------
+    loans_df["__group_break"] = loans_df["loan_id_label"].ne(
+        loans_df["loan_id_label"].shift()
+    )
+
+    # ------------------------------
     # 11. FINAL COLUMN ORDER (SAFE)
+    # ------------------------------
     preferred_order = [
         "sn", "loan_id_label", "borrower", "cycle_no",
         "principal", "total_repayable", "amount_paid",
         "balance", "start_date", "end_date", "status"
     ]
-    
-    # Filter only columns that actually exist to avoid KeyErrors
-    final_cols = [col for col in preferred_order if col in loans_df.columns]
-    loans_df = loans_df[final_cols]
-    
-    # Render to Streamlit
-    st.dataframe(loans_df, use_container_width=True)
+
+    loans_df = loans_df[[col for col in preferred_order if col in loans_df.columns] + ["__group_break"]]
 
     # ==============================
     # TAB: PORTFOLIO VIEW
