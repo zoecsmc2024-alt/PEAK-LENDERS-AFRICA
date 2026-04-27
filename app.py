@@ -1470,13 +1470,7 @@ def show_loans():
             columns=["id", "name"]
         )
 
-    # ------------------------------
-    # UI GROUP BREAK
-    # ------------------------------
-    loans_df["__group_break"] = loans_df["loan_id_label"].ne(
-        loans_df["loan_id_label"].shift()
-    )
-
+    
     # ------------------------------
     # SAVE CLEAN DATA
     # ------------------------------
