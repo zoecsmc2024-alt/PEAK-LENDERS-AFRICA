@@ -1338,22 +1338,30 @@ def show_loans():
         loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
-    # 3. 🛡️ SMART STATUS LOGIC (Protects BCF and PENDING)
+   # ------------------------------
+    # 🛡️ SMART STATUS LOGIC (HARDENED)
+    # ------------------------------
     def determine_status(row):
-        current_status = row["status"]
+        # We use .strip().upper() to ensure we aren't tripped up by spaces or casing
+        current_status = str(row["status"]).strip().upper()
         
-        # Priority 1: IF DB SAYS BCF OR PENDING, DO NOT OVERWRITE!
-        # This stops the code from changing "BCF" back to "ACTIVE" because of the balance
-        if current_status in ["BCF", "PENDING"]:
-            return current_status
+        # Priority 1: IF DB SAYS BCF, DO NOT OVERWRITE.
+        # This ensures once a loan is "Brought Forward" it stays that way.
+        if current_status == "BCF":
+            return "BCF"
         
-        # Priority 2: If balance is zero, it's CLEARED
+        # Priority 2: If balance is zero, it's CLEARED (unless it was already BCF)
         if row["balance"] <= 0:
             return "CLEARED"
-            
-        # Priority 3: Otherwise, it stays ACTIVE
-        return "ACTIVE"
+        
+        # Priority 3: Handle PENDING -> ACTIVE transition
+        # If the loan was PENDING but now has a balance/is saved, 
+        # it should be ACTIVE unless the user manually keeps it PENDING.
+        if current_status == "PENDING" and row["balance"] > 0:
+             return "PENDING" 
 
+        # Default fallback
+        return "ACTIVE" if row["balance"] > 0 else "CLEARED"
     # ------------------------------
     # 7. SORTING (CRITICAL ORDER)
     # ------------------------------
