@@ -1340,12 +1340,14 @@ def show_loans():
     ).clip(lower=0)
 
     # ==============================
-    # SERIAL ENGINE (MOVE UP)
+    # SERIAL ENGINE (STABLE VERSION)
     # ==============================
-    existing_nums = []
+    # Clean SN format first (don't reassign existing valid ones)
+    loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
 
-    for val in loans_df["sn"].astype(str):
-        val = val.strip()
+    # Extract valid existing numbers to find the global ceiling
+    existing_nums = []
+    for val in loans_df["sn"]:
         if val.startswith("LN-"):
             try:
                 existing_nums.append(int(val.replace("LN-", "")))
@@ -1355,25 +1357,25 @@ def show_loans():
     next_sn_val = max(existing_nums, default=0)
 
     for i in loans_df.index:
+        current_sn = str(loans_df.at[i, "sn"]).strip().upper()
         parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
 
+        # ✅ If SN already valid → NEVER TOUCH IT (Prevents shifting IDs)
+        if current_sn.startswith("LN-"):
+            continue
+
+        # ✅ Try inherit from parent for rollovers
         if parent_id != "":
             parent_match = loans_df[loans_df["id"] == parent_id]
             if not parent_match.empty:
                 parent_sn = str(parent_match.iloc[0]["sn"]).strip()
                 if parent_sn.startswith("LN-"):
                     loans_df.at[i, "sn"] = parent_sn
+                    continue
 
-        if not str(loans_df.at[i, "sn"]).startswith("LN-"):
-            next_sn_val += 1
-            loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
-
-    # ✅ SORT BEFORE ASSIGNING CYCLES (Ensures Parent is Cycle 1)
-    loans_df = loans_df.sort_values(by=["sn", "start_date", "id"])
-
-    loans_df["cycle_no"] = (
-        loans_df.groupby("sn").cumcount() + 1
-    )
+        # ✅ Only assign NEW SN if it's a fresh loan without a valid parent
+        next_sn_val += 1
+        loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
 
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
