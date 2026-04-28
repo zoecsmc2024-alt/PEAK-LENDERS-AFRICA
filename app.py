@@ -4098,12 +4098,11 @@ def show_dashboard_view():
             st.markdown("#### 🔔 Recent Loan Activity")
 
             try:
-                # 1. Identify the specific column names for Name and ID
-                # This list covers the most common variations after normalization
-                name_col = first_existing(loans_df, ["borrower_name", "client_name", "name", "borrower"])
-                sn_col = first_existing(loans_df, ["sn", "serial_no", "loan_id", "id"])
+                # Based on your table headers: 'borrower' and 'sn'
+                name_col = first_existing(loans_df, ["borrower", "borrower_name", "name"])
+                sn_col = first_existing(loans_df, ["sn", "serial_no", "loan_id"])
 
-                # 2. Sort by date and cycle to get the latest entries
+                # Sort to show the latest activity
                 display_loans = loans_df.sort_values(
                     by=["due_date_dt", "cycle_no"],
                     ascending=False
@@ -4113,20 +4112,15 @@ def show_dashboard_view():
                 for _, r in display_loans.iterrows():
                     status = str(r.get("status", "ACTIVE")).upper()
                     
-                    # Status Badge Colors
-                    if status == "CLEARED":
-                        status_color = "#10B981" 
-                    elif status == "BCF":
-                        status_color = "#64748B" 
-                    elif status == "PENDING":
-                        status_color = "#F59E0B" 
-                    else:
-                        status_color = "#1E3A8A"
+                    # Status Colors
+                    if status == "CLEARED": status_color = "#10B981" 
+                    elif status == "BCF": status_color = "#64748B" 
+                    elif status == "PENDING": status_color = "#F59E0B" 
+                    else: status_color = "#1E3A8A"
 
-                    # 3. Robust value retrieval
-                    # If name_col finds 'borrower_name', it uses that. Otherwise, it defaults to 'Unknown'
-                    b_name = str(r.get(name_col)) if name_col and pd.notna(r.get(name_col)) else "Unknown Name"
-                    s_number = str(r.get(sn_col)) if sn_col and pd.notna(r.get(sn_col)) else "N/A"
+                    # Explicitly pulling from your 'borrower' column
+                    b_name = r[name_col] if name_col in r and pd.notna(r[name_col]) else "Unknown Name"
+                    s_number = r[sn_col] if sn_col in r and pd.notna(r[sn_col]) else "N/A"
                     amount = float(r.get('principal_n', 0))
 
                     rows += f"""
@@ -4146,14 +4140,10 @@ def show_dashboard_view():
                     </tr>
                     """
 
-                st.markdown(f"""
-                    <table style='width:100%; font-size:13px; border-collapse:collapse;'>
-                        {rows}
-                    </table>
-                """, unsafe_allow_html=True)
+                st.markdown(f"<table style='width:100%; border-collapse:collapse;'>{rows}</table>", unsafe_allow_html=True)
 
             except Exception as e:
-                st.info("Activity feed is refreshing...")
+                st.info("Feed refreshing...")
 
         with t2:
 
