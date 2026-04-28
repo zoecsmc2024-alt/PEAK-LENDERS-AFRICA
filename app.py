@@ -1339,66 +1339,75 @@ def show_loans():
         loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
-    # ==============================
-    # STABLE PARENT-FIRST SN ENGINE
-    # ==============================
+    # ------------------------------
+    # PAYMENT SYNC
+    # ------------------------------
+    loans_df["amount_paid"] = 0  # ✅ ensure column always exists
+
+    if not payments_df.empty and "loan_id" in payments_df.columns:
+        pay_sums = payments_df.groupby("loan_id")["amount"].sum()
+        loans_df["amount_paid"] = loans_df["id"].map(pay_sums).fillna(0)
+
+    loans_df["balance"] = (
+        loans_df["total_repayable"] - loans_df["amount_paid"]
+    ).clip(lower=0)
+
+    # ==========================================
+    # FIXED: STABLE PARENT-FIRST SN ENGINE
+    # ==========================================
     loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
     loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str).str.strip()
 
-    # sort oldest first to ensure root loans are processed before children
-    loans_df["start_date"] = pd.to_datetime(
-        loans_df["start_date"],
-        errors="coerce"
-    )
+    # 1. Force date conversion for reliable chronological sorting
+    loans_df["start_date"] = pd.to_datetime(loans_df["start_date"], errors="coerce")
 
-    loans_df = loans_df.sort_values(
-        by=["start_date", "id"]
-    ).reset_index(drop=True)
+    # 2. Sort oldest first so parents are processed before their children
+    loans_df = loans_df.sort_values(by=["start_date", "id"]).reset_index(drop=True)
 
-    # Find the starting point for new serial numbers
-    used = []
+    # 3. Identify the highest existing SN to prevent duplicates
+    used_indices = []
     for val in loans_df["sn"]:
         if val.startswith("LN-"):
             try:
-                used.append(int(val.replace("LN-", "")))
-            except:
+                used_indices.append(int(val.replace("LN-", "")))
+            except ValueError:
                 pass
+    
+    next_sn = max(used_indices, default=0)
 
-    next_sn = max(used, default=0)
-
-    # Repeat passes until all chains (rollovers of rollovers) are resolved
-    for _ in range(5):
+    # 4. Multi-pass Resolution (Handles deep rollover chains)
+    # We loop multiple times so that if A -> B -> C, B gets A's SN in pass 1, 
+    # and C gets B's SN in pass 2.
+    for _ in range(3): 
         for i in loans_df.index:
             current_sn = str(loans_df.at[i, "sn"]).strip()
-
-            # Skip if already has a valid SN
+            
+            # If it already has an SN, don't touch it (Permanence)
             if current_sn.startswith("LN-"):
                 continue
 
-            parent_id = str(
-                loans_df.at[i, "parent_loan_id"]
-            ).strip()
+            parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
 
-            # Rollover loan: Try to inherit from parent
-            if parent_id != "":
-                parent = loans_df[
-                    loans_df["id"] == parent_id
-                ]
-
-                if not parent.empty:
-                    parent_sn = str(
-                        parent.iloc[0]["sn"]
-                    ).strip()
-
-                    if parent_sn.startswith("LN-"):
-                        loans_df.at[i, "sn"] = parent_sn
+            # Check if this is a rollover
+            if parent_id not in ["", "None", "nan"]:
+                parent_match = loans_df[loans_df["id"] == parent_id]
+                
+                if not parent_match.empty:
+                    p_sn = str(parent_match.iloc[0]["sn"]).strip()
+                    # If parent has an SN, inherit it
+                    if p_sn.startswith("LN-"):
+                        loans_df.at[i, "sn"] = p_sn
                         continue
-            
-            # If no parent or parent doesn't have an SN yet, 
-            # and it's the final pass, assign a fresh SN
-            if _ == 4:
-                next_sn += 1
-                loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
+
+    # 5. Final Pass: Assign brand new SNs to anything still empty
+    for i in loans_df.index:
+        if not str(loans_df.at[i, "sn"]).startswith("LN-"):
+            next_sn += 1
+            loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
+
+    # ------------------------------
+    # SMART STATUS LOGIC (NOW CORRECT)
+    # ------------------------------
 
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
