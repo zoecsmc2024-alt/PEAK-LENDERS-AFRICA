@@ -4095,55 +4095,60 @@ def show_dashboard_view():
         t1, t2 = st.columns(2)
 
         with t1:
-            st.markdown("#### 🔔 Recent Loan Activity")
+            st.markdown("#### ⚠️ Overdue Loans")
 
             try:
-                # Based on your table headers: 'borrower' and 'sn'
+                # 1. Identify the specific column names for Name and ID
                 name_col = first_existing(loans_df, ["borrower", "borrower_name", "name"])
                 sn_col = first_existing(loans_df, ["sn", "serial_no", "loan_id"])
 
-                # Sort to show the latest activity
-                display_loans = loans_df.sort_values(
-                    by=["due_date_dt", "cycle_no"],
-                    ascending=False
-                ).head(5)
+                # 2. FILTER: Only pull rows that are past due and not cleared
+                # Today is defined as pd.Timestamp.now().normalize()
+                overdue_loans = loans_df[
+                    (loans_df["due_date_dt"] < today) & 
+                    (loans_df["status"].astype(str).str.upper() != "CLEARED")
+                ].copy()
 
-                rows = ""
-                for _, r in display_loans.iterrows():
-                    status = str(r.get("status", "ACTIVE")).upper()
-                    
-                    # Status Colors
-                    if status == "CLEARED": status_color = "#10B981" 
-                    elif status == "BCF": status_color = "#64748B" 
-                    elif status == "PENDING": status_color = "#F59E0B" 
-                    else: status_color = "#1E3A8A"
+                if not overdue_loans.empty:
+                    # 3. Sort by the oldest due date first (most urgent)
+                    display_loans = overdue_loans.sort_values(
+                        by="due_date_dt", 
+                        ascending=True
+                    ).head(5)
 
-                    # Explicitly pulling from your 'borrower' column
-                    b_name = r[name_col] if name_col in r and pd.notna(r[name_col]) else "Unknown Name"
-                    s_number = r[sn_col] if sn_col in r and pd.notna(r[sn_col]) else "N/A"
-                    amount = float(r.get('principal_n', 0))
+                    rows = ""
+                    for _, r in display_loans.iterrows():
+                        status_color = "#EF4444"  # Red for Overdue
+                        
+                        # Data Retrieval
+                        b_name = r[name_col] if name_col in r and pd.notna(r[name_col]) else "Unknown Name"
+                        s_number = r[sn_col] if sn_col in r and pd.notna(r[sn_col]) else "N/A"
+                        amount = float(r.get('principal_n', 0))
+                        due_date = r["due_date_dt"].strftime('%Y-%m-%d') if pd.notna(r["due_date_dt"]) else "N/A"
 
-                    rows += f"""
-                    <tr style="border-bottom:1px solid #f0f0f0;">
-                        <td style="padding:12px 5px;">
-                            <div style="font-weight:bold; color:#1E293B;">{b_name}</div>
-                            <div style="font-size:10px; color:#94A3B8;">SN: {s_number} | Cycle {r.get('cycle_no', 1)}</div>
-                        </td>
-                        <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
-                            {amount:,.0f}
-                        </td>
-                        <td style="padding:12px 5px; text-align:center;">
-                            <span style="background:{status_color}20; color:{status_color}; padding:3px 8px; border-radius:12px; font-size:10px; font-weight:bold;">
-                                {status}
-                            </span>
-                        </td>
-                    </tr>
-                    """
+                        rows += f"""
+                        <tr style="border-bottom:1px solid #f0f0f0;">
+                            <td style="padding:12px 5px;">
+                                <div style="font-weight:bold; color:#1E293B;">{b_name}</div>
+                                <div style="font-size:10px; color:#94A3B8;">SN: {s_number} | Due: {due_date}</div>
+                            </td>
+                            <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
+                                {amount:,.0f}
+                            </td>
+                            <td style="padding:12px 5px; text-align:center;">
+                                <span style="background:{status_color}20; color:{status_color}; padding:3px 8px; border-radius:12px; font-size:10px; font-weight:bold;">
+                                    OVERDUE
+                                </span>
+                            </td>
+                        </tr>
+                        """
 
-                st.markdown(f"<table style='width:100%; border-collapse:collapse;'>{rows}</table>", unsafe_allow_html=True)
+                    st.markdown(f"<table style='width:100%; border-collapse:collapse;'>{rows}</table>", unsafe_allow_html=True)
+                else:
+                    st.success("✅ All collections are currently up to date!")
 
             except Exception as e:
-                st.info("Feed refreshing...")
+                st.info("Overdue feed is refreshing...")
 
         with t2:
 
