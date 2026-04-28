@@ -4098,7 +4098,12 @@ def show_dashboard_view():
             st.markdown("#### 🔔 Recent Loan Activity")
 
             try:
-                # Sort by the most recent end_date and cycle to see current status
+                # 1. Identify the correct column names after normalization
+                # Based on your image, it's likely 'borrower_name' or 'name'
+                name_col = first_existing(loans_df, ["borrower_name", "name", "borrower", "client"])
+                sn_col = first_existing(loans_df, ["sn", "loan_id", "serial_no", "id"])
+
+                # 2. Sort by date and cycle
                 display_loans = loans_df.sort_values(
                     by=["due_date_dt", "cycle_no"],
                     ascending=False
@@ -4118,15 +4123,16 @@ def show_dashboard_view():
                     else:
                         status_color = "#1E3A8A"  # Brand Blue (Active)
 
-                    # Format name/ID and Amount
-                    borrower_name = str(r.get('borrower', 'Unknown'))
+                    # 3. Pull values using the identified columns
+                    borrower_name = str(r.get(name_col, 'Unknown User')) if name_col else "Unknown"
+                    serial_number = str(r.get(sn_col, 'N/A')) if sn_col else "N/A"
                     amount = float(r.get('principal_n', 0))
 
                     rows += f"""
                     <tr style="border-bottom:1px solid #f0f0f0;">
                         <td style="padding:12px 5px;">
                             <div style="font-weight:bold; color:#1E293B;">{borrower_name}</div>
-                            <div style="font-size:10px; color:#94A3B8;">SN: {r.get('sn', 'N/A')} | Cycle {r.get('cycle_no', 1)}</div>
+                            <div style="font-size:10px; color:#94A3B8;">SN: {serial_number} | Cycle {r.get('cycle_no', 1)}</div>
                         </td>
                         <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
                             {amount:,.0f}
@@ -4146,7 +4152,7 @@ def show_dashboard_view():
                 """, unsafe_allow_html=True)
 
             except Exception as e:
-                st.info("Loan activity feed is currently updating...")
+                st.info(f"Loan activity feed is currently updating...")
 
         with t2:
 
