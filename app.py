@@ -3855,19 +3855,14 @@ from datetime import datetime
 
 # =========================================================
 # FULLY UPGRADED / CRASH-PROOF / PERFORMANCE VERSION
-# Keeps your original layout, sections, style & indentation
 # =========================================================
 
 st.set_page_config(layout="wide")
 
+# 1. Load the data first
 loans_df = load_your_loan_data_function() 
 
-if loans_df is not None and not loans_df.empty:
 
-if loans_df is not None and not loans_df.empty:
-    pass
-else:
-    st.info("📊 Fetching latest loan data... please wait.")
 # ------------------------------
 # AUTO REFRESH EVERY 60 SECONDS
 # ------------------------------
@@ -4098,6 +4093,7 @@ def show_dashboard_view():
                 st.info("Portfolio chart unavailable.")
 
         # --- 5. ACTIVITY FEEDS ---
+        if loans_df is not None and not loans_df.empty:
         st.write("---")
 
         t1, t2 = st.columns(2)
@@ -4105,12 +4101,15 @@ def show_dashboard_view():
         with t1:
             st.markdown("#### 📊 Portfolio Growth vs. Interest")
 
+            # Initialize export_df as None in case the try block fails
+            export_df = None 
+
             try:
                 if not loans_df.empty:
                     # 1. Prepare and Clean Data
                     graph_df = loans_df.copy()
                     
-                    # Ensure names aren't 'None' for the chart tooltips/export
+                    # Ensure names aren't 'None'
                     name_col = first_existing(graph_df, ["borrower", "borrower_name", "name"])
                     if name_col:
                         graph_df[name_col] = graph_df[name_col].fillna("Unknown Borrower")
@@ -4119,45 +4118,28 @@ def show_dashboard_view():
                     graph_df = graph_df.dropna(subset=["date_dt"])
                     
                     if not graph_df.empty:
-                        # 2. Group by date and sum metrics (Cumulative)
+                        # 2. Group and Sum (Cumulative)
                         timeline_df = graph_df.groupby("date_dt").agg({
                             "principal_n": "sum",
                             "interest_n": "sum"
                         }).sort_index().cumsum().reset_index()
 
-                        # 3. Create the Line Chart
+                        # 3. Create Chart
                         fig_portfolio = px.line(
                             timeline_df,
                             x="date_dt",
                             y=["principal_n", "interest_n"],
-                            labels={
-                                "date_dt": "Date",
-                                "value": "Amount (UGX)",
-                                "variable": "Metric"
-                            },
-                            color_discrete_map={
-                                "principal_n": brand_color,
-                                "interest_n": "#10B981" 
-                            },
+                            labels={"date_dt": "Date", "value": "Amount (UGX)", "variable": "Metric"},
+                            color_discrete_map={"principal_n": brand_color, "interest_n": "#10B981"},
                             template="plotly_white"
                         )
 
-                        # 4. Premium Styling
-                        fig_portfolio.update_layout(
-                            height=350,
-                            margin=dict(l=0, r=0, t=20, b=0),
-                            legend=dict(
-                                orientation="h",
-                                yanchor="bottom",
-                                y=1.02,
-                                xanchor="right",
-                                x=1
-                            ),
-                            hovermode="x unified"
-                        )
-                        
+                        fig_portfolio.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
                         fig_portfolio.update_traces(line=dict(width=3))
                         st.plotly_chart(fig_portfolio, use_container_width=True)
+                        
+                        # Save for export button
+                        export_df = graph_df 
                     else:
                         st.info("Not enough dated records to generate a trend.")
                 else:
@@ -4165,17 +4147,22 @@ def show_dashboard_view():
 
             except Exception as e:
                 st.error("Growth chart is currently recalculating...")
-                # 5. Export Section (Cleaned Data)
-            st.write("") 
-            # We use the cleaned graph_df for the CSV so names don't show as 'None'
-            csv_data = graph_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Underlying Data (CSV)",
-                data=csv_data,
-                file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+
+            # 4. Export Section - Placed outside try but inside t1
+            if export_df is not None:
+                st.write("") 
+                csv_data = export_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download Underlying Data (CSV)",
+                    data=csv_data,
+                    file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+
+# This 'else' belongs to your very first "Safety Gate" check at the top of the app
+else:
+    st.info("📊 Fetching latest loan data... please wait.")
 
             
         with t2:
