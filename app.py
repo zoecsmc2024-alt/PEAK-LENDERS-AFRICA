@@ -1353,58 +1353,54 @@ def show_loans():
     ).clip(lower=0)
 
     # ==========================================
-    # FIXED: STABLE PARENT-FIRST SN ENGINE
+    # FIXED: STRICT INHERITANCE SN ENGINE
     # ==========================================
-    loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
+    # 1. Standardize IDs and Parents
+    loans_df["id"] = loans_df["id"].astype(str).str.strip()
     loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str).str.strip()
+    loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
 
-    # 1. Force date conversion for reliable chronological sorting
+    # 2. Chronological Sort (Critical for Parent -> Child logic)
     loans_df["start_date"] = pd.to_datetime(loans_df["start_date"], errors="coerce")
-
-    # 2. Sort oldest first so parents are processed before their children
     loans_df = loans_df.sort_values(by=["start_date", "id"]).reset_index(drop=True)
 
-    # 3. Identify the highest existing SN to prevent duplicates
+    # 3. Identify existing SNs to find the next available number
     used_indices = []
     for val in loans_df["sn"]:
         if val.startswith("LN-"):
             try:
                 used_indices.append(int(val.replace("LN-", "")))
-            except ValueError:
+            except:
                 pass
-    
     next_sn = max(used_indices, default=0)
 
-    # 4. Multi-pass Resolution (Handles deep rollover chains)
-    # We loop multiple times so that if A -> B -> C, B gets A's SN in pass 1, 
-    # and C gets B's SN in pass 2.
-    for _ in range(3): 
+    # 4. PASS A: INHERITANCE (The Fix)
+    # We loop multiple times to handle chains (A -> B -> C)
+    for _ in range(4): 
         for i in loans_df.index:
-            current_sn = str(loans_df.at[i, "sn"]).strip()
+            pid = loans_df.at[i, "parent_loan_id"]
             
-            # If it already has an SN, don't touch it (Permanence)
-            if current_sn.startswith("LN-"):
-                continue
-
-            parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
-
-            # Check if this is a rollover
-            if parent_id not in ["", "None", "nan"]:
-                parent_match = loans_df[loans_df["id"] == parent_id]
+            # If this is a rollover (has a parent)
+            if pid not in ["", "None", "nan"]:
+                parent_match = loans_df[loans_df["id"] == pid]
                 
                 if not parent_match.empty:
                     p_sn = str(parent_match.iloc[0]["sn"]).strip()
-                    # If parent has an SN, inherit it
+                    # If parent has an LN- number, child MUST take it
                     if p_sn.startswith("LN-"):
                         loans_df.at[i, "sn"] = p_sn
-                        continue
 
-    # 5. Final Pass: Assign brand new SNs to anything still empty
+    # 5. PASS B: NEW ASSIGNMENT
+    # Only assign new numbers to loans that are NOT rollovers 
+    # OR whose parents somehow don't exist.
     for i in loans_df.index:
         if not str(loans_df.at[i, "sn"]).startswith("LN-"):
             next_sn += 1
             loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
 
+    # 6. RESORT FOR DISPLAY
+    loans_df = loans_df.sort_values(by=["sn", "start_date"])
+    loans_df["cycle_no"] = loans_df.groupby("sn").cumcount() + 1
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
     # ------------------------------
