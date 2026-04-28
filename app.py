@@ -1466,6 +1466,8 @@ def show_loans():
                     st.error("Loan not found.")
                 else:
                     loan_to_edit = loan_match.iloc[0]
+                    
+                    # Edit Form
                     with st.form(f"edit_form_{target_id}"):
                         e_princ = st.number_input("Principal", value=float(loan_to_edit["principal"]))
                         status_options = ["ACTIVE", "PENDING", "CLEARED", "BCF", "CLOSED"]
@@ -1483,16 +1485,33 @@ def show_loans():
                                 st.cache_data.clear()
                                 st.rerun()
                             except Exception as e:
-                                st.error("Update failed.")
+                                st.error(f"Update failed: {e}")
 
-                    if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
-                        try:
-                            supabase.table("loans").delete().eq("id", target_id).execute()
-                            st.warning("Loan Deleted.")
-                            st.cache_data.clear()
-                            st.rerun()
-                        except:
-                            st.error("Delete failed.")
+                    st.divider() # Visual separation
+                    
+                    # Improved Delete Logic with Confirmation
+                    st.subheader("Danger Zone")
+                    with st.expander("Permanently Delete This Loan"):
+                        st.warning("This action cannot be undone.")
+                        confirm_delete = st.checkbox(f"I want to delete loan {target_id}")
+                        
+                        if st.button("Confirm Delete", type="primary", disabled=not confirm_delete):
+                            try:
+                                supabase.table("loans").delete().eq("id", target_id).execute()
+                                st.cache_data.clear()
+                                # Store success in session state to show AFTER rerun
+                                st.session_state.last_action = "Loan Deleted Successfully"
+                                st.rerun()
+                            except Exception as e:
+                                st.error("Delete failed. Check database constraints.")
+
+            else:
+                st.info("No loans available to manage.")
+
+    # Optional: Display persistent success messages at the top of the app
+    if "last_action" in st.session_state:
+        st.toast(st.session_state.last_action)
+        del st.session_state.last_action
 
         # ==============================
         # TAB 4: ACTIONS (ROLLOVER)
