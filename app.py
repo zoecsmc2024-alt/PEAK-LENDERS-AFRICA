@@ -1340,40 +1340,52 @@ def show_loans():
     ).clip(lower=0)
 
     # ==============================
-    # SERIAL ENGINE (MOVE UP)
+    # PERMANENT SN ENGINE
     # ==============================
-    existing_nums = []
+    loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
 
-    for val in loans_df["sn"].astype(str):
-        val = val.strip()
+    # Get list of existing valid numbers to find the next available increment
+    used_numbers = []
+    for val in loans_df["sn"]:
         if val.startswith("LN-"):
             try:
-                existing_nums.append(int(val.replace("LN-", "")))
+                used_numbers.append(int(val.replace("LN-", "")))
             except:
                 pass
 
-    next_sn_val = max(existing_nums, default=0)
+    next_sn_val = max(used_numbers, default=0)
+
+    # Process oldest loans first to ensure chronological SN assignment
+    loans_df = loans_df.sort_values(
+        by=["start_date", "id"]
+    ).reset_index(drop=True)
 
     for i in loans_df.index:
+        current_sn = str(loans_df.at[i, "sn"]).strip()
         parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
 
-        if parent_id != "":
-            parent_match = loans_df[loans_df["id"] == parent_id]
+        # Keep existing SN forever if already assigned
+        if current_sn.startswith("LN-"):
+            continue
+
+        # Inherit from parent if this is a rollover
+        if parent_id not in ["", "None", "nan"]:
+            parent_match = loans_df[
+                loans_df["id"].astype(str) == parent_id
+            ]
+
             if not parent_match.empty:
-                parent_sn = str(parent_match.iloc[0]["sn"]).strip()
+                parent_sn = str(
+                    parent_match.iloc[0]["sn"]
+                ).strip()
+
                 if parent_sn.startswith("LN-"):
                     loans_df.at[i, "sn"] = parent_sn
+                    continue
 
-        if not str(loans_df.at[i, "sn"]).startswith("LN-"):
-            next_sn_val += 1
-            loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
-
-    # ✅ SORT BEFORE ASSIGNING CYCLES (Ensures Parent is Cycle 1)
-    loans_df = loans_df.sort_values(by=["sn", "start_date", "id"])
-
-    loans_df["cycle_no"] = (
-        loans_df.groupby("sn").cumcount() + 1
-    )
+        # Assign a brand new SN for original loans
+        next_sn_val += 1
+        loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
 
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
