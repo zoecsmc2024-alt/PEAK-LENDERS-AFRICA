@@ -4098,12 +4098,12 @@ def show_dashboard_view():
             st.markdown("#### 🔔 Recent Loan Activity")
 
             try:
-                # 1. Identify the correct column names after normalization
-                # Based on your image, it's likely 'borrower_name' or 'name'
-                name_col = first_existing(loans_df, ["borrower_name", "name", "borrower", "client"])
-                sn_col = first_existing(loans_df, ["sn", "loan_id", "serial_no", "id"])
+                # 1. Identify the specific column names for Name and ID
+                # This list covers the most common variations after normalization
+                name_col = first_existing(loans_df, ["borrower_name", "client_name", "name", "borrower"])
+                sn_col = first_existing(loans_df, ["sn", "serial_no", "loan_id", "id"])
 
-                # 2. Sort by date and cycle
+                # 2. Sort by date and cycle to get the latest entries
                 display_loans = loans_df.sort_values(
                     by=["due_date_dt", "cycle_no"],
                     ascending=False
@@ -4113,26 +4113,27 @@ def show_dashboard_view():
                 for _, r in display_loans.iterrows():
                     status = str(r.get("status", "ACTIVE")).upper()
                     
-                    # Dynamic Status Colors
+                    # Status Badge Colors
                     if status == "CLEARED":
-                        status_color = "#10B981"  # Green
+                        status_color = "#10B981" 
                     elif status == "BCF":
-                        status_color = "#64748B"  # Slate Gray
+                        status_color = "#64748B" 
                     elif status == "PENDING":
-                        status_color = "#F59E0B"  # Amber
+                        status_color = "#F59E0B" 
                     else:
-                        status_color = "#1E3A8A"  # Brand Blue (Active)
+                        status_color = "#1E3A8A"
 
-                    # 3. Pull values using the identified columns
-                    borrower_name = str(r.get(name_col, 'Unknown User')) if name_col else "Unknown"
-                    serial_number = str(r.get(sn_col, 'N/A')) if sn_col else "N/A"
+                    # 3. Robust value retrieval
+                    # If name_col finds 'borrower_name', it uses that. Otherwise, it defaults to 'Unknown'
+                    b_name = str(r.get(name_col)) if name_col and pd.notna(r.get(name_col)) else "Unknown Name"
+                    s_number = str(r.get(sn_col)) if sn_col and pd.notna(r.get(sn_col)) else "N/A"
                     amount = float(r.get('principal_n', 0))
 
                     rows += f"""
                     <tr style="border-bottom:1px solid #f0f0f0;">
                         <td style="padding:12px 5px;">
-                            <div style="font-weight:bold; color:#1E293B;">{borrower_name}</div>
-                            <div style="font-size:10px; color:#94A3B8;">SN: {serial_number} | Cycle {r.get('cycle_no', 1)}</div>
+                            <div style="font-weight:bold; color:#1E293B;">{b_name}</div>
+                            <div style="font-size:10px; color:#94A3B8;">SN: {s_number} | Cycle {r.get('cycle_no', 1)}</div>
                         </td>
                         <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
                             {amount:,.0f}
@@ -4152,7 +4153,7 @@ def show_dashboard_view():
                 """, unsafe_allow_html=True)
 
             except Exception as e:
-                st.info(f"Loan activity feed is currently updating...")
+                st.info("Activity feed is refreshing...")
 
         with t2:
 
