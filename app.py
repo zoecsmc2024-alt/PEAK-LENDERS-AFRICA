@@ -4099,17 +4099,19 @@ def show_dashboard_view():
 
             try:
                 if not loans_df.empty:
-                    # 1. Prepare data for time-series
-                    # We'll use start_date to track when the value was added to the portfolio
+                    # 1. Prepare and Clean Data
                     graph_df = loans_df.copy()
-                    graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
                     
-                    # Drop rows with invalid dates for the graph
+                    # Ensure names aren't 'None' for the chart tooltips/export
+                    name_col = first_existing(graph_df, ["borrower", "borrower_name", "name"])
+                    if name_col:
+                        graph_df[name_col] = graph_df[name_col].fillna("Unknown Borrower")
+                    
+                    graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
                     graph_df = graph_df.dropna(subset=["date_dt"])
                     
                     if not graph_df.empty:
-                        # 2. Group by date and sum metrics
-                        # We use cumulative sum to show the total portfolio "building up"
+                        # 2. Group by date and sum metrics (Cumulative)
                         timeline_df = graph_df.groupby("date_dt").agg({
                             "principal_n": "sum",
                             "interest_n": "sum"
@@ -4127,12 +4129,12 @@ def show_dashboard_view():
                             },
                             color_discrete_map={
                                 "principal_n": brand_color,
-                                "interest_n": "#10B981" # Green for interest/profit
+                                "interest_n": "#10B981" 
                             },
                             template="plotly_white"
                         )
 
-                        # 4. Styling for that premium look
+                        # 4. Premium Styling
                         fig_portfolio.update_layout(
                             height=350,
                             margin=dict(l=0, r=0, t=20, b=0),
@@ -4147,7 +4149,6 @@ def show_dashboard_view():
                         )
                         
                         fig_portfolio.update_traces(line=dict(width=3))
-
                         st.plotly_chart(fig_portfolio, use_container_width=True)
                     else:
                         st.info("Not enough dated records to generate a trend.")
@@ -4157,8 +4158,10 @@ def show_dashboard_view():
             except Exception as e:
                 st.error("Growth chart is currently recalculating...")
 
-            st.write("") # Add a little spacing
-            csv_data = loans_df.to_csv(index=False).encode('utf-8')
+            # 5. Export Section (Cleaned Data)
+            st.write("") 
+            # We use the cleaned graph_df for the CSV so names don't show as 'None'
+            csv_data = graph_df.to_csv(index=False).encode('utf-8')
             st.download_button(
                 label="📥 Download Underlying Data (CSV)",
                 data=csv_data,
