@@ -4095,58 +4095,58 @@ def show_dashboard_view():
         t1, t2 = st.columns(2)
 
         with t1:
-        st.markdown("#### 🔔 Recent Loan Activity")
+            st.markdown("#### 🔔 Recent Loan Activity")
 
-        try:
-            # Sort by the most recent end_date to see what's currently active/pending
-            display_loans = loans_df.sort_values(
-                by=["end_date", "cycle_no"],
-                ascending=False
-            ).head(5)
+            try:
+                # Sort by the most recent end_date and cycle to see current status
+                display_loans = loans_df.sort_values(
+                    by=["due_date_dt", "cycle_no"],
+                    ascending=False
+                ).head(5)
 
-            rows = ""
-            for _, r in display_loans.iterrows():
-                status = str(r.get("status", "ACTIVE")).upper()
-                
-                # Dynamic Status Colors
-                if status == "CLEARED":
-                    status_color = "#10B981"  # Green
-                elif status == "BCF":
-                    status_color = "#64748B"  # Slate Gray
-                elif status == "PENDING":
-                    status_color = "#F59E0B"  # Amber
-                else:
-                    status_color = "#1E3A8A"  # Brand Blue (Active)
+                rows = ""
+                for _, r in display_loans.iterrows():
+                    status = str(r.get("status", "ACTIVE")).upper()
+                    
+                    # Dynamic Status Colors
+                    if status == "CLEARED":
+                        status_color = "#10B981"  # Green
+                    elif status == "BCF":
+                        status_color = "#64748B"  # Slate Gray
+                    elif status == "PENDING":
+                        status_color = "#F59E0B"  # Amber
+                    else:
+                        status_color = "#1E3A8A"  # Brand Blue (Active)
 
-                # Format name/ID and Amount
-                borrower_name = str(r.get('borrower', 'Unknown'))
-                amount = float(r.get('principal_n', 0))
+                    # Format name/ID and Amount
+                    borrower_name = str(r.get('borrower', 'Unknown'))
+                    amount = float(r.get('principal_n', 0))
 
-                rows += f"""
-                <tr style="border-bottom:1px solid #f0f0f0;">
-                    <td style="padding:12px 5px;">
-                        <div style="font-weight:bold; color:#1E293B;">{borrower_name}</div>
-                        <div style="font-size:10px; color:#94A3B8;">SN: {r.get('sn', 'N/A')} | Cycle {r.get('cycle_no', 1)}</div>
-                    </td>
-                    <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
-                        {amount:,.0f}
-                    </td>
-                    <td style="padding:12px 5px; text-align:center;">
-                        <span style="background:{status_color}20; color:{status_color}; padding:3px 8px; border-radius:12px; font-size:10px; font-weight:bold;">
-                            {status}
-                        </span>
-                    </td>
-                </tr>
-                """
+                    rows += f"""
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:12px 5px;">
+                            <div style="font-weight:bold; color:#1E293B;">{borrower_name}</div>
+                            <div style="font-size:10px; color:#94A3B8;">SN: {r.get('sn', 'N/A')} | Cycle {r.get('cycle_no', 1)}</div>
+                        </td>
+                        <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
+                            {amount:,.0f}
+                        </td>
+                        <td style="padding:12px 5px; text-align:center;">
+                            <span style="background:{status_color}20; color:{status_color}; padding:3px 8px; border-radius:12px; font-size:10px; font-weight:bold;">
+                                {status}
+                            </span>
+                        </td>
+                    </tr>
+                    """
 
-            st.markdown(f"""
-                <table style='width:100%; font-size:13px; border-collapse:collapse;'>
-                    {rows}
-                </table>
-            """, unsafe_allow_html=True)
+                st.markdown(f"""
+                    <table style='width:100%; font-size:13px; border-collapse:collapse;'>
+                        {rows}
+                    </table>
+                """, unsafe_allow_html=True)
 
-        except Exception as e:
-            st.info("Loan activity feed is currently updating...")
+            except Exception as e:
+                st.info("Loan activity feed is currently updating...")
 
         with t2:
 
