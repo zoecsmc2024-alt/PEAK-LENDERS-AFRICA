@@ -1353,11 +1353,16 @@ def show_loans():
     ).clip(lower=0)
 
         # ==========================================
-    # PERMANENT STABLE SN ENGINE
-    # NEVER RENUMBER OLD LOANS
+    # CRASH-PROOF PERMANENT SN ENGINE
+    # FIXES:
+    # ✅ no renumbering
+    # ✅ rollovers keep same SN
+    # ✅ cycle_no stays correct
+    # ✅ old loans unchanged
     # ==========================================
 
     loans_df["id"] = loans_df["id"].astype(str).str.strip()
+
     loans_df["parent_loan_id"] = (
         loans_df["parent_loan_id"]
         .fillna("")
@@ -1378,25 +1383,18 @@ def show_loans():
     )
 
     # ------------------------------------------
-    # KEEP ORIGINAL ROW ORDER / OLD LOANS FIRST
-    # ------------------------------------------
-    loans_df = loans_df.sort_values(
-        by=["start_date", "id"]
-    ).reset_index(drop=True)
-
-    # ------------------------------------------
-    # READ EXISTING SERIALS ONLY
-    # NEVER TOUCH THEM AGAIN
+    # STEP 1:
+    # KEEP EXISTING SERIALS FOREVER
     # ------------------------------------------
     used_nums = []
 
     for val in loans_df["sn"]:
 
-        if val.startswith("LN-"):
+        if str(val).startswith("LN-"):
 
             try:
                 used_nums.append(
-                    int(val.replace("LN-", ""))
+                    int(str(val).replace("LN-", ""))
                 )
 
             except:
@@ -1404,25 +1402,31 @@ def show_loans():
 
     next_sn = max(used_nums, default=0)
 
-    # ==========================================
-    # PASS A:
-    # GIVE ONLY BLANK ROOT LOANS NEW NUMBERS
-    # ==========================================
+    # ------------------------------------------
+    # STEP 2:
+    # ONLY PROCESS BLANK SERIAL ROWS
+    # ------------------------------------------
+    loans_df = loans_df.sort_values(
+        by=["start_date", "id"]
+    ).reset_index(drop=True)
+
     for i in loans_df.index:
 
         cur_sn = str(
             loans_df.at[i, "sn"]
         ).strip()
 
+        # already fixed -> never touch again
+        if cur_sn.startswith("LN-"):
+            continue
+
         pid = str(
             loans_df.at[i, "parent_loan_id"]
         ).strip()
 
-        # already has serial -> preserve forever
-        if cur_sn.startswith("LN-"):
-            continue
-
-        # brand new main loan
+        # ----------------------------------
+        # ROOT LOAN = NEW SERIAL
+        # ----------------------------------
         if pid in ["", "None", "nan"]:
 
             next_sn += 1
@@ -1431,66 +1435,53 @@ def show_loans():
                 f"LN-{next_sn:04d}"
             )
 
-    # ==========================================
-    # PASS B:
-    # CHILDREN MUST INHERIT PARENT SN
-    # ==========================================
-    for _ in range(15):
+        # ----------------------------------
+        # CHILD LOAN = INHERIT PARENT SN
+        # ----------------------------------
+        else:
 
-        for i in loans_df.index:
+            parent = loans_df[
+                loans_df["id"] == pid
+            ]
 
-            cur_sn = str(
-                loans_df.at[i, "sn"]
-            ).strip()
+            if not parent.empty:
 
-            pid = str(
-                loans_df.at[i, "parent_loan_id"]
-            ).strip()
+                p_sn = str(
+                    parent.iloc[0]["sn"]
+                ).strip()
 
-            if cur_sn.startswith("LN-"):
-                continue
+                if p_sn.startswith("LN-"):
 
-            if pid not in ["", "None", "nan"]:
+                    loans_df.at[i, "sn"] = p_sn
 
-                parent = loans_df[
-                    loans_df["id"] == pid
-                ]
+                else:
 
-                if not parent.empty:
+                    next_sn += 1
 
-                    p_sn = str(
-                        parent.iloc[0]["sn"]
-                    ).strip()
+                    loans_df.at[i, "sn"] = (
+                        f"LN-{next_sn:04d}"
+                    )
 
-                    if p_sn.startswith("LN-"):
+            else:
 
-                        loans_df.at[i, "sn"] = p_sn
+                next_sn += 1
 
-    # ==========================================
-    # PASS C:
-    # BROKEN ORPHAN ONLY
-    # ==========================================
-    for i in loans_df.index:
+                loans_df.at[i, "sn"] = (
+                    f"LN-{next_sn:04d}"
+                )
 
-        cur_sn = str(
-            loans_df.at[i, "sn"]
-        ).strip()
-
-        if not cur_sn.startswith("LN-"):
-
-            next_sn += 1
-
-            loans_df.at[i, "sn"] = (
-                f"LN-{next_sn:04d}"
-            )
-
-    # ==========================================
-    # DISPLAY ONLY
-    # ==========================================
+    # ------------------------------------------
+    # STEP 3:
+    # DISPLAY SORT ONLY
+    # ------------------------------------------
     loans_df = loans_df.sort_values(
         by=["sn", "start_date", "id"]
     ).reset_index(drop=True)
 
+    # ------------------------------------------
+    # STEP 4:
+    # CYCLE NUMBER BY SN FAMILY
+    # ------------------------------------------
     loans_df["cycle_no"] = (
         loans_df.groupby("sn").cumcount() + 1
     )
