@@ -4156,6 +4156,16 @@ def show_dashboard_view():
 
             except Exception as e:
                 st.error("Growth chart is currently recalculating...")
+
+            st.write("") # Add a little spacing
+            csv_data = loans_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Underlying Data (CSV)",
+                data=csv_data,
+                file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
         with t2:
 
             st.markdown("#### 💸 Latest Expenses")
@@ -4195,17 +4205,6 @@ def show_dashboard_view():
 
         # --- 6. EXPORT SECTION ---
         st.write("---")
-
-        c1, c2 = st.columns(2)
-
-        with c1:
-            csv1 = loans_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "⬇️ Export Loans CSV",
-                csv1,
-                file_name="loans_report.csv",
-                mime="text/csv"
-            )
 
         with c2:
             csv2 = expenses_df.to_csv(index=False).encode("utf-8")
