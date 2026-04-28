@@ -4158,17 +4158,7 @@ def show_dashboard_view():
             except Exception as e:
                 st.error("Growth chart is currently recalculating...")
 
-            # 5. Export Section (Cleaned Data)
-            st.write("") 
-            # We use the cleaned graph_df for the CSV so names don't show as 'None'
-            csv_data = graph_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download Underlying Data (CSV)",
-                data=csv_data,
-                file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+            
         with t2:
 
             st.markdown("#### 💸 Latest Expenses")
