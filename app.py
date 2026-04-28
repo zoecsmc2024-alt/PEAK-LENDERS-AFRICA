@@ -1326,7 +1326,7 @@ def show_loans():
     for col in ["start_date", "end_date"]:
         loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
 
-    # ------------------------------
+   # ------------------------------
     # PAYMENT SYNC
     # ------------------------------
     loans_df["amount_paid"] = 0  # ✅ ensure column always exists
@@ -1340,52 +1340,65 @@ def show_loans():
     ).clip(lower=0)
 
     # ==============================
-    # PERMANENT SN ENGINE
+    # STABLE PARENT-FIRST SN ENGINE
     # ==============================
     loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
+    loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str).str.strip()
 
-    # Get list of existing valid numbers to find the next available increment
-    used_numbers = []
-    for val in loans_df["sn"]:
-        if val.startswith("LN-"):
-            try:
-                used_numbers.append(int(val.replace("LN-", "")))
-            except:
-                pass
+    # sort oldest first to ensure root loans are processed before children
+    loans_df["start_date"] = pd.to_datetime(
+        loans_df["start_date"],
+        errors="coerce"
+    )
 
-    next_sn_val = max(used_numbers, default=0)
-
-    # Process oldest loans first to ensure chronological SN assignment
     loans_df = loans_df.sort_values(
         by=["start_date", "id"]
     ).reset_index(drop=True)
 
-    for i in loans_df.index:
-        current_sn = str(loans_df.at[i, "sn"]).strip()
-        parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
+    # Find the starting point for new serial numbers
+    used = []
+    for val in loans_df["sn"]:
+        if val.startswith("LN-"):
+            try:
+                used.append(int(val.replace("LN-", "")))
+            except:
+                pass
 
-        # Keep existing SN forever if already assigned
-        if current_sn.startswith("LN-"):
-            continue
+    next_sn = max(used, default=0)
 
-        # Inherit from parent if this is a rollover
-        if parent_id not in ["", "None", "nan"]:
-            parent_match = loans_df[
-                loans_df["id"].astype(str) == parent_id
-            ]
+    # Repeat passes until all chains (rollovers of rollovers) are resolved
+    for _ in range(5):
+        for i in loans_df.index:
+            current_sn = str(loans_df.at[i, "sn"]).strip()
 
-            if not parent_match.empty:
-                parent_sn = str(
-                    parent_match.iloc[0]["sn"]
-                ).strip()
+            # Skip if already has a valid SN
+            if current_sn.startswith("LN-"):
+                continue
 
-                if parent_sn.startswith("LN-"):
-                    loans_df.at[i, "sn"] = parent_sn
-                    continue
+            parent_id = str(
+                loans_df.at[i, "parent_loan_id"]
+            ).strip()
 
-        # Assign a brand new SN for original loans
-        next_sn_val += 1
-        loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
+            # Rollover loan: Try to inherit from parent
+            if parent_id != "":
+                parent = loans_df[
+                    loans_df["id"] == parent_id
+                ]
+
+                if not parent.empty:
+                    parent_sn = str(
+                        parent.iloc[0]["sn"]
+                    ).strip()
+
+                    if parent_sn.startswith("LN-"):
+                        loans_df.at[i, "sn"] = parent_sn
+                        continue
+            
+            # If no parent or parent doesn't have an SN yet, 
+            # and it's the final pass, assign a fresh SN
+            if _ == 4:
+                next_sn += 1
+                loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
 
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
