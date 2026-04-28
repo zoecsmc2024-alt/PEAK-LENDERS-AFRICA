@@ -4096,46 +4096,46 @@ def show_dashboard_view():
 
         with t1:
 
-    st.markdown("#### 🔔 Recent Loan Disbursals")
+            st.markdown("#### 🔔 Recent Loan Disbursals")
 
-    try:
+            try:
 
-        display_loans = loans_df.sort_values(
-            "due_date_dt",
-            ascending=False
-        ).head(5)
+                display_loans = loans_df.sort_values(
+                    "due_date_dt",
+                    ascending=False
+                ).head(5)
 
-        rows = ""
+                rows = ""
 
-        for _, r in display_loans.iterrows():
+                for _, r in display_loans.iterrows():
 
-            status = str(r.get("status", "ACTIVE")).upper()
+                    status = str(r.get("status", "ACTIVE")).upper()
 
-            status_color = "#10B981" if status == "CLEARED" else "#F59E0B"
+                    status_color = "#10B981" if status == "CLEARED" else "#F59E0B"
 
-            rows += f"""
-            <tr style="border-bottom:1px solid #f0f0f0;">
-                <td style="padding:12px 5px;"><b>{str(r.get('borrower_id','Unknown'))[:8]}...</b></td>
-                <td style="padding:12px 5px; text-align:right;">{float(r.get('principal_n',0)):,.0f}</td>
-                <td style="padding:12px 5px; text-align:center;">
-                    <span style="color:{status_color}; font-size:10px;">●</span> {status}
-                </td>
-            </tr>
-            """
+                    rows += f"""
+                    <tr style="border-bottom:1px solid #f0f0f0;">
+                        <td style="padding:12px 5px;"><b>{str(r.get('borrower_id','Unknown'))[:8]}...</b></td>
+                        <td style="padding:12px 5px; text-align:right;">{float(r.get('principal_n',0)):,.0f}</td>
+                        <td style="padding:12px 5px; text-align:center;">
+                            <span style="color:{status_color}; font-size:10px;">●</span> {status}
+                        </td>
+                    </tr>
+                    """
 
-        html_table = f"""
-        <table style='width:100%; font-size:13px; border-collapse:collapse;'>
-            {rows}
-        </table>
-        """
+                html_table = f"""
+                <table style='width:100%; font-size:13px; border-collapse:collapse;'>
+                    {rows}
+                </table>
+                """
 
-        st.markdown(
-            html_table,
-            unsafe_allow_html=True
-        )
+                st.markdown(
+                    html_table,
+                    unsafe_allow_html=True
+                )
 
-    except:
-        st.info("Loan activity unavailable.")
+            except:
+                st.info("Loan activity unavailable.")
 
         with t2:
 
