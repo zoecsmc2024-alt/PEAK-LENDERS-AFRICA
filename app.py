@@ -1352,139 +1352,105 @@ def show_loans():
         loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
-        # ==========================================
-    # CRASH-PROOF PERMANENT SN ENGINE
-    # FIXES:
-    # ✅ no renumbering
-    # ✅ rollovers keep same SN
-    # ✅ cycle_no stays correct
-    # ✅ old loans unchanged
     # ==========================================
+# STABLE EXCEL-LIKE SN CODE LOGIC
+# 00001, 00002, 00003...
+# SAME CUSTOMER + SAME LOAN FAMILY KEEPS SAME SN
+# ROLLOVERS / CONTINUATIONS KEEP SAME SN
+# NEW INDEPENDENT LOAN GETS NEXT SN
+# ==========================================
 
-    loans_df["id"] = loans_df["id"].astype(str).str.strip()
+import pandas as pd
 
-    loans_df["parent_loan_id"] = (
-        loans_df["parent_loan_id"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-    )
+if not loans_df.empty:
 
-    loans_df["sn"] = (
-        loans_df["sn"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-    )
+    # --------------------------------------
+    # 1. Clean text fields
+    # --------------------------------------
+    loans_df["name"] = loans_df["name"].astype(str).str.strip().str.upper()
+    loans_df["offer_no"] = loans_df["offer_no"].astype(str).str.strip()
+    
+    if "parent_loan_id" not in loans_df.columns:
+        loans_df["parent_loan_id"] = ""
 
-    loans_df["start_date"] = pd.to_datetime(
-        loans_df["start_date"],
+    loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str)
+
+    # --------------------------------------
+    # 2. Sort oldest first (important)
+    # --------------------------------------
+    loans_df["date_of_issue"] = pd.to_datetime(
+        loans_df["date_of_issue"],
         errors="coerce"
     )
 
-    # ------------------------------------------
-    # STEP 1:
-    # KEEP EXISTING SERIALS FOREVER
-    # ------------------------------------------
-    used_nums = []
-
-    for val in loans_df["sn"]:
-
-        if str(val).startswith("LN-"):
-
-            try:
-                used_nums.append(
-                    int(str(val).replace("LN-", ""))
-                )
-
-            except:
-                pass
-
-    next_sn = max(used_nums, default=0)
-
-    # ------------------------------------------
-    # STEP 2:
-    # ONLY PROCESS BLANK SERIAL ROWS
-    # ------------------------------------------
     loans_df = loans_df.sort_values(
-        by=["start_date", "id"]
+        by=["date_of_issue", "id"],
+        ascending=True
     ).reset_index(drop=True)
 
-    for i in loans_df.index:
+    # --------------------------------------
+    # 3. Build stable family root
+    # --------------------------------------
+    id_map = {}
 
-        cur_sn = str(
-            loans_df.at[i, "sn"]
-        ).strip()
+    for _, row in loans_df.iterrows():
+        loan_id = str(row["id"])
+        parent = str(row["parent_loan_id"]).strip()
 
-        # already fixed -> never touch again
-        if cur_sn.startswith("LN-"):
-            continue
+        if parent == "" or parent.lower() == "nan":
+            id_map[loan_id] = loan_id
+        else:
+            root = parent
+            visited = set()
 
-        pid = str(
-            loans_df.at[i, "parent_loan_id"]
-        ).strip()
+            while root in loans_df["id"].astype(str).values and root not in visited:
+                visited.add(root)
 
-        # ----------------------------------
-        # ROOT LOAN = NEW SERIAL
-        # ----------------------------------
-        if pid in ["", "None", "nan"]:
+                parent_row = loans_df.loc[
+                    loans_df["id"].astype(str) == root,
+                    "parent_loan_id"
+                ]
 
+                if parent_row.empty:
+                    break
+
+                next_parent = str(parent_row.iloc[0]).strip()
+
+                if next_parent == "" or next_parent.lower() == "nan":
+                    break
+
+                root = next_parent
+
+            id_map[loan_id] = root
+
+    loans_df["loan_family"] = loans_df["id"].astype(str).map(id_map)
+
+    # --------------------------------------
+    # 4. Assign SN per family (Excel style)
+    # --------------------------------------
+    family_to_sn = {}
+    next_sn = 1
+
+    sn_list = []
+
+    for _, row in loans_df.iterrows():
+
+        family = row["loan_family"]
+
+        if family not in family_to_sn:
+            family_to_sn[family] = str(next_sn).zfill(5)
             next_sn += 1
 
-            loans_df.at[i, "sn"] = (
-                f"LN-{next_sn:04d}"
-            )
+        sn_list.append(family_to_sn[family])
 
-        # ----------------------------------
-        # CHILD LOAN = INHERIT PARENT SN
-        # ----------------------------------
-        else:
+    loans_df["sn"] = sn_list
 
-            parent = loans_df[
-                loans_df["id"] == pid
-            ]
-
-            if not parent.empty:
-
-                p_sn = str(
-                    parent.iloc[0]["sn"]
-                ).strip()
-
-                if p_sn.startswith("LN-"):
-
-                    loans_df.at[i, "sn"] = p_sn
-
-                else:
-
-                    next_sn += 1
-
-                    loans_df.at[i, "sn"] = (
-                        f"LN-{next_sn:04d}"
-                    )
-
-            else:
-
-                next_sn += 1
-
-                loans_df.at[i, "sn"] = (
-                    f"LN-{next_sn:04d}"
-                )
-
-    # ------------------------------------------
-    # STEP 3:
-    # DISPLAY SORT ONLY
-    # ------------------------------------------
+    # --------------------------------------
+    # 5. Final reorder
+    # --------------------------------------
     loans_df = loans_df.sort_values(
-        by=["sn", "start_date", "id"]
+        by=["sn", "date_of_issue", "id"]
     ).reset_index(drop=True)
-
-    # ------------------------------------------
-    # STEP 4:
-    # CYCLE NUMBER BY SN FAMILY
-    # ------------------------------------------
-    loans_df["cycle_no"] = (
-        loans_df.groupby("sn").cumcount() + 1
-    )
 
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
