@@ -4093,7 +4093,7 @@ def show_dashboard_view():
                 st.info("Portfolio chart unavailable.")
 
         # --- 5. ACTIVITY FEEDS ---
-        if loans_df is not None and not loans_df.empty:
+        
         st.write("---")
 
         t1, t2 = st.columns(2)
