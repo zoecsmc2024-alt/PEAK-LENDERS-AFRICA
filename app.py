@@ -3859,7 +3859,12 @@ from datetime import datetime
 # =========================================================
 
 st.set_page_config(layout="wide")
-
+# Place this at the start of your dashboard tab
+if loans_df is not None and not loans_df.empty:
+    # All your PX.LINE and ST.MARKDOWN code goes here
+    pass
+else:
+    st.info("📊 Fetching latest loan data... please wait.")
 # ------------------------------
 # AUTO REFRESH EVERY 60 SECONDS
 # ------------------------------
@@ -4157,6 +4162,17 @@ def show_dashboard_view():
 
             except Exception as e:
                 st.error("Growth chart is currently recalculating...")
+                # 5. Export Section (Cleaned Data)
+            st.write("") 
+            # We use the cleaned graph_df for the CSV so names don't show as 'None'
+            csv_data = graph_df.to_csv(index=False).encode('utf-8')
+            st.download_button(
+                label="📥 Download Underlying Data (CSV)",
+                data=csv_data,
+                file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
             
         with t2:
