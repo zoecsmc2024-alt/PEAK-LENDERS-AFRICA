@@ -1508,11 +1508,7 @@ def show_loans():
             else:
                 st.info("No loans available to manage.")
 
-    # Optional: Display persistent success messages at the top of the app
-    if "last_action" in st.session_state:
-        st.toast(st.session_state.last_action)
-        del st.session_state.last_action
-
+    
         # ==============================
         # TAB 4: ACTIONS (ROLLOVER)
         # ==============================
