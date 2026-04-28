@@ -1582,7 +1582,6 @@ def show_loans():
                             st.error(f"Rollover failed: {str(e)}")
 
     
-            
 import pandas as pd
 from datetime import datetime
 import uuid
