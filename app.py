@@ -3859,9 +3859,12 @@ from datetime import datetime
 # =========================================================
 
 st.set_page_config(layout="wide")
-# Place this at the start of your dashboard tab
+
+loans_df = load_your_loan_data_function() 
+
 if loans_df is not None and not loans_df.empty:
-    # All your PX.LINE and ST.MARKDOWN code goes here
+
+if loans_df is not None and not loans_df.empty:
     pass
 else:
     st.info("📊 Fetching latest loan data... please wait.")
