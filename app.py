@@ -1580,6 +1580,11 @@ def show_loans():
 
                         except Exception as e:
                             st.error(f"Rollover failed: {str(e)}")
+# Display success toast after rerun
+    if "last_action" in st.session_state:
+        st.success(st.session_state.last_action)
+        del st.session_state.last_action
+    
 
     
 import pandas as pd
