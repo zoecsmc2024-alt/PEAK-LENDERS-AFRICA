@@ -1352,7 +1352,7 @@ def show_loans():
         loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
-    # ==========================================
+        # ==========================================
     # FIXED: STRICT INHERITANCE SN ENGINE
     # ==========================================
     # 1. Standardize IDs and Parents
@@ -1360,47 +1360,93 @@ def show_loans():
     loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str).str.strip()
     loans_df["sn"] = loans_df["sn"].fillna("").astype(str).str.strip()
 
-    # 2. Chronological Sort (Critical for Parent -> Child logic)
-    loans_df["start_date"] = pd.to_datetime(loans_df["start_date"], errors="coerce")
-    loans_df = loans_df.sort_values(by=["start_date", "id"]).reset_index(drop=True)
+    # 2. Chronological Sort (Parent must come before Child)
+    loans_df["start_date"] = pd.to_datetime(
+        loans_df["start_date"],
+        errors="coerce"
+    )
 
-    # 3. Identify existing SNs to find the next available number
+    loans_df = loans_df.sort_values(
+        by=["start_date", "id"]
+    ).reset_index(drop=True)
+
+    # 3. Existing used serials
     used_indices = []
+
     for val in loans_df["sn"]:
         if val.startswith("LN-"):
             try:
-                used_indices.append(int(val.replace("LN-", "")))
+                used_indices.append(
+                    int(val.replace("LN-", ""))
+                )
             except:
                 pass
+
     next_sn = max(used_indices, default=0)
 
-    # 4. PASS A: INHERITANCE (The Fix)
-    # We loop multiple times to handle chains (A -> B -> C)
-    for _ in range(4): 
+    # ==========================================
+    # 4. PASS A: ASSIGN ONLY ROOT LOANS FIRST
+    # (loans with no parent)
+    # ==========================================
+    for i in loans_df.index:
+
+        pid = loans_df.at[i, "parent_loan_id"]
+        cur_sn = str(loans_df.at[i, "sn"]).strip()
+
+        if pid in ["", "None", "nan"]:
+
+            if not cur_sn.startswith("LN-"):
+                next_sn += 1
+                loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
+
+    # ==========================================
+    # 5. PASS B: FORCE CHILDREN TO INHERIT
+    # Repeat for long chains
+    # ==========================================
+    for _ in range(10):
+
         for i in loans_df.index:
+
             pid = loans_df.at[i, "parent_loan_id"]
-            
-            # If this is a rollover (has a parent)
+
             if pid not in ["", "None", "nan"]:
-                parent_match = loans_df[loans_df["id"] == pid]
-                
+
+                parent_match = loans_df[
+                    loans_df["id"] == pid
+                ]
+
                 if not parent_match.empty:
-                    p_sn = str(parent_match.iloc[0]["sn"]).strip()
-                    # If parent has an LN- number, child MUST take it
+
+                    p_sn = str(
+                        parent_match.iloc[0]["sn"]
+                    ).strip()
+
                     if p_sn.startswith("LN-"):
                         loans_df.at[i, "sn"] = p_sn
 
-    # 5. PASS B: NEW ASSIGNMENT
-    # Only assign new numbers to loans that are NOT rollovers 
-    # OR whose parents somehow don't exist.
+    # ==========================================
+    # 6. LAST RESORT:
+    # orphan child / broken parent only
+    # ==========================================
     for i in loans_df.index:
-        if not str(loans_df.at[i, "sn"]).startswith("LN-"):
+
+        cur_sn = str(loans_df.at[i, "sn"]).strip()
+
+        if not cur_sn.startswith("LN-"):
+
             next_sn += 1
             loans_df.at[i, "sn"] = f"LN-{next_sn:04d}"
 
-    # 6. RESORT FOR DISPLAY
-    loans_df = loans_df.sort_values(by=["sn", "start_date"])
-    loans_df["cycle_no"] = loans_df.groupby("sn").cumcount() + 1
+    # ==========================================
+    # 7. FINAL DISPLAY ORDER
+    # ==========================================
+    loans_df = loans_df.sort_values(
+        by=["sn", "start_date", "id"]
+    ).reset_index(drop=True)
+
+    loans_df["cycle_no"] = (
+        loans_df.groupby("sn").cumcount() + 1
+    )
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
     # ------------------------------
