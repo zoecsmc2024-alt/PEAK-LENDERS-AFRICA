@@ -1249,7 +1249,13 @@ def save_data_saas(table_name, df):
     except:
         return False
 
+def get_latest_eligible(loans_df):
 
+    latest = loans_df.sort_values(
+        by=["sn", "cycle_no", "start_date"]
+    ).groupby("sn").tail(1)
+
+    return latest[latest["balance"] > 0]
 # ==========================================================
 # MAIN PAGE
 # ==========================================================
@@ -1443,8 +1449,16 @@ def show_loans():
         )
 
         # ==================================================
-        # STATUS ENGINE
+        # STATUS ENGINE (FIXED - PRESERVE CLOSED)
         # ==================================================
+
+        # Preserve manually closed loans
+        closed_ids = set(
+            loans_df[
+                loans_df["status"].astype(str).str.upper() == "CLOSED"
+            ]["id"]
+        )
+
         loans_df["status"] = "CLEARED"
         loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
 
@@ -1459,7 +1473,6 @@ def show_loans():
             )
 
             latest = grp.iloc[-1]
-
             older = grp.iloc[:-1]["id"]
 
             loans_df.loc[
@@ -1475,6 +1488,12 @@ def show_loans():
                 if int(latest["cycle_no"]) == 1
                 else "PENDING"
             )
+
+        # ✅ FIX: Restore CLOSED loans (do NOT override them)
+        loans_df.loc[
+            loans_df["id"].isin(closed_ids),
+            "status"
+        ] = "CLOSED"
 
         # ==================================================
         # BORROWER MAP
@@ -1557,6 +1576,12 @@ def show_loans():
 
             else:
 
+                # =========================
+                # TABLE + INLINE ACTIONS
+                # =========================
+
+                latest_eligible = get_latest_eligible(filtered_loans)
+
                 show_cols = [
                     "sn",
                     "loan_id_label",
@@ -1572,9 +1597,7 @@ def show_loans():
 
                 def style_entire_row(row):
 
-                    val = str(
-                        row["status"]
-                    ).upper().strip()
+                    val = str(row["status"]).upper().strip()
 
                     colors = {
                         "ACTIVE": "background-color:#DBEAFE;color:#1E40AF;font-weight:bold;",
@@ -1602,6 +1625,81 @@ def show_loans():
                     use_container_width=True,
                     hide_index=True
                 )
+
+                st.markdown("### ⚡ Quick Actions")
+
+                # =========================
+                # INLINE ROLLOVER BUTTONS
+                # =========================
+
+                for _, r in latest_eligible.iterrows():
+
+                    col1, col2, col3 = st.columns([4, 2, 2])
+
+                    with col1:
+                        st.write(
+                            f"**{r['borrower']} • {r['loan_id_label']} • Cycle {r['cycle_no']}**"
+                        )
+
+                    with col2:
+                        rate_key = f"rate_{r['id']}"
+                        rate = st.number_input(
+                            "Rate %",
+                            value=3.0,
+                            key=rate_key
+                        )
+
+                    with col3:
+                        if st.button("🔁 Rollover", key=f"roll_{r['id']}"):
+
+                            try:
+                                old = r
+
+                                old_due = pd.to_datetime(
+                                    old["end_date"],
+                                    errors="coerce"
+                                )
+
+                                if pd.isna(old_due):
+                                    old_due = datetime.now()
+
+                                unpaid = float(old["balance"])
+
+                                if unpaid <= 0:
+                                    st.warning("Already cleared.")
+                                    st.stop()
+
+                                new_row = {
+                                    "id": str(uuid.uuid4()),
+                                    "sn": "",
+                                    "loan_id_label": "",
+                                    "parent_loan_id": old["id"],
+                                    "borrower_id": old["borrower_id"],
+                                    "loan_type": old["loan_type"],
+                                    "principal": unpaid,
+                                    "interest": unpaid * (rate / 100),
+                                    "total_repayable": unpaid + (unpaid * rate / 100),
+                                    "amount_paid": 0,
+                                    "balance": unpaid + (unpaid * rate / 100),
+                                    "status": "PENDING",
+                                    "start_date": str(old_due.date()),
+                                    "end_date": str((old_due + timedelta(days=30)).date()),
+                                    "cycle_no": int(old["cycle_no"]) + 1,
+                                    "tenant_id": get_current_tenant()
+                                }
+
+                                # Close old loan safely
+                                supabase.table("loans").update({
+                                    "status": "CLOSED"
+                                }).eq("id", old["id"]).neq("status", "CLOSED").execute()
+
+                                if save_data("loans", pd.DataFrame([new_row])):
+                                    st.success("Rollover done")
+                                    st.cache_data.clear()
+                                    st.rerun()
+
+                            except Exception as e:
+                                st.error(f"Failed: {e}")
 
         # ==================================================
         # TAB 2 ADD
@@ -1789,10 +1887,14 @@ def show_loans():
         # ==================================================
         with tab4:
 
-            eligible = loans_df[
-                loans_df["balance"] > 0
-            ]
+            # Only latest cycle loans should rollover
+            latest_loans = loans_df.sort_values(
+                by=["sn", "cycle_no", "start_date"]
+            ).groupby("sn").tail(1)
 
+            eligible = latest_loans[
+                latest_loans["balance"] > 0
+            ]
             if eligible.empty:
 
                 st.info("No active loans eligible.")
@@ -1839,17 +1941,17 @@ def show_loans():
 
                         unpaid = float(old["balance"])
 
-                        new_cycle = int(
-                            old["cycle_no"]
-                        ) + 1
+                        if unpaid <= 0:
+                            st.warning("Loan already cleared.")
+                            st.stop()
 
-                        new_interest = unpaid * (
-                            rate / 100
-                        )
+                        new_cycle = int(old["cycle_no"]) + 1
+
+                        new_interest = unpaid * (rate / 100)
 
                         new_row = {
                             "id": str(uuid.uuid4()),
-                            "sn": "",
+                            "sn": "",  # will inherit
                             "loan_id_label": "",
                             "parent_loan_id": old["id"],
                             "borrower_id": old["borrower_id"],
@@ -1866,17 +1968,12 @@ def show_loans():
                             "tenant_id": get_current_tenant()
                         }
 
+                        # ✅ FIX: Close ONLY if still active (avoid overwriting)
                         supabase.table("loans").update({
                             "status": "CLOSED"
-                        }).eq(
-                            "id",
-                            old["id"]
-                        ).execute()
+                        }).eq("id", old["id"]).neq("status", "CLOSED").execute()
 
-                        if save_data(
-                            "loans",
-                            pd.DataFrame([new_row])
-                        ):
+                        if save_data("loans", pd.DataFrame([new_row])):
 
                             st.success("Rollover complete.")
                             st.cache_data.clear()
@@ -1884,14 +1981,9 @@ def show_loans():
 
                     except Exception as e:
 
-                        st.error(
-                            f"Rollover failed: {e}"
-                        )
-
-    except Exception as e:
-
-        st.error("Loans page recovered from an internal issue.")
-        st.warning(str(e))        
+                        st.error(f"Rollover failed: {e}")
+    except Exception as general_e:
+        st.error(f"Critical Error: {general_e}")
     
 import pandas as pd
 from datetime import datetime
