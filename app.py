@@ -4095,61 +4095,67 @@ def show_dashboard_view():
         t1, t2 = st.columns(2)
 
         with t1:
-            st.markdown("#### ⚠️ Overdue Loans")
+            st.markdown("#### 📊 Portfolio Growth vs. Interest")
 
             try:
-                # 1. Identify the specific column names for Name and ID
-                name_col = first_existing(loans_df, ["borrower", "borrower_name", "name"])
-                sn_col = first_existing(loans_df, ["sn", "serial_no", "loan_id"])
+                if not loans_df.empty:
+                    # 1. Prepare data for time-series
+                    # We'll use start_date to track when the value was added to the portfolio
+                    graph_df = loans_df.copy()
+                    graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
+                    
+                    # Drop rows with invalid dates for the graph
+                    graph_df = graph_df.dropna(subset=["date_dt"])
+                    
+                    if not graph_df.empty:
+                        # 2. Group by date and sum metrics
+                        # We use cumulative sum to show the total portfolio "building up"
+                        timeline_df = graph_df.groupby("date_dt").agg({
+                            "principal_n": "sum",
+                            "interest_n": "sum"
+                        }).sort_index().cumsum().reset_index()
 
-                # 2. FILTER: Only pull rows that are past due and not cleared
-                # Today is defined as pd.Timestamp.now().normalize()
-                overdue_loans = loans_df[
-                    (loans_df["due_date_dt"] < today) & 
-                    (loans_df["status"].astype(str).str.upper() != "CLEARED")
-                ].copy()
+                        # 3. Create the Line Chart
+                        fig_portfolio = px.line(
+                            timeline_df,
+                            x="date_dt",
+                            y=["principal_n", "interest_n"],
+                            labels={
+                                "date_dt": "Date",
+                                "value": "Amount (UGX)",
+                                "variable": "Metric"
+                            },
+                            color_discrete_map={
+                                "principal_n": brand_color,
+                                "interest_n": "#10B981" # Green for interest/profit
+                            },
+                            template="plotly_white"
+                        )
 
-                if not overdue_loans.empty:
-                    # 3. Sort by the oldest due date first (most urgent)
-                    display_loans = overdue_loans.sort_values(
-                        by="due_date_dt", 
-                        ascending=True
-                    ).head(5)
-
-                    rows = ""
-                    for _, r in display_loans.iterrows():
-                        status_color = "#EF4444"  # Red for Overdue
+                        # 4. Styling for that premium look
+                        fig_portfolio.update_layout(
+                            height=350,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=1.02,
+                                xanchor="right",
+                                x=1
+                            ),
+                            hovermode="x unified"
+                        )
                         
-                        # Data Retrieval
-                        b_name = r[name_col] if name_col in r and pd.notna(r[name_col]) else "Unknown Name"
-                        s_number = r[sn_col] if sn_col in r and pd.notna(r[sn_col]) else "N/A"
-                        amount = float(r.get('principal_n', 0))
-                        due_date = r["due_date_dt"].strftime('%Y-%m-%d') if pd.notna(r["due_date_dt"]) else "N/A"
+                        fig_portfolio.update_traces(line=dict(width=3))
 
-                        rows += f"""
-                        <tr style="border-bottom:1px solid #f0f0f0;">
-                            <td style="padding:12px 5px;">
-                                <div style="font-weight:bold; color:#1E293B;">{b_name}</div>
-                                <div style="font-size:10px; color:#94A3B8;">SN: {s_number} | Due: {due_date}</div>
-                            </td>
-                            <td style="padding:12px 5px; text-align:right; font-weight:bold; color:#0F172A;">
-                                {amount:,.0f}
-                            </td>
-                            <td style="padding:12px 5px; text-align:center;">
-                                <span style="background:{status_color}20; color:{status_color}; padding:3px 8px; border-radius:12px; font-size:10px; font-weight:bold;">
-                                    OVERDUE
-                                </span>
-                            </td>
-                        </tr>
-                        """
-
-                    st.markdown(f"<table style='width:100%; border-collapse:collapse;'>{rows}</table>", unsafe_allow_html=True)
+                        st.plotly_chart(fig_portfolio, use_container_width=True)
+                    else:
+                        st.info("Not enough dated records to generate a trend.")
                 else:
-                    st.success("✅ All collections are currently up to date!")
+                    st.info("Add some loans to see your portfolio trend!")
 
             except Exception as e:
-                st.info("Overdue feed is refreshing...")
-
+                st.error("Growth chart is currently recalculating...")
         with t2:
 
             st.markdown("#### 💸 Latest Expenses")
