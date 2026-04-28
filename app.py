@@ -1513,52 +1513,74 @@ def show_loans():
         # TAB 4: ACTIONS (ROLLOVER)
         # ==============================
         with tab4:
+            # Only allow rollovers for loans that actually have a balance
             eligible = loans_df[loans_df["balance"] > 0]
+            
             if eligible.empty:
-                st.success("No loans to rollover.")
+                st.info("No active loans eligible for rollover.")
             else:
                 roll_map = {
-                    f"{r['borrower']} • {r['loan_id_label']} • Cycle {r['cycle_no']}": r["id"]
+                    f"{r['borrower']} • {r['loan_id_label']} • Cycle {r['cycle_no']} (Bal: {r['balance']})": r["id"]
                     for _, r in eligible.iterrows()
                 }
                 chosen = st.selectbox("Select Loan to Rollover", list(roll_map.keys()))
                 pid = roll_map[chosen]
                 old = eligible[eligible["id"] == pid].iloc[0]
-                rate = st.number_input("New Interest %", value=3.0, step=0.5)
+                
+                rate = st.number_input("New Interest %", value=3.0, step=0.1)
 
-                if st.button("Execute Rollover"):
-                    try:
-                        old_due = pd.to_datetime(old["end_date"], errors="coerce")
-                        if pd.isna(old_due):
-                            old_due = datetime.now()
-                        
-                        new_start = old_due
-                        new_due = old_due + timedelta(days=30)
-                        unpaid = float(old["balance"])
-                        new_cycle = int(old["cycle_no"]) + 1
-                        new_parent = old["id"]
-                        new_interest = unpaid * rate / 100
+                if st.button("🚀 Execute Rollover", use_container_width=True):
+                    with st.spinner("Processing rollover..."):
+                        try:
+                            # 1. Calculate Dates
+                            old_due = pd.to_datetime(old["end_date"], errors="coerce")
+                            if pd.isna(old_due):
+                                old_due = datetime.now()
+                            
+                            new_start = old_due
+                            new_due = old_due + timedelta(days=30)
+                            unpaid = float(old["balance"])
+                            new_cycle = int(old["cycle_no"]) + 1
+                            new_interest = unpaid * (rate / 100)
 
-                        row = {
-                            "id": str(uuid.uuid4()), "sn": "", "loan_id_label": "",
-                            "parent_loan_id": new_parent, "borrower_id": old["borrower_id"],
-                            "loan_type": old["loan_type"], "principal": unpaid,
-                            "interest": new_interest, "total_repayable": unpaid + new_interest,
-                            "amount_paid": 0, "balance": unpaid + new_interest,
-                            "status": "PENDING", "start_date": str(new_start.date()),
-                            "end_date": str(new_due.date()), "cycle_no": new_cycle,
-                            "tenant_id": get_current_tenant()
-                        }
+                            # 2. Prepare the New Loan Row
+                            new_loan_id = str(uuid.uuid4())
+                            row = {
+                                "id": new_loan_id, 
+                                "sn": "", 
+                                "loan_id_label": "", # Ensure your DB/Logic handles label generation
+                                "parent_loan_id": old["id"], 
+                                "borrower_id": old["borrower_id"],
+                                "loan_type": old["loan_type"], 
+                                "principal": unpaid,
+                                "interest": new_interest, 
+                                "total_repayable": unpaid + new_interest,
+                                "amount_paid": 0, 
+                                "balance": unpaid + new_interest,
+                                "status": "PENDING", 
+                                "start_date": str(new_start.date()),
+                                "end_date": str(new_due.date()), 
+                                "cycle_no": new_cycle,
+                                "tenant_id": get_current_tenant()
+                            }
 
-                        if save_data("loans", pd.DataFrame([row])):
-                            st.success("Rollover complete.")
-                            st.cache_data.clear()
-                            st.rerun()
-                    except:
-                        st.error("Recovered rollover error.")
+                            # 3. Database Operations
+                            # First: Mark the old loan as CLOSED/ROLLED OVER
+                            supabase.table("loans").update({"status": "CLOSED"}).eq("id", old["id"]).execute()
+                            
+                            # Second: Insert the new loan
+                            success = save_data("loans", pd.DataFrame([row]))
 
-    except Exception as e:
-        st.error(f"Loans page recovered from internal issue: {e}")
+                            if success:
+                                st.cache_data.clear()
+                                st.session_state.last_action = f"✅ Rollover Complete! New Cycle: {new_cycle}"
+                                st.rerun()
+                            else:
+                                st.error("Database rejected the new loan entry.")
+
+                        except Exception as e:
+                            st.error(f"Rollover failed: {str(e)}")
+
     
             
 import pandas as pd
