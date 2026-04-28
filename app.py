@@ -3855,12 +3855,10 @@ from datetime import datetime
 
 # =========================================================
 # FULLY UPGRADED / CRASH-PROOF / PERFORMANCE VERSION
+# Keeps your original layout, sections, style & indentation
 # =========================================================
 
 st.set_page_config(layout="wide")
-
-# 1. Load the data first
-loans_df = load_your_loan_data_function() 
 
 # ------------------------------
 # AUTO REFRESH EVERY 60 SECONDS
@@ -3895,6 +3893,7 @@ def show_dashboard_view():
     brand_color = get_Active_color()
 
     try:
+
         # --- GLOBAL CSS UPGRADE ---
         st.markdown(f"""
         <style>
@@ -3905,10 +3904,12 @@ def show_dashboard_view():
             box-shadow:0 4px 10px rgba(0,0,0,0.05);
             transition:0.25s ease;
         }}
+
         .metric-card:hover {{
             transform:translateY(-3px);
             box-shadow:0 8px 16px rgba(0,0,0,0.08);
         }}
+
         @media (max-width: 768px) {{
             .metric-card {{
                 padding:14px;
@@ -3948,7 +3949,9 @@ def show_dashboard_view():
         )
 
         total_expenses = safe_numeric(expenses_df, ["amount"]).sum()
+
         today = pd.Timestamp.now().normalize()
+
         loans_df["due_date_dt"] = safe_date(loans_df, ["end_date", "due_date"])
 
         overdue_mask = (
@@ -3958,6 +3961,7 @@ def show_dashboard_view():
         )
 
         overdue_count = int(overdue_mask.sum())
+
         total_principal = loans_df["principal_n"].sum()
         total_interest = loans_df["interest_n"].sum()
 
@@ -3969,10 +3973,12 @@ def show_dashboard_view():
         m1, m2, m3, m4 = st.columns(4)
 
         def metric_card(title, value, subtitle, color, is_money=True):
+
             try:
                 fmt = f"{float(value):,.0f} UGX" if is_money else f"{int(value)}"
             except:
                 fmt = "0"
+
             return f"""
             <div class='metric-card' style='border-bottom:5px solid {color};'>
                 <p style="color:#64748B; font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:5px;">{title}</p>
@@ -3992,17 +3998,29 @@ def show_dashboard_view():
         col_l, col_r = st.columns([2, 1])
 
         with col_l:
+
             st.markdown("#### 📈 Revenue Trend vs Expenses")
+
             try:
+
                 if not payments_df.empty:
+
                     date_col = first_existing(payments_df, ["date", "payment_date", "created_at"])
                     amt_col = first_existing(payments_df, ["amount", "paid", "payment"])
+
                     if date_col and amt_col:
+
                         payments_df["date_dt"] = pd.to_datetime(payments_df[date_col], errors="coerce")
                         payments_df["amount_n"] = pd.to_numeric(payments_df[amt_col], errors="coerce").fillna(0)
+
                         temp = payments_df.dropna(subset=["date_dt"]).copy()
+
                         temp["month"] = temp["date_dt"].dt.to_period("M").astype(str)
-                        monthly_rev = temp.groupby("month", as_index=False)["amount_n"].sum()
+
+                        monthly_rev = (
+                            temp.groupby("month", as_index=False)["amount_n"]
+                            .sum()
+                        )
 
                         fig = px.area(
                             monthly_rev,
@@ -4011,95 +4029,150 @@ def show_dashboard_view():
                             template="plotly_white",
                             color_discrete_sequence=[brand_color]
                         )
+
                         fig.update_traces(line=dict(width=2))
-                        fig.update_layout(height=320, margin=dict(l=0, r=0, t=20, b=0), xaxis_title="", yaxis_title="")
+                        fig.update_layout(
+                            height=320,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            xaxis_title="",
+                            yaxis_title=""
+                        )
+
                         st.plotly_chart(fig, use_container_width=True)
+
                     else:
                         st.info("Payment columns missing.")
+
                 else:
                     st.info("Insufficient payment history for trend analysis.")
+
             except:
                 st.warning("Revenue chart temporarily unavailable.")
 
         with col_r:
+
             st.markdown("#### 🎯 Portfolio Health")
+
             try:
-                status_data = loans_df["status"].astype(str).str.upper().value_counts().reset_index()
+
+                status_data = (
+                    loans_df["status"]
+                    .astype(str)
+                    .str.upper()
+                    .value_counts()
+                    .reset_index()
+                )
+
                 status_data.columns = ["status", "count"]
+
                 fig_pie = px.pie(
                     status_data,
                     names="status",
                     values="count",
                     hole=0.72,
-                    color_discrete_sequence=["#10B981", "#F59E0B", "#EF4444", brand_color]
+                    color_discrete_sequence=[
+                        "#10B981",
+                        "#F59E0B",
+                        "#EF4444",
+                        brand_color
+                    ]
                 )
-                fig_pie.update_layout(height=320, showlegend=False, margin=dict(l=0, r=0, b=0, t=20))
+
+                fig_pie.update_layout(
+                    height=320,
+                    showlegend=False,
+                    margin=dict(l=0, r=0, b=0, t=20)
+                )
+
                 st.plotly_chart(fig_pie, use_container_width=True)
+
             except:
                 st.info("Portfolio chart unavailable.")
 
         # --- 5. ACTIVITY FEEDS ---
         st.write("---")
-        t1, t2 = st.columns(2)
 
         with t1:
             st.markdown("#### 📊 Portfolio Growth vs. Interest")
-            export_df = None 
+
             try:
                 if not loans_df.empty:
+                    # 1. Prepare data for time-series
+                    # We'll use start_date to track when the value was added to the portfolio
                     graph_df = loans_df.copy()
-                    name_col = first_existing(graph_df, ["borrower", "borrower_name", "name"])
-                    if name_col:
-                        graph_df[name_col] = graph_df[name_col].fillna("Unknown Borrower")
-                    
                     graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
+                    
+                    # Drop rows with invalid dates for the graph
                     graph_df = graph_df.dropna(subset=["date_dt"])
                     
                     if not graph_df.empty:
+                        # 2. Group by date and sum metrics
+                        # We use cumulative sum to show the total portfolio "building up"
                         timeline_df = graph_df.groupby("date_dt").agg({
                             "principal_n": "sum",
                             "interest_n": "sum"
                         }).sort_index().cumsum().reset_index()
 
+                        # 3. Create the Line Chart
                         fig_portfolio = px.line(
                             timeline_df,
                             x="date_dt",
                             y=["principal_n", "interest_n"],
-                            labels={"date_dt": "Date", "value": "Amount (UGX)", "variable": "Metric"},
-                            color_discrete_map={"principal_n": brand_color, "interest_n": "#10B981"},
+                            labels={
+                                "date_dt": "Date",
+                                "value": "Amount (UGX)",
+                                "variable": "Metric"
+                            },
+                            color_discrete_map={
+                                "principal_n": brand_color,
+                                "interest_n": "#10B981" # Green for interest/profit
+                            },
                             template="plotly_white"
                         )
-                        fig_portfolio.update_layout(height=350, margin=dict(l=0, r=0, t=20, b=0), hovermode="x unified")
+
+                        # 4. Styling for that premium look
+                        fig_portfolio.update_layout(
+                            height=350,
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            legend=dict(
+                                orientation="h",
+                                yanchor="bottom",
+                                y=1.02,
+                                xanchor="right",
+                                x=1
+                            ),
+                            hovermode="x unified"
+                        )
+                        
                         fig_portfolio.update_traces(line=dict(width=3))
+
                         st.plotly_chart(fig_portfolio, use_container_width=True)
-                        export_df = graph_df 
                     else:
                         st.info("Not enough dated records to generate a trend.")
                 else:
                     st.info("Add some loans to see your portfolio trend!")
+
             except Exception as e:
                 st.error("Growth chart is currently recalculating...")
 
-            if export_df is not None:
-                st.write("") 
-                csv_data = export_df.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Underlying Data (CSV)",
-                    data=csv_data,
-                    file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
-
         with t2:
+
             st.markdown("#### 💸 Latest Expenses")
+
             try:
+
                 if not expenses_df.empty:
+
                     display_exp = expenses_df.head(5)
+
                     exp_rows = ""
+
                     vals = safe_numeric(display_exp, ["amount"]).tolist()
+
                     for i, (_, r) in enumerate(display_exp.iterrows()):
+
                         amount_val = vals[i] if i < len(vals) else 0
+
                         exp_rows += f"""
                         <tr style="border-bottom:1px solid #f0f0f0;">
                             <td style="padding:12px 5px;">{r.get('category','General')}</td>
@@ -4107,42 +4180,44 @@ def show_dashboard_view():
                             <td style="padding:12px 5px; text-align:right; color:#64748B;">{r.get('date','-')}</td>
                         </tr>
                         """
-                    st.markdown(f"<table style='width:100%; font-size:13px;'>{exp_rows}</table>", unsafe_allow_html=True)
+
+                    st.markdown(
+                        f"<table style='width:100%; font-size:13px;'>{exp_rows}</table>",
+                        unsafe_allow_html=True
+                    )
+
                 else:
                     st.info("No recorded expenses.")
+
             except:
                 st.info("Expenses feed unavailable.")
 
-        # --- 6. EXPORT SECTION ---
-        st.write("---")
-        # Assuming c2 was intended as a column, or simply use st
-        csv2 = expenses_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "⬇️ Export Expenses CSV",
-            csv2,
-            file_name="expenses_report.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        with c2:
+            csv2 = expenses_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "⬇️ Export Expenses CSV",
+                csv2,
+                file_name="expenses_report.csv",
+                mime="text/csv"
+            )
 
     except Exception as e:
+
         st.error("Dashboard recovered from an internal issue.")
         st.info("Please refresh if data was recently updated.")
-
-# Trigger the view
-if loans_df is not None and not loans_df.empty:
-    show_dashboard_view()
-else:
-    st.info("📊 Fetching latest loan data... please wait.")
 
 # =========================================================
 # HELPERS
 # =========================================================
 
 def normalize(df):
+
     try:
+
         if df is not None and not df.empty:
+
             df = df.copy()
+
             df.columns = (
                 df.columns
                 .astype(str)
@@ -4150,39 +4225,66 @@ def normalize(df):
                 .str.lower()
                 .str.replace(" ", "_")
             )
+
             return df
+
         return pd.DataFrame()
+
     except:
         return pd.DataFrame()
 
 def safe_numeric(df, cols):
+
     try:
+
         if df is None or df.empty:
             return pd.Series(dtype="float64")
+
         for c in cols:
+
             if c in df.columns:
-                return pd.to_numeric(df[c], errors="coerce").fillna(0)
+
+                return pd.to_numeric(
+                    df[c],
+                    errors="coerce"
+                ).fillna(0)
+
         return pd.Series(0.0, index=df.index)
+
     except:
         return pd.Series(dtype="float64")
 
 def safe_date(df, cols):
+
     try:
+
         if df is None or df.empty:
             return pd.Series(dtype="datetime64[ns]")
+
         for c in cols:
+
             if c in df.columns:
-                return pd.to_datetime(df[c], errors="coerce")
+
+                return pd.to_datetime(
+                    df[c],
+                    errors="coerce"
+                )
+
         return pd.Series(pd.NaT, index=df.index)
+
     except:
         return pd.Series(dtype="datetime64[ns]")
 
 def first_existing(df, cols):
+
     try:
+
         for c in cols:
             if c in df.columns:
                 return c
+
         return None
+
     except:
         return None
 # ==========================================
