@@ -1365,18 +1365,44 @@ def show_loans():
                 # ==============================
                 # FINAL TABLE (FIXED FORMATTING)
                 # ==============================
-                final_table = active_view[["loan_id", "start_date", "end_date", "borrower", "principal", "interest", "balance", "status"]].copy()
+                                # ==============================
+                # FINAL TABLE (BANK-ENHANCED VIEW)
+                # ==============================
+                final_table = active_view[[
+                    "loan_id",
+                    "borrower",
+                    "principal",
+                    "interest",
+                    "amount_paid",
+                    "balance",
+                    "start_date",
+                    "end_date",
+                    "status"
+                ]].copy()
 
+                # Format loan_id (0001 style)
                 # Ensure loan_id is sequential and formatted with leading zeros
                 final_table["loan_id"] = range(1, len(final_table) + 1)
                 final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{x:04d}")
 
 
-                # 🔥 ADD COMMAS (THIS WAS MISSING)
+                # Ensure numeric safety before formatting
+                for col in ["principal", "interest", "amount_paid", "balance"]:
+                    if col in final_table.columns:
+                        final_table[col] = pd.to_numeric(final_table[col], errors="coerce").fillna(0)
+
+                # Format dates safely
+                for col in ["start_date", "end_date"]:
+                    if col in final_table.columns:
+                        final_table[col] = pd.to_datetime(final_table[col], errors="coerce").dt.strftime("%Y-%m-%d")
+
+                # Pretty formatting (commas for money)
                 st.dataframe(
                     final_table.style.format({
                         "principal": "{:,.0f}",
-                        "balance": "{:,.0f}"
+                        "interest": "{:,.0f}",
+                        "amount_paid": "{:,.0f}",
+                        "balance": "{:,.0f}",
                     }).apply(style_loan_table, axis=1),
                     use_container_width=True
                 )
