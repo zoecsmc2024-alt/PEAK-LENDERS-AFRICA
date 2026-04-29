@@ -1121,7 +1121,7 @@ def show_borrowers():
                         hide_index=True,
                         column_config={
                             "id": None, "tenant_id": None, "borrower_id": None, "borrower": None,
-                            "principal": st.column_config.NumberColumn("Principal", format="%d UGX"),
+                            "principal": st.column_config.NumberColumn("principal", format="%d UGX"),
                             "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
                             "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
@@ -1248,13 +1248,13 @@ def show_loans():
     
     # Ensure loans_df is valid
     if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=["loan_id", "Borrower", "Principal", "Interest", "total_repayable", "amount_paid", "Balance", "status", "Start_Date", "End_Date"])
+        loans_df = pd.DataFrame(columns=["loan_id", "Borrower", "principal", "Interest", "total_repayable", "amount_paid", "Balance", "status", "Start_Date", "End_Date"])
     
     # Normalize headers
     loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
 
     # Clean numeric columns for math and comma formatting
-    num_cols = ["Principal", "Interest", "total_repayable", "amount_paid", "Balance"]
+    num_cols = ["principal", "Interest", "total_repayable", "amount_paid", "Balance"]
     for col in num_cols:
         if col in loans_df.columns:
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
@@ -1343,7 +1343,7 @@ def show_loans():
                     return styles
 
                 # 4. PREP DATA
-                base_cols = ["loan_id", "Borrower", "Principal", "Balance"]
+                base_cols = ["loan_id", "Borrower", "principal", "Balance"]
                 date_cols = []
                 for d_col in ["Start_Date", "Start Date", "End_Date", "End Date"]:
                     if d_col in active_view.columns: date_cols.append(d_col)
@@ -1351,14 +1351,14 @@ def show_loans():
                 show_cols = base_cols + date_cols + ["status"]
                 final_table = active_view[show_cols].copy()
 
-                for col in ["Principal", "Balance"]:
+                for col in ["principal", "Balance"]:
                     if col in final_table.columns:
                         final_table[col] = pd.to_numeric(final_table[col], errors='coerce').fillna(0)
 
                 # 5. RENDER THE PEACHY TABLE
                 st.dataframe(
                     final_table.style.format({
-                        "Principal": "{:,.0f}",
+                        "principal": "{:,.0f}",
                         "Balance": "{:,.0f}"
                     }).apply(style_loan_table, axis=1), 
                     use_container_width=True, 
@@ -1377,7 +1377,7 @@ def show_loans():
                 col1, col2 = st.columns(2)
                 
                 selected_borrower = col1.selectbox("Select Borrower", active_borrowers["Name"].unique())
-                amount = col1.number_input("Principal Amount (UGX)", min_value=0, step=50000)
+                amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
                 l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
@@ -1396,7 +1396,7 @@ def show_loans():
                         
                         new_loan = pd.DataFrame([{
                             "loan_id": new_id, "Borrower": selected_borrower, "Type": l_type,
-                            "Principal": float(amount), "Interest": float(interest),
+                            "principal": float(amount), "Interest": float(interest),
                             "total_repayable": float(total_due), "amount_paid": 0.0,
                             "status": "Active", "Start_Date": date_issued.strftime("%Y-%m-%d"),
                             "End_Date": date_due.strftime("%Y-%m-%d")
@@ -1442,7 +1442,7 @@ def show_loans():
                 col1, col2 = st.columns(2)
                 
                 new_borrower = col1.text_input("Borrower Name", value=loan_to_edit['Borrower'])
-                new_principal = col1.number_input("Principal (UGX)", value=float(loan_to_edit['Principal']))
+                new_principal = col1.number_input("principal (UGX)", value=float(loan_to_edit['principal']))
                 new_interest = col1.number_input("Interest (UGX)", value=float(loan_to_edit['Interest']))
                 
                 new_status = col2.selectbox("status", ["Active", "Pending", "Closed", "Overdue", "BCF"], 
@@ -1455,7 +1455,7 @@ def show_loans():
                     idx = loans_df[loans_df["loan_id"].astype(str).str.replace(".0", "", regex=False) == clean_id].index[0]
                     
                     loans_df.at[idx, 'Borrower'] = new_borrower
-                    loans_df.at[idx, 'Principal'] = new_principal
+                    loans_df.at[idx, 'principal'] = new_principal
                     loans_df.at[idx, 'Interest'] = new_interest
                     loans_df.at[idx, 'status'] = new_status
                     loans_df.at[idx, 'Start_Date'] = new_start
@@ -1502,7 +1502,7 @@ def show_loans():
         
         try: 
             # FORCE NUMERIC: This kills the "stubborn balance" issue
-            money_cols = ['Principal', 'Interest', 'Balance', 'total_repayable', 'amount_paid']
+            money_cols = ['principal', 'Interest', 'Balance', 'total_repayable', 'amount_paid']
             for col in money_cols:
                 if col in updated_df.columns:
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
@@ -1521,7 +1521,7 @@ def show_loans():
                         updated_df.at[i, 'status'] = "BCF"
 
                         # 2. THE ULTIMATE MATH FIX
-                        old_p = float(r.get('Principal', 0))
+                        old_p = float(r.get('principal', 0))
                         old_i = float(r.get('Interest', 0))
                         
                         # New Basis = 514,000 (Old P + Old I)
@@ -1540,7 +1540,7 @@ def show_loans():
                         new_row = r.copy()
                         new_row['Start_Date'] = new_start.strftime('%Y-%m-%d')
                         new_row['End_Date'] = new_end.strftime('%Y-%m-%d')
-                        new_row['Principal'] = new_basis
+                        new_row['principal'] = new_basis
                         new_row['Interest'] = new_month_interest
                         new_row['Balance'] = compounded_balance 
                         new_row['total_repayable'] = compounded_balance
@@ -3307,7 +3307,7 @@ def show_ledger():
 
     # Metric Cards with Styled Font
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Principal", f"UGX {p:,.0f}")
+    m1.metric("principal", f"UGX {p:,.0f}")
     m2.metric("Total Interest", f"UGX {i:,.0f}")
     m3.metric("Total Paid", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%}" if total_due > 0 else None)
     m4.metric("Current Balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
@@ -3779,7 +3779,7 @@ def show_dashboard_view():
             </div>
             """
 
-        m1.markdown(metric_card("Active Principal", total_principal, "Portfolio Value", brand_color), unsafe_allow_html=True)
+        m1.markdown(metric_card("Active principal", total_principal, "Portfolio Value", brand_color), unsafe_allow_html=True)
         m2.markdown(metric_card("Interest Income", total_interest, "Expected Earnings", "#10B981"), unsafe_allow_html=True)
         m3.markdown(metric_card("Operational Costs", total_expenses, "Total Expenses", "#EF4444"), unsafe_allow_html=True)
         m4.markdown(metric_card("Critical Alerts", overdue_count, "Overdue loans", "#F59E0B", False), unsafe_allow_html=True)
