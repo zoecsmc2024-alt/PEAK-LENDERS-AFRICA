@@ -1204,7 +1204,7 @@ def get_data(table_name):
     # Apply tenant filter ONLY if column exists AND tenant is valid
     if tenant_id and "tenant_id" in df.columns:
         df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
-        df = df[df["tenant_id"] == tenant_id].copy()
+        df = df[df["tenant_id"].astype(str).str.strip() == str(tenant_id).strip()].copy()
 
     return df.reset_index(drop=True)
 
