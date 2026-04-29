@@ -1062,8 +1062,8 @@ def show_borrowers():
                                 <th style='padding:14px;'>Phone</th>
                                 <th style='padding:14px;'>National ID</th>
                                 <th style='padding:14px;'>Next of Kin</th>
-                                <th style='padding:14px;'>Risk Status</th>
-                                <th style='padding:14px; text-align:center;'>Status</th>
+                                <th style='padding:14px;'>Risk status</th>
+                                <th style='padding:14px; text-align:center;'>status</th>
                             </tr>
                         </thead>
                         <tbody>{rows_html}</tbody>
@@ -1242,13 +1242,13 @@ def show_loans():
     
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = [str(c).strip().replace(" ", "_") for c in borrowers_df.columns]
-        active_borrowers = borrowers_df[borrowers_df["Status"] == "Active"]
+        active_borrowers = borrowers_df[borrowers_df["status"] == "Active"]
     else:
         active_borrowers = pd.DataFrame()
     
     # Ensure loans_df is valid
     if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=["Loan_ID", "Borrower", "Principal", "Interest", "Total_Repayable", "Amount_Paid", "Balance", "Status", "Start_Date", "End_Date"])
+        loans_df = pd.DataFrame(columns=["Loan_ID", "Borrower", "Principal", "Interest", "Total_Repayable", "Amount_Paid", "Balance", "status", "Start_Date", "End_Date"])
     
     # Normalize headers
     loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
@@ -1271,7 +1271,7 @@ def show_loans():
         closed_mask = loans_df["Balance"] <= 0
 
         # If balance is 0, force status to Closed and cleanup figures
-        loans_df.loc[closed_mask, "Status"] = "Closed"
+        loans_df.loc[closed_mask, "status"] = "Closed"
         loans_df.loc[closed_mask, "Balance"] = 0
         loans_df.loc[closed_mask, "Total_Repayable"] = loans_df.loc[closed_mask, "Amount_Paid"]
 
@@ -1307,7 +1307,7 @@ def show_loans():
                     
                     rec_val = float(latest_info.get('Amount_Paid', 0))
                     out_val = float(latest_info.get('Balance', 0))
-                    stat_val = str(latest_info.get('Status', 'Active')).upper()
+                    stat_val = str(latest_info.get('status', 'Active')).upper()
 
                     # Safety check for display
                     if stat_val == "CLOSED":
@@ -1320,7 +1320,7 @@ def show_loans():
 
                 c1.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">✅ RECEIVED</p><h3 style="{text_style} font-size:18px;">{rec_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
                 c2.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">🚨 OUTSTANDING</p><h3 style="{text_style} font-size:18px;">{out_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-                c3.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">📑 STATUS</p><h3 style="{text_style} font-size:18px;">{stat_val}</h3></div>""", unsafe_allow_html=True)
+                c3.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">📑 status</p><h3 style="{text_style} font-size:18px;">{stat_val}</h3></div>""", unsafe_allow_html=True)
 
                 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -1328,7 +1328,7 @@ def show_loans():
                 def style_loan_table(row):
                     bg_color = "#FFF9F5" 
                     
-                    status = str(row["Status"])
+                    status = str(row["status"])
                     if status == "Active": s_color = "#4A90E2"
                     elif status == "Closed": s_color = "#2E7D32"
                     elif status == "Overdue": s_color = "#D32F2F"
@@ -1338,7 +1338,7 @@ def show_loans():
                     else: s_color = "#666666"
 
                     styles = [f'background-color: {bg_color}; color: #0A192F;'] * len(row)
-                    # Status is at the end of show_cols
+                    # status is at the end of show_cols
                     styles[-1] = f'background-color: {s_color}; color: white; font-weight: bold; border-radius: 5px;'
                     return styles
 
@@ -1348,7 +1348,7 @@ def show_loans():
                 for d_col in ["Start_Date", "Start Date", "End_Date", "End Date"]:
                     if d_col in active_view.columns: date_cols.append(d_col)
                 
-                show_cols = base_cols + date_cols + ["Status"]
+                show_cols = base_cols + date_cols + ["status"]
                 final_table = active_view[show_cols].copy()
 
                 for col in ["Principal", "Balance"]:
@@ -1398,7 +1398,7 @@ def show_loans():
                             "Loan_ID": new_id, "Borrower": selected_borrower, "Type": l_type,
                             "Principal": float(amount), "Interest": float(interest),
                             "Total_Repayable": float(total_due), "Amount_Paid": 0.0,
-                            "Status": "Active", "Start_Date": date_issued.strftime("%Y-%m-%d"),
+                            "status": "Active", "Start_Date": date_issued.strftime("%Y-%m-%d"),
                             "End_Date": date_due.strftime("%Y-%m-%d")
                         }])
                         
@@ -1445,8 +1445,8 @@ def show_loans():
                 new_principal = col1.number_input("Principal (UGX)", value=float(loan_to_edit['Principal']))
                 new_interest = col1.number_input("Interest (UGX)", value=float(loan_to_edit['Interest']))
                 
-                new_status = col2.selectbox("Status", ["Active", "Pending", "Closed", "Overdue", "BCF"], 
-                                            index=["Active", "Pending", "Closed", "Overdue", "BCF"].index(loan_to_edit['Status']) if loan_to_edit['Status'] in ["Active", "Pending", "Closed", "Overdue", "BCF"] else 0)
+                new_status = col2.selectbox("status", ["Active", "Pending", "Closed", "Overdue", "BCF"], 
+                                            index=["Active", "Pending", "Closed", "Overdue", "BCF"].index(loan_to_edit['status']) if loan_to_edit['status'] in ["Active", "Pending", "Closed", "Overdue", "BCF"] else 0)
                 new_start = col2.text_input("Start Date (YYYY-MM-DD)", value=str(loan_to_edit['Start_Date']))
                 new_end = col2.text_input("End Date (YYYY-MM-DD)", value=str(loan_to_edit['End_Date']))
 
@@ -1457,7 +1457,7 @@ def show_loans():
                     loans_df.at[idx, 'Borrower'] = new_borrower
                     loans_df.at[idx, 'Principal'] = new_principal
                     loans_df.at[idx, 'Interest'] = new_interest
-                    loans_df.at[idx, 'Status'] = new_status
+                    loans_df.at[idx, 'status'] = new_status
                     loans_df.at[idx, 'Start_Date'] = new_start
                     loans_df.at[idx, 'End_Date'] = new_end
                     
@@ -1508,7 +1508,7 @@ def show_loans():
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
             # Targets: Find active 'Pending' rows or Fallback to Overdue
-            targets = updated_df[updated_df['Status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
+            targets = updated_df[updated_df['status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
             if targets.empty:
                 targets = overdue_df.copy()
 
@@ -1518,7 +1518,7 @@ def show_loans():
                 for i, r in targets.iterrows():
                     if i in updated_df.index:
                         # 1. Archive the old row
-                        updated_df.at[i, 'Status'] = "BCF"
+                        updated_df.at[i, 'status'] = "BCF"
 
                         # 2. THE ULTIMATE MATH FIX
                         old_p = float(r.get('Principal', 0))
@@ -1545,7 +1545,7 @@ def show_loans():
                         new_row['Balance'] = compounded_balance 
                         new_row['Total_Repayable'] = compounded_balance
                         new_row['Amount_Paid'] = 0
-                        new_row['Status'] = "Pending" 
+                        new_row['status'] = "Pending" 
                         new_row['Balance_B/F'] = new_basis 
                         
                         new_rows_list.append(new_row)
@@ -1888,7 +1888,7 @@ def show_collateral():
         available_loans = pd.DataFrame()
 
     # --- TABS ---
-    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
+    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & status"])
 
     # ==============================
     # ➕ TAB 1: REGISTER ASSET
@@ -1944,7 +1944,7 @@ def show_collateral():
                             st.rerun()
 
     # ==============================
-    # 📋 TAB 2: INVENTORY & STATUS
+    # 📋 TAB 2: INVENTORY & status
     # ==============================
     with tab_view:
         if collateral_df is None or collateral_df.empty:
@@ -1993,11 +1993,11 @@ def show_collateral():
 
                     col_stat, col_btn = st.columns([2,1])
                     new_stat = col_stat.selectbox(
-                        "Set New Status", 
+                        "Set New status", 
                         ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"]
                     )
                     
-                    if col_btn.button("Update Status", use_container_width=True):
+                    if col_btn.button("Update status", use_container_width=True):
                         # Constructing the update payload
                         update_row = pd.DataFrame([{
                             "id": asset_id, 
@@ -2154,7 +2154,7 @@ def show_calendar():
                         <th style="padding:10px;">Loan ID</th>
                         <th style="padding:10px;">Borrower</th>
                         <th style="padding:10px;text-align:center;">Late By</th>
-                        <th style="padding:10px;text-align:center;">Status</th>
+                        <th style="padding:10px;text-align:center;">status</th>
                     </tr>
                     {od_rows}
                 </table>
@@ -2395,7 +2395,7 @@ def show_petty_cash():
     .metric-title {{ font-size: 11px; color: #6b7280; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }}
     .metric-value {{ font-size: 24px; font-weight: 700; margin-top: 4px; }}
     
-    /* Status Badges */
+    /* status Badges */
     .status-badge {{ font-size: 10px; padding: 3px 10px; border-radius: 12px; font-weight: 700; float: right; }}
     .badge-safe {{ background: #E1F9F0; color: #10B981; }}
     .badge-low {{ background: #FFEBEB; color: #FF4B4B; }}
