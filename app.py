@@ -1123,7 +1123,7 @@ def show_borrowers():
                             "id": None, "tenant_id": None, "borrower_id": None, "borrower": None,
                             "principal": st.column_config.NumberColumn("principal", format="%d UGX"),
                             "interest": st.column_config.NumberColumn("interest", format="%d UGX"),
-                            "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
+                            "balance": st.column_config.NumberColumn("balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
                             "start_date": st.column_config.DateColumn("Date Issued"),
                             "end_date": st.column_config.DateColumn("Due Date"),
@@ -1257,7 +1257,7 @@ def show_loans():
     if loans_df is None or loans_df.empty:
         loans_df = pd.DataFrame(columns=[
             "loan_id", "borrower", "principal", "interest",
-            "total_repayable", "amount_paid", "Balance",
+            "total_repayable", "amount_paid", "balance",
             "status", "start_date", "end_date", "tenant_id"
         ])
     
@@ -1267,30 +1267,30 @@ def show_loans():
     # ==============================
     # 3. CLEAN NUMERIC DATA
     # ==============================
-    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "Balance"]
+    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "balance"]
     for col in num_cols:
         if col in loans_df.columns:
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
 
     # ==============================
-    # 4. SAFE BALANCE CALCULATION
+    # 4. SAFE balance CALCULATION
     # ==============================
     def compute_balance(row):
         if str(row.get("status")) == "BCF":
-            return row.get("Balance", 0)  # preserve historical rows
+            return row.get("balance", 0)  # preserve historical rows
         return row.get("total_repayable", 0) - row.get("amount_paid", 0)
 
-    loans_df["Balance"] = loans_df.apply(compute_balance, axis=1)
+    loans_df["balance"] = loans_df.apply(compute_balance, axis=1)
 
     # ==============================
     # ✅ AUTO-CLOSE ENGINE
     # ==============================
     if not loans_df.empty:
-        loans_df["Balance"] = loans_df["Balance"].clip(lower=0)
+        loans_df["balance"] = loans_df["balance"].clip(lower=0)
 
-        closed_mask = (loans_df["Balance"] <= 0) & (loans_df["status"] != "BCF")
+        closed_mask = (loans_df["balance"] <= 0) & (loans_df["status"] != "BCF")
         loans_df.loc[closed_mask, "status"] = "Closed"
-        loans_df.loc[closed_mask, "Balance"] = 0
+        loans_df.loc[closed_mask, "balance"] = 0
         loans_df.loc[closed_mask, "total_repayable"] = loans_df.loc[closed_mask, "amount_paid"]
 
     # ==============================
@@ -1341,7 +1341,7 @@ def show_loans():
                     latest_info = loan_history.iloc[-1]
                     
                     rec_val = float(latest_info.get('amount_paid', 0))
-                    out_val = float(latest_info.get('Balance', 0))
+                    out_val = float(latest_info.get('balance', 0))
                     stat_val = str(latest_info.get('status', 'Active')).upper()
 
                     if stat_val == "CLOSED":
@@ -1371,7 +1371,7 @@ def show_loans():
                     return [f'background-color: {bg}; color: #0A192F;' for _ in row]
 
                 # 4. PREP DATA
-                base_cols = ["loan_id", "borrower", "principal", "Balance"]
+                base_cols = ["loan_id", "borrower", "principal", "balance"]
                 date_cols = [d for d in ["start_date", "end_date"] if d in active_view.columns]
                 show_cols = base_cols + date_cols + ["status"]
                 final_table = active_view[show_cols].copy()
@@ -1383,7 +1383,7 @@ def show_loans():
                 st.dataframe(
                     final_table.style.format({
                         "principal": "{:,.0f}",
-                        "Balance": "{:,.0f}"
+                        "balance": "{:,.0f}"
                     }).apply(style_loan_table, axis=1),
                     use_container_width=True,
                     hide_index=True
@@ -1432,7 +1432,7 @@ def show_loans():
                             "interest": float(interest),
                             "total_repayable": float(total_due),
                             "amount_paid": 0.0,
-                            "Balance": float(total_due),
+                            "balance": float(total_due),
                             "status": "Active",
                             "start_date": date_issued.strftime("%Y-%m-%d"),
                             "end_date": date_due.strftime("%Y-%m-%d"),
@@ -1500,7 +1500,7 @@ def show_loans():
                             
                             new_total = new_principal + new_interest
                             loans_df.at[idx, 'total_repayable'] = new_total
-                            loans_df.at[idx, 'Balance'] = new_total - float(loans_df.at[idx, 'amount_paid'])
+                            loans_df.at[idx, 'balance'] = new_total - float(loans_df.at[idx, 'amount_paid'])
 
                             save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
                             save_df.columns = [c.replace("_", " ") for c in save_df.columns]
@@ -1541,12 +1541,12 @@ def show_loans():
                 count = 0
                 
                 # FORCE NUMERIC
-                money_cols = ['principal', 'interest', 'Balance', 'total_repayable', 'amount_paid']
+                money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
                 for col in money_cols:
                     if col in updated_df.columns:
                         updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-                targets = updated_df[(updated_df['status'] == "Pending") & (updated_df['Balance'] > 0)].copy()
+                targets = updated_df[(updated_df['status'] == "Pending") & (updated_df['balance'] > 0)].copy()
 
                 if targets.empty:
                     st.info("No loans currently require a rollover cycle.")
@@ -1574,11 +1574,11 @@ def show_loans():
                         new_row['end_date'] = new_end.strftime('%Y-%m-%d')
                         new_row['principal'] = new_basis
                         new_row['interest'] = new_month_interest
-                        new_row['Balance'] = compounded_balance 
+                        new_row['balance'] = compounded_balance 
                         new_row['total_repayable'] = compounded_balance
                         new_row['amount_paid'] = 0
                         new_row['status'] = "Pending"
-                        new_row['Balance_B/F'] = new_basis 
+                        new_row['balance_B/F'] = new_basis 
 
                         new_rows_list.append(new_row)
                         count += 1
@@ -1733,7 +1733,7 @@ def show_payments():
 
                 c1, c2 = st.columns(2)
                 c1.metric("👤 borrower", loan["borrower"])
-                c2.metric("💰 Balance", f"UGX {balance:,.0f}")
+                c2.metric("💰 balance", f"UGX {balance:,.0f}")
 
                 with st.form("payment_form"):
                     amount = st.number_input("Amount", min_value=0.0, step=1000.0)
@@ -1791,7 +1791,7 @@ def show_payments():
                                 st.session_state["receipt_pdf"] = f.read()
                                 st.session_state["show_receipt"] = True
 
-                            st.success(f"✅ Payment Success! New Balance: {max(0, total-new_paid):,.0f}")
+                            st.success(f"✅ Payment Success! New balance: {max(0, total-new_paid):,.0f}")
                             st.cache_data.clear()
                             st.rerun()
 
@@ -2445,7 +2445,7 @@ def show_petty_cash():
     outflow = df[df["type"] == "Out"]["amount"].sum()
     balance = inflow - outflow
 
-    # Threshold for "Low Balance" warning
+    # Threshold for "Low balance" warning
     LOW_CASH_THRESHOLD = 50000
     bal_status = "SAFE" if balance >= LOW_CASH_THRESHOLD else "LOW"
     status_class = "badge-safe" if balance >= LOW_CASH_THRESHOLD else "badge-low"
@@ -2463,7 +2463,7 @@ def show_petty_cash():
         <div class="metric-value" style="color:#FF4B4B;">{outflow:,.0f} <span style="font-size:12px;">UGX</span></div></div>""", unsafe_allow_html=True)
 
     c3.markdown(f"""<div class="glass-card">
-        <div class="metric-title">Current Balance <span class="status-badge {status_class}">{bal_status}</span></div>
+        <div class="metric-title">Current balance <span class="status-badge {status_class}">{bal_status}</span></div>
         <div class="metric-value" style="color:{bal_color};">{balance:,.0f} <span style="font-size:12px;">UGX</span></div></div>""", unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
@@ -2693,7 +2693,7 @@ def show_overdue_tracker():
             ["days_overdue", "amount", "risk_level", "risk_score", "id"]
         ].rename(columns={
             "days_overdue": "Days Late",
-            "amount": "Balance (UGX)",
+            "amount": "balance (UGX)",
             "risk_level": "Risk Level",
             "risk_score": "Score/100",
             "id": "Loan ID"
@@ -2963,7 +2963,7 @@ def show_reports():
     st.markdown("""
     <div style='background: linear-gradient(90deg,#1E3A8A,#2B3F87); padding:20px; border-radius:15px; margin-bottom:25px;'>
         <h2 style='margin:0; color:white; font-size:24px;'>📊 Financial Intelligence Dashboard</h2>
-        <p style='margin:0; color:#DBEAFE; font-size:13px;'>Real-time P&L, Balance Sheet, and Portfolio Yield Analysis</p>
+        <p style='margin:0; color:#DBEAFE; font-size:13px;'>Real-time P&L, balance Sheet, and Portfolio Yield Analysis</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3108,7 +3108,7 @@ def show_reports():
         """, unsafe_allow_html=True)
 
     with s2:
-        st.markdown("#### 🧾 Balance Sheet Position")
+        st.markdown("#### 🧾 balance Sheet Position")
         loan_book_value = col_sum(loans, "balance")
         total_assets = cash_profit + loan_book_value
         st.markdown(f"""
@@ -3193,7 +3193,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
         elements.append(Paragraph(f"<b>Loan Ref:</b> {display_id}", styles["Heading3"]))
 
-        data = [["Date", "Description", "Debit", "Credit", "Balance"]]
+        data = [["Date", "Description", "Debit", "Credit", "balance"]]
 
         # Truncate dates to YYYY-MM-DD to prevent overwriting
         start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
@@ -3227,7 +3227,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
         grand_total += balance
 
-        # Adjusted colWidths: widened the Description and Balance columns
+        # Adjusted colWidths: widened the Description and balance columns
         table = Table(data, repeatRows=1, colWidths=[75, 170, 85, 85, 100])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
@@ -3332,7 +3332,7 @@ def show_ledger():
     m1.metric("principal", f"UGX {p:,.0f}")
     m2.metric("Total interest", f"UGX {i:,.0f}")
     m3.metric("Total Paid", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%}" if total_due > 0 else None)
-    m4.metric("Current Balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
+    m4.metric("Current balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
 
     # ==============================
     # 📜 TRANSACTION HISTORY (LEDGER)
@@ -3346,7 +3346,7 @@ def show_ledger():
         "Description": "🏦 Loan Disbursement",
         "Debit (Due)": p,
         "Credit (Paid)": 0,
-        "Balance": running_bal
+        "balance": running_bal
     })
 
     # Entry 2: interest Charge
@@ -3356,7 +3356,7 @@ def show_ledger():
             "Description": "📈 Monthly interest Applied",
             "Debit (Due)": i,
             "Credit (Paid)": 0,
-            "Balance": running_bal
+            "balance": running_bal
         })
 
     # Entry 3+: Repayments
@@ -3371,7 +3371,7 @@ def show_ledger():
                     "Description": "💰 Repayment Received",
                     "Debit (Due)": 0,
                     "Credit (Paid)": amt,
-                    "Balance": running_bal
+                    "balance": running_bal
                 })
 
     # Render Modern Styled Ledger
@@ -3385,7 +3385,7 @@ def show_ledger():
             "Description": st.column_config.TextColumn("Transaction Details"),
             "Debit (Due)": st.column_config.NumberColumn("Debit (UGX)", format="%,d"),
             "Credit (Paid)": st.column_config.NumberColumn("Credit (UGX)", format="%,d"),
-            "Balance": st.column_config.NumberColumn("Running Balance (UGX)", format="%,d"),
+            "balance": st.column_config.NumberColumn("Running balance (UGX)", format="%,d"),
         }
     )
 
