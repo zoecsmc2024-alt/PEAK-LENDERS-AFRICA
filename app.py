@@ -1392,7 +1392,7 @@ def show_loans():
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     if amount > 0:
                         last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce').max()
-                        new_id = int(last_id + 1) if pd.notna(last_id) else 1
+                        new_id = int(pd.Timestamp.now().timestamp()) if pd.notna(last_id) else 1
                         
                         new_loan = pd.DataFrame([{
                             "loan_id": new_id, "borrower": selected_borrower, "Type": l_type,
