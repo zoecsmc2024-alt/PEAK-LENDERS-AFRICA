@@ -1204,7 +1204,13 @@ def get_data(table_name):
     # Apply tenant filter ONLY if column exists AND tenant is valid
     if tenant_id and "tenant_id" in df.columns:
         df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
-        df = df[df["tenant_id"].astype(str).str.strip() == str(tenant_id).strip()].copy()
+        df = df[df["tenant_id"] == str(tenant_id).strip()].copy()
+
+    # 🚨 HARDEN: Ensure integer columns are actually integers
+    int_cols = ["loan_id", "customer_id", "duration_in_months"]  # adjust to your schema
+    for col in int_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).astype("int64")
 
     return df.reset_index(drop=True)
 
@@ -1381,9 +1387,7 @@ def show_loans():
                 # ==============================
                 # FINAL TABLE (FIXED FORMATTING)
                 # ==============================
-                                # ==============================
-                # FINAL TABLE (BANK-ENHANCED VIEW)
-                # ==============================
+
                 final_table = active_view[[
                     "loan_id",
                     "borrower",
