@@ -1508,44 +1508,98 @@ def show_loans():
         if loans_df.empty:
             st.info("No loans.")
         else:
-
+            # Ensure ID is numeric for logic
             loans_df["loan_id"] = pd.to_numeric(loans_df["loan_id"], errors="coerce").fillna(0).astype(int)
-            loans_df["label"] = loans_df.apply(lambda r: f"{int(r['loan_id']):04d} - {r.get('borrower','')}", axis=1)
+
+            # Create labels for the dropdown
+            loans_df["label"] = loans_df.apply(
+                lambda r: f"{int(r['loan_id']):04d} - {r.get('borrower','')}", axis=1
+            )
 
             selected = st.selectbox("Select Loan", loans_df["label"])
-
             loan_id = int(selected.split(" - ")[0])
+            loan_rows = loans_df[loans_df["loan_id"] == loan_id]
 
-            loan = loans_df[loans_df["loan_id"] == loan_id].iloc[-1]
+            # SAFE FALLBACK
+            loan = loan_rows.iloc[-1] if not loan_rows.empty else {}
 
             with st.form("edit_form"):
+                borrower = st.text_input("Borrower", loan.get("borrower", ""))
 
-                borrower = st.text_input("Borrower", loan.get("borrower"))
-                principal = st.number_input("Principal", value=float(loan.get("principal", 0)))
-                interest = st.number_input("Interest", value=float(loan.get("interest", 0)))
+                principal = st.number_input(
+                    "Principal",
+                    value=float(loan.get("principal", 0))
+                )
 
-                status = st.selectbox("Status", ["Active", "Pending", "Closed", "Overdue"])
+                interest = st.number_input(
+                    "Interest",
+                    value=float(loan.get("interest", 0))
+                )
 
-                start = st.date_input("Start", pd.to_datetime(loan.get("start_date")))
-                end = st.date_input("End", pd.to_datetime(loan.get("end_date")))
+                status_options = ["Active", "Pending", "Closed", "Overdue"]
+                current_status = loan.get("status", "Active")
+                
+                status = st.selectbox(
+                    "Status",
+                    status_options,
+                    index=status_options.index(current_status) if current_status in status_options else 0
+                )
 
-                if st.form_submit_button("Save"):
+                start = st.date_input(
+                    "Start",
+                    pd.to_datetime(loan.get("start_date", pd.Timestamp.today()))
+                )
 
-                    idx = loans_df[loans_df["loan_id"] == loan_id].index[-1]
+                end = st.date_input(
+                    "End",
+                    pd.to_datetime(loan.get("end_date", pd.Timestamp.today()))
+                )
 
-                    loans_df.at[idx, "borrower"] = borrower
-                    loans_df.at[idx, "principal"] = principal
-                    loans_df.at[idx, "interest"] = interest
-                    loans_df.at[idx, "status"] = status
-                    loans_df.at[idx, "start_date"] = str(start)
-                    loans_df.at[idx, "end_date"] = str(end)
+                if st.form_submit_button("Save Changes"):
+                    if not loan_rows.empty:
+                        idx = loan_rows.index[-1]
 
-                    loans_df.at[idx, "total_repayable"] = principal + interest
-                    loans_df.at[idx, "balance"] = (principal + interest) - float(loans_df.at[idx, "amount_paid"])
+                        loans_df.at[idx, "borrower"] = borrower
+                        loans_df.at[idx, "principal"] = principal
+                        loans_df.at[idx, "interest"] = interest
+                        loans_df.at[idx, "status"] = status
+                        loans_df.at[idx, "start_date"] = str(start)
+                        loans_df.at[idx, "end_date"] = str(end)
 
-                    if save_data_saas("loans", loans_df):
-                        st.session_state.loans = get_data("loans")
-                        st.rerun()
+                        loans_df.at[idx, "total_repayable"] = principal + interest
+                        
+                        # Calculate balance safely
+                        paid_amt = float(loans_df.at[idx, "amount_paid"]) if "amount_paid" in loans_df.columns else 0
+                        loans_df.at[idx, "balance"] = (principal + interest) - paid_amt
+
+                        # Remove helper labels before saving to DB
+                        db_save_df = loans_df.drop(columns=['label'], errors='ignore')
+
+                        if save_data_saas("loans", db_save_df):
+                            st.session_state.loans = get_data("loans")
+                            st.success("✅ Loan Updated!")
+                            st.rerun()
+
+            # ==============================
+            # DELETE SECTION (Outside the Form)
+            # ==============================
+            st.markdown("---")
+            st.warning(f"⚠️ Dangerous Area: Manage Loan #{loan_id:04d}")
+
+            if st.button("🗑️ Delete Permanently", use_container_width=True, key=f"del_{loan_id}"):
+                # Filter out the specific loan
+                new_df = loans_df[loans_df["loan_id"] != loan_id].copy()
+
+                # Clean columns for database compatibility
+                final_save_df = new_df.drop(columns=['label'], errors='ignore').copy()
+                final_save_df.columns = [
+                    str(c).lower().strip().replace(" ", "_") for c in final_save_df.columns
+                ]
+
+                if save_data_saas("loans", final_save_df):
+                    st.session_state.loans = new_df.copy()
+                    st.success(f"🗑️ Loan #{loan_id:04d} deleted.")
+                    st.rerun()
 
     # ==============================
     # ACTIONS TAB
