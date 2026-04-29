@@ -1254,7 +1254,7 @@ def show_loans():
         loans_df = pd.DataFrame(columns=[
             "loan_id", "borrower", "principal", "Interest",
             "total_repayable", "amount_paid", "Balance",
-            "status", "Start_Date", "End_Date", "tenant_id"
+            "status", "start_date", "End_Date", "tenant_id"
         ])
     
     # Normalize headers
@@ -1306,8 +1306,8 @@ def show_loans():
             display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype(int)
 
             # Ensure proper date sorting
-            if "Start_Date" in display_df.columns:
-                display_df["Start_Date"] = pd.to_datetime(display_df["Start_Date"], errors="coerce")
+            if "start_date" in display_df.columns:
+                display_df["start_date"] = pd.to_datetime(display_df["start_date"], errors="coerce")
 
             active_view = display_df.copy()
 
@@ -1332,7 +1332,7 @@ def show_loans():
                 loan_history = active_view[active_view["loan_id"] == sel_id]
 
                 if not loan_history.empty:
-                    loan_history = loan_history.sort_values("Start_Date")
+                    loan_history = loan_history.sort_values("start_date")
                     latest_info = loan_history.iloc[-1]
                     
                     rec_val = float(latest_info.get('amount_paid', 0))
@@ -1378,7 +1378,7 @@ def show_loans():
                 base_cols = ["loan_id", "borrower", "principal", "Balance"]
 
                 date_cols = []
-                for d_col in ["Start_Date", "End_Date"]:
+                for d_col in ["start_date", "End_Date"]:
                     if d_col in active_view.columns:
                         date_cols.append(d_col)
                 
@@ -1455,7 +1455,7 @@ def show_loans():
                             "amount_paid": 0.0,
                             "Balance": float(total_due),
                             "status": "Active",
-                            "Start_Date": date_issued.strftime("%Y-%m-%d"),
+                            "start_date": date_issued.strftime("%Y-%m-%d"),
                             "End_Date": date_due.strftime("%Y-%m-%d")
                         }])
                         
@@ -1502,9 +1502,9 @@ def show_loans():
                 st.stop()
 
             # Always edit latest cycle
-            if "Start_Date" in loan_rows.columns:
-                loan_rows["Start_Date"] = pd.to_datetime(loan_rows["Start_Date"], errors="coerce")
-                loan_rows = loan_rows.sort_values("Start_Date")
+            if "start_date" in loan_rows.columns:
+                loan_rows["start_date"] = pd.to_datetime(loan_rows["start_date"], errors="coerce")
+                loan_rows = loan_rows.sort_values("start_date")
 
             loan_to_edit = loan_rows.iloc[-1]
 
@@ -1527,7 +1527,7 @@ def show_loans():
                 
                 new_status = col2.selectbox("status", status_options, index=status_options.index(current_status))
                 
-                new_start = col2.date_input("Start Date", value=pd.to_datetime(loan_to_edit['Start_Date']))
+                new_start = col2.date_input("Start Date", value=pd.to_datetime(loan_to_edit['start_date']))
                 new_end = col2.date_input("End Date", value=pd.to_datetime(loan_to_edit['End_Date']))
 
                 if st.form_submit_button("💾 Save Changes", use_container_width=True):
@@ -1541,7 +1541,7 @@ def show_loans():
                         loans_df.at[idx, 'principal'] = new_principal
                         loans_df.at[idx, 'Interest'] = new_interest
                         loans_df.at[idx, 'status'] = new_status
-                        loans_df.at[idx, 'Start_Date'] = new_start.strftime("%Y-%m-%d")
+                        loans_df.at[idx, 'start_date'] = new_start.strftime("%Y-%m-%d")
                         loans_df.at[idx, 'End_Date'] = new_end.strftime("%Y-%m-%d")
                         
                         # Recalculate totals safely
@@ -1628,7 +1628,7 @@ def show_loans():
 
                         # 4. CREATE NEW ROW
                         new_row = r.copy()
-                        new_row['Start_Date'] = new_start.strftime('%Y-%m-%d')
+                        new_row['start_date'] = new_start.strftime('%Y-%m-%d')
                         new_row['End_Date'] = new_end.strftime('%Y-%m-%d')
                         new_row['principal'] = new_basis
                         new_row['Interest'] = new_month_interest
@@ -1646,11 +1646,11 @@ def show_loans():
                     combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
 
                     # Ensure proper sorting
-                    if "Start_Date" in combined_df.columns:
-                        combined_df["Start_Date"] = pd.to_datetime(combined_df["Start_Date"], errors="coerce")
+                    if "start_date" in combined_df.columns:
+                        combined_df["start_date"] = pd.to_datetime(combined_df["start_date"], errors="coerce")
 
                     updated_df = combined_df.sort_values(
-                        by=["loan_id", "Start_Date"], 
+                        by=["loan_id", "start_date"], 
                         ascending=[True, True]
                     )
 
