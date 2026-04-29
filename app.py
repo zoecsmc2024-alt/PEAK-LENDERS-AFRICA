@@ -1464,7 +1464,8 @@ def show_loans():
                     # Recalculate Total and Balance for this row
                     new_total = new_principal + new_interest
                     loans_df.at[idx, 'total_repayable'] = new_total
-                    loans_df.at[idx, 'Balance'] = new_total - float(loan_to_edit['amount_paid'])
+                    amount_paid = float(loans_df.at[idx, 'amount_paid']) 
+                    loans_df.at[idx, 'Balance'] = new_total - amount_paid
 
                     # Save to Sheets
                     save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
