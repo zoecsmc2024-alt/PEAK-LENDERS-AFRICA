@@ -545,8 +545,8 @@ def admin_company_registration(supabase):
     st.header("🏢 Register Your Company")
     
     with st.form("company_reg_form", clear_on_submit=False):
-        company_name = st.text_input("Organization Name")
-        admin_name = st.text_input("Admin Full Name")
+        company_name = st.text_input("Organization name")
+        admin_name = st.text_input("Admin Full name")
         email = st.text_input("Business Email").strip().lower()
         password = st.text_input("Password", type="password", help="Minimum 6 characters")
         submit = st.form_submit_button("Create Organization", use_container_width=True)
@@ -593,11 +593,11 @@ def admin_company_registration(supabase):
 # ============================================================
 def view_staff_signup(supabase):
     st.header("🆕 Join Organization")
-    st.info("Ask your Admin for the exact Business Name registered.")
+    st.info("Ask your Admin for the exact Business name registered.")
     
     with st.form("staff_form"):
-        company_input = st.text_input("Company Name to Join").strip()
-        name = st.text_input("Your Full Name")
+        company_input = st.text_input("Company name to Join").strip()
+        name = st.text_input("Your Full name")
         email = st.text_input("Email").strip().lower()
         pwd = st.text_input("Password", type="password")
         submit = st.form_submit_button("Request Access", use_container_width=True)
@@ -639,7 +639,7 @@ def login_page(supabase):
     st.markdown("## PEAK-LENDERS AFRICA 💰")
     
     with st.container():
-        company_name = st.text_input("Business Name").strip()
+        company_name = st.text_input("Business name").strip()
         email = st.text_input("Email").strip().lower()
         pwd = st.text_input("Password", type="password")
         
@@ -789,7 +789,7 @@ def render_sidebar():
             st.stop()
 
         # ==============================
-        # 💎 BRANDING (LOGO & NAME)
+        # 💎 BRANDING (LOGO & name)
         # ==============================
         logo_val = active_company.get('logo_url') if active_company else None
         final_logo_url = None
@@ -933,7 +933,7 @@ def show_borrowers():
             borrowers_df[col] = ""
 
     # ==============================
-    # 🔗 THE NAME FIX: DATA LINKAGE
+    # 🔗 THE name FIX: DATA LINKAGE
     # ==============================
     if not borrowers_df.empty and not loans_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str).str.strip()
@@ -985,12 +985,12 @@ def show_borrowers():
         with st.form("add_borrower_form", clear_on_submit=True):
             st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            name = c1.text_input("Full Name*")
+            name = c1.text_input("Full name*")
             phone = c2.text_input("Phone Number*")
             email = c1.text_input("Email Address")
             nid = c2.text_input("National ID / NIN")
             addr = c1.text_input("Physical Address")
-            nok = c2.text_input("Next of Kin (Name & Contact)")
+            nok = c2.text_input("Next of Kin (name & Contact)")
             
             if st.form_submit_button("🚀 Save borrower Profile", use_container_width=True):
                 if name and phone:
@@ -1005,7 +1005,7 @@ def show_borrowers():
                         st.cache_data.clear()
                         st.rerun()
                 else:
-                    st.error("⚠️ Full Name and Phone Number are required.")
+                    st.error("⚠️ Full name and Phone Number are required.")
 
     with tab_view:
         search = st.text_input("🔍 Search by name or phone...").lower()
@@ -1058,7 +1058,7 @@ def show_borrowers():
                     <table style='width:100%; border-collapse:collapse; font-family:Inter, sans-serif; font-size:13px;'>
                         <thead>
                             <tr style='background:{brand_color}; color:white; text-align:left;'>
-                                <th style='padding:14px;'>borrower Name</th>
+                                <th style='padding:14px;'>borrower name</th>
                                 <th style='padding:14px;'>Phone</th>
                                 <th style='padding:14px;'>National ID</th>
                                 <th style='padding:14px;'>Next of Kin</th>
@@ -1100,7 +1100,7 @@ def show_borrowers():
 
             with st.container(border=True):
                 c1, c2 = st.columns(2)
-                upd_name = c1.text_input("Name", borrower["name"])
+                upd_name = c1.text_input("name", borrower["name"])
                 upd_phone = c2.text_input("Phone", borrower["phone"])
                 upd_email = c1.text_input("Email", borrower["email"])
                 upd_nid = c2.text_input("National ID", borrower.get("national_id", ""))
@@ -1376,7 +1376,7 @@ def show_loans():
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
                 
-                selected_borrower = col1.selectbox("Select borrower", active_borrowers["Name"].unique())
+                selected_borrower = col1.selectbox("Select borrower", active_borrowers["name"].unique())
                 amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
@@ -1418,7 +1418,7 @@ def show_loans():
         if loans_df.empty:
             st.info("No loans available to manage.")
         else:
-            # 1. Selection with Names
+            # 1. Selection with names
             loans_df['display_name'] = loans_df.apply(
                 lambda x: f"ID: {str(x['loan_id']).replace('.0', '')} - {x['borrower']}", 
                 axis=1
@@ -1441,7 +1441,7 @@ def show_loans():
             with st.form("edit_loan_form"):
                 col1, col2 = st.columns(2)
                 
-                new_borrower = col1.text_input("borrower Name", value=loan_to_edit['borrower'])
+                new_borrower = col1.text_input("borrower name", value=loan_to_edit['borrower'])
                 new_principal = col1.number_input("principal (UGX)", value=float(loan_to_edit['principal']))
                 new_interest = col1.number_input("Interest (UGX)", value=float(loan_to_edit['Interest']))
                 
@@ -1645,7 +1645,7 @@ def show_payments():
             df[col] = df[col].astype(str)
 
     # ==============================
-    # 👤 borrower NAME RESOLUTION
+    # 👤 borrower name RESOLUTION
     # ==============================
     if not borrowers_df.empty and "id" in borrowers_df.columns and "name" in borrowers_df.columns:
         borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
@@ -2027,7 +2027,7 @@ def show_calendar():
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- 👤 INJECT borrower NAMES (MAPPING) ---
+    # --- 👤 INJECT borrower nameS (MAPPING) ---
     if borrowers_df is not None and not borrowers_df.empty:
         # Standardizing ID columns for a perfect match
         borrowers_df['id'] = borrowers_df['id'].astype(str)
@@ -2793,7 +2793,7 @@ def show_payroll():
     with tab_process:
         with st.form("new_payroll_form", clear_on_submit=True):
             st.markdown("<h4 style='color: #2B3F87; font-family: sans-serif;'>👤 Employee Details</h4>", unsafe_allow_html=True)
-            name = st.text_input("Employee Name")
+            name = st.text_input("Employee name")
             c1, c2, c3 = st.columns(3)
             f_tin = c1.text_input("TIN")
             f_desig = c2.text_input("Designation")
@@ -3213,7 +3213,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
             ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
             ("ALIGN", (0, 0), (0, -1), "LEFT"),
-            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTname", (0, 0), (-1, 0), "Helvetica-Bold"),
             ("FONTSIZE", (0, 0), (-1, -1), 9), # Slightly smaller font for better fit
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
         ]))
@@ -3266,7 +3266,7 @@ def show_ledger():
     if payments_df is not None and not payments_df.empty:
         payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # Map borrower Names
+    # Map borrower names
     bor_map = {}
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
@@ -3286,7 +3286,7 @@ def show_ledger():
     selected_label = st.selectbox("🎯 Select Loan Account", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
     
-    # Corrected data check to avoid NameError 'df'
+    # Corrected data check to avoid nameError 'df'
     filtered_loan = loans_df[loans_df["id"].astype(str) == raw_id]
     if filtered_loan.empty:
         st.error("Loan data not found.")
@@ -3455,7 +3455,7 @@ def show_settings():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.markdown(f"**Current Business Name:** {Active_company.get('name', 'Unknown')}")
+        st.markdown(f"**Current Business name:** {Active_company.get('name', 'Unknown')}")
 
         new_color = st.color_picker(
             "🎨 Change Brand Color",
