@@ -1619,11 +1619,11 @@ def show_loans():
     # ACTIONS TAB
     # ==============================
     with tab_actions:
-
+    
         if st.button("Run Rollover"):
-
+    
             df = loans_df.copy()
-
+    
             # ==============================
             # SAFE NORMALIZATION
             # ==============================
@@ -1633,16 +1633,16 @@ def show_loans():
                 .str.strip()
                 .str.lower()
             )
-
+    
             df["end_date"] = pd.to_datetime(df["end_date"], errors="coerce")
-
+    
             money_cols = ["principal", "interest", "balance"]
             for col in money_cols:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
+    
             today = pd.Timestamp.today().normalize()
-
+    
             # ==============================
             # FIXED TARGET LOGIC
             # ==============================
@@ -1650,35 +1650,47 @@ def show_loans():
                 (df["balance"] > 0) &
                 (
                     (df["status_check"].isin(["active", "pending"])) &
-                    (df["end_date"].notna()) &
-                    (df["end_date"] <= today)
+                    (
+                        (df["end_date"].notna() & (df["end_date"] <= today)) |
+                        (df["status_check"] == "pending")
+                    )
                 )
             ].copy()
-
+    
             if targets.empty:
                 st.info("No rollover needed.")
             else:
-
+    
                 new_rows = []
-
+    
                 for _, r in targets.iterrows():
-
+    
                     # Mark old row as BCF
                     df.loc[r.name, "status"] = "BCF"
-
+    
                     base_amount = float(r.get("principal", 0)) + float(r.get("interest", 0))
-
+    
                     # Use existing rate if present, fallback to 3%
                     rate = float(r.get("interest_rate", 3))
-
+    
                     new_interest = base_amount * (rate / 100)
                     total = base_amount + new_interest
-
+    
                     start_date = r["end_date"] if pd.notna(r["end_date"]) else today
                     end_date = start_date + pd.DateOffset(months=1)
-
+    
+                    # ==============================
+                    # 🔥 FIX: CLEAN r.to_dict() (NO TIMESTAMP ERRORS)
+                    # ==============================
+                    clean_row = r.to_dict()
+                    for k, v in clean_row.items():
+                        if isinstance(v, pd.Timestamp):
+                            clean_row[k] = v.strftime("%Y-%m-%d")
+                        elif pd.isna(v):
+                            clean_row[k] = None
+    
                     new_rows.append({
-                        **r.to_dict(),
+                        **clean_row,
                         "principal": base_amount,
                         "interest": new_interest,
                         "total_repayable": total,
@@ -1688,15 +1700,15 @@ def show_loans():
                         "start_date": start_date.strftime("%Y-%m-%d"),
                         "end_date": end_date.strftime("%Y-%m-%d")
                     })
-
+    
                 final = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
-
+    
                 # ==============================
                 # CLEAN BEFORE SAVE
                 # ==============================
                 final = final.drop(columns=["status_check"], errors="ignore")
                 final.columns = [str(c).lower().strip().replace(" ", "_") for c in final.columns]
-
+    
                 if save_data_saas("loans", final):
                     st.session_state.refresh_loans = True
                     st.success(f"✅ Rollover completed for {len(new_rows)} loans.")
