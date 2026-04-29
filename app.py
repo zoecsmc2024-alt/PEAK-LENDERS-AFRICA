@@ -1377,13 +1377,7 @@ def show_loans():
                     }).apply(style_loan_table, axis=1),
                     use_container_width=True
                 )
-                final_table["principal"] = final_table["principal"].apply(lambda x: f"{x:,.0f}")
-                final_table["balance"] = final_table["balance"].apply(lambda x: f"{x:,.0f}")
-
-                st.dataframe(
-                    final_table.style.apply(style_loan_table, axis=1),
-                    use_container_width=True
-                )
+                
     # ==============================
     # TAB: NEW LOAN
     # ==============================
