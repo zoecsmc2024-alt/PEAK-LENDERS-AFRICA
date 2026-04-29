@@ -1493,238 +1493,84 @@ def show_loans():
     # ==============================
     # TAB ACTIONS
     # ==============================
-    with tab_actions:
-        st.markdown(
-            "<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>",
-            unsafe_allow_html=True
-        )
+    # 8. --- ROLLOVER BUTTON (The History-Building Engine) ---
+    st.markdown("---") 
+    if st.button("🔄 Execute Monthly Rollover (Compound All)", use_container_width=True):
+        updated_df = loans_work.copy() 
+        new_rows_list = []
+        count = 0
+        
+        try: 
+            # FORCE NUMERIC: This kills the "stubborn balance" issue
+            money_cols = ['Principal', 'Interest', 'Balance', 'Total_Repayable', 'Amount_Paid']
+            for col in money_cols:
+                if col in updated_df.columns:
+                    updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-        # ---------------------------------
-        # ONLY CURRENT LIVE LOANS CAN ROLL
-        # (ACTIVE / PENDING / BCF with bal)
-        # ---------------------------------
-        eligible_loans = loans_df[
-            (loans_df["balance"] > 0) &
-            (~loans_df["status"].astype(str).str.upper().isin(["CLEARED", "CLOSED"]))
-        ].copy()
+            # Targets: Find active 'Pending' rows or Fallback to Overdue
+            targets = updated_df[updated_df['Status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
+            if targets.empty:
+                targets = overdue_df.copy()
 
-        if eligible_loans.empty:
-            st.success("All loans brought up to date! ✨")
-        else:
-            # ---------------------------------
-            # SHOW ONLY LATEST CYCLE PER FAMILY
-            # ---------------------------------
-            latest_ids = (
-                eligible_loans
-                .sort_values(by=["sn", "cycle_no", "start_date"])
-                .groupby("sn")
-                .tail(1)["id"]
-                .tolist()
-            )
+            if targets.empty:
+                st.info("No loans currently require a rollover cycle.")
+            else:
+                for i, r in targets.iterrows():
+                    if i in updated_df.index:
+                        # 1. Archive the old row
+                        updated_df.at[i, 'Status'] = "BCF"
 
-            eligible_loans = eligible_loans[
-                eligible_loans["id"].isin(latest_ids)
-            ].copy()
+                        # 2. THE ULTIMATE MATH FIX
+                        old_p = float(r.get('Principal', 0))
+                        old_i = float(r.get('Interest', 0))
+                        
+                        # New Basis = 514,000 (Old P + Old I)
+                        new_basis = old_p + old_i
+                        # New Interest = 15,420 (3% of 514k)
+                        new_month_interest = new_basis * 0.03
+                        # Final Balance = 529,420
+                        compounded_balance = new_basis + new_month_interest
+                        
+                        # Date Math
+                        orig_end = pd.to_datetime(r['End_Date'], errors='coerce')
+                        new_start = orig_end if pd.notna(orig_end) else datetime.now()
+                        new_end = new_start + pd.DateOffset(months=1)
 
-            roll_map = {
-                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal {row['balance']:,.0f}":
-                row["id"]
-                for _, row in eligible_loans.iterrows()
-            }
+                        # 3. Create New Cycle Row
+                        new_row = r.copy()
+                        new_row['Start_Date'] = new_start.strftime('%Y-%m-%d')
+                        new_row['End_Date'] = new_end.strftime('%Y-%m-%d')
+                        new_row['Principal'] = new_basis
+                        new_row['Interest'] = new_month_interest
+                        new_row['Balance'] = compounded_balance 
+                        new_row['Total_Repayable'] = compounded_balance
+                        new_row['Amount_Paid'] = 0
+                        new_row['Status'] = "Pending" 
+                        new_row['Balance_B/F'] = new_basis 
+                        
+                        new_rows_list.append(new_row)
+                        count += 1
 
-            roll_sel = st.selectbox(
-                "Select Loan to Roll Forward",
-                list(roll_map.keys())
-            )
+                if new_rows_list:
+                    new_entries_df = pd.DataFrame(new_rows_list)
+                    combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
+                    id_col = 'Loan_ID' if 'Loan_ID' in combined_df.columns else 'Loan ID'
+                    updated_df = combined_df.sort_values(by=[id_col, 'Start_Date'], ascending=[True, True])
 
-            selected_id = roll_map[roll_sel]
-
-            loan_to_roll = eligible_loans[
-                eligible_loans["id"] == selected_id
-            ].iloc[0]
-
-            new_interest_rate = st.number_input(
-                "New Monthly Interest (%)",
-                value=3.0,
-                step=0.5
-            )
-
-            if st.button(
-                "🔥 Execute Next Rollover",
-                use_container_width=True
-            ):
-                # STEP 1: FIND ROOT LOAN OF FAMILY
-                root_id = str(loan_to_roll["id"])
-                current_parent = str(
-                    loan_to_roll["parent_loan_id"]
-                ).strip()
-
-                while current_parent not in ["", "None", "nan"]:
-                    parent_match = loans_df[
-                        loans_df["id"].astype(str) == current_parent
-                    ]
-                    if parent_match.empty:
-                        break
-                    root_id = current_parent
-                    current_parent = str(
-                        parent_match.iloc[0]["parent_loan_id"]
-                    ).strip()
-
-                # STEP 2: GET SAME SN FROM ROOT
-                root_match = loans_df[
-                    loans_df["id"].astype(str) == root_id
-                ]
-
-                inherited_sn = ""
-                if not root_match.empty:
-                    inherited_sn = str(
-                        root_match.iloc[0]["sn"]
-                    ).strip()
-
-                # STEP 3: CLOSE CURRENT LIVE CYCLE
-                loans_df.loc[
-                    loans_df["id"] == selected_id,
-                    "status"
-                ] = "BCF"
-
-                save_data_saas("loans", loans_df)
-
-                # STEP 4: DATE ENGINE
-                old_due = pd.to_datetime(
-                    loan_to_roll["end_date"],
-                    errors="coerce"
-                )
-
-                if pd.isna(old_due):
-                    old_due = datetime.now()
-
-                new_start = old_due
-                new_due = old_due + timedelta(days=30)
-
-                # STEP 5: FINANCIALS
-                unpaid = float(loan_to_roll["balance"])
-                new_interest = unpaid * (new_interest_rate / 100)
-                new_total = unpaid + new_interest
-
-                # STEP 6: NEXT CYCLE NUMBER
-                next_cycle = int(loan_to_roll["cycle_no"]) + 1
-
-                # STEP 7: INSERT TRUE ROLLOVER
-                new_row = {
-                    "id": str(uuid.uuid4()),
-                    "sn": inherited_sn,
-                    "loan_id_label": "",
-                    "parent_loan_id": selected_id,
-                    "borrower_id": loan_to_roll["borrower_id"],
-                    "borrower": loan_to_roll["borrower"],
-                    "loan_type": loan_to_roll["loan_type"],
-                    "principal": unpaid,
-                    "interest": new_interest,
-                    "total_repayable": new_total,
-                    "amount_paid": 0.0,
-                    "balance": new_total,
-                    "status": "PENDING",
-                    "start_date": str(new_start.date()),
-                    "end_date": str(new_due.date()),
-                    "cycle_no": next_cycle,
-                    "tenant_id": get_current_tenant()
-                }
-
-                if save_data(
-                    "loans",
-                    pd.DataFrame([new_row])
-                ):
-                    st.success(f"✅ Cycle {next_cycle} created successfully.")
-                    st.cache_data.clear()
+                # 6. --- THE CORRECTED SAVE BLOCK ---
+                # We use .fillna(0) to ensure Google Sheets doesn't crash on empty numbers
+                save_ready_df = updated_df.fillna(0).copy()
+                save_ready_df.columns = [col.replace("_", " ") for col in save_ready_df.columns]
+                
+                if save_data("Loans", save_ready_df):
+                    st.success(f"✅ Compounding Successful! Added {count} rows.")
+                    st.cache_data.clear() 
+                    st.session_state.loans = get_cached_data("Loans")
                     st.rerun()
+        except Exception as e:
+            st.error(f"🚨 Rollover Error: {str(e)}")
 
-    # ==============================
-    # TAB MANAGE
-    # ==============================
-    with tab_manage:
-        if not loans_df.empty:
-            edit_map = {
-                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}":
-                row["id"]
-                for _, row in loans_df.iterrows()
-            }
-
-            selected = st.selectbox(
-                "Select Loan to Edit",
-                list(edit_map.keys())
-            )
-
-            target_id = edit_map[selected]
-
-            loan_match = loans_df[
-                loans_df["id"] == target_id
-            ]
-
-            if loan_match.empty:
-                st.error("Loan not found.")
-                st.stop()
-
-            loan_to_edit = loan_match.iloc[0]
-
-            with st.form(f"edit_form_{target_id}"):
-                e_princ = st.number_input(
-                    "Principal",
-                    value=float(
-                        loan_to_edit["principal"]
-                    )
-                )
-
-                status_options = [
-                    "ACTIVE",
-                    "PENDING",
-                    "CLEARED",
-                    "BCF",
-                    "CLOSED"
-                ]
-
-                current_stat = str(
-                    loan_to_edit["status"]
-                ).upper()
-
-                idx = (
-                    status_options.index(current_stat)
-                    if current_stat in status_options
-                    else 0
-                )
-
-                e_stat = st.selectbox(
-                    "Status",
-                    status_options,
-                    index=idx
-                )
-
-                if st.form_submit_button(
-                    "💾 Save Changes"
-                ):
-                    supabase.table("loans").update({
-                        "principal": e_princ,
-                        "status": e_stat
-                    }).eq(
-                        "id",
-                        target_id
-                    ).execute()
-
-                    st.success("✅ Updated!")
-                    st.cache_data.clear()
-                    st.rerun()
-
-            if st.button(
-                "🗑️ Delete Loan Permanently",
-                use_container_width=True
-            ):
-                supabase.table("loans").delete().eq(
-                    "id",
-                    target_id
-                ).execute()
-
-                st.warning("Loan Deleted.")
-                st.cache_data.clear()
-                st.rerun()
+    
     
 import pandas as pd
 from datetime import datetime
