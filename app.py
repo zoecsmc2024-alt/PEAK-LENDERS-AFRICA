@@ -1215,7 +1215,11 @@ def save_data_saas(table_name, df):
     if tenant_id:
         df["tenant_id"] = str(tenant_id).strip()
 
-    # 🚨 IMPORTANT: NEVER rename columns here
+    # 🚨 HARDEN: enforce correct DB-safe column types BEFORE saving
+    if "loan_id" in df.columns:
+        df["loan_id"] = pd.to_numeric(df["loan_id"], errors="coerce").fillna(0).astype("int64")
+
+    # DO NOT rename columns EVER
     return save_data(table_name, df)
 
 
@@ -1302,7 +1306,7 @@ def show_loans():
         if not loans_df.empty:
             display_df = loans_df.copy()
 
-            display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype(int)
+            display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype("int64")
 
             if "start_date" in display_df.columns:
                 display_df["start_date"] = pd.to_datetime(display_df["start_date"], errors="coerce")
@@ -1366,6 +1370,13 @@ def show_loans():
                 final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{int(x):04d}")
 
                 # 🔥 ADD COMMAS (THIS WAS MISSING)
+                st.dataframe(
+                    final_table.style.format({
+                        "principal": "{:,.0f}",
+                        "balance": "{:,.0f}"
+                    }).apply(style_loan_table, axis=1),
+                    use_container_width=True
+                )
                 final_table["principal"] = final_table["principal"].apply(lambda x: f"{x:,.0f}")
                 final_table["balance"] = final_table["balance"].apply(lambda x: f"{x:,.0f}")
 
@@ -1404,7 +1415,9 @@ def show_loans():
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     if amount > 0 and date_due > date_issued:
                         tenant_id = get_current_tenant()
-                        last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce').max()
+                        last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce')
+                        last_id = last_id[last_id > 0].max()
+
                         new_id = int(last_id + 1) if pd.notna(last_id) else 1
 
                         new_loan = pd.DataFrame([{
