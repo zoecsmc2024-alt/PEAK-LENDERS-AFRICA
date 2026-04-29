@@ -950,8 +950,8 @@ def show_borrowers():
     risk_map = {}
     if not loans_df.empty:
         loans_df["balance"] = safe_numeric(loans_df, "balance")
-        # Handle different dnd_date column naming possibilities
-        date_col = "dnd_date" if "dnd_date" in loans_df.columns else "due_date"
+        # Handle different end_date column naming possibilities
+        date_col = "end_date" if "end_date" in loans_df.columns else "due_date"
         loans_df["parsed_due_date"] = pd.to_datetime(loans_df[date_col], errors="coerce")
 
         today = pd.Timestamp.today().normalize()
@@ -1126,7 +1126,7 @@ def show_borrowers():
                             "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
                             "start_date": st.column_config.DateColumn("Date Issued"),
-                            "dnd_date": st.column_config.DateColumn("Due Date"),
+                            "end_date": st.column_config.DateColumn("Due Date"),
                         }
                     )
                     
@@ -1254,7 +1254,7 @@ def show_loans():
         loans_df = pd.DataFrame(columns=[
             "loan_id", "borrower", "principal", "interest",
             "total_repayable", "amount_paid", "Balance",
-            "status", "start_date", "dnd_date", "tenant_id"
+            "status", "start_date", "end_date", "tenant_id"
         ])
     
     # Normalize headers
@@ -1378,7 +1378,7 @@ def show_loans():
                 base_cols = ["loan_id", "borrower", "principal", "Balance"]
 
                 date_cols = []
-                for d_col in ["start_date", "dnd_date"]:
+                for d_col in ["start_date", "end_date"]:
                     if d_col in active_view.columns:
                         date_cols.append(d_col)
                 
@@ -1456,7 +1456,7 @@ def show_loans():
                             "Balance": float(total_due),
                             "status": "Active",
                             "start_date": date_issued.strftime("%Y-%m-%d"),
-                            "dnd_date": date_due.strftime("%Y-%m-%d")
+                            "end_date": date_due.strftime("%Y-%m-%d")
                         }])
                         
                         updated_df = pd.concat([loans_df, new_loan], ignore_index=True).fillna(0)
@@ -1528,7 +1528,7 @@ def show_loans():
                 new_status = col2.selectbox("status", status_options, index=status_options.index(current_status))
                 
                 new_start = col2.date_input("Start Date", value=pd.to_datetime(loan_to_edit['start_date']))
-                new_end = col2.date_input("End Date", value=pd.to_datetime(loan_to_edit['dnd_date']))
+                new_end = col2.date_input("End Date", value=pd.to_datetime(loan_to_edit['end_date']))
 
                 if st.form_submit_button("💾 Save Changes", use_container_width=True):
                     if new_end <= new_start:
@@ -1542,7 +1542,7 @@ def show_loans():
                         loans_df.at[idx, 'interest'] = new_interest
                         loans_df.at[idx, 'status'] = new_status
                         loans_df.at[idx, 'start_date'] = new_start.strftime("%Y-%m-%d")
-                        loans_df.at[idx, 'dnd_date'] = new_end.strftime("%Y-%m-%d")
+                        loans_df.at[idx, 'end_date'] = new_end.strftime("%Y-%m-%d")
                         
                         # Recalculate totals safely
                         new_total = new_principal + new_interest
@@ -1622,14 +1622,14 @@ def show_loans():
                         compounded_balance = new_basis + new_month_interest
                         
                         # 3. SAFE DATE HANDLING
-                        orig_end = pd.to_datetime(r.get('dnd_date'), errors='coerce')
+                        orig_end = pd.to_datetime(r.get('end_date'), errors='coerce')
                         new_start = orig_end if pd.notna(orig_end) else pd.Timestamp.now()
                         new_end = new_start + pd.DateOffset(months=1)
 
                         # 4. CREATE NEW ROW
                         new_row = r.copy()
                         new_row['start_date'] = new_start.strftime('%Y-%m-%d')
-                        new_row['dnd_date'] = new_end.strftime('%Y-%m-%d')
+                        new_row['end_date'] = new_end.strftime('%Y-%m-%d')
                         new_row['principal'] = new_basis
                         new_row['interest'] = new_month_interest
                         new_row['Balance'] = compounded_balance 
@@ -2134,7 +2134,7 @@ def show_calendar():
         loans_df['borrower'] = "Unknown borrower"
 
     # --- 🛡️ STANDARDIZATION ---
-    loans_df["dnd_date"] = pd.to_datetime(loans_df["dnd_date"], errors="coerce")
+    loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
     loans_df["total_repayable"] = pd.to_numeric(loans_df["total_repayable"], errors="coerce").fillna(0)
     
     today = pd.Timestamp.today().normalize()
@@ -2145,17 +2145,17 @@ def show_calendar():
     # --- 🎨 VISUAL CALENDAR WIDGET ---
     calendar_events = []
     for _, r in active_loans.iterrows():
-        if pd.notna(r['dnd_date']):
+        if pd.notna(r['end_date']):
             # Color logic: Red for overdue, Blue for upcoming
-            is_overdue = r['dnd_date'].date() < today.date()
+            is_overdue = r['end_date'].date() < today.date()
             ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
             
             # Construct rich event title
             amount_fmt = f"UGX {float(r['total_repayable']):,.0f}"
             calendar_events.append({
                 "title": f"{amount_fmt} - {r['borrower']}",
-                "start": r['dnd_date'].strftime("%Y-%m-%d"),
-                "end": r['dnd_date'].strftime("%Y-%m-%d"),
+                "start": r['end_date'].strftime("%Y-%m-%d"),
+                "end": r['end_date'].strftime("%Y-%m-%d"),
                 "color": ev_color,
                 "allDay": True,
             })
@@ -2172,12 +2172,12 @@ def show_calendar():
     st.markdown("---")
 
     # 2. 📊 DAILY WORKLOAD METRICS
-    due_today_df = active_loans[active_loans["dnd_date"].dt.date == today.date()]
+    due_today_df = active_loans[active_loans["end_date"].dt.date == today.date()]
     upcoming_df = active_loans[
-        (active_loans["dnd_date"] > today) & 
-        (active_loans["dnd_date"] <= today + pd.Timedelta(days=7))
+        (active_loans["end_date"] > today) & 
+        (active_loans["end_date"] <= today + pd.Timedelta(days=7))
     ]
-    overdue_count = active_loans[active_loans["dnd_date"] < today].shape[0]
+    overdue_count = active_loans[active_loans["end_date"] < today].shape[0]
 
     m1, m2, m3 = st.columns(3)
     
@@ -2189,7 +2189,7 @@ def show_calendar():
     st.markdown("---")
     st.markdown("<h4 style='color: #2B3F87;'>📊 Revenue Forecast (This Month)</h4>", unsafe_allow_html=True)
     
-    this_month_df = active_loans[active_loans["dnd_date"].dt.month == today.month]
+    this_month_df = active_loans[active_loans["end_date"].dt.month == today.month]
     total_expected = this_month_df["total_repayable"].sum()
     
     f1, f2 = st.columns(2)
@@ -2226,9 +2226,9 @@ def show_calendar():
 
     # 5. 🔴 OVERDUE FOLLOW-UP
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
-    overdue_df = active_loans[active_loans["dnd_date"] < today].copy()
+    overdue_df = active_loans[active_loans["end_date"] < today].copy()
     if not overdue_df.empty:
-        overdue_df["days_late"] = (today - overdue_df["dnd_date"]).dt.days
+        overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
         od_rows = ""
         for _, r in overdue_df.iterrows():
             late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
@@ -3839,7 +3839,7 @@ def show_dashboard_view():
 
         today = pd.Timestamp.now().normalize()
 
-        loans_df["due_date_dt"] = safe_date(loans_df, ["dnd_date", "due_date"])
+        loans_df["due_date_dt"] = safe_date(loans_df, ["end_date", "due_date"])
 
         overdue_mask = (
             (loans_df["due_date_dt"] < today)
