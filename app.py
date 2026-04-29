@@ -1553,7 +1553,7 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # TAB: ACTIONS (ROLLOVER ENGINE)
+    # TAB: ACTIONS
     # ==============================
     with tab_actions:
         st.markdown("### 🔄 Loan Lifecycle Operations")
@@ -1565,27 +1565,36 @@ def show_loans():
             if st.session_state.rollover_done:
                 st.warning("⚠️ Rollover already executed in this session.")
             else:
-                st.session_state.rollover_done = True
-                updated_df = loans_df.copy() 
+                # 1. Initialize logic variables
                 new_rows_list = []
                 count = 0
+                updated_df = loans_df.copy()
+
+                # 2. Pre-processing & Normalization
+                updated_df['end_date'] = pd.to_datetime(updated_df['end_date'], errors='coerce')
+                updated_df['status'] = updated_df['status'].astype(str).str.strip().str.lower()
                 
-                # FORCE NUMERIC
                 money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
                 for col in money_cols:
                     if col in updated_df.columns:
                         updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-                targets = updated_df[(updated_df['status'] == "Pending") & (updated_df['balance'] > 0)].copy()
+                # 3. Filter targets: Pending loans, balance > 0, and end_date before today
+                today = pd.Timestamp.today().normalize()
+                targets = updated_df[
+                    (updated_df['status'] == "pending") & 
+                    (updated_df['balance'] > 0) & 
+                    (updated_df['end_date'] < today)
+                ].copy()
 
                 if targets.empty:
                     st.info("No loans currently require a rollover cycle.")
                 else:
                     for i, r in targets.iterrows():
-                        # 1. Archive old row
-                        updated_df.at[i, 'status'] = "BCF"
+                        # Archive old row
+                        updated_df.at[i, 'status'] = "bcf" # Keeping lowercase for DB consistency
 
-                        # 2. Compounding Logic
+                        # Compounding Logic
                         old_p = float(r.get('principal', 0))
                         old_i = float(r.get('interest', 0))
                         new_basis = old_p + old_i
@@ -1593,29 +1602,39 @@ def show_loans():
                         new_month_interest = new_basis * (rate / 100)
                         compounded_balance = new_basis + new_month_interest
                         
-                        # 3. Dates
+                        # Date Calculations
                         orig_end = pd.to_datetime(r.get('end_date'), errors='coerce')
                         new_start = orig_end if pd.notna(orig_end) else pd.Timestamp.today()
                         new_end = new_start + pd.DateOffset(months=1)
 
-                        # 4. Create new rollover row
+                        # Create new rollover row
                         new_row = r.copy()
                         new_row['principal'] = new_basis
                         new_row['interest'] = new_month_interest
                         new_row['balance'] = compounded_balance
-                        new_row['start_date'] = new_start
-                        new_row['end_date'] = new_end
-                        new_row['status'] = "Pending"
+                        new_row['start_date'] = new_start.strftime("%Y-%m-%d")
+                        new_row['end_date'] = new_end.strftime("%Y-%m-%d")
+                        new_row['status'] = "pending"
                         
                         new_rows_list.append(new_row)
                         count += 1
 
+                # 4. Final Save and UI Refresh
                 if new_rows_list:
-                    updated_df = pd.concat([updated_df, pd.DataFrame(new_rows_list)], ignore_index=True)
-                    st.success(f"✅ Rollover completed for {count} loans.")
+                    final_df = pd.concat([updated_df, pd.DataFrame(new_rows_list)], ignore_index=True)
+                    
+                    # Clean columns for database save (no spaces, all lowercase)
+                    final_df.columns = [c.lower().replace(" ", "_") for c in final_df.columns]
+                    if "display_name" in final_df.columns:
+                        final_df = final_df.drop(columns=["display_name"])
+
+                    if save_data_saas("loans", final_df):
+                        st.session_state.rollover_done = True
+                        st.success(f"✅ Rollover completed for {count} loans.")
+                        st.session_state.loans = get_data("loans")
+                        st.rerun()
                 else:
                     st.info("No loans were rolled over.")
-
     
     
 import pandas as pd
