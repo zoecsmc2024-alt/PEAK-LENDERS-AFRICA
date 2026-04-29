@@ -1248,7 +1248,7 @@ def show_loans():
     
     # Ensure loans_df is valid
     if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=["Loan_ID", "Borrower", "Principal", "Interest", "total_repayable", "amount_paid", "Balance", "status", "Start_Date", "End_Date"])
+        loans_df = pd.DataFrame(columns=["loan_id", "Borrower", "Principal", "Interest", "total_repayable", "amount_paid", "Balance", "status", "Start_Date", "End_Date"])
     
     # Normalize headers
     loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
@@ -1284,7 +1284,7 @@ def show_loans():
         if not loans_df.empty:
             display_df = loans_df.copy()
             # Handle Loan ID formatting
-            display_df["Loan_ID"] = display_df["Loan_ID"].astype(str).str.replace(".0", "", regex=False)
+            display_df["loan_id"] = display_df["loan_id"].astype(str).str.replace(".0", "", regex=False)
             
             active_view = display_df.copy()
 
@@ -1292,14 +1292,14 @@ def show_loans():
                 st.info("ℹ️ No loan records found.")
             else:
                 # 1. SELECT LOAN FOR INSPECTION CARDS
-                sel_id = st.selectbox("🔍 Select Loan to Inspect", active_view["Loan_ID"].unique(), key="inspect_sel_v5")
+                sel_id = st.selectbox("🔍 Select Loan to Inspect", active_view["loan_id"].unique(), key="inspect_sel_v5")
                 
                 # 2. BRANDED METRIC CARDS (Restored Peach/Navy Blend)
                 c1, c2, c3 = st.columns(3)
                 
                 # --- THE FIX: ENSURE WE GRAB THE LATEST ROLLED-OVER RECORD ---
                 # We filter for the selected ID and sort by Start_Date to get the newest entry
-                loan_history = active_view[active_view["Loan_ID"] == sel_id]
+                loan_history = active_view[active_view["loan_id"] == sel_id]
                 
                 if not loan_history.empty:
                     # .iloc[-1] grabs the very last record (the current cycle)
@@ -1343,7 +1343,7 @@ def show_loans():
                     return styles
 
                 # 4. PREP DATA
-                base_cols = ["Loan_ID", "Borrower", "Principal", "Balance"]
+                base_cols = ["loan_id", "Borrower", "Principal", "Balance"]
                 date_cols = []
                 for d_col in ["Start_Date", "Start Date", "End_Date", "End Date"]:
                     if d_col in active_view.columns: date_cols.append(d_col)
@@ -1391,11 +1391,11 @@ def show_loans():
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     if amount > 0:
-                        last_id = pd.to_numeric(loans_df["Loan_ID"], errors='coerce').max()
+                        last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce').max()
                         new_id = int(last_id + 1) if pd.notna(last_id) else 1
                         
                         new_loan = pd.DataFrame([{
-                            "Loan_ID": new_id, "Borrower": selected_borrower, "Type": l_type,
+                            "loan_id": new_id, "Borrower": selected_borrower, "Type": l_type,
                             "Principal": float(amount), "Interest": float(interest),
                             "total_repayable": float(total_due), "amount_paid": 0.0,
                             "status": "Active", "Start_Date": date_issued.strftime("%Y-%m-%d"),
@@ -1420,7 +1420,7 @@ def show_loans():
         else:
             # 1. Selection with Names
             loans_df['display_name'] = loans_df.apply(
-                lambda x: f"ID: {str(x['Loan_ID']).replace('.0', '')} - {x['Borrower']}", 
+                lambda x: f"ID: {str(x['loan_id']).replace('.0', '')} - {x['Borrower']}", 
                 axis=1
             )
             
@@ -1434,7 +1434,7 @@ def show_loans():
             
             # 2. FETCH THE DATA FOR THE FORM
             # We grab the specific row to pre-fill the edit form
-            loan_to_edit = loans_df[loans_df["Loan_ID"].astype(str).str.replace(".0", "", regex=False) == clean_id].iloc[0]
+            loan_to_edit = loans_df[loans_df["loan_id"].astype(str).str.replace(".0", "", regex=False) == clean_id].iloc[0]
 
             # 3. --- THE RESTORED EDIT FORM ---
             st.markdown(f"#### 🛠️ Edit Loan #{clean_id}")
@@ -1452,7 +1452,7 @@ def show_loans():
 
                 if st.form_submit_button("💾 Save Changes", use_container_width=True):
                     # Update the dataframe
-                    idx = loans_df[loans_df["Loan_ID"].astype(str).str.replace(".0", "", regex=False) == clean_id].index[0]
+                    idx = loans_df[loans_df["loan_id"].astype(str).str.replace(".0", "", regex=False) == clean_id].index[0]
                     
                     loans_df.at[idx, 'Borrower'] = new_borrower
                     loans_df.at[idx, 'Principal'] = new_principal
@@ -1480,7 +1480,7 @@ def show_loans():
             st.markdown("---")
             st.warning(f"⚠️ Dangerous Area: Manage Loan #{clean_id}")
             if st.button("🗑️ Delete Permanently", use_container_width=True, key="del_loan_btn"):
-                new_df = loans_df[loans_df["Loan_ID"].astype(str).str.replace(".0", "", regex=False) != clean_id]
+                new_df = loans_df[loans_df["loan_id"].astype(str).str.replace(".0", "", regex=False) != clean_id]
                 
                 final_save_df = new_df.drop(columns=['display_name'], errors='ignore').copy()
                 final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
@@ -1554,7 +1554,7 @@ def show_loans():
                 if new_rows_list:
                     new_entries_df = pd.DataFrame(new_rows_list)
                     combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
-                    id_col = 'Loan_ID' if 'Loan_ID' in combined_df.columns else 'Loan ID'
+                    id_col = 'loan_id' if 'loan_id' in combined_df.columns else 'Loan ID'
                     updated_df = combined_df.sort_values(by=[id_col, 'Start_Date'], ascending=[True, True])
 
                 # 6. --- THE CORRECTED SAVE BLOCK ---
