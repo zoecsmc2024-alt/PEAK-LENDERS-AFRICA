@@ -1496,7 +1496,7 @@ def show_loans():
     # 8. --- ROLLOVER BUTTON (The History-Building Engine) ---
     st.markdown("---") 
     if st.button("🔄 Execute Monthly Rollover (Compound All)", use_container_width=True):
-        updated_df = loans_work.copy() 
+        updated_df = loans_df.copy() 
         new_rows_list = []
         count = 0
         
