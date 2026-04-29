@@ -1308,105 +1308,105 @@ def show_loans():
     )
 
     # ==============================
-# VIEW TAB
-# ==============================
-with tab_view:
-
-    if loans_df.empty:
-        st.info("No loans found.")
-        return
-
-    display_df = loans_df.copy()
-
-    for col in ["principal", "balance", "amount_paid"]:
-        if col in display_df.columns:
-            display_df[col] = pd.to_numeric(display_df[col], errors="coerce").fillna(0)
-
-    display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype(int)
-
-    loan_options = sorted(display_df["loan_id"].unique())
-
-    sel_id = st.selectbox(
-        "🔍 Select Loan",
-        loan_options,
-        format_func=lambda x: f"{int(x):04d}"
-    )
-
-    loan_history = display_df[display_df["loan_id"] == sel_id]
-
-    latest = loan_history.iloc[-1] if not loan_history.empty else {}
-
-    c1, c2, c3 = st.columns(3)
-
-    c1.metric("Paid", f"{float(latest.get('amount_paid', 0)):,.0f}")
-    c2.metric("Balance", f"{float(latest.get('balance', 0)):,.0f}")
-    c3.metric("Status", str(latest.get("status", "N/A")))
-
+    # VIEW TAB
     # ==============================
-    # 🧠 LOAN HEALTH ENGINE (NEW)
-    # ==============================
-    def loan_health(row):
-        bal = float(row.get("balance", 0))
-        total = float(row.get("total_repayable", 1))
-        if total == 0:
-            return 0
-        return max(0, 100 - (bal / total * 100))
+    with tab_view:
 
-    display_df["health"] = display_df.apply(loan_health, axis=1)
+        if loans_df.empty:
+            st.info("No loans found.")
+            return
 
-    # Status icon mapping
-    def status_icon(status):
-        status = str(status).lower()
-        if status == "active":
-            return "🟢 Active"
-        elif status == "closed":
-            return "⚫ Closed"
-        elif status == "overdue":
-            return "🔴 Overdue"
-        elif status == "pending":
-            return "🟡 Pending"
-        elif status == "bcf":
-            return "🟣 BCF"
-        return "⚪ Unknown"
+        display_df = loans_df.copy()
 
-    display_df["status"] = display_df["status"].apply(status_icon)
+        for col in ["principal", "balance", "amount_paid"]:
+            if col in display_df.columns:
+                display_df[col] = pd.to_numeric(display_df[col], errors="coerce").fillna(0)
 
-    # ==============================
-    # 🎨 SAFE ROW STYLING (RESTORED + UPGRADED)
-    # ==============================
-    def style_loan_table(row):
-        status = str(row.get("status", "")).lower()
+        display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype(int)
 
-        if "active" in status:
-            bg = "#E3F2FD"
-        elif "closed" in status:
-            bg = "#E8F5E9"
-        elif "overdue" in status:
-            bg = "#FFEBEE"
-        elif "pending" in status:
-            bg = "#FFF3E0"
-        elif "bcf" in status:
-            bg = "#F3E5F5"
-        else:
-            bg = "#FFFFFF"
+        loan_options = sorted(display_df["loan_id"].unique())
 
-        return [f"background-color: {bg};"] * len(row)
+        sel_id = st.selectbox(
+            "🔍 Select Loan",
+            loan_options,
+            format_func=lambda x: f"{int(x):04d}"
+        )
 
-    # ==============================
-    # FINAL DISPLAY TABLE
-    # ==============================
-    st.dataframe(
-        display_df.style
-        .format({
-            "principal": "{:,.0f}",
-            "interest": "{:,.0f}",
-            "amount_paid": "{:,.0f}",
-            "balance": "{:,.0f}",
-            "health": "{:.0f}%",
-        })
-        .apply(style_loan_table, axis=1),
-        use_container_width=True
-    )
+        loan_history = display_df[display_df["loan_id"] == sel_id]
+
+        latest = loan_history.iloc[-1] if not loan_history.empty else {}
+
+        c1, c2, c3 = st.columns(3)
+
+        c1.metric("Paid", f"{float(latest.get('amount_paid', 0)):,.0f}")
+        c2.metric("Balance", f"{float(latest.get('balance', 0)):,.0f}")
+        c3.metric("Status", str(latest.get("status", "N/A")))
+
+        # ==============================
+        # 🧠 LOAN HEALTH ENGINE (NEW)
+        # ==============================
+        def loan_health(row):
+            bal = float(row.get("balance", 0))
+            total = float(row.get("total_repayable", 1))
+            if total == 0:
+                return 0
+            return max(0, 100 - (bal / total * 100))
+
+        display_df["health"] = display_df.apply(loan_health, axis=1)
+
+        # Status icon mapping
+        def status_icon(status):
+            status = str(status).lower()
+            if status == "active":
+                return "🟢 Active"
+            elif status == "closed":
+                return "⚫ Closed"
+            elif status == "overdue":
+                return "🔴 Overdue"
+            elif status == "pending":
+                return "🟡 Pending"
+            elif status == "bcf":
+                return "🟣 BCF"
+            return "⚪ Unknown"
+
+        display_df["status"] = display_df["status"].apply(status_icon)
+
+        # ==============================
+        # 🎨 SAFE ROW STYLING (RESTORED + UPGRADED)
+        # ==============================
+        def style_loan_table(row):
+            status = str(row.get("status", "")).lower()
+
+            if "active" in status:
+                bg = "#E3F2FD"
+            elif "closed" in status:
+                bg = "#E8F5E9"
+            elif "overdue" in status:
+                bg = "#FFEBEE"
+            elif "pending" in status:
+                bg = "#FFF3E0"
+            elif "bcf" in status:
+                bg = "#F3E5F5"
+            else:
+                bg = "#FFFFFF"
+
+            return [f"background-color: {bg};"] * len(row)
+
+        # ==============================
+        # FINAL DISPLAY TABLE
+        # ==============================
+        st.dataframe(
+            display_df.style
+            .format({
+                "principal": "{:,.0f}",
+                "interest": "{:,.0f}",
+                "amount_paid": "{:,.0f}",
+                "balance": "{:,.0f}",
+                "health": "{:.0f}%",
+            })
+            .apply(style_loan_table, axis=1),
+            use_container_width=True
+        )
     # ==============================
     # ADD TAB
     # ==============================
