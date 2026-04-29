@@ -1239,10 +1239,9 @@ def show_loans():
     if "loans" in st.session_state and not st.session_state.loans.empty:
         loans_df = st.session_state.loans.copy()
     else:
-        loans_df = get_data("loans")   # ✅ FIX: use tenant-safe loader
+        loans_df = get_data("loans")
         st.session_state.loans = loans_df.copy()
 
-    # Borrowers (also tenant-safe)
     borrowers_df = get_data("borrowers")
     
     if borrowers_df is not None and not borrowers_df.empty:
@@ -1261,7 +1260,6 @@ def show_loans():
             "status", "start_date", "end_date", "tenant_id"
         ])
     
-    # Normalize headers
     loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
 
     # ==============================
@@ -1273,17 +1271,17 @@ def show_loans():
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
 
     # ==============================
-    # 4. SAFE balance CALCULATION
+    # 4. SAFE BALANCE CALCULATION
     # ==============================
     def compute_balance(row):
         if str(row.get("status")) == "BCF":
-            return row.get("balance", 0)  # preserve historical rows
+            return row.get("balance", 0)
         return row.get("total_repayable", 0) - row.get("amount_paid", 0)
 
     loans_df["balance"] = loans_df.apply(compute_balance, axis=1)
 
     # ==============================
-    # ✅ AUTO-CLOSE ENGINE
+    # AUTO-CLOSE ENGINE
     # ==============================
     if not loans_df.empty:
         loans_df["balance"] = loans_df["balance"].clip(lower=0)
@@ -1301,95 +1299,65 @@ def show_loans():
     )
 
     # ==============================
-    # TAB: PORTFOLIO VIEW (Restored Peach Luxe Theme)
+    # TAB VIEW
     # ==============================
     with tab_view:
         if not loans_df.empty:
             display_df = loans_df.copy()
 
-            # Normalize Loan ID (keep numeric but display padded)
             display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype(int)
 
-            # Ensure proper date sorting
             if "start_date" in display_df.columns:
                 display_df["start_date"] = pd.to_datetime(display_df["start_date"], errors="coerce")
 
             active_view = display_df.copy()
 
-            if active_view.empty:
-                st.info("ℹ️ No loan records found.")
-            else:
-                # 1. SELECT LOAN FOR INSPECTION CARDS
-                loan_options = active_view["loan_id"].dropna().unique()
-                loan_options_sorted = sorted(loan_options)
+            if not active_view.empty:
+
+                loan_options = sorted(active_view["loan_id"].dropna().unique())
 
                 sel_id = st.selectbox(
                     "🔍 Select Loan to Inspect",
-                    loan_options_sorted,
+                    loan_options,
                     format_func=lambda x: f"{int(x):04d}",
                     key="inspect_sel_v5"
                 )
-                
-                # 2. BRANDED METRIC CARDS
+
                 c1, c2, c3 = st.columns(3)
-                
-                # Filter and sort to get latest cycle
+
                 loan_history = active_view[active_view["loan_id"] == sel_id]
 
                 if not loan_history.empty:
                     loan_history = loan_history.sort_values("start_date")
                     latest_info = loan_history.iloc[-1]
-                    
+
                     rec_val = float(latest_info.get('amount_paid', 0))
                     out_val = float(latest_info.get('balance', 0))
                     stat_val = str(latest_info.get('status', 'Active')).upper()
-
-                    if stat_val == "CLOSED":
-                        out_val = 0
                 else:
                     rec_val, out_val, stat_val = 0, 0, "N/A"
 
-                card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);"
+                card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F;"
                 text_style = "margin:0; color:#0A192F;"
 
-                c1.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">✅ RECEIVED</p><h3 style="{text_style} font-size:18px;">{rec_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-                c2.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">🚨 OUTSTANDING</p><h3 style="{text_style} font-size:18px;">{out_val:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
-                c3.markdown(f"""<div style="{card_style}"><p style="{text_style} font-size:11px; font-weight:bold;">📑 STATUS</p><h3 style="{text_style} font-size:18px;">{stat_val}</h3></div>""", unsafe_allow_html=True)
+                c1.markdown(f"""<div style="{card_style}"><h3>{rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
+                c2.markdown(f"""<div style="{card_style}"><h3>{out_val:,.0f}</h3></div>""", unsafe_allow_html=True)
+                c3.markdown(f"""<div style="{card_style}"><h3>{stat_val}</h3></div>""", unsafe_allow_html=True)
 
-                st.markdown("<br>", unsafe_allow_html=True)
-
-                # --- 3. FULL ROW COLOR STYLING ---
                 def style_loan_table(row):
                     status = str(row.get("status", "Active"))
-                    if status == "Active": bg = "#E3F2FD"      # Light Blue
-                    elif status == "Closed": bg = "#E8F5E9"    # Light Green
-                    elif status == "Overdue": bg = "#FFEBEE"   # Light Red
-                    elif status == "Pending": bg = "#FFF3E0"   # Light Orange
-                    elif status == "BCF": bg = "#F3E5F5"       # Light Purple
-                    elif "Rolled" in status: bg = "#FFF8E1"    # Amber
-                    else: bg = "#FFFFFF"                       # White
-                    return [f'background-color: {bg}; color: #0A192F;' for _ in row]
+                    if status == "Active": bg = "#E3F2FD"
+                    elif status == "Closed": bg = "#E8F5E9"
+                    elif status == "Overdue": bg = "#FFEBEE"
+                    elif status == "Pending": bg = "#FFF3E0"
+                    elif status == "BCF": bg = "#F3E5F5"
+                    else: bg = "#FFFFFF"
+                    return [f'background-color: {bg};' for _ in row]
 
-                # 4. PREP DATA
-                base_cols = ["loan_id", "borrower", "principal", "balance"]
-                date_cols = [d for d in ["start_date", "end_date"] if d in active_view.columns]
-                show_cols = base_cols + date_cols + ["status"]
-                final_table = active_view[show_cols].copy()
-
-                # Format loan_id for display (preserving underlying numeric for sorting)
+                final_table = active_view[["loan_id", "borrower", "principal", "balance", "status"]].copy()
                 final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{int(x):04d}")
 
-                # 5. RENDER TABLE WITH STYLING
-                # Note: .style must be applied before final rendering
-                st.dataframe(
-                    final_table.style.apply(style_loan_table, axis=1).format({
-                        "principal": "{:,.0f}",
-                        "balance": "{:,.0f}"
-                    }),
-                    use_container_width=True,
-                    hide_index=True
-                )
-
+                st.dataframe(final_table.style.apply(style_loan_table, axis=1), use_container_width=True)
     # ==============================
     # TAB: NEW LOAN
     # ==============================
