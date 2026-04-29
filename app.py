@@ -1510,7 +1510,7 @@ def show_loans():
             # Targets: Find active 'Pending' rows or Fallback to Overdue
             targets = updated_df[updated_df['status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
             if targets.empty:
-                targets = overdue_df.copy()
+                targets = loans_df[loans_df['status'] == "Pending"].copy()
 
             if targets.empty:
                 st.info("No loans currently require a rollover cycle.")
