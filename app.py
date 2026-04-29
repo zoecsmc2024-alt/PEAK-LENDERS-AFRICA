@@ -1307,6 +1307,13 @@ def show_loans():
             if "start_date" in display_df.columns:
                 display_df["start_date"] = pd.to_datetime(display_df["start_date"], errors="coerce")
 
+            # ==============================
+            # SAFE NUMERIC CLEANING (ADD THIS)
+            # ==============================
+            for col in ["principal", "balance", "amount_paid"]:
+                if col in display_df.columns:
+                    display_df[col] = pd.to_numeric(display_df[col], errors="coerce").fillna(0)
+
             active_view = display_df.copy()
 
             if not active_view.empty:
@@ -1351,10 +1358,21 @@ def show_loans():
                     else: bg = "#FFFFFF"
                     return [f'background-color: {bg};' for _ in row]
 
+                # ==============================
+                # FINAL TABLE (FIXED FORMATTING)
+                # ==============================
                 final_table = active_view[["loan_id", "borrower", "principal", "balance", "status"]].copy()
+
                 final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{int(x):04d}")
 
-                st.dataframe(final_table.style.apply(style_loan_table, axis=1), use_container_width=True)
+                # 🔥 ADD COMMAS (THIS WAS MISSING)
+                final_table["principal"] = final_table["principal"].apply(lambda x: f"{x:,.0f}")
+                final_table["balance"] = final_table["balance"].apply(lambda x: f"{x:,.0f}")
+
+                st.dataframe(
+                    final_table.style.apply(style_loan_table, axis=1),
+                    use_container_width=True
+                )
     # ==============================
     # TAB: NEW LOAN
     # ==============================
