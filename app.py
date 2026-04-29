@@ -1421,8 +1421,6 @@ def show_loans():
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     if amount > 0 and date_due > date_issued:
                         tenant_id = get_current_tenant()
-                        
-                        # Calculate New ID
                         last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce').max()
                         new_id = int(last_id + 1) if pd.notna(last_id) else 1
 
@@ -1434,7 +1432,7 @@ def show_loans():
                             "principal": float(amount),
                             "interest": float(interest),
                             "total_repayable": float(total_due),
-                            "amount_paid": 0.0,
+                            "amount_paid": 0.0,  # ✅ This must stay underscored
                             "balance": float(total_due),
                             "status": "Active",
                             "start_date": date_issued.strftime("%Y-%m-%d"),
@@ -1442,16 +1440,16 @@ def show_loans():
                             "interest_rate": interest_rate
                         }])
                         
-                        # Merge and Prep for Save
                         updated_df = pd.concat([loans_df, new_loan], ignore_index=True).fillna(0)
                         
-                        # Normalize columns to match database (removing underscores for save_data_saas)
+                        # --- CRITICAL FIX START ---
+                        # Keep columns clean with underscores so they match the DB exactly
                         final_save = updated_df.copy()
-                        final_save.columns = [c.replace("_", " ") for c in final_save.columns]
+                        # Removed: final_save.columns = [c.replace("_", " ") for c in final_save.columns]
+                        # --- CRITICAL FIX END ---
                         
                         if save_data_saas("loans", final_save):
                             st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
-                            # Refresh state and UI
                             st.session_state.loans = get_data("loans")
                             st.rerun()
     # ==============================
