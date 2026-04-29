@@ -1360,14 +1360,14 @@ def show_loans():
 
                 # --- 3. FULL ROW COLOR STYLING ---
                 def style_loan_table(row):
-                    status = str(row["status"])
-                    if status == "Active": bg = "#E3F2FD"
-                    elif status == "Closed": bg = "#E8F5E9"
-                    elif status == "Overdue": bg = "#FFEBEE"
-                    elif status == "Pending": bg = "#FFF3E0"
-                    elif status == "BCF": bg = "#F3E5F5"
-                    elif "Rolled" in status: bg = "#FFF8E1"
-                    else: bg = "#FFFFFF"
+                    status = str(row.get("status", "Active"))
+                    if status == "Active": bg = "#E3F2FD"      # Light Blue
+                    elif status == "Closed": bg = "#E8F5E9"    # Light Green
+                    elif status == "Overdue": bg = "#FFEBEE"   # Light Red
+                    elif status == "Pending": bg = "#FFF3E0"   # Light Orange
+                    elif status == "BCF": bg = "#F3E5F5"       # Light Purple
+                    elif "Rolled" in status: bg = "#FFF8E1"    # Amber
+                    else: bg = "#FFFFFF"                       # White
                     return [f'background-color: {bg}; color: #0A192F;' for _ in row]
 
                 # 4. PREP DATA
@@ -1376,15 +1376,16 @@ def show_loans():
                 show_cols = base_cols + date_cols + ["status"]
                 final_table = active_view[show_cols].copy()
 
-                # Format loan_id for display
+                # Format loan_id for display (preserving underlying numeric for sorting)
                 final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{int(x):04d}")
 
-                # 5. RENDER TABLE
+                # 5. RENDER TABLE WITH STYLING
+                # Note: .style must be applied before final rendering
                 st.dataframe(
-                    final_table.style.format({
+                    final_table.style.apply(style_loan_table, axis=1).format({
                         "principal": "{:,.0f}",
                         "balance": "{:,.0f}"
-                    }).apply(style_loan_table, axis=1),
+                    }),
                     use_container_width=True,
                     hide_index=True
                 )
@@ -1420,6 +1421,8 @@ def show_loans():
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
                     if amount > 0 and date_due > date_issued:
                         tenant_id = get_current_tenant()
+                        
+                        # Calculate New ID
                         last_id = pd.to_numeric(loans_df["loan_id"], errors='coerce').max()
                         new_id = int(last_id + 1) if pd.notna(last_id) else 1
 
@@ -1439,15 +1442,18 @@ def show_loans():
                             "interest_rate": interest_rate
                         }])
                         
+                        # Merge and Prep for Save
                         updated_df = pd.concat([loans_df, new_loan], ignore_index=True).fillna(0)
+                        
+                        # Normalize columns to match database (removing underscores for save_data_saas)
                         final_save = updated_df.copy()
                         final_save.columns = [c.replace("_", " ") for c in final_save.columns]
                         
                         if save_data_saas("loans", final_save):
                             st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
+                            # Refresh state and UI
                             st.session_state.loans = get_data("loans")
                             st.rerun()
-
     # ==============================
     # TAB: MANAGE/EDIT (Restored Edit + Delete)
     # ==============================
@@ -1455,11 +1461,13 @@ def show_loans():
         if loans_df.empty:
             st.info("No loans available to manage.")
         else:
+            # Data Preprocessing for Selection
             loans_df['loan_id'] = pd.to_numeric(loans_df['loan_id'], errors='coerce').fillna(0).astype(int)
             loans_df['display_name'] = loans_df.apply(lambda x: f"ID: {int(x['loan_id']):04d} - {x['borrower']}", axis=1)
             
             selected_display = st.selectbox("Select Loan to Manage/Edit", loans_df['display_name'].unique(), key="edit_sel_loan_v3")
             
+            # Extract ID and find latest record
             clean_id_int = int(selected_display.split(" - ")[0].replace("ID: ", "").strip())
             loan_rows = loans_df[loans_df["loan_id"] == clean_id_int].copy()
 
@@ -1469,6 +1477,7 @@ def show_loans():
 
             loan_to_edit = loan_rows.iloc[-1]
 
+            # Logic Gate for BCF (Historical) Records
             if str(loan_to_edit.get("status")) == "BCF":
                 st.warning("⚠️ This is a historical (BCF) record and cannot be edited.")
             else:
@@ -1500,6 +1509,7 @@ def show_loans():
                             
                             new_total = new_principal + new_interest
                             loans_df.at[idx, 'total_repayable'] = new_total
+                            # Ensure 'balance' matches your schema casing
                             loans_df.at[idx, 'balance'] = new_total - float(loans_df.at[idx, 'amount_paid'])
 
                             save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
@@ -1510,15 +1520,18 @@ def show_loans():
                                 st.session_state.loans = get_data("loans")
                                 st.rerun()
 
+            # DELETE SECTION
             st.markdown("---")
             st.warning(f"⚠️ Dangerous Area: Manage Loan #{clean_id_int:04d}")
             if st.button("🗑️ Delete Permanently", use_container_width=True, key="del_loan_btn"):
+                # Filter out the selected ID
                 new_df = loans_df[loans_df["loan_id"] != clean_id_int].copy()
                 final_save_df = new_df.drop(columns=['display_name'], errors='ignore').copy()
                 final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
                 
                 if save_data_saas("loans", final_save_df):
                     st.success(f"🗑️ Loan #{clean_id_int:04d} deleted.")
+                    # Explicitly refresh state before rerun
                     st.session_state.loans = get_data("loans")
                     st.rerun()
 
