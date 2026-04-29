@@ -1287,13 +1287,13 @@ def show_loans():
     # 2. ENSURE STRUCTURE (FIXED BUG)
     # ==============================
     if loans_df is None or loans_df.empty:
-    loans_df = pd.DataFrame(columns=[
-        "loan_id", "borrower", "principal", "interest",
-        "total_repayable", "amount_paid", "balance",
-        "status", "start_date", "end_date", "tenant_id"
-    ])
+        loans_df = pd.DataFrame(columns=[
+            "loan_id", "borrower", "principal", "interest",
+            "total_repayable", "amount_paid", "balance",
+            "status", "start_date", "end_date", "tenant_id"
+        ])
     # Force the types immediately
-    loans_df["loan_id"] = loans_df["loan_id"].astype("int64")
+        loans_df["loan_id"] = loans_df["loan_id"].astype("int64")
     # ==============================
     # 3. CLEAN NUMERIC DATA
     # ==============================
