@@ -1365,9 +1365,12 @@ def show_loans():
                 # ==============================
                 # FINAL TABLE (FIXED FORMATTING)
                 # ==============================
-                final_table = active_view[["loan_id", "borrower", "principal", "balance", "status"]].copy()
+                final_table = active_view[["loan_id", "start_date", "end_date", "borrower", "principal", "interest", "balance", "status"]].copy()
 
-                final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{int(x):04d}")
+                # Ensure loan_id is sequential and formatted with leading zeros
+                final_table["loan_id"] = range(1, len(final_table) + 1)
+                final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{x:04d}")
+
 
                 # 🔥 ADD COMMAS (THIS WAS MISSING)
                 st.dataframe(
