@@ -1506,94 +1506,92 @@ def show_loans():
                             st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
                             st.session_state.loans = get_data("loans")
                             st.rerun()
-
     # ==============================
-# TAB: MANAGE/EDIT (Restored Edit + Delete)
-# ==============================
-with tab_manage:
-    if loans_df.empty:
-        st.info("No loans available to manage.")
-    else:
-        # Data Preprocessing for Selection
-        loans_df['loan_id'] = pd.to_numeric(loans_df['loan_id'], errors='coerce').fillna(0).astype(int)
-        loans_df['display_name'] = loans_df.apply(lambda x: f"ID: {int(x['loan_id']):04d} - {x['borrower']}", axis=1)
-        
-        selected_display = st.selectbox(
-            "Select Loan to Manage/Edit",
-            loans_df['display_name'].unique(),
-            key="edit_sel_loan_v3"
-        )
-        
-        # Extract ID and find latest record
-        clean_id_int = int(selected_display.split(" - ")[0].replace("ID: ", "").strip())
-        loan_rows = loans_df[loans_df["loan_id"] == clean_id_int].copy()
-
-        if "start_date" in loan_rows.columns:
-            loan_rows["start_date"] = pd.to_datetime(loan_rows["start_date"], errors="coerce")
-            loan_rows = loan_rows.sort_values("start_date")
-
-        loan_to_edit = loan_rows.iloc[-1]
-
-        # Logic Gate for BCF (Historical) Records
-        if str(loan_to_edit.get("status")).upper() == "BCF":
-            st.warning("⚠️ This is a historical (BCF) record and cannot be edited.")
+    # TAB: MANAGE/EDIT (Restored Edit + Delete)
+    # ==============================
+    with tab_manage:
+        if loans_df.empty:
+            st.info("No loans available to manage.")
         else:
-            st.markdown(f"#### 🛠️ Edit Loan #{clean_id_int:04d}")
-            with st.form(f"edit_loan_form_{clean_id_int}"):
-                col1, col2 = st.columns(2)
-                new_borrower = col1.text_input("borrower name", value=loan_to_edit['borrower'])
-                new_principal = col1.number_input("principal (UGX)", value=float(loan_to_edit['principal']))
-                new_interest = col1.number_input("interest (UGX)", value=float(loan_to_edit['interest']))
-                
-                status_options = ["Active", "Pending", "Closed", "Overdue"]
-                current_status = loan_to_edit['status'] if loan_to_edit['status'] in status_options else "Active"
-                new_status = col2.selectbox("status", status_options, index=status_options.index(current_status))
-                
-                new_start = col2.date_input("Start Date", value=pd.to_datetime(loan_to_edit['start_date']))
-                new_end = col2.date_input("End Date", value=pd.to_datetime(loan_to_edit['end_date']))
-
-                if st.form_submit_button("💾 Save Changes", use_container_width=True):
-                    if new_end <= new_start:
-                        st.error("❌ End date must be after start date")
-                    else:
-                        idx = loan_rows.index[-1]
-                        loans_df.at[idx, 'borrower'] = new_borrower
-                        loans_df.at[idx, 'principal'] = new_principal
-                        loans_df.at[idx, 'interest'] = new_interest
-                        loans_df.at[idx, 'status'] = new_status
-                        loans_df.at[idx, 'start_date'] = new_start.strftime("%Y-%m-%d")
-                        loans_df.at[idx, 'end_date'] = new_end.strftime("%Y-%m-%d")
-                        
-                        new_total = new_principal + new_interest
-                        loans_df.at[idx, 'total_repayable'] = new_total
-                        loans_df.at[idx, 'balance'] = new_total - float(loans_df.at[idx, 'amount_paid'])
-
-                        save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
-                        save_df.columns = [str(c).lower().strip().replace(" ", "_") for c in save_df.columns]
-                        
-                        if save_data_saas("loans", save_df):
-                            st.success(f"✅ Loan #{clean_id_int:04d} updated!")
-                            st.session_state.loans = get_data("loans")
-                            st.rerun()
-
-        # ==============================
-        # DELETE SECTION (Inside Manage/Edit)
-        # ==============================
-        st.markdown("---")
-        st.warning(f"⚠️ Dangerous Area: Manage Loan #{clean_id_int:04d}")
-        
-        # ✅ Dynamic key fixes delete button
-        delete_key = f"del_loan_btn_{clean_id_int}"
-        if st.button("🗑️ Delete Permanently", use_container_width=True, key=delete_key):
-            new_df = loans_df[loans_df["loan_id"] != clean_id_int].copy()
+            # Data Preprocessing for Selection
+            loans_df['loan_id'] = pd.to_numeric(loans_df['loan_id'], errors='coerce').fillna(0).astype(int)
+            loans_df['display_name'] = loans_df.apply(lambda x: f"ID: {int(x['loan_id']):04d} - {x['borrower']}", axis=1)
             
-            final_save_df = new_df.drop(columns=['display_name', 'borrower_name_check'], errors='ignore').copy()
-            final_save_df.columns = [str(c).lower().strip().replace(" ", "_") for c in final_save_df.columns]
+            selected_display = st.selectbox("Select Loan to Manage/Edit", loans_df['display_name'].unique(), key="edit_sel_loan_v3")
             
-            if save_data_saas("loans", final_save_df):
-                st.success(f"🗑️ Loan #{clean_id_int:04d} deleted.")
-                st.session_state.loans = get_data("loans")
-                st.rerun()
+            # Extract ID and find latest record
+            clean_id_int = int(selected_display.split(" - ")[0].replace("ID: ", "").strip())
+            loan_rows = loans_df[loans_df["loan_id"] == clean_id_int].copy()
+
+            if "start_date" in loan_rows.columns:
+                loan_rows["start_date"] = pd.to_datetime(loan_rows["start_date"], errors="coerce")
+                loan_rows = loan_rows.sort_values("start_date")
+
+            loan_to_edit = loan_rows.iloc[-1]
+
+            # Logic Gate for BCF (Historical) Records
+            if str(loan_to_edit.get("status")).upper() == "BCF":
+                st.warning("⚠️ This is a historical (BCF) record and cannot be edited.")
+            else:
+                st.markdown(f"#### 🛠️ Edit Loan #{clean_id_int:04d}")
+                with st.form(f"edit_loan_form_{clean_id_int}"):
+                    col1, col2 = st.columns(2)
+                    new_borrower = col1.text_input("borrower name", value=loan_to_edit['borrower'])
+                    new_principal = col1.number_input("principal (UGX)", value=float(loan_to_edit['principal']))
+                    new_interest = col1.number_input("interest (UGX)", value=float(loan_to_edit['interest']))
+                    
+                    status_options = ["Active", "Pending", "Closed", "Overdue"]
+                    current_status = loan_to_edit['status'] if loan_to_edit['status'] in status_options else "Active"
+                    new_status = col2.selectbox("status", status_options, index=status_options.index(current_status))
+                    
+                    new_start = col2.date_input("Start Date", value=pd.to_datetime(loan_to_edit['start_date']))
+                    new_end = col2.date_input("End Date", value=pd.to_datetime(loan_to_edit['end_date']))
+
+                    if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                        if new_end <= new_start:
+                            st.error("❌ End date must be after start date")
+                        else:
+                            idx = loan_rows.index[-1]
+                            loans_df.at[idx, 'borrower'] = new_borrower
+                            loans_df.at[idx, 'principal'] = new_principal
+                            loans_df.at[idx, 'interest'] = new_interest
+                            loans_df.at[idx, 'status'] = new_status
+                            loans_df.at[idx, 'start_date'] = new_start.strftime("%Y-%m-%d")
+                            loans_df.at[idx, 'end_date'] = new_end.strftime("%Y-%m-%d")
+                            
+                            new_total = new_principal + new_interest
+                            loans_df.at[idx, 'total_repayable'] = new_total
+                            loans_df.at[idx, 'balance'] = new_total - float(loans_df.at[idx, 'amount_paid'])
+
+                            # Hardened cleaning: lowercase and underscores ONLY
+                            save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
+                            save_df.columns = [str(c).lower().strip().replace(" ", "_") for c in save_df.columns]
+                            
+                            if save_data_saas("loans", save_df):
+                                st.success(f"✅ Loan #{clean_id_int:04d} updated!")
+                                st.session_state.loans = get_data("loans")
+                                st.rerun()
+
+            # ==============================
+            # DELETE SECTION (Inside Manage/Edit)
+            # ==============================
+            st.markdown("---")
+            st.warning(f"⚠️ Dangerous Area: Manage Loan #{clean_id_int:04d}")
+            
+            # Dynamic key to fix button issue
+            delete_key = f"del_loan_btn_{clean_id_int}"
+            if st.button("🗑️ Delete Permanently", use_container_width=True, key=delete_key):
+                new_df = loans_df[loans_df["loan_id"] != clean_id_int].copy()
+                
+                final_save_df = new_df.drop(columns=['display_name', 'borrower_name_check'], errors='ignore').copy()
+                final_save_df.columns = [str(c).lower().strip().replace(" ", "_") for c in final_save_df.columns]
+                
+                if save_data_saas("loans", final_save_df):
+                    st.success(f"🗑️ Loan #{clean_id_int:04d} deleted.")
+                    st.session_state.loans = get_data("loans")
+                    st.rerun()
+
+
     # ==============================
     # TAB: ACTIONS
     # ==============================
