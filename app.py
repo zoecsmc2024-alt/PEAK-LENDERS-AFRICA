@@ -1689,7 +1689,7 @@ def show_loans():
                         "end_date": end_date.strftime("%Y-%m-%d")
                     })
 
-              final = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
+                final = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
                 # ==============================
                 # CLEAN BEFORE SAVE
