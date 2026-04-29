@@ -1419,7 +1419,7 @@ def show_loans():
     # ==============================
     with tab_add:
 
-        if Active_borrowers.empty:
+        if active_borrowers.empty:
             st.info("💡 Tip: Activate a borrower in the 'borrowers' section.")
         else:
             with st.form("loan_issue_form"):
@@ -1430,7 +1430,7 @@ def show_loans():
 
                 selected_borrower = col1.selectbox(
                     "Select borrower",
-                    Active_borrowers["name"].unique() if "name" in Active_borrowers.columns else Active_borrowers["borrower"].unique()
+                    active_borrowers["name"].unique() if "name" in active_borrowers.columns else active_borrowers["borrower"].unique()
                 )
 
                 amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
