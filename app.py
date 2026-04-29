@@ -1343,7 +1343,7 @@ def show_loans():
                 display_df["start_date"] = pd.to_datetime(display_df["start_date"], errors="coerce")
 
             # ==============================
-            # SAFE NUMERIC CLEANING (ADD THIS)
+            # SAFE NUMERIC CLEANING
             # ==============================
             for col in ["principal", "balance", "amount_paid"]:
                 if col in display_df.columns:
@@ -1352,7 +1352,6 @@ def show_loans():
             active_view = display_df.copy()
 
             if not active_view.empty:
-
                 loan_options = sorted(active_view["loan_id"].dropna().unique())
 
                 sel_id = st.selectbox(
@@ -1377,8 +1376,7 @@ def show_loans():
                     rec_val, out_val, stat_val = 0, 0, "N/A"
 
                 card_style = "background-color:#FFF9F5; padding:20px; border-radius:15px; border-left:10px solid #0A192F;"
-                text_style = "margin:0; color:#0A192F;"
-
+                
                 c1.markdown(f"""<div style="{card_style}"><h3>{rec_val:,.0f}</h3></div>""", unsafe_allow_html=True)
                 c2.markdown(f"""<div style="{card_style}"><h3>{out_val:,.0f}</h3></div>""", unsafe_allow_html=True)
                 c3.markdown(f"""<div style="{card_style}"><h3>{stat_val}</h3></div>""", unsafe_allow_html=True)
@@ -1396,7 +1394,6 @@ def show_loans():
                 # ==============================
                 # FINAL TABLE (FIXED FORMATTING)
                 # ==============================
-
                 final_table = active_view[[
                     "loan_id",
                     "borrower",
@@ -1410,11 +1407,9 @@ def show_loans():
                 ]].copy()
 
                 # Format loan_id (0001 style)
-                # Use the real loan_id from the database for the display
-                    if "loan_id" in final_table.columns:
-                        final_table["loan_id"] = pd.to_numeric(final_table["loan_id"], errors="coerce").fillna(0).astype(int)
-                        final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{x:04d}")
-
+                if "loan_id" in final_table.columns:
+                    final_table["loan_id"] = pd.to_numeric(final_table["loan_id"], errors="coerce").fillna(0).astype(int)
+                    final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{x:04d}")
 
                 # Ensure numeric safety before formatting
                 for col in ["principal", "interest", "amount_paid", "balance"]:
