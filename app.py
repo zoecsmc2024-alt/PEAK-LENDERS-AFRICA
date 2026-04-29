@@ -1589,84 +1589,84 @@ def show_loans():
                     st.session_state.loans = get_data("loans")
                     st.rerun()
 
-# ==============================
-# TAB: ACTIONS
-# ==============================
-with tab_actions:
-    st.markdown("### 🔄 Loan Lifecycle")
-    
-    if "rollover_done" not in st.session_state:
-        st.session_state.rollover_done = False
+    # ==============================
+    # TAB: ACTIONS
+    # ==============================
+    with tab_actions:
+        st.markdown("### 🔄 Loan Lifecycle")
+        
+        if "rollover_done" not in st.session_state:
+            st.session_state.rollover_done = False
 
-    if st.button("🔄 Execute Monthly Rollover", use_container_width=True):
-        if st.session_state.rollover_done:
-            st.warning("⚠️ Rollover already executed in this session.")
-        else:
-            new_rows_list = []
-            count = 0
-            updated_df = loans_df.copy()
-
-            # Normalization for logic check
-            updated_df['status_check'] = updated_df['status'].astype(str).str.strip().str.lower()
-            money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid', 'interest_rate']
-            for col in money_cols:
-                if col in updated_df.columns:
-                    updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
-
-            today = pd.Timestamp.today().normalize()
-            updated_df['end_date_dt'] = pd.to_datetime(updated_df['end_date'], errors='coerce').dt.normalize()
-
-            targets = updated_df[
-                (updated_df['status_check'] == "pending") & 
-                (updated_df['balance'] > 0) & 
-                (updated_df['end_date_dt'] <= today)
-            ].copy()
-
-            if targets.empty:
-                st.info("No loans currently require a rollover cycle.")
-                with st.expander("Debug Filter Data"):
-                    st.write("Today:", today)
-                    st.write(updated_df[['loan_id', 'status_check', 'balance', 'end_date_dt']])
+        if st.button("🔄 Execute Monthly Rollover", use_container_width=True):
+            if st.session_state.rollover_done:
+                st.warning("⚠️ Rollover already executed in this session.")
             else:
-                for i, r in targets.iterrows():
-                    updated_df.at[i, 'status'] = "BCF" 
+                new_rows_list = []
+                count = 0
+                updated_df = loans_df.copy()
 
-                    old_p = float(r.get('principal', 0))
-                    old_i = float(r.get('interest', 0))
-                    new_basis = old_p + old_i
-                    rate = float(r.get('interest_rate', r.get('monthly_interest_rate', 3))) 
-                    
-                    new_month_interest = new_basis * (rate / 100)
-                    compounded_balance = new_basis + new_month_interest
-                    
-                    orig_end = r['end_date_dt']
-                    new_start = orig_end if pd.notna(orig_end) else today
-                    new_end = new_start + pd.DateOffset(months=1)
+                # Normalization for logic check
+                updated_df['status_check'] = updated_df['status'].astype(str).str.strip().str.lower()
+                money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid', 'interest_rate']
+                for col in money_cols:
+                    if col in updated_df.columns:
+                        updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-                    new_row = r.copy()
-                    new_row['principal'] = new_basis
-                    new_row['interest'] = new_month_interest
-                    new_row['balance'] = compounded_balance
-                    new_row['start_date'] = new_start.strftime("%Y-%m-%d")
-                    new_row['end_date'] = new_end.strftime("%Y-%m-%d")
-                    new_row['status'] = "Pending"
-                    
-                    new_row = new_row.drop(['status_check', 'end_date_dt'], errors='ignore')
-                    new_rows_list.append(new_row)
-                    count += 1
+                today = pd.Timestamp.today().normalize()
+                updated_df['end_date_dt'] = pd.to_datetime(updated_df['end_date'], errors='coerce').dt.normalize()
 
-                if new_rows_list:
-                    updated_df = updated_df.drop(columns=['status_check', 'end_date_dt'], errors='ignore')
-                    final_df = pd.concat([updated_df, pd.DataFrame(new_rows_list)], ignore_index=True)
-                    
-                    final_df.columns = [str(c).lower().strip().replace(" ", "_") for c in final_df.columns]
-                    final_df = final_df.drop(columns=["display_name", "borrower_name_check"], errors='ignore')
+                targets = updated_df[
+                    (updated_df['status_check'] == "pending") & 
+                    (updated_df['balance'] > 0) & 
+                    (updated_df['end_date_dt'] <= today)
+                ].copy()
 
-                    if save_data_saas("loans", final_df):
-                        st.session_state.rollover_done = True
-                        st.success(f"✅ Rollover completed for {count} loans.")
-                        st.session_state.loans = get_data("loans")
-                        st.rerun()
+                if targets.empty:
+                    st.info("No loans currently require a rollover cycle.")
+                    with st.expander("Debug Filter Data"):
+                        st.write("Today:", today)
+                        st.write(updated_df[['loan_id', 'status_check', 'balance', 'end_date_dt']])
+                else:
+                    for i, r in targets.iterrows():
+                        updated_df.at[i, 'status'] = "BCF" 
+
+                        old_p = float(r.get('principal', 0))
+                        old_i = float(r.get('interest', 0))
+                        new_basis = old_p + old_i
+                        rate = float(r.get('interest_rate', r.get('monthly_interest_rate', 3))) 
+                        
+                        new_month_interest = new_basis * (rate / 100)
+                        compounded_balance = new_basis + new_month_interest
+                        
+                        orig_end = r['end_date_dt']
+                        new_start = orig_end if pd.notna(orig_end) else today
+                        new_end = new_start + pd.DateOffset(months=1)
+
+                        new_row = r.copy()
+                        new_row['principal'] = new_basis
+                        new_row['interest'] = new_month_interest
+                        new_row['balance'] = compounded_balance
+                        new_row['start_date'] = new_start.strftime("%Y-%m-%d")
+                        new_row['end_date'] = new_end.strftime("%Y-%m-%d")
+                        new_row['status'] = "Pending"
+                        
+                        new_row = new_row.drop(['status_check', 'end_date_dt'], errors='ignore')
+                        new_rows_list.append(new_row)
+                        count += 1
+
+                    if new_rows_list:
+                        updated_df = updated_df.drop(columns=['status_check', 'end_date_dt'], errors='ignore')
+                        final_df = pd.concat([updated_df, pd.DataFrame(new_rows_list)], ignore_index=True)
+                        
+                        final_df.columns = [str(c).lower().strip().replace(" ", "_") for c in final_df.columns]
+                        final_df = final_df.drop(columns=["display_name", "borrower_name_check"], errors='ignore')
+
+                        if save_data_saas("loans", final_df):
+                            st.session_state.rollover_done = True
+                            st.success(f"✅ Rollover completed for {count} loans.")
+                            st.session_state.loans = get_data("loans")
+                            st.rerun()
     
     
 import pandas as pd
