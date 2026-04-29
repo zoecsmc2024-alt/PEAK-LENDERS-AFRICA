@@ -1122,7 +1122,7 @@ def show_borrowers():
                         column_config={
                             "id": None, "tenant_id": None, "borrower_id": None, "borrower": None,
                             "principal": st.column_config.NumberColumn("principal", format="%d UGX"),
-                            "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
+                            "interest": st.column_config.NumberColumn("interest", format="%d UGX"),
                             "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
                             "start_date": st.column_config.DateColumn("Date Issued"),
@@ -1252,7 +1252,7 @@ def show_loans():
     # ==============================
     if loans_df is None or loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "loan_id", "borrower", "principal", "Interest",
+            "loan_id", "borrower", "principal", "interest",
             "total_repayable", "amount_paid", "Balance",
             "status", "start_date", "End_Date", "tenant_id"
         ])
@@ -1263,7 +1263,7 @@ def show_loans():
     # ==============================
     # 3. CLEAN NUMERIC DATA
     # ==============================
-    num_cols = ["principal", "Interest", "total_repayable", "amount_paid", "Balance"]
+    num_cols = ["principal", "interest", "total_repayable", "amount_paid", "Balance"]
     for col in num_cols:
         if col in loans_df.columns:
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
@@ -1418,7 +1418,7 @@ def show_loans():
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
                 l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
+                interest_rate = col2.number_input("Monthly interest Rate (%)", min_value=0.0, step=0.5)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
                 # Validation
@@ -1450,7 +1450,7 @@ def show_loans():
                             "borrower": selected_borrower,
                             "Type": l_type,
                             "principal": float(amount),
-                            "Interest": float(interest),
+                            "interest": float(interest),
                             "total_repayable": float(total_due),
                             "amount_paid": 0.0,
                             "Balance": float(total_due),
@@ -1520,7 +1520,7 @@ def show_loans():
                 
                 new_borrower = col1.text_input("borrower name", value=loan_to_edit['borrower'])
                 new_principal = col1.number_input("principal (UGX)", value=float(loan_to_edit['principal']))
-                new_interest = col1.number_input("Interest (UGX)", value=float(loan_to_edit['Interest']))
+                new_interest = col1.number_input("interest (UGX)", value=float(loan_to_edit['interest']))
                 
                 status_options = ["Active", "Pending", "Closed", "Overdue", "BCF"]
                 current_status = loan_to_edit['status'] if loan_to_edit['status'] in status_options else "Active"
@@ -1539,7 +1539,7 @@ def show_loans():
                         
                         loans_df.at[idx, 'borrower'] = new_borrower
                         loans_df.at[idx, 'principal'] = new_principal
-                        loans_df.at[idx, 'Interest'] = new_interest
+                        loans_df.at[idx, 'interest'] = new_interest
                         loans_df.at[idx, 'status'] = new_status
                         loans_df.at[idx, 'start_date'] = new_start.strftime("%Y-%m-%d")
                         loans_df.at[idx, 'End_Date'] = new_end.strftime("%Y-%m-%d")
@@ -1587,7 +1587,7 @@ def show_loans():
         
         try: 
             # FORCE NUMERIC
-            money_cols = ['principal', 'Interest', 'Balance', 'total_repayable', 'amount_paid']
+            money_cols = ['principal', 'interest', 'Balance', 'total_repayable', 'amount_paid']
             for col in money_cols:
                 if col in updated_df.columns:
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
@@ -1613,7 +1613,7 @@ def show_loans():
 
                         # 2. SAFE MATH
                         old_p = float(r.get('principal', 0))
-                        old_i = float(r.get('Interest', 0))
+                        old_i = float(r.get('interest', 0))
                         
                         new_basis = old_p + old_i
 
@@ -1631,7 +1631,7 @@ def show_loans():
                         new_row['start_date'] = new_start.strftime('%Y-%m-%d')
                         new_row['End_Date'] = new_end.strftime('%Y-%m-%d')
                         new_row['principal'] = new_basis
-                        new_row['Interest'] = new_month_interest
+                        new_row['interest'] = new_month_interest
                         new_row['Balance'] = compounded_balance 
                         new_row['total_repayable'] = compounded_balance
                         new_row['amount_paid'] = 0
@@ -3173,7 +3173,7 @@ def show_reports():
         st.markdown("#### 💰 Income Statement (OpEx)")
         st.markdown(f"""
         <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
-            <small>REVENUE (Projected Interest)</small><br><b>UGX {projected_interest:,.0f}</b><hr>
+            <small>REVENUE (Projected interest)</small><br><b>UGX {projected_interest:,.0f}</b><hr>
             <small>OPERATIONAL COSTS</small><br><b>UGX {total_opex:,.0f}</b><br>
             <p style="font-size:12px; color:#666;">Includes Salaries, Taxes, Petty Cash & Admin Expenses</p>
             <h4 style="color:#1E3A8A; margin-top:10px;">TRUE NET: UGX {(projected_interest - total_opex):,.0f}</h4>
@@ -3198,7 +3198,7 @@ def show_reports():
     # ==============================
     with st.expander("📥 Export Financial Data for Auditors"):
         report_data = {
-            "Metric": ["Capital Out", "Interest Revenue", "Total OpEx", "Cash Profit", "Portfolio Yield %", "PAR %"],
+            "Metric": ["Capital Out", "interest Revenue", "Total OpEx", "Cash Profit", "Portfolio Yield %", "PAR %"],
             "Value": [total_capital_out, projected_interest, total_opex, cash_profit, f"{yield_pct:.2f}%", f"{par_ratio:.2f}%"]
         }
         export_df = pd.DataFrame(report_data)
@@ -3403,7 +3403,7 @@ def show_ledger():
     # Metric Cards with Styled Font
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("principal", f"UGX {p:,.0f}")
-    m2.metric("Total Interest", f"UGX {i:,.0f}")
+    m2.metric("Total interest", f"UGX {i:,.0f}")
     m3.metric("Total Paid", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%}" if total_due > 0 else None)
     m4.metric("Current Balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
 
@@ -3422,11 +3422,11 @@ def show_ledger():
         "Balance": running_bal
     })
 
-    # Entry 2: Interest Charge
+    # Entry 2: interest Charge
     if i > 0:
         ledger_data.append({
             "Date": str(loan_info.get("start_date", "-"))[:10],
-            "Description": "📈 Monthly Interest Applied",
+            "Description": "📈 Monthly interest Applied",
             "Debit (Due)": i,
             "Credit (Paid)": 0,
             "Balance": running_bal
@@ -3875,7 +3875,7 @@ def show_dashboard_view():
             """
 
         m1.markdown(metric_card("Active principal", total_principal, "Portfolio Value", brand_color), unsafe_allow_html=True)
-        m2.markdown(metric_card("Interest Income", total_interest, "Expected Earnings", "#10B981"), unsafe_allow_html=True)
+        m2.markdown(metric_card("interest Income", total_interest, "Expected Earnings", "#10B981"), unsafe_allow_html=True)
         m3.markdown(metric_card("Operational Costs", total_expenses, "Total Expenses", "#EF4444"), unsafe_allow_html=True)
         m4.markdown(metric_card("Critical Alerts", overdue_count, "Overdue loans", "#F59E0B", False), unsafe_allow_html=True)
 
@@ -3976,7 +3976,7 @@ def show_dashboard_view():
 
         with t1:
 
-            st.markdown("#### 📊 Portfolio Growth vs. Interest")
+            st.markdown("#### 📊 Portfolio Growth vs. interest")
 
             try:
 
