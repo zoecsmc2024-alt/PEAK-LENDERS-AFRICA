@@ -1413,41 +1413,41 @@ def show_loans():
                 use_container_width=True,
                 hide_index=True
             )
-    # ==============================
+   # ==============================
     # ADD TAB
     # ==============================
     with tab_add:
-
+    
         if active_borrowers.empty:
             st.info("💡 Tip: Activate a borrower in the 'borrowers' section.")
         else:
             with st.form("loan_issue_form"):
-
+    
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
-
+    
                 col1, col2 = st.columns(2)
-
+    
                 selected_borrower = col1.selectbox(
                     "Select borrower",
                     active_borrowers["name"].unique() if "name" in active_borrowers.columns else active_borrowers["borrower"].unique()
                 )
-
+    
                 amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
-
+    
                 l_type = col2.selectbox("Loan type", ["Business", "Personal", "Emergency", "Other"])
                 interest_rate = col2.number_input("Monthly interest Rate (%)", min_value=0.0, step=0.5)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
-
+    
                 # ==============================
                 # VALIDATION (SAFE FIX)
                 # ==============================
                 if date_due <= date_issued:
                     st.error("❌ Due date must be after start date")
-
+    
                 interest = (interest_rate / 100) * amount
                 total_due = amount + interest
-
+    
                 st.markdown(
                     f"""
                     <div style="background-color: #F0F8FF; padding: 10px; border-radius: 8px; border-left: 5px solid #0A192F;">
@@ -1458,21 +1458,21 @@ def show_loans():
                     """,
                     unsafe_allow_html=True
                 )
-
+    
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
-
+    
                     if amount > 0 and date_due > date_issued:
-
+    
                         tenant_id = get_current_tenant()
-
+    
                         # SAFE ID GENERATION
                         if "loan_id" in loans_df.columns and not loans_df.empty:
                             last_id = pd.to_numeric(loans_df["loan_id"], errors="coerce").max()
                         else:
                             last_id = 0
-
+    
                         new_id = int(last_id + 1) if pd.notna(last_id) else 1
-
+    
                         # NEW LOAN ROW (UNCHANGED LOGIC)
                         new_loan = pd.DataFrame([{
                             "tenant_id": str(tenant_id) if tenant_id else "default",
@@ -1489,20 +1489,33 @@ def show_loans():
                             "end_date": date_due.strftime("%Y-%m-%d"),
                             "interest_rate": float(interest_rate)
                         }])
-
+    
                         updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
-
+    
                         # ==============================
                         # DB HARDENING & SYNC
                         # ==============================
                         final_save = updated_df.copy()
-
+    
                         # Ensure critical IDs are clean integers for the database
                         int_cols = ["loan_id", "customer_id", "duration_in_months"]
                         for col in int_cols:
                             if col in final_save.columns:
                                 final_save[col] = pd.to_numeric(final_save[col], errors="coerce").fillna(0).astype("int64")
-
+    
+                        # 🔥 FIX: Ensure date columns are strings (prevents Timestamp crash)
+                        date_cols = ["start_date", "end_date", "created_at", "updated_at"]
+                        for col in date_cols:
+                            if col in final_save.columns:
+                                final_save[col] = (
+                                    pd.to_datetime(final_save[col], errors="coerce")
+                                    .dt.strftime("%Y-%m-%d")
+                                    .replace("NaT", None)
+                                )
+    
+                        # 🔥 FIX: Clean column names (prevents Supabase mismatch)
+                        final_save.columns = [str(c).lower().strip().replace(" ", "_") for c in final_save.columns]
+    
                         # Save to SaaS
                         if save_data_saas("loans", final_save):
                             st.session_state.refresh_loans = True
