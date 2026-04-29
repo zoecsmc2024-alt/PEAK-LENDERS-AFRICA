@@ -1232,32 +1232,27 @@ def get_data(table_name):
 
 def save_data_saas(table_name, df):
     tenant_id = get_current_tenant()
+    
+    # Create a deep copy to avoid SettingWithCopy warnings
+    save_df = df.copy()
 
     if tenant_id:
-        df["tenant_id"] = str(tenant_id).strip()
+        save_df["tenant_id"] = str(tenant_id).strip()
 
-    # 🚨 HARDEN: enforce correct DB-safe column types BEFORE saving
-    if "loan_id" in df.columns:
-        # Strip spaces, convert to numeric, drop decimals, force int64
-        df["loan_id"] = (
-            pd.to_numeric(df["loan_id"], errors="coerce")  # convert to number or NaN
-            .fillna(0)                                     # replace NaN with 0
-            .astype("int64")                               # force integer type
-        )
+    # 🚨 ULTIMATE HARDEN: Force Int64 and remove decimals
+    # This list covers all potential BIGINT columns in your DB
+    target_int_cols = ["loan_id", "customer_id", "duration_in_months", "id"]
+    
+    for col in target_int_cols:
+        if col in save_df.columns:
+            # fillna(0) is critical because you can't have an 'int' NaN in standard Pandas
+            save_df[col] = pd.to_numeric(save_df[col], errors="coerce").fillna(0).astype("int64")
 
-    # If there are other integer columns, enforce them too
-    int_cols = ["customer_id", "duration_in_months"]  # adjust to your schema
-    for col in int_cols:
-        if col in df.columns:
-            df[col] = (
-                pd.to_numeric(df[col], errors="coerce")
-                .fillna(0)
-                .astype("int64")
-            )
+    # Final column name scrub: lowercase and underscores only
+    save_df.columns = [str(c).lower().strip().replace(" ", "_") for c in save_df.columns]
 
-    # DO NOT rename columns EVER
-    return save_data(table_name, df)
-
+    # DO NOT drop columns here, let the adapter handle it
+    return save_data(table_name, save_df)
 
 
 # ==============================
@@ -1416,9 +1411,10 @@ def show_loans():
                 ]].copy()
 
                 # Format loan_id (0001 style)
-                # Ensure loan_id is sequential and formatted with leading zeros
-                final_table["loan_id"] = range(1, len(final_table) + 1)
-                final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{x:04d}")
+                # Use the real loan_id from the database for the display
+                    if "loan_id" in final_table.columns:
+                        final_table["loan_id"] = pd.to_numeric(final_table["loan_id"], errors="coerce").fillna(0).astype(int)
+                        final_table["loan_id"] = final_table["loan_id"].apply(lambda x: f"{x:04d}")
 
 
                 # Ensure numeric safety before formatting
