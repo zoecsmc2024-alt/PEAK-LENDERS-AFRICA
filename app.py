@@ -1487,18 +1487,25 @@ def show_loans():
                         updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
 
                         # ==============================
-                        # DB HARDENING (PRESERVED)
+                        # DB HARDENING & SYNC
                         # ==============================
                         final_save = updated_df.copy()
 
+                        # Ensure critical IDs are clean integers for the database
                         int_cols = ["loan_id", "customer_id", "duration_in_months"]
                         for col in int_cols:
                             if col in final_save.columns:
                                 final_save[col] = pd.to_numeric(final_save[col], errors="coerce").fillna(0).astype("int64")
 
+                        # Save to SaaS
                         if save_data_saas("loans", final_save):
                             st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
+                            
+                            # 🚨 SYNC STEP: Force the app to pull the new row from the cloud
                             st.session_state.loans = get_data("loans")
+                            
+                            # 🚨 REFRESH STEP: Jump back to the top of the script 
+                            # so 'Portfolio View' sees the updated st.session_state.loans
                             st.rerun()
     # ==============================
     # MANAGE TAB
