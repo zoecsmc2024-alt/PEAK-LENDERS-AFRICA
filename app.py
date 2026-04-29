@@ -1213,12 +1213,9 @@ def save_data_saas(table_name, df):
     tenant_id = get_current_tenant()
 
     if tenant_id:
-        # Only add tenant_id if it's not already there to prevent data loss
-        if "tenant_id" not in df.columns:
-            df["tenant_id"] = str(tenant_id)
-        else:
-            df["tenant_id"] = df["tenant_id"].fillna(str(tenant_id))
+        df["tenant_id"] = str(tenant_id).strip()
 
+    # 🚨 IMPORTANT: NEVER rename columns here
     return save_data(table_name, df)
 
 
