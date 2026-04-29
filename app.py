@@ -1471,56 +1471,51 @@ def show_loans():
                 st.markdown(f"""<div style="background-color: #F0F8FF; padding: 10px; border-radius: 8px; border-left: 5px solid #0A192F;"><p style="margin:0; color:#0A192F;"><b>Preview:</b> Total Repayable will be <b>{total_due:,.0f} UGX</b></p></div>""", unsafe_allow_html=True)
 
                 if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
-            if amount > 0 and date_due > date_issued:
-                tenant_id = get_current_tenant()
-                
-                # 1. Calculate New ID
-                last_id_series = pd.to_numeric(loans_df["loan_id"], errors='coerce')
-                valid_ids = last_id_series[last_id_series > 0]
-                last_id = valid_ids.max() if not valid_ids.empty else 0
-                new_id = int(last_id + 1)
+                    if amount > 0 and date_due > date_issued:
+                        tenant_id = get_current_tenant()
 
-                # 2. Create the New Row
-                new_loan = pd.DataFrame([{
-                    "tenant_id": str(tenant_id) if tenant_id else "default",
-                    "loan_id": new_id, # Integer here
-                    "borrower": selected_borrower,
-                    "type": l_type,
-                    "principal": float(amount),
-                    "interest": float(interest),
-                    "total_repayable": float(total_due),
-                    "amount_paid": 0.0,
-                    "balance": float(total_due),
-                    "status": "Active",
-                    "start_date": date_issued.strftime("%Y-%m-%d"),
-                    "end_date": date_due.strftime("%Y-%m-%d"),
-                    "interest_rate": float(interest_rate)
-                }])
-                
-                # 3. Combine Data
-                updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
-                
-                # --- CRITICAL FIX START ---
-                final_save = updated_df.copy()
-                
-                # Force loan_id to be an integer (removes the .0)
-                # and fill potential NaNs with 0 first to avoid cast errors
-                if "loan_id" in final_save.columns:
-                    final_save["loan_id"] = pd.to_numeric(final_save["loan_id"], errors='coerce').fillna(0).astype(int)
-                
-                # Ensure interest_rate or other potential BIGINT columns don't have .0 if the DB expects INT
-                # However, usually interest is NUMERIC/DECIMAL, so float is fine there.
-                
-                # Clean up any helper columns that shouldn't go to DB
-                if "display_name" in final_save.columns:
-                    final_save = final_save.drop(columns=["display_name"])
-                
-                # --- CRITICAL FIX END ---
-                
-                if save_data_saas("loans", final_save):
-                    st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
-                    st.session_state.loans = get_data("loans")
-                    st.rerun()
+                        # Ensure loan_id column is numeric before finding max
+                        last_id_series = pd.to_numeric(loans_df.get("loan_id", pd.Series(dtype="int64")), errors='coerce')
+                        last_id = last_id_series[last_id_series > 0].max()
+
+                        # Generate new loan_id as int
+                        new_id = int(last_id + 1) if pd.notna(last_id) else 1
+
+                        # Create new loan row
+                        new_loan = pd.DataFrame([{
+                            "tenant_id": str(tenant_id) if tenant_id else "default",
+                            "loan_id": new_id,  # already int
+                            "borrower": selected_borrower,
+                            "type": l_type,
+                            "principal": float(amount),
+                            "interest": float(interest),
+                            "total_repayable": float(total_due),
+                            "amount_paid": 0.0,
+                            "balance": float(total_due),
+                            "status": "Active",
+                            "start_date": date_issued.strftime("%Y-%m-%d"),
+                            "end_date": date_due.strftime("%Y-%m-%d"),
+                            "interest_rate": float(interest_rate)
+                        }])
+
+                        # Merge with existing loans
+                        updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
+
+                        # --- CRITICAL FIX START ---
+                        final_save = updated_df.copy()
+
+                        # Ensure integer columns are actually int64 for DB safety
+                        int_cols = ["loan_id", "customer_id", "duration_in_months"]
+                        for col in int_cols:
+                            if col in final_save.columns:
+                                final_save[col] = pd.to_numeric(final_save[col], errors="coerce").fillna(0).astype("int64")
+                        # --- CRITICAL FIX END ---
+
+                        if save_data_saas("loans", final_save):
+                            st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
+                            st.session_state.loans = get_data("loans")
+                            st.rerun()
+
     # ==============================
     # TAB: MANAGE/EDIT (Restored Edit + Delete)
     # ==============================
