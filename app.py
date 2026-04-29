@@ -1249,19 +1249,18 @@ def show_loans():
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # LOAD DATA (SYNC-AWARE)
+    # LOAD DATA (SYNC-AWARE FIXED)
     # ==============================
-    # Always try to get from state first for speed
-    loans_df = st.session_state.get("loans")
+    refresh_flag = st.session_state.get("refresh_loans", False)
 
-    # If state is missing OR we just performed an action that requires a fresh pull
-    if loans_df is None:
+    if "loans" not in st.session_state or refresh_flag:
         loans_df = get_data("loans")
         st.session_state.loans = loans_df.copy()
-    
-    # IMPORTANT: If you just called get_data() in Add/Manage tab, 
-    # ensure it actually overwrote the session state.
-    # To be 100% safe, we re-sync the local variable here:
+        st.session_state.refresh_loans = False
+    else:
+        loans_df = st.session_state.loans.copy()
+        
+    # Re-sync local variable to ensure all subsequent logic uses the latest state
     loans_df = st.session_state.loans
 
     # --- RESTORED MISSING VARIABLE ---
@@ -1506,6 +1505,7 @@ def show_loans():
 
                         # Save to SaaS
                         if save_data_saas("loans", final_save):
+                            st.session_state.refresh_loans = True
                             st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
                             
                             # 🚨 SYNC STEP: Force the app to pull the new row from the cloud
@@ -1590,7 +1590,7 @@ def show_loans():
                         db_save_df = loans_df.drop(columns=['label'], errors='ignore')
 
                         if save_data_saas("loans", db_save_df):
-                            st.session_state.loans = get_data("loans")
+                            st.session_state.refresh_loans = True
                             st.success("✅ Loan Updated!")
                             st.rerun()
 
@@ -1611,7 +1611,7 @@ def show_loans():
                 ]
 
                 if save_data_saas("loans", final_save_df):
-                    st.session_state.loans = new_df.copy()
+                    st.session_state.refresh_loans = True
                     st.success(f"🗑️ Loan #{loan_id:04d} deleted.")
                     st.rerun()
 
@@ -1657,7 +1657,7 @@ def show_loans():
                 final = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
 
                 if save_data_saas("loans", final):
-                    st.session_state.loans = get_data("loans")
+                    st.session_state.refresh_loans = True
                     st.rerun()
     
     
