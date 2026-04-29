@@ -828,7 +828,7 @@ def render_sidebar():
         # 📍 NAVIGATION MENU
         # ==============================
         menu = {
-            "Overview": "📈", "loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
+            "Overview": "📈", "loans": "💵", "borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
             "Petty Cash": "🪙", "Overdue Tracker": "🚨", "Payments": "💰", "Reports": "📊", "Settings": "⚙️"
         }
@@ -869,7 +869,7 @@ def render_sidebar():
     return selected_page
 
 # ==============================
-# 🚀 BORROWERS ENGINE (PRODUCTION)
+# 🚀 borrowers ENGINE (PRODUCTION)
 # ==============================
 import streamlit as st
 import pandas as pd
@@ -883,7 +883,7 @@ def show_borrowers():
     # 🎨 BRANDING & THEME
     # ==============================
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f"<h2 style='color:{brand_color};'>🚀 Borrowers Registry</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color:{brand_color};'>🚀 borrowers Registry</h2>", unsafe_allow_html=True)
 
     # ==============================
     # 🔐 TENANT SESSION CHECK
@@ -979,7 +979,7 @@ def show_borrowers():
     # ==============================
     # 📑 UI NAVIGATION
     # ==============================
-    tab_view, tab_add = st.tabs(["📋 View Borrowers", "➕ Add Borrower"])
+    tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add Borrower"])
 
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
@@ -1237,8 +1237,8 @@ def show_loans():
         if loans_df is not None:
             st.session_state.loans = loans_df.copy()
 
-    # Standard loading for Borrowers
-    borrowers_df = get_cached_data("Borrowers")
+    # Standard loading for borrowers
+    borrowers_df = get_cached_data("borrowers")
     
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = [str(c).strip().replace(" ", "_") for c in borrowers_df.columns]
@@ -1370,7 +1370,7 @@ def show_loans():
     # ==============================
     with tab_add:
         if active_borrowers.empty:
-            st.info("💡 Tip: Activate a borrower in the 'Borrowers' section.")
+            st.info("💡 Tip: Activate a borrower in the 'borrowers' section.")
         else:
             with st.form("loan_issue_form"):
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
@@ -4038,7 +4038,7 @@ if __name__ == "__main__":
             elif page == "loans":
                 show_loans()
                 
-            elif page == "Borrowers":
+            elif page == "borrowers":
                 show_borrowers()
                 
             elif page == "Collateral":
