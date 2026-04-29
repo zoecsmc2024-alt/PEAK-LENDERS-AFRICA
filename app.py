@@ -1571,25 +1571,30 @@ def show_loans():
                                 st.success(f"✅ Loan #{clean_id_int:04d} updated!")
                                 st.session_state.loans = get_data("loans")
                                 st.rerun()
-
             # ==============================
             # DELETE SECTION (Inside Manage/Edit)
             # ==============================
             st.markdown("---")
             st.warning(f"⚠️ Dangerous Area: Manage Loan #{clean_id_int:04d}")
-            
-            # Dynamic key to fix button issue
-            delete_key = f"del_loan_btn_{clean_id_int}"
-            if st.button("🗑️ Delete Permanently", use_container_width=True, key=delete_key):
+
+            if st.button("🗑️ Delete Permanently", use_container_width=True, key="del_loan_btn"):
+                # 1. Filter out the deleted loan
                 new_df = loans_df[loans_df["loan_id"] != clean_id_int].copy()
-                
+            
+                # 2. Prep for DB save
                 final_save_df = new_df.drop(columns=['display_name', 'borrower_name_check'], errors='ignore').copy()
                 final_save_df.columns = [str(c).lower().strip().replace(" ", "_") for c in final_save_df.columns]
-                
+            
+                # 3. Save and Refresh
                 if save_data_saas("loans", final_save_df):
+                    # Update local session state IMMEDIATELY
+                    st.session_state.loans = new_df.copy() 
+                
                     st.success(f"🗑️ Loan #{clean_id_int:04d} deleted.")
-                    st.session_state.loans = get_data("loans")
+                
+                    # 🚨 CRITICAL: Force Streamlit to rebuild the UI from the top
                     st.rerun()
+
 
 
     # ==============================
