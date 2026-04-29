@@ -1312,145 +1312,89 @@ def show_loans():
     # ==============================
     with tab_view:
 
+        # 1. DEFINE STYLING FIRST (Avoids the "local variable" error)
+        def style_loan_table(row):
+            status_str = str(row.get("status", "")).lower()
+            if "active" in status_str:
+                bg = "#E3F2FD"
+            elif "closed" in status_str:
+                bg = "#E8F5E9"
+            elif "overdue" in status_str:
+                bg = "#FFEBEE"
+            elif "pending" in status_str:
+                bg = "#FFF3E0"
+            elif "bcf" in status_str:
+                bg = "#F3E5F5"
+            else:
+                bg = "#FFFFFF"
+            return [f"background-color: {bg};"] * len(row)
+
         if loans_df.empty:
             st.info("No loans found.")
         else:
+            # 2. DATA PREPARATION
             display_df = loans_df.copy()
 
-            for col in ["principal", "balance", "amount_paid"]:
+            # Ensure numeric types for calculation/display
+            for col in ["principal", "balance", "amount_paid", "interest"]:
                 if col in display_df.columns:
                     display_df[col] = pd.to_numeric(display_df[col], errors="coerce").fillna(0)
 
+            # Ensure ID is integer for the selector
             display_df["loan_id"] = pd.to_numeric(display_df["loan_id"], errors="coerce").fillna(0).astype(int)
 
+            # 3. LOAN SELECTOR (For Metric Cards only)
             loan_options = sorted(display_df["loan_id"].unique())
-
             sel_id = st.selectbox(
-                "🔍 Select Loan",
+                "🔍 Select Loan to View Summary",
                 loan_options,
                 format_func=lambda x: f"{int(x):04d}"
             )
 
-            loan_history = display_df[display_df["loan_id"] == sel_id]
+            # Filter for the summary cards
+            selected_loan_data = display_df[display_df["loan_id"] == sel_id]
+            latest = selected_loan_data.iloc[-1] if not selected_loan_data.empty else {}
 
-            latest = loan_history.iloc[-1] if not loan_history.empty else {}
-
+            # 4. METRIC CARDS (Top Section)
             c1, c2, c3 = st.columns(3)
-
-            c1.markdown(
-                f"""
+            
+            c1.markdown(f"""
                 <div style="background-color:#E3F2FD;padding:15px;border-radius:12px;border-left:6px solid #1E88E5;">
                     <h4 style="margin:0;color:#0A192F;">💰 Paid</h4>
                     <h3 style="margin:0;color:#0A192F;">{float(latest.get('amount_paid', 0)):,.0f}</h3>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                </div>""", unsafe_allow_html=True)
 
-            c2.markdown(
-                f"""
+            c2.markdown(f"""
                 <div style="background-color:#FFF3E0;padding:15px;border-radius:12px;border-left:6px solid #FB8C00;">
                     <h4 style="margin:0;color:#0A192F;">📉 Balance</h4>
                     <h3 style="margin:0;color:#0A192F;">{float(latest.get('balance', 0)):,.0f}</h3>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                </div>""", unsafe_allow_html=True)
 
-            status = str(latest.get("status", "N/A"))
-
-            c3.markdown(
-                f"""
+            status_val = str(latest.get("status", "N/A"))
+            c3.markdown(f"""
                 <div style="background-color:#E8F5E9;padding:15px;border-radius:12px;border-left:6px solid #43A047;">
                     <h4 style="margin:0;color:#0A192F;">📌 Status</h4>
-                    <h3 style="margin:0;color:#0A192F;">{status}</h3>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                    <h3 style="margin:0;color:#0A192F;">{status_val}</h3>
+                </div>""", unsafe_allow_html=True)
+
+            st.markdown("---")
+
+            # 5. FULL TABLE DISPLAY (Restoring the "Everything" view)
+            st.markdown("### 📋 All Portfolio Loans")
             
-            # ==============================
-            # 🧼 CLEAN TABLE DISPLAY
-            # ==============================
-            # 1. Ensure we are filtering based on the selected ID for the table too? 
-            # Or do you want to see ALL loans in the table? 
-            # If you want to see only the selected loan's history:
-            table_view = display_df[display_df["loan_id"] == sel_id].copy()
+            # Prepare the full table view
+            allowed_cols = ["loan_id", "borrower", "principal", "interest", "amount_paid", "balance", "status", "start_date", "end_date"]
+            table_view = display_df[[c for c in allowed_cols if c in display_df.columns]].copy()
 
-            # 2. Define visible columns
-            allowed_cols = [
-                "loan_id", "borrower", "principal", "interest",
-                "amount_paid", "balance", "status",
-                "start_date", "end_date"
-            ]
+            # Formatting for display
+            if "loan_id" in table_view.columns:
+                table_view["loan_id"] = table_view["loan_id"].apply(lambda x: f"{int(x):04d}")
             
-            # Filter columns that actually exist in your DF
-            existing_cols = [c for c in allowed_cols if c in table_view.columns]
-            table_view = table_view[existing_cols].copy()
-
-            if table_view.empty:
-                st.warning("No details available for this selection.")
-            else:
-                # 3. Apply Formatting
-                for col in ["principal", "interest", "amount_paid", "balance"]:
-                    if col in table_view.columns:
-                        table_view[col] = pd.to_numeric(table_view[col], errors="coerce").fillna(0)
-
-                # 4. Final Render
-                st.dataframe(
-                    table_view.style
-                    .format({
-                        "principal": "{:,.0f}",
-                        "interest": "{:,.0f}",
-                        "amount_paid": "{:,.0f}",
-                        "balance": "{:,.0f}",
-                    })
-                    .apply(style_loan_table, axis=1),
-                    use_container_width=True,
-                    hide_index=True
-                )
-
-            table_view = table_view[[c for c in allowed_cols if c in table_view.columns]].copy()
-
-            # ==============================
-            # FORMATTING (READABLE MONEY + DATES)
-            # ==============================
-            for col in ["principal", "interest", "amount_paid", "balance"]:
-                if col in table_view.columns:
-                    table_view[col] = pd.to_numeric(table_view[col], errors="coerce").fillna(0)
-
             for col in ["start_date", "end_date"]:
                 if col in table_view.columns:
                     table_view[col] = pd.to_datetime(table_view[col], errors="coerce").dt.strftime("%Y-%m-%d")
 
-            if "loan_id" in table_view.columns:
-                table_view["loan_id"] = pd.to_numeric(table_view["loan_id"], errors="coerce").fillna(0).astype(int)
-                table_view["loan_id"] = table_view["loan_id"].apply(lambda x: f"{x:04d}")
-
-            # ==============================
-            # 🎨 SAFE ROW COLORS (YOUR STYLE PRESERVED)
-            # ==============================
-            def style_loan_table(row):
-                status_str = str(row.get("status", "")).lower()
-
-                if "active" in status_str:
-                    bg = "#E3F2FD"
-                elif "closed" in status_str:
-                    bg = "#E8F5E9"
-                elif "overdue" in status_str:
-                    bg = "#FFEBEE"
-                elif "pending" in status_str:
-                    bg = "#FFF3E0"
-                elif "bcf" in status_str:
-                    bg = "#F3E5F5"
-                else:
-                    bg = "#FFFFFF"
-
-                return [f"background-color: {bg};"] * len(row)
-
-            # ==============================
-            # 📊 FINAL RENDER (CLEAN + SPACED)
-            # ==============================
+            # Final Render of the FULL list
             st.dataframe(
                 table_view.style
                 .format({
