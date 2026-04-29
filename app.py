@@ -1264,6 +1264,14 @@ def show_loans():
     # To be 100% safe, we re-sync the local variable here:
     loans_df = st.session_state.loans
 
+    # --- RESTORED MISSING VARIABLE ---
+    borrowers_df = get_data("borrowers")
+    if not borrowers_df.empty:
+        borrowers_df.columns = borrowers_df.columns.str.lower().str.replace(" ", "_")
+        active_borrowers = borrowers_df[borrowers_df.get("status", "") == "Active"]
+    else:
+        active_borrowers = pd.DataFrame()
+
     # ==============================
     # STRUCTURE FIX
     # ==============================
