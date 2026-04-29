@@ -828,7 +828,7 @@ def render_sidebar():
         # 📍 NAVIGATION MENU
         # ==============================
         menu = {
-            "Overview": "📈", "Loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
+            "Overview": "📈", "loans": "💵", "Borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
             "Petty Cash": "🪙", "Overdue Tracker": "🚨", "Payments": "💰", "Reports": "📊", "Settings": "⚙️"
         }
@@ -1217,7 +1217,7 @@ def save_data_saas(table_name, df):
 
 
 # ==============================
-# 13. LOANS MANAGEMENT PAGE (Luxe Edition)
+# 13. loans MANAGEMENT PAGE (Luxe Edition)
 # ==============================
 
 def show_loans():
@@ -1225,14 +1225,14 @@ def show_loans():
     Core engine for issuing and managing loan agreements.
     Features Midnight Blue branding, Start Date tracking, and formatted currency.
     """
-    st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #0A192F;'>💵 loans Management</h2>", unsafe_allow_html=True)
     
     # 1. LOAD & NORMALIZE DATA (The Sync Fix)
     # --- THE FIX: ALWAYS CHECK SESSION STATE FIRST ---
     if "loans" in st.session_state and not st.session_state.loans.empty:
         loans_df = st.session_state.loans.copy()
     else:
-        loans_df = get_cached_data("Loans")
+        loans_df = get_cached_data("loans")
         # Initialize session state if it's the first run
         if loans_df is not None:
             st.session_state.loans = loans_df.copy()
@@ -1407,7 +1407,7 @@ def show_loans():
                         final_save = updated_df.copy()
                         final_save.columns = [c.replace("_", " ") for c in final_save.columns]
                         
-                        if save_data("Loans", final_save):
+                        if save_data("loans", final_save):
                             st.success(f"✅ Loan #{new_id} issued to {selected_borrower}!")
                             st.rerun()
 
@@ -1470,10 +1470,10 @@ def show_loans():
                     save_df = loans_df.drop(columns=['display_name'], errors='ignore').copy()
                     save_df.columns = [c.replace("_", " ") for c in save_df.columns]
                     
-                    if save_data("Loans", save_df):
+                    if save_data("loans", save_df):
                         st.success(f"✅ Loan #{clean_id} updated successfully!")
                         st.cache_data.clear()
-                        st.session_state.loans = get_cached_data("Loans")
+                        st.session_state.loans = get_cached_data("loans")
                         st.rerun()
 
             # 4. --- DELETE BUTTON (At the bottom) ---
@@ -1485,7 +1485,7 @@ def show_loans():
                 final_save_df = new_df.drop(columns=['display_name'], errors='ignore').copy()
                 final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
                 
-                if save_data("Loans", final_save_df):
+                if save_data("loans", final_save_df):
                     st.warning(f"⚠️ Loan #{clean_id} deleted.")
                     st.session_state.loans = final_save_df
                     st.rerun()
@@ -1562,10 +1562,10 @@ def show_loans():
                 save_ready_df = updated_df.fillna(0).copy()
                 save_ready_df.columns = [col.replace("_", " ") for col in save_ready_df.columns]
                 
-                if save_data("Loans", save_ready_df):
+                if save_data("loans", save_ready_df):
                     st.success(f"✅ Compounding Successful! Added {count} rows.")
                     st.cache_data.clear() 
-                    st.session_state.loans = get_cached_data("Loans")
+                    st.session_state.loans = get_cached_data("loans")
                     st.rerun()
         except Exception as e:
             st.error(f"🚨 Rollover Error: {str(e)}")
@@ -1665,7 +1665,7 @@ def show_payments():
     loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", 0), errors="coerce").fillna(0)
 
     # ==============================
-    # 🔥 CRITICAL FIX: SYNC PAYMENTS → LOANS
+    # 🔥 CRITICAL FIX: SYNC PAYMENTS → loans
     # ==============================
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["amount"] = pd.to_numeric(payments_df.get("amount", 0), errors="coerce").fillna(0)
@@ -1876,7 +1876,7 @@ def show_collateral():
     loans_df = get_data("loans")
 
     # ==============================
-    # 🔍 FILTER ELIGIBLE LOANS
+    # 🔍 FILTER ELIGIBLE loans
     # ==============================
     if loans_df is not None and not loans_df.empty:
         # Standardize columns to avoid case-sensitivity issues
@@ -3714,7 +3714,7 @@ def show_dashboard_view():
         st.markdown(f"""
         <div style='background:{brand_color}; padding:25px; border-radius:15px; margin-bottom:25px; color:white;'>
             <h1 style='margin:0; font-size:28px;'>🏛️ Financial Control Center</h1>
-            <p style='margin:0; opacity:0.8;'>Real-time insights across Loans, Expenses & Petty Cash</p>
+            <p style='margin:0; opacity:0.8;'>Real-time insights across loans, Expenses & Petty Cash</p>
         </div>
         """, unsafe_allow_html=True)
 
@@ -3782,7 +3782,7 @@ def show_dashboard_view():
         m1.markdown(metric_card("Active Principal", total_principal, "Portfolio Value", brand_color), unsafe_allow_html=True)
         m2.markdown(metric_card("Interest Income", total_interest, "Expected Earnings", "#10B981"), unsafe_allow_html=True)
         m3.markdown(metric_card("Operational Costs", total_expenses, "Total Expenses", "#EF4444"), unsafe_allow_html=True)
-        m4.markdown(metric_card("Critical Alerts", overdue_count, "Overdue Loans", "#F59E0B", False), unsafe_allow_html=True)
+        m4.markdown(metric_card("Critical Alerts", overdue_count, "Overdue loans", "#F59E0B", False), unsafe_allow_html=True)
 
         st.write("##")
 
@@ -4035,7 +4035,7 @@ if __name__ == "__main__":
             if page == "Overview":
                 show_dashboard_view()
                 
-            elif page == "Loans":
+            elif page == "loans":
                 show_loans()
                 
             elif page == "Borrowers":
