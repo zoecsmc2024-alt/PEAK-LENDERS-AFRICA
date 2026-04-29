@@ -1217,10 +1217,26 @@ def save_data_saas(table_name, df):
 
     # 🚨 HARDEN: enforce correct DB-safe column types BEFORE saving
     if "loan_id" in df.columns:
-        df["loan_id"] = pd.to_numeric(df["loan_id"], errors="coerce").fillna(0).astype("int64")
+        # Strip spaces, convert to numeric, drop decimals, force int64
+        df["loan_id"] = (
+            pd.to_numeric(df["loan_id"], errors="coerce")  # convert to number or NaN
+            .fillna(0)                                     # replace NaN with 0
+            .astype("int64")                               # force integer type
+        )
+
+    # If there are other integer columns, enforce them too
+    int_cols = ["customer_id", "duration_in_months"]  # adjust to your schema
+    for col in int_cols:
+        if col in df.columns:
+            df[col] = (
+                pd.to_numeric(df[col], errors="coerce")
+                .fillna(0)
+                .astype("int64")
+            )
 
     # DO NOT rename columns EVER
     return save_data(table_name, df)
+
 
 
 # ==============================
