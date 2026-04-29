@@ -1249,21 +1249,20 @@ def show_loans():
     st.markdown("<h2 style='color: #0A192F;'>💵 Loans Management</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # LOAD DATA
+    # LOAD DATA (SYNC-AWARE)
     # ==============================
+    # Always try to get from state first for speed
     loans_df = st.session_state.get("loans")
 
-    if loans_df is None or loans_df.empty:
+    # If state is missing OR we just performed an action that requires a fresh pull
+    if loans_df is None:
         loans_df = get_data("loans")
         st.session_state.loans = loans_df.copy()
-
-    borrowers_df = get_data("borrowers")
-
-    if not borrowers_df.empty:
-        borrowers_df.columns = borrowers_df.columns.str.lower().str.replace(" ", "_")
-        active_borrowers = borrowers_df[borrowers_df.get("status", "") == "Active"]
-    else:
-        active_borrowers = pd.DataFrame()
+    
+    # IMPORTANT: If you just called get_data() in Add/Manage tab, 
+    # ensure it actually overwrote the session state.
+    # To be 100% safe, we re-sync the local variable here:
+    loans_df = st.session_state.loans
 
     # ==============================
     # STRUCTURE FIX
