@@ -1426,7 +1426,7 @@ def show_loans():
 
                         new_loan = pd.DataFrame([{
                             "tenant_id": str(tenant_id) if tenant_id else "default",
-                            "loan_id": new_id,
+                            "loan_id": int(new_id),
                             "borrower": selected_borrower,
                             "type": l_type,
                             "principal": float(amount),
