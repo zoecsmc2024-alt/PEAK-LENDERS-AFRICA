@@ -1588,89 +1588,104 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # TAB: ACTIONS
-    # ==============================
-    with tab_actions:
-        st.markdown("### 🔄 Loan Lifecycle Operations")
-        
-        if "rollover_done" not in st.session_state:
-            st.session_state.rollover_done = False
+# TAB: ACTIONS
+# ==============================
+with tab_actions:
+    st.markdown("### 🔄 Loan Lifecycle")
+    
+    if "rollover_done" not in st.session_state:
+        st.session_state.rollover_done = False
 
-        if st.button("🔄 Execute Monthly Rollover (Compound All)", use_container_width=True):
-            if st.session_state.rollover_done:
-                st.warning("⚠️ Rollover already executed in this session.")
+    if st.button("🔄 Execute Monthly Rollover", use_container_width=50):
+        if st.session_state.rollover_done:
+            st.warning("⚠️ Rollover already executed in this session.")
+        else:
+            # 1. Initialize logic variables
+            new_rows_list = []
+            count = 0
+            
+            # Create a working copy and force alignment
+            updated_df = loans_df.copy()
+
+            # 2. Pre-processing & Strict Normalization
+            # Force status to lowercase for the filter check
+            updated_df['status_check'] = updated_df['status'].astype(str).str.strip().str.lower()
+            
+            # Force numeric types to avoid 'float vs string' errors
+            money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid', 'interest_rate']
+            for col in money_cols:
+                if col in updated_df.columns:
+                    updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
+
+            # 3. Date Alignment (The most likely culprit)
+            # Normalize 'today' to midnight and ensure end_date is a matching date object
+            today = pd.Timestamp.today().normalize()
+            updated_df['end_date_dt'] = pd.to_datetime(updated_df['end_date'], errors='coerce').dt.normalize()
+
+            # 4. Filter targets: We use '<=' to catch loans due TODAY or earlier
+            targets = updated_df[
+                (updated_df['status_check'] == "pending") & 
+                (updated_df['balance'] > 0) & 
+                (updated_df['end_date_dt'] <= today)
+            ].copy()
+
+            if targets.empty:
+                st.info("No loans currently require a rollover cycle. (Check if Due Dates are in the future)")
+                # Debugging help: show what the filter saw
+                with st.expander("Debug Filter Data"):
+                    st.write("Today is:", today)
+                    st.write(updated_df[['loan_id', 'status_check', 'balance', 'end_date_dt']])
             else:
-                # 1. Initialize logic variables
-                new_rows_list = []
-                count = 0
-                updated_df = loans_df.copy()
+                for i, r in targets.iterrows():
+                    # Archive old row in original dataframe
+                    # We use the index 'i' to update the correct row in updated_df
+                    updated_df.at[i, 'status'] = "BCF" 
 
-                # 2. Pre-processing & Normalization
-                updated_df['end_date'] = pd.to_datetime(updated_df['end_date'], errors='coerce')
-                updated_df['status'] = updated_df['status'].astype(str).str.strip().str.lower()
-                
-                money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
-                for col in money_cols:
-                    if col in updated_df.columns:
-                        updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
+                    # Compounding Logic
+                    old_p = float(r.get('principal', 0))
+                    old_i = float(r.get('interest', 0))
+                    new_basis = old_p + old_i
+                    
+                    # Check both possible naming conventions for interest rate
+                    rate = float(r.get('interest_rate', r.get('monthly_interest_rate', 3))) 
+                    
+                    new_month_interest = new_basis * (rate / 100)
+                    compounded_balance = new_basis + new_month_interest
+                    
+                    # Date Calculations for the NEW row
+                    orig_end = r['end_date_dt']
+                    new_start = orig_end if pd.notna(orig_end) else today
+                    new_end = new_start + pd.DateOffset(months=1)
 
-                # 3. Filter targets: Robust date and status check
-                today = pd.Timestamp.today().normalize()
-                
-                # Convert end_date to datetime and remove time/timezone for clean comparison
-                updated_df['end_date_dt'] = pd.to_datetime(updated_df['end_date'], errors='coerce').dt.normalize()
+                    # Create new rollover row
+                    new_row = r.copy()
+                    new_row['principal'] = new_basis
+                    new_row['interest'] = new_month_interest
+                    new_row['balance'] = compounded_balance
+                    new_row['start_date'] = new_start.strftime("%Y-%m-%d")
+                    new_row['end_date'] = new_end.strftime("%Y-%m-%d")
+                    new_row['status'] = "Pending" # Set back to display casing
+                    
+                    # Remove the helper columns before adding to list
+                    if 'status_check' in new_row: del new_row['status_check']
+                    if 'end_date_dt' in new_row: del new_row['end_date_dt']
+                    
+                    new_rows_list.append(new_row)
+                    count += 1
 
-                targets = updated_df[
-                    (updated_df['status'].str.lower() == "pending") & 
-                    (updated_df['balance'] > 0) & 
-                    (updated_df['end_date_dt'] <= today) # Change < to <= to include today
-                ].copy()
-                
-                # Drop the helper column so it doesn't break the database save
-                updated_df = updated_df.drop(columns=['end_date_dt'])
-                if targets.empty:
-                    st.info("No loans currently require a rollover cycle.")
-                else:
-                    for i, r in targets.iterrows():
-                        # Archive old row: Use uppercase if that is your UI standard
-                        updated_df.at[i, 'status'] = "BCF" 
-
-                        # Compounding Logic
-                        old_p = float(r.get('principal', 0))
-                        old_i = float(r.get('interest', 0))
-                        new_basis = old_p + old_i
-                        
-                        # Match the column name from your 'Create New Loan' UI
-                        rate = float(r.get('interest_rate', r.get('monthly_interest_rate', 3))) 
-                        
-                        new_month_interest = new_basis * (rate / 100)
-                        compounded_balance = new_basis + new_month_interest
-                        
-                        # Date Calculations
-                        orig_end = pd.to_datetime(r.get('end_date'), errors='coerce')
-                        new_start = orig_end if pd.notna(orig_end) else pd.Timestamp.today()
-                        new_end = new_start + pd.DateOffset(months=1)
-
-                        # Create new rollover row
-                        new_row = r.copy()
-                        new_row['principal'] = new_basis
-                        new_row['interest'] = new_month_interest
-                        new_row['balance'] = compounded_balance
-                        new_row['start_date'] = new_start.strftime("%Y-%m-%d")
-                        new_row['end_date'] = new_end.strftime("%Y-%m-%d")
-                        new_row['status'] = "pending"
-                        
-                        new_rows_list.append(new_row)
-                        count += 1
-
-                # 4. Final Save and UI Refresh
+                # 5. Final Save and UI Refresh
                 if new_rows_list:
+                    # Clean up updated_df helper columns before concat
+                    updated_df = updated_df.drop(columns=['status_check', 'end_date_dt'], errors='ignore')
+                    
                     final_df = pd.concat([updated_df, pd.DataFrame(new_rows_list)], ignore_index=True)
                     
-                    # Clean columns for database save (no spaces, all lowercase)
-                    final_df.columns = [c.lower().replace(" ", "_") for c in final_df.columns]
-                    if "display_name" in final_df.columns:
-                        final_df = final_df.drop(columns=["display_name"])
+                    # Clean columns for database (lowercase and underscores)
+                    final_df.columns = [str(c).lower().replace(" ", "_") for c in final_df.columns]
+                    
+                    # Drop any UI-only columns that shouldn't go to Supabase
+                    cols_to_drop = ["display_name", "borrower_name_check"]
+                    final_df = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns], errors='ignore')
 
                     if save_data_saas("loans", final_df):
                         st.session_state.rollover_done = True
@@ -1678,7 +1693,7 @@ def show_loans():
                         st.session_state.loans = get_data("loans")
                         st.rerun()
                 else:
-                    st.info("No loans were rolled over.")
+                    st.error("Processing error: Targets were found but rows were not created.")
     
     
 import pandas as pd
