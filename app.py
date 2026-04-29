@@ -1292,8 +1292,9 @@ def show_loans():
             "total_repayable", "amount_paid", "balance",
             "status", "start_date", "end_date", "tenant_id"
         ])
-    # Force the types immediately
+        # Force the types immediately
         loans_df["loan_id"] = loans_df["loan_id"].astype("int64")
+
     # ==============================
     # 3. CLEAN NUMERIC DATA
     # ==============================
