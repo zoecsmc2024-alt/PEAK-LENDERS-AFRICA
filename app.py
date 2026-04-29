@@ -1614,26 +1614,35 @@ def show_loans():
                     if col in updated_df.columns:
                         updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-                # 3. Filter targets: Pending loans, balance > 0, and end_date before today
+                # 3. Filter targets: Robust date and status check
                 today = pd.Timestamp.today().normalize()
-                targets = updated_df[
-                    (updated_df['status'] == "pending") & 
-                    (updated_df['balance'] > 0) & 
-                    (updated_df['end_date'] < today)
-                ].copy()
+                
+                # Convert end_date to datetime and remove time/timezone for clean comparison
+                updated_df['end_date_dt'] = pd.to_datetime(updated_df['end_date'], errors='coerce').dt.normalize()
 
+                targets = updated_df[
+                    (updated_df['status'].str.lower() == "pending") & 
+                    (updated_df['balance'] > 0) & 
+                    (updated_df['end_date_dt'] <= today) # Change < to <= to include today
+                ].copy()
+                
+                # Drop the helper column so it doesn't break the database save
+                updated_df = updated_df.drop(columns=['end_date_dt'])
                 if targets.empty:
                     st.info("No loans currently require a rollover cycle.")
                 else:
                     for i, r in targets.iterrows():
-                        # Archive old row
-                        updated_df.at[i, 'status'] = "bcf" # Keeping lowercase for DB consistency
+                        # Archive old row: Use uppercase if that is your UI standard
+                        updated_df.at[i, 'status'] = "BCF" 
 
                         # Compounding Logic
                         old_p = float(r.get('principal', 0))
                         old_i = float(r.get('interest', 0))
                         new_basis = old_p + old_i
-                        rate = float(r.get('interest_rate', 3)) 
+                        
+                        # Match the column name from your 'Create New Loan' UI
+                        rate = float(r.get('interest_rate', r.get('monthly_interest_rate', 3))) 
+                        
                         new_month_interest = new_basis * (rate / 100)
                         compounded_balance = new_basis + new_month_interest
                         
