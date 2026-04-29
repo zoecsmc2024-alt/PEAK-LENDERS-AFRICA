@@ -1413,7 +1413,7 @@ def show_loans():
                         # --- CRITICAL FIX START ---
                         # Keep columns clean with underscores so they match the DB exactly
                         final_save = updated_df.copy()
-                        # Removed: final_save.columns = [c.replace("_", " ") for c in final_save.columns]
+                        
                         # --- CRITICAL FIX END ---
                         
                         if save_data_saas("loans", final_save):
