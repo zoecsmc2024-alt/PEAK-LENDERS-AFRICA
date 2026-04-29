@@ -940,7 +940,7 @@ def show_borrowers():
         loans_df["borrower_id"] = loans_df["borrower_id"].astype(str).str.strip()
         
         bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
-        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown Borrower")
+        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown borrower")
     else:
         loans_df["borrower"] = "Unknown"
 
@@ -979,11 +979,11 @@ def show_borrowers():
     # ==============================
     # 📑 UI NAVIGATION
     # ==============================
-    tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add Borrower"])
+    tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add borrower"])
 
     with tab_add:
         with st.form("add_borrower_form", clear_on_submit=True):
-            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
+            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
             name = c1.text_input("Full Name*")
             phone = c2.text_input("Phone Number*")
@@ -992,7 +992,7 @@ def show_borrowers():
             addr = c1.text_input("Physical Address")
             nok = c2.text_input("Next of Kin (Name & Contact)")
             
-            if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
+            if st.form_submit_button("🚀 Save borrower Profile", use_container_width=True):
                 if name and phone:
                     new_id = str(uuid.uuid4())
                     new_entry = pd.DataFrame([{
@@ -1058,7 +1058,7 @@ def show_borrowers():
                     <table style='width:100%; border-collapse:collapse; font-family:Inter, sans-serif; font-size:13px;'>
                         <thead>
                             <tr style='background:{brand_color}; color:white; text-align:left;'>
-                                <th style='padding:14px;'>Borrower Name</th>
+                                <th style='padding:14px;'>borrower Name</th>
                                 <th style='padding:14px;'>Phone</th>
                                 <th style='padding:14px;'>National ID</th>
                                 <th style='padding:14px;'>Next of Kin</th>
@@ -1085,7 +1085,7 @@ def show_borrowers():
             st.info("The registry is currently empty.")
 
     # ==============================
-    # 👤 BORROWER PROFILE PANEL (EXPANDED)
+    # 👤 borrower PROFILE PANEL (EXPANDED)
     # ==============================
     selected_id = st.session_state.get("selected_borrower")
 
@@ -1248,7 +1248,7 @@ def show_loans():
     
     # Ensure loans_df is valid
     if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=["loan_id", "Borrower", "principal", "Interest", "total_repayable", "amount_paid", "Balance", "status", "Start_Date", "End_Date"])
+        loans_df = pd.DataFrame(columns=["loan_id", "borrower", "principal", "Interest", "total_repayable", "amount_paid", "Balance", "status", "Start_Date", "End_Date"])
     
     # Normalize headers
     loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
@@ -1343,7 +1343,7 @@ def show_loans():
                     return styles
 
                 # 4. PREP DATA
-                base_cols = ["loan_id", "Borrower", "principal", "Balance"]
+                base_cols = ["loan_id", "borrower", "principal", "Balance"]
                 date_cols = []
                 for d_col in ["Start_Date", "Start Date", "End_Date", "End Date"]:
                     if d_col in active_view.columns: date_cols.append(d_col)
@@ -1376,7 +1376,7 @@ def show_loans():
                 st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
                 
-                selected_borrower = col1.selectbox("Select Borrower", active_borrowers["Name"].unique())
+                selected_borrower = col1.selectbox("Select borrower", active_borrowers["Name"].unique())
                 amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
@@ -1395,7 +1395,7 @@ def show_loans():
                         new_id = int(last_id + 1) if pd.notna(last_id) else 1
                         
                         new_loan = pd.DataFrame([{
-                            "loan_id": new_id, "Borrower": selected_borrower, "Type": l_type,
+                            "loan_id": new_id, "borrower": selected_borrower, "Type": l_type,
                             "principal": float(amount), "Interest": float(interest),
                             "total_repayable": float(total_due), "amount_paid": 0.0,
                             "status": "Active", "Start_Date": date_issued.strftime("%Y-%m-%d"),
@@ -1420,7 +1420,7 @@ def show_loans():
         else:
             # 1. Selection with Names
             loans_df['display_name'] = loans_df.apply(
-                lambda x: f"ID: {str(x['loan_id']).replace('.0', '')} - {x['Borrower']}", 
+                lambda x: f"ID: {str(x['loan_id']).replace('.0', '')} - {x['borrower']}", 
                 axis=1
             )
             
@@ -1441,7 +1441,7 @@ def show_loans():
             with st.form("edit_loan_form"):
                 col1, col2 = st.columns(2)
                 
-                new_borrower = col1.text_input("Borrower Name", value=loan_to_edit['Borrower'])
+                new_borrower = col1.text_input("borrower Name", value=loan_to_edit['borrower'])
                 new_principal = col1.number_input("principal (UGX)", value=float(loan_to_edit['principal']))
                 new_interest = col1.number_input("Interest (UGX)", value=float(loan_to_edit['Interest']))
                 
@@ -1454,7 +1454,7 @@ def show_loans():
                     # Update the dataframe
                     idx = loans_df[loans_df["loan_id"].astype(str).str.replace(".0", "", regex=False) == clean_id].index[0]
                     
-                    loans_df.at[idx, 'Borrower'] = new_borrower
+                    loans_df.at[idx, 'borrower'] = new_borrower
                     loans_df.at[idx, 'principal'] = new_principal
                     loans_df.at[idx, 'Interest'] = new_interest
                     loans_df.at[idx, 'status'] = new_status
@@ -1645,7 +1645,7 @@ def show_payments():
             df[col] = df[col].astype(str)
 
     # ==============================
-    # 👤 BORROWER NAME RESOLUTION
+    # 👤 borrower NAME RESOLUTION
     # ==============================
     if not borrowers_df.empty and "id" in borrowers_df.columns and "name" in borrowers_df.columns:
         borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
@@ -1710,7 +1710,7 @@ def show_payments():
                 balance = total - paid
 
                 c1, c2 = st.columns(2)
-                c1.metric("👤 Borrower", loan["borrower"])
+                c1.metric("👤 borrower", loan["borrower"])
                 c2.metric("💰 Balance", f"UGX {balance:,.0f}")
 
                 with st.form("payment_form"):
@@ -1758,7 +1758,7 @@ def show_payments():
                             file_path = f"/tmp/{receipt_no}.pdf"
                             generate_receipt_pdf({
                                 "Receipt No": receipt_no,
-                                "Borrower": loan["borrower"],
+                                "borrower": loan["borrower"],
                                 "Amount": f"UGX {amount:,.0f}",
                                 "Method": method,
                                 "Date": date.strftime("%Y-%m-%d"),
@@ -1906,7 +1906,7 @@ def show_collateral():
                     lambda x: f"{x['borrower']} (ID: {x['id']})", axis=1
                 ).tolist()
                 
-                selected_label = c1.selectbox("Select Loan/Borrower", options=loan_labels)
+                selected_label = c1.selectbox("Select Loan/borrower", options=loan_labels)
                 asset_type = c2.selectbox(
                     "Asset Type",
                     ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
@@ -2027,16 +2027,16 @@ def show_calendar():
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- 👤 INJECT BORROWER NAMES (MAPPING) ---
+    # --- 👤 INJECT borrower NAMES (MAPPING) ---
     if borrowers_df is not None and not borrowers_df.empty:
         # Standardizing ID columns for a perfect match
         borrowers_df['id'] = borrowers_df['id'].astype(str)
         loans_df['borrower_id'] = loans_df['borrower_id'].astype(str)
         
         bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
-        loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown Borrower")
+        loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown borrower")
     else:
-        loans_df['borrower'] = "Unknown Borrower"
+        loans_df['borrower'] = "Unknown borrower"
 
     # --- 🛡️ STANDARDIZATION ---
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
@@ -2121,7 +2121,7 @@ def show_calendar():
                 <table style="width:100%;border-collapse:collapse;font-size:12px;">
                     <tr style="background:#2B3F87;color:white;">
                         <th style="padding:10px;">Loan ID</th>
-                        <th style="padding:10px;">Borrower</th>
+                        <th style="padding:10px;">borrower</th>
                         <th style="padding:10px;text-align:right;">Amount</th>
                         <th style="padding:10px;text-align:center;">Action</th>
                     </tr>
@@ -2152,7 +2152,7 @@ def show_calendar():
                 <table style="width:100%;border-collapse:collapse;font-size:12px;">
                     <tr style="background:#FF4B4B;color:white;">
                         <th style="padding:10px;">Loan ID</th>
-                        <th style="padding:10px;">Borrower</th>
+                        <th style="padding:10px;">borrower</th>
                         <th style="padding:10px;text-align:center;">Late By</th>
                         <th style="padding:10px;text-align:center;">status</th>
                     </tr>
@@ -2653,7 +2653,7 @@ def show_overdue_tracker():
     st.markdown("<br>", unsafe_allow_html=True)
     f1, f2 = st.columns([1, 2])
     risk_filter = f1.selectbox("Filter Risk", ["All Levels", "🔴 High Risk", "🟠 Watch", "🟢 Stable"])
-    search = f2.text_input("🔍 Search Borrower or Loan ID")
+    search = f2.text_input("🔍 Search borrower or Loan ID")
 
     display_df = overdue_df.copy()
     if risk_filter != "All Levels":
@@ -3266,7 +3266,7 @@ def show_ledger():
     if payments_df is not None and not payments_df.empty:
         payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # Map Borrower Names
+    # Map borrower Names
     bor_map = {}
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
