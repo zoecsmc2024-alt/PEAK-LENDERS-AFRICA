@@ -1413,51 +1413,93 @@ def show_loans():
     with tab_add:
 
         if active_borrowers.empty:
-            st.info("No active borrowers.")
+            st.info("💡 Tip: Activate a borrower in the 'borrowers' section.")
         else:
-            with st.form("loan_form"):
+            with st.form("loan_issue_form"):
 
-                borrower_list = (
-                    active_borrowers["name"]
-                    if "name" in active_borrowers.columns
-                    else active_borrowers.get("borrower", [])
+                st.markdown("<h4 style='color: #0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
+
+                col1, col2 = st.columns(2)
+
+                selected_borrower = col1.selectbox(
+                    "Select borrower",
+                    active_borrowers["name"].unique() if "name" in active_borrowers.columns else active_borrowers["borrower"].unique()
                 )
 
-                borrower = st.selectbox("Borrower", borrower_list)
+                amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
+                date_issued = col1.date_input("Start Date", value=datetime.now())
 
-                principal = st.number_input("Principal", min_value=0)
-                rate = st.number_input("Interest %", min_value=0.0)
-                start = st.date_input("Start")
-                end = st.date_input("End")
+                l_type = col2.selectbox("Loan type", ["Business", "Personal", "Emergency", "Other"])
+                interest_rate = col2.number_input("Monthly interest Rate (%)", min_value=0.0, step=0.5)
+                date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
-                interest = (rate / 100) * principal
-                total = principal + interest
+                # ==============================
+                # VALIDATION (SAFE FIX)
+                # ==============================
+                if date_due <= date_issued:
+                    st.error("❌ Due date must be after start date")
 
-                if st.form_submit_button("Create Loan"):
+                interest = (interest_rate / 100) * amount
+                total_due = amount + interest
 
-                    last_id = pd.to_numeric(loans_df.get("loan_id", []), errors="coerce").max()
-                    new_id = int(last_id + 1) if pd.notna(last_id) else 1
+                st.markdown(
+                    f"""
+                    <div style="background-color: #F0F8FF; padding: 10px; border-radius: 8px; border-left: 5px solid #0A192F;">
+                    <p style="margin:0; color:#0A192F;">
+                    <b>Preview:</b> Total Repayable will be <b>{total_due:,.0f} UGX</b>
+                    </p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
 
-                    new_row = pd.DataFrame([{
-                        "loan_id": new_id,
-                        "borrower": borrower,
-                        "principal": principal,
-                        "interest": interest,
-                        "total_repayable": total,
-                        "amount_paid": 0,
-                        "balance": total,
-                        "status": "Active",
-                        "start_date": str(start),
-                        "end_date": str(end),
-                        "tenant_id": get_current_tenant()
-                    }])
+                if st.form_submit_button("🚀 Confirm & Issue Loan", use_container_width=True):
 
-                    loans_df = pd.concat([loans_df, new_row], ignore_index=True)
+                    if amount > 0 and date_due > date_issued:
 
-                    if save_data_saas("loans", loans_df):
-                        st.session_state.loans = get_data("loans")
-                        st.rerun()
+                        tenant_id = get_current_tenant()
 
+                        # SAFE ID GENERATION
+                        if "loan_id" in loans_df.columns and not loans_df.empty:
+                            last_id = pd.to_numeric(loans_df["loan_id"], errors="coerce").max()
+                        else:
+                            last_id = 0
+
+                        new_id = int(last_id + 1) if pd.notna(last_id) else 1
+
+                        # NEW LOAN ROW (UNCHANGED LOGIC)
+                        new_loan = pd.DataFrame([{
+                            "tenant_id": str(tenant_id) if tenant_id else "default",
+                            "loan_id": new_id,
+                            "borrower": selected_borrower,
+                            "type": l_type,
+                            "principal": float(amount),
+                            "interest": float(interest),
+                            "total_repayable": float(total_due),
+                            "amount_paid": 0.0,
+                            "balance": float(total_due),
+                            "status": "Active",
+                            "start_date": date_issued.strftime("%Y-%m-%d"),
+                            "end_date": date_due.strftime("%Y-%m-%d"),
+                            "interest_rate": float(interest_rate)
+                        }])
+
+                        updated_df = pd.concat([loans_df, new_loan], ignore_index=True)
+
+                        # ==============================
+                        # DB HARDENING (PRESERVED)
+                        # ==============================
+                        final_save = updated_df.copy()
+
+                        int_cols = ["loan_id", "customer_id", "duration_in_months"]
+                        for col in int_cols:
+                            if col in final_save.columns:
+                                final_save[col] = pd.to_numeric(final_save[col], errors="coerce").fillna(0).astype("int64")
+
+                        if save_data_saas("loans", final_save):
+                            st.success(f"✅ Loan #{new_id:04d} Issued Successfully!")
+                            st.session_state.loans = get_data("loans")
+                            st.rerun()
     # ==============================
     # MANAGE TAB
     # ==============================
