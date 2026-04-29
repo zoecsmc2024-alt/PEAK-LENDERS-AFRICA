@@ -897,16 +897,31 @@ def show_borrowers():
     # 🧠 SAFE HELPERS (INTERNAL)
     # ==============================
     def safe_df(df):
+        """
+        Ensure the object is a valid pandas DataFrame.
+        Returns an empty DataFrame if not.
+        """
         return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
 
-    def safe_numeric(df, col, default=0.0):
+    def safe_numeric(df, col, default=0.0, as_int=False):
+        """
+        Safely extract a numeric column from a DataFrame.
+        - If column doesn't exist, fills with default.
+        - If as_int=True, returns int64 dtype (useful for BIGINT DB fields).
+        """
         if not isinstance(df, pd.DataFrame) or df.empty:
-            return pd.Series(dtype="float64")
+            return pd.Series(dtype="int64" if as_int else "float64")
+
         if col in df.columns:
             s = pd.to_numeric(df[col], errors="coerce")
         else:
             s = pd.Series([default] * len(df), index=df.index)
-        return s.fillna(default)
+
+        s = s.fillna(default)
+
+        if as_int:
+            return s.astype("int64")
+        return s
 
     # ==============================
     # 📥 LOAD & NORMALIZE DATA
