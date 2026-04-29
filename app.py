@@ -1404,7 +1404,7 @@ def show_loans():
                 amount = col1.number_input("principal Amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start Date", value=datetime.now())
                 
-                l_type = col2.selectbox("Loan Type", ["Business", "Personal", "Emergency", "Other"])
+                l_type = col2.selectbox("Loan type", ["Business", "Personal", "Emergency", "Other"])
                 interest_rate = col2.number_input("Monthly interest Rate (%)", min_value=0.0, step=0.5)
                 date_due = col2.date_input("Due Date", value=date_issued + timedelta(days=30))
 
@@ -1427,7 +1427,7 @@ def show_loans():
                             "tenant_id": str(tenant_id) if tenant_id else "default",
                             "loan_id": new_id,
                             "borrower": selected_borrower,
-                            "Type": l_type,
+                            "type": l_type,
                             "principal": float(amount),
                             "interest": float(interest),
                             "total_repayable": float(total_due),
@@ -1930,7 +1930,7 @@ def show_collateral():
                 
                 selected_label = c1.selectbox("Select Loan/borrower", options=loan_labels)
                 asset_type = c2.selectbox(
-                    "Asset Type",
+                    "Asset type",
                     ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
                 )
 
@@ -2478,7 +2478,7 @@ def show_petty_cash():
         with st.form("petty_cash_form", clear_on_submit=True):
             st.write("### Log Cash Movement")
             col_a, col_b = st.columns(2)
-            ttype = col_a.selectbox("Transaction Type", ["Out", "In"], help="'In' for top-ups, 'Out' for expenses")
+            ttype = col_a.selectbox("Transaction type", ["Out", "In"], help="'In' for top-ups, 'Out' for expenses")
             t_amount = col_b.number_input("Amount (UGX)", min_value=0, step=500)
             desc = st.text_input("Purpose / Description", placeholder="e.g., Office Internet bundle, Cleaning supplies")
 
@@ -2514,7 +2514,7 @@ def show_petty_cash():
             # Stylized display using st.dataframe
             st.dataframe(
                 display_df[["date", "type", "description", "amount"]].rename(
-                    columns={"date": "Date", "type": "Type", "description": "Details", "amount": "Amount (UGX)"}
+                    columns={"date": "Date", "type": "type", "description": "Details", "amount": "Amount (UGX)"}
                 ),
                 use_container_width=True,
                 hide_index=True
