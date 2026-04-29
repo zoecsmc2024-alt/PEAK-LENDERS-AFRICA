@@ -1303,7 +1303,7 @@ def show_loans():
                 
                 if not loan_history.empty:
                     # .iloc[-1] grabs the very last record (the current cycle)
-                    latest_info = loan_history.sort_values("Start_Date").iloc[-1]
+                    latest_info = loan_historyloans_df["Start_Date"] = pd.to_datetime(loans_df["Start_Date"], errors="coerce").iloc[-1]
                     
                     rec_val = float(latest_info.get('amount_paid', 0))
                     out_val = float(latest_info.get('Balance', 0))
