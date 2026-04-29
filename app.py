@@ -1248,19 +1248,19 @@ def show_loans():
     
     # Ensure loans_df is valid
     if loans_df is None or loans_df.empty:
-        loans_df = pd.DataFrame(columns=["Loan_ID", "Borrower", "Principal", "Interest", "Total_Repayable", "Amount_Paid", "Balance", "status", "Start_Date", "End_Date"])
+        loans_df = pd.DataFrame(columns=["Loan_ID", "Borrower", "Principal", "Interest", "total_repayable", "Amount_Paid", "Balance", "status", "Start_Date", "End_Date"])
     
     # Normalize headers
     loans_df.columns = [str(col).strip().replace(" ", "_") for col in loans_df.columns]
 
     # Clean numeric columns for math and comma formatting
-    num_cols = ["Principal", "Interest", "Total_Repayable", "Amount_Paid", "Balance"]
+    num_cols = ["Principal", "Interest", "total_repayable", "Amount_Paid", "Balance"]
     for col in num_cols:
         if col in loans_df.columns:
             loans_df[col] = pd.to_numeric(loans_df[col], errors='coerce').fillna(0)
 
     # Auto-Calc Balance
-    loans_df["Balance"] = loans_df["Total_Repayable"] - loans_df["Amount_Paid"]
+    loans_df["Balance"] = loans_df["total_repayable"] - loans_df["Amount_Paid"]
 
     # ==============================
     # ✅ AUTO-CLOSE ENGINE (NEW FIX)
@@ -1273,7 +1273,7 @@ def show_loans():
         # If balance is 0, force status to Closed and cleanup figures
         loans_df.loc[closed_mask, "status"] = "Closed"
         loans_df.loc[closed_mask, "Balance"] = 0
-        loans_df.loc[closed_mask, "Total_Repayable"] = loans_df.loc[closed_mask, "Amount_Paid"]
+        loans_df.loc[closed_mask, "total_repayable"] = loans_df.loc[closed_mask, "Amount_Paid"]
 
     tab_view, tab_add, tab_manage, tab_actions = st.tabs(["📑 Portfolio View", "➕ New Loan", "🛠️ Manage/Edit", "⚙️ Actions"])
 
@@ -1397,7 +1397,7 @@ def show_loans():
                         new_loan = pd.DataFrame([{
                             "Loan_ID": new_id, "Borrower": selected_borrower, "Type": l_type,
                             "Principal": float(amount), "Interest": float(interest),
-                            "Total_Repayable": float(total_due), "Amount_Paid": 0.0,
+                            "total_repayable": float(total_due), "Amount_Paid": 0.0,
                             "status": "Active", "Start_Date": date_issued.strftime("%Y-%m-%d"),
                             "End_Date": date_due.strftime("%Y-%m-%d")
                         }])
@@ -1463,7 +1463,7 @@ def show_loans():
                     
                     # Recalculate Total and Balance for this row
                     new_total = new_principal + new_interest
-                    loans_df.at[idx, 'Total_Repayable'] = new_total
+                    loans_df.at[idx, 'total_repayable'] = new_total
                     loans_df.at[idx, 'Balance'] = new_total - float(loan_to_edit['Amount_Paid'])
 
                     # Save to Sheets
@@ -1502,7 +1502,7 @@ def show_loans():
         
         try: 
             # FORCE NUMERIC: This kills the "stubborn balance" issue
-            money_cols = ['Principal', 'Interest', 'Balance', 'Total_Repayable', 'Amount_Paid']
+            money_cols = ['Principal', 'Interest', 'Balance', 'total_repayable', 'Amount_Paid']
             for col in money_cols:
                 if col in updated_df.columns:
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
@@ -1543,7 +1543,7 @@ def show_loans():
                         new_row['Principal'] = new_basis
                         new_row['Interest'] = new_month_interest
                         new_row['Balance'] = compounded_balance 
-                        new_row['Total_Repayable'] = compounded_balance
+                        new_row['total_repayable'] = compounded_balance
                         new_row['Amount_Paid'] = 0
                         new_row['status'] = "Pending" 
                         new_row['Balance_B/F'] = new_basis 
