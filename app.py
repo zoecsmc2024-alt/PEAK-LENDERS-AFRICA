@@ -1527,7 +1527,7 @@ def show_loans():
                         # New Basis = 514,000 (Old P + Old I)
                         new_basis = old_p + old_i
                         # New Interest = 15,420 (3% of 514k)
-                        new_month_interest = new_basis * 0.03
+                        new_month_interest = new_basis * (r.get('interest_rate', 3) / 100)
                         # Final Balance = 529,420
                         compounded_balance = new_basis + new_month_interest
                         
