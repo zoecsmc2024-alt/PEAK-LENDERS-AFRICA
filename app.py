@@ -1370,18 +1370,45 @@ def show_loans():
             )
             
             # ==============================
-            # 🧼 CLEAN TABLE DISPLAY (SPACED + CONTROLLED)
+            # 🧼 CLEAN TABLE DISPLAY
             # ==============================
-            table_view = display_df.copy()
+            # 1. Ensure we are filtering based on the selected ID for the table too? 
+            # Or do you want to see ALL loans in the table? 
+            # If you want to see only the selected loan's history:
+            table_view = display_df[display_df["loan_id"] == sel_id].copy()
 
-            # ==============================
-            # KEEP ONLY UI-RELEVANT COLUMNS (SUPABASE SAFE FILTER)
-            # ==============================
+            # 2. Define visible columns
             allowed_cols = [
                 "loan_id", "borrower", "principal", "interest",
                 "amount_paid", "balance", "status",
                 "start_date", "end_date"
             ]
+            
+            # Filter columns that actually exist in your DF
+            existing_cols = [c for c in allowed_cols if c in table_view.columns]
+            table_view = table_view[existing_cols].copy()
+
+            if table_view.empty:
+                st.warning("No details available for this selection.")
+            else:
+                # 3. Apply Formatting
+                for col in ["principal", "interest", "amount_paid", "balance"]:
+                    if col in table_view.columns:
+                        table_view[col] = pd.to_numeric(table_view[col], errors="coerce").fillna(0)
+
+                # 4. Final Render
+                st.dataframe(
+                    table_view.style
+                    .format({
+                        "principal": "{:,.0f}",
+                        "interest": "{:,.0f}",
+                        "amount_paid": "{:,.0f}",
+                        "balance": "{:,.0f}",
+                    })
+                    .apply(style_loan_table, axis=1),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
             table_view = table_view[[c for c in allowed_cols if c in table_view.columns]].copy()
 
