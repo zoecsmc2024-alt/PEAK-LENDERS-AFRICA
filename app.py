@@ -2237,16 +2237,15 @@ def show_payments():
                                 new_child_total = new_child_principal + new_child_interest
                                 
                                 # Update Database (Child)
-                                supabase.table("loans").update({
-                                    "principal": new_child_principal,
-                                    "interest": new_child_interest,
-                                    "total_repayable": new_child_total,
-                                    "balance": new_child_total - float(child_data["amount_paid"])
-                                }).eq("id", child_id).execute()
+                                # ✅ INSERT PAYMENT (SOURCE OF TRUTH)
+                                supabase.table("payments").insert({
+                                    "loan_id": loan_id,
+                                    "amount": amount,
+                                    "method": method,
+                                    "date": str(date),
+                                    "tenant_id": tenant_id
+                                }).execute()
 
-                                # Update Local Dataframe (Child)
-                                loans_df.loc[loans_df["id"] == child_id, ["principal", "interest", "total_repayable"]] = [new_child_principal, new_child_interest, new_child_total]
-                                loans_df.loc[loans_df["id"] == child_id, "balance"] = new_child_total - float(child_data["amount_paid"])
 
                             # 5. Success and Refresh
                             st.success(f"✅ Payment of {amount:,.0f} posted!")
