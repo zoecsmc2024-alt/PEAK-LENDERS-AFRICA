@@ -2145,9 +2145,11 @@ def show_payments():
                 search = search.lower()
                 # Search logic using a mask to avoid ambiguity errors
                 mask = active_loans.apply(
-                    lambda r: search in str(r.get("borrower", "")).lower()
-                    or search in str(r.get("loan_id_label", "")).lower(), axis=1
-                )
+                lambda r: search in str(r.get("borrower", "")).lower()
+                or search in str(r.get("loan_id_label", "")).lower()
+                or search in str(r.get("sn", "")).lower(), # Added sn for LN-XXXX searches
+                axis=1
+            )
                 active_loans = active_loans[mask]
     
             if active_loans.empty:
