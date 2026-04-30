@@ -2094,7 +2094,7 @@ def show_payments():
 
     # --- TAB 1: RECORD PAYMENT ---
     with tab1:
-        # Filter for actionable loans
+        # 1. Filter for actionable loans
         active_loans = loans_df[
             loans_df["status"].isin(["ACTIVE", "BCF", "PENDING", "OVERDUE"])
         ].copy()
@@ -2103,32 +2103,30 @@ def show_payments():
             st.success("🎉 No active loans requiring payment.")
         else:
             # =========================================================
-            # ✅ FIX 1: DEFINE FORMATTER (Targeting 'loan_id_label')
+            # ✅ FIX 1: REFRESHED FORMATTER
             # =========================================================
             def format_loan(row):
-                # 1. Calculate balance safely
+                # Calculate balance safely
                 total = float(row.get("total_repayable", 0))
                 paid = float(row.get("amount_paid", 0))
                 balance = total - paid
             
-                # 2. Aggressive SN Lookup
-                # We check the specific label first, then common alternatives, then case-insensitive keys
+                # Target the synced 'loan_id_label' first
                 raw_sn = row.get("loan_id_label")
                 
-                if raw_sn is None:
-                    # If it's still N/A, try to find any column that contains 'label' or 'sn'
+                # Fallback for aggressive lookup if primary column is missing
+                if raw_sn is None or str(raw_sn).strip().lower() == "empty":
                     cols = row.index.tolist()
                     possible_keys = [k for k in cols if 'label' in k.lower() or 'sn' in k.lower()]
-                    if possible_keys:
-                        raw_sn = row.get(possible_keys[0])
+                    raw_sn = row.get(possible_keys[0]) if possible_keys else None
             
-                # 3. Final Formatting
-                if raw_sn and str(raw_sn).strip():
+                # Final Formatting with 4-digit padding
+                if raw_sn and str(raw_sn).strip().lower() != "nan":
                     sn_display = str(raw_sn).strip().zfill(4)
                 else:
                     sn_display = "N/A"
             
-                cycle = row.get("cycle_no", row.get("cycle", "1"))
+                cycle = row.get("cycle_no", "1")
                 borrower = row.get("borrower", "Unknown")
                 loan_short = str(row.get("id", ""))[:6]
             
@@ -2139,17 +2137,18 @@ def show_payments():
             # =========================================================
             active_loans["label"] = active_loans.apply(format_loan, axis=1)
     
-            search = st.text_input("🔍 Search borrower or loan")
+            search = st.text_input("🔍 Search borrower, SN, or Loan ID")
     
             if search:
-                search = search.lower()
-                # Search logic using a mask to avoid ambiguity errors
+                s = search.lower()
+                # 🔎 Use a boolean mask to avoid ambiguity errors (image_fe4b23.png)
                 mask = active_loans.apply(
-                lambda r: search in str(r.get("borrower", "")).lower()
-                or search in str(r.get("loan_id_label", "")).lower()
-                or search in str(r.get("sn", "")).lower(), # Added sn for LN-XXXX searches
-                axis=1
-            )
+                    lambda r: s in str(r.get("borrower", "")).lower()
+                    or s in str(r.get("loan_id_label", "")).lower()
+                    or s in str(r.get("sn", "")).lower()
+                    or s in str(r.get("id", "")).lower(), 
+                    axis=1
+                )
                 active_loans = active_loans[mask]
     
             if active_loans.empty:
@@ -2166,8 +2165,11 @@ def show_payments():
                     format_func=lambda i: active_loans.loc[i, "label"]
                 )
     
+                # Extract selected data
                 loan = active_loans.loc[selected_index]
                 loan_id = loan["id"]
+                
+                st.success(f"Selected: {loan['borrower']} (SN: {loan['loan_id_label']})")
     
                 # =========================
                 # 💰 CALCULATIONS
