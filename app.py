@@ -2087,12 +2087,22 @@ def show_payments():
         # 🔎 FILTERING LOGIC
         if search:
             s = search.lower()
-            active_loans = active_loans[
-                active_loans.apply(lambda r: s in str(r.get("borrower", "")).lower() or s in str(r.get("sn", "")).lower(), axis=1)
-            ]
+            # Use a mask to avoid truth value ambiguity
+            mask = active_loans.apply(
+                lambda r: s in str(r.get("borrower", "")).lower() 
+                or s in str(r.get("sn", "")).lower(), 
+                axis=1
+            )
+            active_loans = active_loans[mask]
 
         if status_filter != "ALL":
             active_loans = active_loans[active_loans["status_calc"] == status_filter]
+
+        # Use .empty instead of "if active_loans:"
+        if active_loans.empty:
+            st.warning("No loans match your filters.")
+        else:
+            # Proceed with selection logic...
 
         # 📊 SORTING
         if sort_by == "balance":
