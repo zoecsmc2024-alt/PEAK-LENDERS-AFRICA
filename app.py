@@ -1629,78 +1629,86 @@ def show_loans():
                     st.rerun()
 
     # ==============================
-    # ACTIONS TAB
+    # TAB ACTIONS
     # ==============================
     with tab_actions:
-    
-        if st.button("Run Rollover"):
-    
-            df = loans_df.copy()
-    
-            # ==============================
-            # SAFE NORMALIZATION
-            # ==============================
-            df["status_check"] = (
-                df["status"]
-                .astype(str)
-                .str.strip()
-                .str.lower()
+
+        st.markdown(
+            "<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>",
+            unsafe_allow_html=True
+        )
+
+        eligible_loans = loans_df[
+            (~loans_df["status"].isin(["CLEARED"])) &
+            (loans_df["balance"] > 0)
+        ]
+
+        if eligible_loans.empty:
+            st.success("All loans brought up to date! ✨")
+
+        else:
+            roll_map = {
+                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal {row['balance']:,.0f}":
+                row["id"]
+                for _, row in eligible_loans.iterrows()
+            }
+
+            roll_sel = st.selectbox(
+                "Select Loan to Roll Forward",
+                list(roll_map.keys())
             )
-    
-            df["end_date"] = pd.to_datetime(df["end_date"], errors="coerce")
-    
-            money_cols = ["principal", "interest", "balance"]
-            for col in money_cols:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-    
-            today = pd.Timestamp.today().normalize()
-    
-            # ==============================
-            # FIXED TARGET LOGIC
-            # ==============================
-            targets = df[
-                (df["balance"] > 0) &
-                (
-                    (df["status_check"].isin(["active", "pending"])) &
-                    (
-                        (df["end_date"].notna() & (df["end_date"] <= today)) |
-                        (df["status_check"] == "pending")
-                    )
+
+            parent_id = roll_map[roll_sel]
+
+            loan_to_roll = eligible_loans[
+                eligible_loans["id"] == parent_id
+            ].iloc[0]
+
+            new_interest_rate = st.number_input(
+                "New Monthly Interest (%)",
+                value=3.0,
+                step=0.5
+            )
+
+            if st.button(
+                "🔥 Execute Next Rollover",
+                use_container_width=True
+            ):
+
+                old_due = pd.to_datetime(
+                    loan_to_roll["end_date"],
+                    errors="coerce"
                 )
-            ].copy()
-    
-            if targets.empty:
-                st.info("No rollover needed.")
-            else:
-    
-                new_rows = []
-    
-                for _, r in targets.iterrows():
-    
-                    # Mark old row as BCF
-                    df.loc[r.name, "status"] = "BCF"
-    
-                    base_amount = float(r.get("principal", 0)) + float(r.get("interest", 0))
-    
-                    # Use existing rate if present, fallback to 3%
-                    rate = float(r.get("interest_rate", 3))
-    
-                    new_interest = base_amount * (rate / 100)
-                    total = base_amount + new_interest
-    
-                    start_date = r["end_date"] if pd.notna(r["end_date"]) else today
-                    end_date = start_date + pd.DateOffset(months=1)
-    
-                    # ==============================
-                    # 🔥 FIX: CLEAN r.to_dict() (NO TIMESTAMP ERRORS)
-                    # ==============================
-                    clean_row = r.to_dict()
-                    for k, v in clean_row.items():
-                        if isinstance(v, pd.Timestamp):
-                            clean_row[k] = v.strftime("%Y-%m-%d")
-                        elif pd.isna(v):
-                            clean_row[k] = None
+
+                if pd.isna(old_due):
+                    old_due = datetime.now()
+
+                new_start = old_due
+                new_due = old_due + timedelta(days=30)
+
+                # --- Corrected Indentation for Status Check ---
+                current_status = str(
+                    loan_to_roll["status"]
+                ).strip().upper()
+
+                # Only pending loans become BCF when pushed forward
+                if current_status == "PENDING":
+                    loans_df.loc[
+                        loans_df["id"] == parent_id,
+                        "status"
+                    ] = "BCF"
+
+                save_data_saas("loans", loans_df)
+                # ----------------------------------------------
+
+                unpaid = float(
+                    loan_to_roll["balance"]
+                )
+
+                new_interest = unpaid * (
+                    new_interest_rate / 100
+                )
+
     
                     new_rows.append({
                         **clean_row,
@@ -1714,18 +1722,14 @@ def show_loans():
                         "end_date": end_date.strftime("%Y-%m-%d")
                     })
     
-                final = pd.concat([df, pd.DataFrame(new_rows)], ignore_index=True)
-    
-                # ==============================
-                # CLEAN BEFORE SAVE
-                # ==============================
-                final = final.drop(columns=["status_check"], errors="ignore")
-                final.columns = [str(c).lower().strip().replace(" ", "_") for c in final.columns]
-    
-                if save_data_saas("loans", final):
-                    st.session_state.refresh_loans = True
-                    st.success(f"✅ Rollover completed for {len(new_rows)} loans.")
+                if save_data(
+                    "loans",
+                    pd.DataFrame([new_row])
+                ):
+                    st.success("✅ Loan rolled forward.")
+                    st.cache_data.clear()
                     st.rerun()
+
       
     
 import pandas as pd
