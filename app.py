@@ -1790,83 +1790,84 @@ def show_loans():
     # TAB ACTIONS
     # ==============================
     with tab_actions:
-
+    
         st.markdown(
             "<h4 style='color: #0A192F;'>🔄 Multi-Stage Loan Rollover</h4>",
             unsafe_allow_html=True
         )
-
+    
         eligible_loans = loans_df[
             (~loans_df["status"].isin(["CLEARED"])) &
             (loans_df["balance"] > 0)
         ]
-
+    
         if eligible_loans.empty:
             st.success("All loans brought up to date! ✨")
-
+    
         else:
             roll_map = {
                 f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal {row['balance']:,.0f}":
                 row["id"]
                 for _, row in eligible_loans.iterrows()
             }
-
+    
             roll_sel = st.selectbox(
                 "Select Loan to Roll Forward",
                 list(roll_map.keys())
             )
-
+    
             parent_id = roll_map[roll_sel]
-
+    
             loan_to_roll = eligible_loans[
                 eligible_loans["id"] == parent_id
             ].iloc[0]
-
+    
             new_interest_rate = st.number_input(
                 "New Monthly Interest (%)",
                 value=3.0,
                 step=0.5
             )
-
+    
             if st.button(
                 "🔥 Execute Next Rollover",
                 use_container_width=True
             ):
-
+    
                 old_due = pd.to_datetime(
                     loan_to_roll["end_date"],
                     errors="coerce"
                 )
-
+    
                 if pd.isna(old_due):
                     old_due = datetime.now()
-
+    
                 new_start = old_due
                 new_due = old_due + timedelta(days=30)
-
+    
                 # --- Corrected Indentation for Status Check ---
                 current_status = str(
                     loan_to_roll["status"]
                 ).strip().upper()
-
+    
                 # Only pending loans become BCF when pushed forward
                 if current_status == "PENDING":
                     loans_df.loc[
                         loans_df["id"] == parent_id,
                         "status"
                     ] = "BCF"
-
+    
                 save_data_saas("loans", loans_df)
                 # ----------------------------------------------
-
+    
+                # This 'unpaid' value is (Old Total Repayable - Old Amount Paid)
                 unpaid = float(
                     loan_to_roll["balance"]
                 )
-
+    
                 new_interest = unpaid * (
                     new_interest_rate / 100
                 )
-
+    
                 new_row = {
                     "id": str(uuid.uuid4()),
                     "sn": "",  # Handled by your serial engine
@@ -1874,7 +1875,7 @@ def show_loans():
                     "parent_loan_id": parent_id,
                     "borrower_id": loan_to_roll["borrower_id"],
                     "loan_type": loan_to_roll["loan_type"],
-                    "principal": unpaid,
+                    "principal": unpaid, # ✅ New Principal is Old Principal + Old Interest - Payments
                     "interest": new_interest,
                     "total_repayable": unpaid + new_interest,
                     "amount_paid": 0.0,
@@ -1887,7 +1888,7 @@ def show_loans():
                     ) + 1,
                     "tenant_id": get_current_tenant()
                 }
-
+    
                 if save_data(
                     "loans",
                     pd.DataFrame([new_row])
