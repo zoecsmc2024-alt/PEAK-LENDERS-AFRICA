@@ -2125,75 +2125,63 @@ def show_payments():
                         color = "#f59e0b"  # Orange
 
                     # ------------------------------
-                    # 🧾 RENDER BOX & SELECTION
+                    # 🧾 RENDER BOX & SELECTION (PURE STREAMLIT)
                     # ------------------------------
-                    with st.container():
-                        # Visual Card (The UI)
-                        import html
-                        borrower = html.escape(str(row['borrower']))
-                        sn = html.escape(str(row['sn']))
-                        end_date = html.escape(str(row.get('end_date', ''))[:10])
+                    with st.container(border=True): # Added border=True for card effect
 
-                        st.markdown(
-                            f"""
-                            <div style="
-                                border:2px solid {color};
-                                border-radius:12px;
-                                padding:12px;
-                                margin-bottom:-42px;
-                                background:#0f172a;
-                                color:white;
-                                position:relative;
-                                z-index:1;
-                                clip-path: inset(0 round 12px);
-                            ">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <b style="font-size:16px;">{borrower}</b>
-                                    <span style="color:#94a3b8; font-size:12px;">SN: {sn}</span>
-                                </div>
-                                <div style="color:#94a3b8; font-size:12px; margin-top:4px;">
-                                    Cycle {row.get('cycle_no',1)} • Due {end_date}
-                                    {' | <span style="color:#ef4444; font-weight:bold;">⚠️ OVERDUE</span>' if overdue else ''}
-                                </div>
-                                <div style="margin-top:10px;">
-                                    💰 Paid: {paid:,.0f} / {total:,.0f} UGX<br>
-                                    ⚖️ Balance: <b style="color:{color};">{balance:,.0f}</b>
-                                </div>
-                                
-                                <div style="display:none;">PROGRESS BAR WITH IRONCLAD MASKING</div>
-                                <div style="
-                                    background: #1e293b; 
-                                    border-radius: 10px; 
-                                    margin-top: 12px; 
-                                    height: 10px; 
-                                    width: 100%; 
-                                    overflow: hidden;
-                                    position: relative;
-                                    -webkit-mask-image: -webkit-radial-gradient(white, black);
-                                ">
-                                    <div style="
-                                        width: {progress}%; 
-                                        background: {color}; 
-                                        height: 100%; 
-                                        position: absolute;
-                                        top: 0;
-                                        left: 0;
-                                        transition: width 0.4s ease-in-out;
-                                    "></div>
-                                </div>
-                                <div style="margin-top: 6px;">
-                                    <small style="color:#94a3b8;">{progress}% repaid</small>
-                                </div>
-                            </div>
-                            """,
-                            unsafe_allow_html=True
-                        )
+                        borrower = str(row["borrower"])
+                        sn = str(row["sn"])
+                        cycle_no = row.get("cycle_no", 1)
+                        end_date = str(row.get("end_date", ""))[:10]
 
-                        # Functional Button (The Logic)
+                        # ------------------------------
+                        # CARD HEADER
+                        # ------------------------------
+                        col1, col2 = st.columns([3, 1])
+
+                        with col1:
+                            st.markdown(f"### {borrower}")
+
+                        with col2:
+                            st.caption(f"SN: {sn}")
+
+                        # ------------------------------
+                        # META INFO
+                        # ------------------------------
+                        overdue_text = "⚠️ OVERDUE" if overdue else ""
+                        st.caption(f"Cycle {cycle_no} • Due {end_date} {overdue_text}")
+
+                        # ------------------------------
+                        # FINANCIALS
+                        # ------------------------------
+                        st.write(f"💰 Paid: {paid:,.0f} / {total:,.0f} UGX")
+                        st.write(f"⚖️ Balance: **{balance:,.0f}**")
+
+                        # ------------------------------
+                        # PROGRESS BAR (STREAMLIT NATIVE)
+                        # ------------------------------
+                        # Ensure progress is a float between 0.0 and 1.0
+                        st.progress(min(max(float(progress / 100), 0.0), 1.0))
+                        st.caption(f"{progress}% repaid")
+
+                        # ------------------------------
+                        # COLOR INDICATOR (NO HTML VERSION)
+                        # ------------------------------
+                        if overdue:
+                            st.error("Overdue Loan")
+                        elif balance <= 0:
+                            st.success("Fully Paid") # Success is usually better for paid
+                        elif str(row.get("status")).upper() == "PENDING":
+                            st.warning("Pending Approval")
+
+                        # ------------------------------
+                        # ACTION BUTTON
+                        # ------------------------------
                         if st.button(
-                            f"Select {row['borrower']} (SN:{row['sn']})", 
-                            key=f"loan_btn_{row['id']}", 
-                            use_container_width=True
+                            f"Select {borrower} (SN:{sn})",
+                            key=f"loan_btn_{row['id']}",
+                            use_container_width=True,
+                            type="primary" if not overdue else "secondary"
                         ):
                             st.session_state["selected_loan_id"] = row["id"]
                             st.rerun()
