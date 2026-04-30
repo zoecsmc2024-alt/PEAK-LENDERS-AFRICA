@@ -2262,8 +2262,80 @@ if submit:
 
     except Exception as e:
         st.error(f"Payment failed: {e}")
-    # --- TAB 2: HISTORY & MANAGEMENT --- with tab2: if payments_df.empty: st.info("No payment history found.") else: df_hist = payments_df.copy() df_hist["amount_display"] = df_hist["amount"].apply(lambda x: f"UGX {x:,.0f}") if "date" in df_hist.columns: df_hist = df_hist.sort_values("date", ascending=False) display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"] st.dataframe(df_hist[display_cols], use_container_width=True, hide_index=True) # --- 🛠️ EDIT/DELETE MANAGEMENT --- st.markdown("---") st.markdown("### ⚙️ Payment Maintenance") pay_map = {f"{row['receipt_no']} | {row['borrower']}": row['id'] for _, row in df_hist.iterrows()} selected_pay = st.selectbox("Choose Payment to Modify", list(pay_map.keys())) target_pay_id = pay_map[selected_pay] target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0] p_col1, p_col2 = st.columns(2) if p_col1.button("🗑️ Delete Payment", use_container_width=True): try: supabase.table("payments").delete().eq("id", target_pay_id).execute() st.cache_data.clear() # Triggers the Sync logic at top st.warning(f"Payment {target_pay['receipt_no']} removed.") st.rerun() except Exception as e: st.error(f"Delete failed: {e}") if p_col2.button("📝 Edit Payment", use_container_width=True): st.session_state["edit_pay_mode"] = True if st.session_state.get("edit_pay_mode"): with st.form("edit_payment_form"): st.info(f"Modifying: {target_pay['receipt_no']}") new_amt = st.number_input("Revised Amount", value=float(target_pay['amount'])) new_method = st.selectbox("Revised Method", ["Cash", "Mobile Money", "Bank"], index=["Cash", "Mobile Money", "Bank"].index(target_pay['method'])) eb1, eb2 = st.columns(2) if eb1.form_submit_button("💾 Save Changes"): try: supabase.table("payments").update({ "amount": new_amt, "method": new_method }).eq("id", target_pay_id).execute() st.session_state["edit_pay_mode"] = False st.cache_data.clear() st.rerun() except Exception as e: st.error(f"Update failed: {e}") if eb2.form_submit_button("❌ Cancel"): st.session_state["edit_pay_mode"] = False st.rerun()
-# ==============================
+
+    #====================================    
+    # --- TAB 2: HISTORY & MANAGEMENT ---
+    #====================================
+        with tab2:
+            if payments_df.empty:
+                st.info("No payment history found.")
+            else:
+                df_hist = payments_df.copy()
+                df_hist["amount_display"] = df_hist["amount"].apply(lambda x: f"UGX {x:,.0f}")
+                
+                if "date" in df_hist.columns:
+                    df_hist = df_hist.sort_values("date", ascending=False)
+                
+                display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
+                st.dataframe(df_hist[display_cols], use_container_width=True, hide_index=True)
+
+                # --- 🛠️ EDIT/DELETE MANAGEMENT ---
+                st.markdown("---")
+                st.markdown("### ⚙️ Payment Maintenance")
+                
+                pay_map = {f"{row['receipt_no']} | {row['borrower']}": row['id'] for _, row in df_hist.iterrows()}
+                selected_pay = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
+                
+                target_pay_id = pay_map[selected_pay]
+                target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0]
+                
+                p_col1, p_col2 = st.columns(2)
+                
+                if p_col1.button("🗑️ Delete Payment", use_container_width=True):
+                    try:
+                        supabase.table("payments").delete().eq("id", target_pay_id).execute()
+                        st.cache_data.clear() # Triggers the Sync logic at top
+                        st.warning(f"Payment {target_pay['receipt_no']} removed.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Delete failed: {e}")
+
+                if p_col2.button("📝 Edit Payment", use_container_width=True):
+                    st.session_state["edit_pay_mode"] = True
+
+                # --- EDIT FORM LOGIC ---
+                if st.session_state.get("edit_pay_mode"):
+                    with st.form("edit_payment_form"):
+                        st.info(f"Modifying: {target_pay['receipt_no']}")
+                        
+                        new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
+                        
+                        # Set default index for selectbox
+                        methods = ["Cash", "Mobile Money", "Bank"]
+                        current_method_idx = methods.index(target_pay['method']) if target_pay['method'] in methods else 0
+                        new_method = st.selectbox("Revised Method", methods, index=current_method_idx)
+                        
+                        eb1, eb2 = st.columns(2)
+                        
+                        if eb1.form_submit_button("💾 Save Changes"):
+                            try:
+                                supabase.table("payments").update({
+                                    "amount": new_amt,
+                                    "method": new_method
+                                }).eq("id", target_pay_id).execute()
+                                
+                                st.session_state["edit_pay_mode"] = False
+                                st.cache_data.clear()
+                                st.success("Payment updated successfully!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Update failed: {e}")
+                        
+                        if eb2.form_submit_button("❌ Cancel"):
+                            st.session_state["edit_pay_mode"] = False
+                            st.rerun()
+
+# ==============================                           
 # 🛡️ 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
 import mimetypes
