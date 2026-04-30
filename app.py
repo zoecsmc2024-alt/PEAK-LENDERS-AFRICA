@@ -1638,18 +1638,19 @@ def show_loans():
             unsafe_allow_html=True
         )
 
+        # Filter for loans that have a balance and aren't cleared
         eligible_loans = loans_df[
-            (~loans_df["status"].isin(["CLEARED"])) &
+            (~loans_df["status"].str.upper().isin(["CLEARED", "CLOSED"])) &
             (loans_df["balance"] > 0)
-        ]
+        ].copy()
 
         if eligible_loans.empty:
             st.success("All loans brought up to date! ✨")
-
         else:
+            # Create a selection map for the dropdown
+            # Note: fallback to 'borrower' if 'loan_id_label' or 'cycle_no' missing
             roll_map = {
-                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal {row['balance']:,.0f}":
-                row["id"]
+                f"{row.get('borrower', 'N/A')} • ID: {row.get('loan_id', 0)} • Bal: {row['balance']:,.0f}": row.get("id")
                 for _, row in eligible_loans.iterrows()
             }
 
@@ -1658,11 +1659,8 @@ def show_loans():
                 list(roll_map.keys())
             )
 
-            parent_id = roll_map[roll_sel]
-
-            loan_to_roll = eligible_loans[
-                eligible_loans["id"] == parent_id
-            ].iloc[0]
+            parent_db_id = roll_map[roll_sel]
+            loan_to_roll = eligible_loans[eligible_loans["id"] == parent_db_id].iloc[0]
 
             new_interest_rate = st.number_input(
                 "New Monthly Interest (%)",
@@ -1670,64 +1668,51 @@ def show_loans():
                 step=0.5
             )
 
-            if st.button(
-                "🔥 Execute Next Rollover",
-                use_container_width=True
-            ):
-
-                old_due = pd.to_datetime(
-                    loan_to_roll["end_date"],
-                    errors="coerce"
-                )
-
+            if st.button("🔥 Execute Next Rollover", use_container_width=True):
+                # 1. Calculate Dates
+                old_due = pd.to_datetime(loan_to_roll.get("end_date"), errors="coerce")
                 if pd.isna(old_due):
-                    old_due = datetime.now()
+                    old_due = pd.Timestamp.today()
 
                 new_start = old_due
-                new_due = old_due + timedelta(days=30)
+                new_due = old_due + pd.Timedelta(days=30)
 
-                # --- Corrected Indentation for Status Check ---
-                current_status = str(
-                    loan_to_roll["status"]
-                ).strip().upper()
+                # 2. Update Old Loan Status (Mark as BCF - Brought Carry Forward)
+                current_status = str(loan_to_roll.get("status", "")).strip().upper()
+                
+                # Update status in the main dataframe
+                loans_df.loc[loans_df["id"] == parent_db_id, "status"] = "BCF"
 
-                # Only pending loans become BCF when pushed forward
-                if current_status == "PENDING":
-                    loans_df.loc[
-                        loans_df["id"] == parent_id,
-                        "status"
-                    ] = "BCF"
+                # 3. Create the New Rolled Loan Entry
+                unpaid_balance = float(loan_to_roll["balance"])
+                calculated_interest = unpaid_balance * (new_interest_rate / 100)
+                total_new_repayable = unpaid_balance + calculated_interest
 
+                # Construct new row based on parent data
+                new_loan_entry = {
+                    "loan_id": loan_to_roll.get("loan_id"),
+                    "borrower": loan_to_roll.get("borrower"),
+                    "principal": unpaid_balance,
+                    "interest": calculated_interest,
+                    "total_repayable": total_new_repayable,
+                    "amount_paid": 0,
+                    "balance": total_new_repayable,
+                    "status": "Pending",
+                    "start_date": new_start.strftime("%Y-%m-%d"),
+                    "end_date": new_due.strftime("%Y-%m-%d"),
+                    "tenant_id": st.session_state.get("tenant_id")
+                }
+
+                # 4. Save Updates to Database
+                # Save the updated list (the BCF status update)
                 save_data_saas("loans", loans_df)
-                # ----------------------------------------------
-
-                unpaid = float(
-                    loan_to_roll["balance"]
-                )
-
-                new_interest = unpaid * (
-                    new_interest_rate / 100
-                )
-
-    
-                    new_rows.append({
-                        **clean_row,
-                        "principal": base_amount,
-                        "interest": new_interest,
-                        "total_repayable": total,
-                        "balance": total,
-                        "amount_paid": 0,
-                        "status": "Pending",
-                        "start_date": start_date.strftime("%Y-%m-%d"),
-                        "end_date": end_date.strftime("%Y-%m-%d")
-                    })
-    
-                if save_data(
-                    "loans",
-                    pd.DataFrame([new_row])
-                ):
-                    st.success("✅ Loan rolled forward.")
-                    st.cache_data.clear()
+                
+                # Save the new rolled-over loan row
+                new_row_df = pd.DataFrame([new_loan_entry])
+                if save_data_saas("loans", new_row_df):
+                    # 5. SYNC & REFRESH
+                    st.session_state.refresh_loans = True 
+                    st.success(f"✅ Loan for {loan_to_roll['borrower']} rolled forward to {new_due.strftime('%Y-%m-%d')}")
                     st.rerun()
 
       
