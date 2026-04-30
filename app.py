@@ -2145,44 +2145,28 @@ def show_payments():
                             <b style="font-size:16px;">{row['borrower']}</b> • SN {row['sn']}<br>
                             <span style="color:#94a3b8; font-size:12px;">Cycle {row.get('cycle_no',1)}</span><br>
                             
+                            <b style="font-size:16px;">{row['borrower']}</b> • SN {row['sn']}<br>
+                            <span style="color:#94a3b8; font-size:12px;">Cycle {row.get('cycle_no',1)}</span><br>
                             <div style="margin-top:8px;">
                                 💰 {paid:,.0f} / {total:,.0f} UGX<br>
                                 ⚖️ Balance: <b>{balance:,.0f}</b><br>
                                 📅 Due: {str(row.get('end_date',''))[:10]} {'⚠️ <span style="color:#ef4444;font-weight:bold;">OVERDUE</span>' if overdue else ''}
                             </div>
 
-                            <!-- THE FIX: Added position:relative, display:block, and box-sizing -->
-                            <div style="
-                                background: #1e293b; 
-                                border-radius: 10px; 
-                                margin-top: 12px; 
-                                height: 10px; 
-                                width: 100%;
-                                position: relative;
-                                overflow: hidden;
-                                display: block;
-                                box-sizing: border-box;
-                            ">
+                            <!-- Progress Bar Container with overflow:hidden to stop leaks -->
+                            <div style="background:#1e293b; border-radius:8px; margin-top:10px; height:8px; overflow:hidden;">
                                 <div style="
-                                    position: absolute;
-                                    top: 0;
-                                    left: 0;
-                                    height: 100%;
-                                    width: {progress}%;
-                                    background: {color};
-                                    border-radius: 10px;
-                                    transition: width 0.4s ease;
+                                    width:{progress}%;
+                                    background:{color};
+                                    height:8px;
+                                    transition: width 0.5s ease-in-out;
                                 "></div>
                             </div>
-                            <div style="margin-top: 4px;">
-                                <small style="color:#94a3b8;">{progress}% repaid</small>
-                            </div>
+                            <small style="color:#94a3b8;">{progress}% repaid</small>
                         </div>
                         """,
                         unsafe_allow_html=True
-                    
                     )
-
                     if clicked:
                         st.session_state["selected_loan_id"] = row["id"]
 
