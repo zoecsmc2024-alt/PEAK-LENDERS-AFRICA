@@ -2115,76 +2115,94 @@ def show_payments():
         # ------------------------------
         # 📋 UI RENDER CHECK
         # ------------------------------
-        # Use .empty as suggested in image_fe4b23.png to avoid ambiguity errors
         if active_loans.empty:
             st.warning("No loans match your filters.")
         else:
-            # Proceed with selection logic (e.g., st.selectbox or cards)
-            loan_options = {
-                f"{r['borrower']} | SN:{r['sn']} | Balance:{r['balance']:,.0f}": r["id"]
-                for _, r in active_loans.iterrows()
-            }
-            
-        if active_loans.empty:
-            st.warning("No loans match your filters.")
-        else:
+        
+            # ------------------------------
             # 📋 SELECT BOX
+            # ------------------------------
             loan_options = {
                 f"{r['borrower']} | SN:{r['sn']} | Balance:{r['balance']:,.0f} | {r['status_calc']}": r["id"]
                 for _, r in active_loans.iterrows()
             }
+        
             selected_label = st.selectbox("Choose Loan", list(loan_options.keys()))
             selected_id = loan_options[selected_label]
-            loan = active_loans[active_loans["id"] == selected_id].iloc[0]
-
+        
+            # ------------------------------
+            # 🧠 SAFE LOAN SELECTION (FIXED CRASH)
+            # ------------------------------
+            match = active_loans[active_loans["id"] == selected_id]
+        
+            if match.empty:
+                st.error("Selected loan not found.")
+                st.stop()
+        
+            loan = match.iloc[0]
+        
+            # ------------------------------
             # 📊 PREVIEW PANEL
+            # ------------------------------
             st.divider()
+        
             c1, c2, c3 = st.columns(3)
             c1.metric("Borrower", loan["borrower"])
             c2.metric("Paid", f"UGX {loan['amount_paid']:,.0f}")
             c3.metric("Balance", f"UGX {loan['balance']:,.0f}")
-            st.progress(loan["progress"] / 100)
-            st.caption(f"{loan['progress']:.1f}% repaid")
-
+        
+            st.progress(float(loan["progress"]) / 100)
+            st.caption(f"{float(loan['progress']):.1f}% repaid")
+        
+            # ------------------------------
             # 💳 PAYMENT FORM
+            # ------------------------------
             with st.form("payment_form"):
                 amount = st.number_input("Amount", min_value=0.0, step=1000.0)
                 method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
                 pay_date = st.date_input("Date", datetime.now())
                 submit = st.form_submit_button("Post Payment")
-
+        
             if submit:
+        
                 if amount <= 0:
                     st.warning("Invalid amount")
-                else:
-                    try:
-                        tenant_id = st.session_state.get("tenant_id")
-                        receipt_no = generate_receipt_no(supabase, tenant_id)
-                        
-                        supabase.table("payments").insert({
-                            "receipt_no": receipt_no,
-                            "loan_id": loan["id"],
-                            "borrower": loan["borrower"],
-                            "amount": float(amount),
-                            "date": pay_date.strftime("%Y-%m-%d"),
-                            "method": method,
-                            "tenant_id": tenant_id
-                        }).execute()
-
-                        new_paid = float(loan["amount_paid"]) + amount
-                        new_status = "CLEARED" if new_paid >= float(loan["total_repayable"]) else "ACTIVE"
-
-                        supabase.table("loans").update({
-                            "amount_paid": float(new_paid),
-                            "status": new_status
-                        }).eq("id", loan["id"]).execute()
-
-                        st.success("Payment recorded successfully")
-                        st.cache_data.clear()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Payment failed: {e}")
-
+                    st.stop()
+        
+                try:
+                    tenant_id = st.session_state.get("tenant_id")
+                    if not tenant_id:
+                        st.error("Missing tenant session")
+                        st.stop()
+        
+                    receipt_no = generate_receipt_no(supabase, tenant_id)
+        
+                    supabase.table("payments").insert({
+                        "receipt_no": receipt_no,
+                        "loan_id": loan["id"],
+                        "borrower": loan["borrower"],
+                        "amount": float(amount),
+                        "date": pay_date.strftime("%Y-%m-%d"),
+                        "method": method,
+                        "tenant_id": tenant_id
+                    }).execute()
+        
+                    new_paid = float(loan["amount_paid"]) + float(amount)
+                    total = float(loan["total_repayable"])
+        
+                    new_status = "CLEARED" if new_paid >= total else "ACTIVE"
+        
+                    supabase.table("loans").update({
+                        "amount_paid": float(new_paid),
+                        "status": new_status
+                    }).eq("id", loan["id"]).execute()
+        
+                    st.success("Payment recorded successfully")
+                    st.cache_data.clear()
+                    st.rerun()
+        
+                except Exception as e:
+                    st.error(f"Payment failed: {e}")
     # =========================================================
     # TAB 2: HISTORY & MANAGEMENT
     # =========================================================
