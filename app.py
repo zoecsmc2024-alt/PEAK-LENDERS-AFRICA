@@ -1551,37 +1551,50 @@ def show_loans():
             total_principal = filtered_loans["principal"].sum()
             total_repayable = filtered_loans["total_repayable"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
-            total_balance = filtered_loans["balance"].sum()
 
-            active_loans = filtered_loans[
-                filtered_loans["status"] == "ACTIVE"
-            ].shape[0]
 
-            pending_loans = filtered_loans[
-                filtered_loans["status"] == "PENDING"
-            ].shape[0]
+            col1, col2, col3,  = st.columns(4)
 
-            cleared_loans = filtered_loans[
-                filtered_loans["status"] == "CLEARED"
-            ].shape[0]
-
-            bcf_loans = filtered_loans[
-                filtered_loans["status"] == "BCF"
-            ].shape[0]
-
-            col1, col2, col3, col4 = st.columns(4)
+    col1.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #3b82f6, #1e3a8a);
+        padding:15px;
+        border-radius:10px;
+        color:white;
+        text-align:center;">
+        <div style="font-size:14px;">📄 Total Loans</div>
+        <div style="font-size:22px;font-weight:bold;">{total_loans}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col2.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #10b981, #065f46);
+        padding:15px;
+        border-radius:10px;
+        color:white;
+        text-align:center;">
+        <div style="font-size:14px;">💰 Principal</div>
+        <div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    col3.markdown(f"""
+    <div style="
+        background: linear-gradient(135deg, #f59e0b, #92400e);
+        padding:15px;
+        border-radius:10px;
+        color:white;
+        text-align:center;">
+        <div style="font-size:14px;">💳 Paid</div>
+        <div style="font-size:22px;font-weight:bold;">{total_paid:,.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
             col1.metric("📄 Total Loans", f"{total_loans}")
             col2.metric("💰 Principal", f"{total_principal:,.0f}")
             col3.metric("💳 Paid", f"{total_paid:,.0f}")
-            col4.metric("⚖️ Balance", f"{total_balance:,.0f}")
 
-            col5, col6, col7, col8 = st.columns(4)
-
-            col5.metric("🟢 Active", active_loans)
-            col6.metric("🟡 Pending", pending_loans)
-            col7.metric("✅ Cleared", cleared_loans)
-            col8.metric("🟠 BCF", bcf_loans)
 
             st.markdown("---")
 
