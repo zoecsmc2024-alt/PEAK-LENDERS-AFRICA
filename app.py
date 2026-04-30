@@ -2209,45 +2209,52 @@ def show_payments():
                                 st.error("❌ Authentication error. Please login again.")
                                 st.stop()
 
-                            # 1. Calculate values for the current loan update
+                            # 1. Prepare updated values
                             new_total_paid = float(loan["amount_paid"]) + amount
                             updated_balance = float(loan["total_repayable"]) - new_total_paid
 
-                            # 2. Update the current loan being paid
+                            # 2. UPDATE DATABASE (Current Loan)
                             supabase.table("loans").update({
                                 "amount_paid": new_total_paid,
                                 "balance": updated_balance
                             }).eq("id", loan_id).execute()
 
-                            # 3. PROPAGATION LOGIC: Check for "Child" (Rollover) loan
+                            # 3. UPDATE LOCAL DATAFRAME (Forces the UI to see it immediately)
+                            loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] = new_total_paid
+                            loans_df.loc[loans_df["id"] == loan_id, "balance"] = updated_balance
+
+                            # 4. PROPAGATION: Update Child Loan
                             child_loan = loans_df[loans_df["parent_loan_id"] == loan_id]
 
                             if not child_loan.empty:
                                 child_data = child_loan.iloc[0]
                                 child_id = child_data["id"]
                                 
-                                # The new principal for the next cycle is the current cycle's new balance
+                                # Recalculate based on new balance
                                 new_child_principal = updated_balance
-                                
-                                # Recalculate child's interest based on original child interest rate
-                                # We use a fallback to prevent division by zero errors
-                                if float(child_data["principal"]) > 0:
-                                    old_interest_rate = float(child_data["interest"]) / float(child_data["principal"])
-                                else:
-                                    old_interest_rate = 0.03 # Default 3% fallback
-
-                                new_child_interest = new_child_principal * old_interest_rate
+                                old_int_rate = float(child_data["interest"]) / float(child_data["principal"]) if float(child_data["principal"]) > 0 else 0.03
+                                new_child_interest = new_child_principal * old_int_rate
                                 new_child_total = new_child_principal + new_child_interest
                                 
-                                # Update the Child Loan in the Database
+                                # Update Database (Child)
                                 supabase.table("loans").update({
                                     "principal": new_child_principal,
                                     "interest": new_child_interest,
                                     "total_repayable": new_child_total,
                                     "balance": new_child_total - float(child_data["amount_paid"])
                                 }).eq("id", child_id).execute()
-                                
-                                st.info(f"🔄 Child Loan (Cycle {child_data['cycle_no']}) updated to reflect new balance.")
+
+                                # Update Local Dataframe (Child)
+                                loans_df.loc[loans_df["id"] == child_id, ["principal", "interest", "total_repayable"]] = [new_child_principal, new_child_interest, new_child_total]
+                                loans_df.loc[loans_df["id"] == child_id, "balance"] = new_child_total - float(child_data["amount_paid"])
+
+                            # 5. Success and Refresh
+                            st.success(f"✅ Payment of {amount:,.0f} posted!")
+                            st.cache_data.clear() # Clears the "get_data" cache
+                            st.rerun()           # Reloads the page with new numbers
+
+                        except Exception as e:
+                            st.error(f"Error: {e}")
 
 
 
