@@ -2116,7 +2116,7 @@ with col3:
 # ------------------------------
 # 🧮 DERIVED FIELDS
 # ------------------------------
-df = active_loans.copy()
+df = Active_loans.copy()
 
 df["total_repayable"] = pd.to_numeric(df["total_repayable"], errors="coerce").fillna(0)
 df["amount_paid"] = pd.to_numeric(df["amount_paid"], errors="coerce").fillna(0)
