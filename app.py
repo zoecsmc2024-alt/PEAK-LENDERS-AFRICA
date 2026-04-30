@@ -1487,6 +1487,30 @@ def show_loans():
         .str.replace("LN-", "", regex=False)
         .str.zfill(4)
     )
+    # ==============================
+    # 🔄 DATABASE SYNC ENGINE
+    # ==============================
+    # Filter for rows that need syncing (where DB currently shows empty/null)
+    # We only sync rows that have a valid calculated SN
+    to_sync = loans_df[loans_df["sn"].str.startswith("LN-")]
+    
+    if not to_sync.empty:
+        with st.spinner("🔄 Syncing Serial Numbers to Database..."):
+            for _, row in to_sync.iterrows():
+                sync_data = {
+                    "sn": row["sn"],
+                    "loan_id_label": row["loan_id_label"],
+                    "cycle_no": int(row["cycle_no"]) # Syncing cycle too is highly recommended
+                }
+                
+                try:
+                    # Update the database where the ID matches
+                    supabase.table("loans").update(sync_data).eq("id", row["id"]).execute()
+                except Exception as e:
+                    # Log error but continue with others
+                    print(f"Error syncing row {row['id']}: {e}")
+                    
+        st.success("✅ Database Serial Numbers Synced!")
     # ------------------------------
     # BORROWER MAP
     # ------------------------------
