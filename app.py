@@ -2084,9 +2084,7 @@ def show_payments():
                 active_loans = active_loans[
                     active_loans.apply(
                         lambda r: search in str(r.get("borrower", "")).lower()
-                        or search in str(r.get("sn", "")).lower(),
-                        axis=1
-                    )
+                        or search in str(r.get("sn", "")).lower(), axis=1)
                 ]
     
             if active_loans.empty:
