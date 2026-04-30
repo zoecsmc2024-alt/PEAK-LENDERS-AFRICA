@@ -2110,6 +2110,14 @@ def show_payments():
             # =========================================================
             # ✅ FIX 1: REFRESHED FORMATTER
             # =========================================================
+            def get_active_loan(loans_df, loan_row):
+                current = loan_row
+
+                while True:
+                    child = loans_df[loans_df["parent_loan_id"] == current["id"]]
+                    if child.empty:
+                        return current
+                    current = child.iloc[0]
             def format_loan(row):
                 # Calculate balance safely
                 total = float(row.get("total_repayable", 0))
@@ -2172,7 +2180,8 @@ def show_payments():
     
                 # Extract selected data
                 loan = active_loans.loc[selected_index]
-                loan_id = loan["id"]
+                active_loan = get_active_loan(loans_df, loan) 
+                loan_id = active_loan["id"]
                 
                 st.success(f"Selected: {loan['borrower']} (SN: {loan['loan_id_label']})")
     
