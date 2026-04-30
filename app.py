@@ -1622,6 +1622,9 @@ def show_loans():
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
+            # Calculation update (Ensuring amount_paid reduces total_repayable)
+            filtered_loans["balance"] = filtered_loans["total_repayable"] - filtered_loans["amount_paid"]
+            
             show_cols = [
                 "sn",
                 "loan_id_label",
@@ -1646,13 +1649,14 @@ def show_loans():
                 }
                 style = color_map.get(val, "")
                 return [style] * len(row)
-
+        
             # Apply styling and currency formatting
             styled_df = (
                 filtered_loans[show_cols].style
                 .apply(style_entire_row, axis=1)
                 .format({
                     "principal": "{:,.0f}",
+                    "amount_paid": "{:,.0f}",  # 1. Added commas to amount paid
                     "total_repayable": "{:,.0f}",
                     "balance": "{:,.0f}"
                 })
@@ -1665,7 +1669,6 @@ def show_loans():
                 use_container_width=True,
                 hide_index=True
             )
-
             
     # ==============================       
     # TAB ADD LOAN
