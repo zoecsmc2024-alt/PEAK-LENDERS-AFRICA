@@ -1628,6 +1628,7 @@ def show_loans():
                 "borrower",
                 "cycle_no",
                 "principal",
+                "amount_paid",
                 "total_repayable",
                 "balance",
                 "start_date",
