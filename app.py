@@ -1547,7 +1547,8 @@ def show_loans():
         if not filtered_loans.empty:
 
             total_loans = filtered_loans["sn"].nunique()
-            total_principal = filtered_loans["principal"].sum()
+            original_loans = filtered_loans[filtered_loans["cycle_no"] == 1]  
+            total_principal = original_loans["principal"].sum()
             total_repayable = filtered_loans["total_repayable"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
 
