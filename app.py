@@ -2111,7 +2111,7 @@ def show_payments():
 
                     progress = 0 if total == 0 else min(int((paid / total) * 100), 100)
 
-                    # ------------------------------
+                   # ------------------------------
                     # 🎨 STYLE
                     # ------------------------------
                     color = "#10b981" # Green
@@ -2123,11 +2123,10 @@ def show_payments():
                         color = "#f59e0b" # Orange
 
                     # ------------------------------
-                    # 🧾 CARD BUTTON
+                    # 🧾 CLICKABLE LOAN CARD (FIXED LAYOUT)
                     # ------------------------------
-                    # Using columns to put button and visual card together
-                    clicked = st.button(
-                        f"Select: {row['borrower']} (SN:{row['sn']})",
+                    card_clicked = st.button(
+                        f"📌 Select {row['borrower']} | SN:{row['sn']} | Cycle:{row.get('cycle_no',1)}",
                         key=f"loan_btn_{row['id']}",
                         use_container_width=True
                     )
@@ -2136,43 +2135,61 @@ def show_payments():
                         f"""
                         <div style="
                             border:2px solid {color};
-                            border-radius:10px;
-                            padding:10px;
-                            margin-bottom:15px;
+                            border-radius:12px;
+                            padding:12px;
+                            margin-top:-8px;
+                            margin-bottom:12px;
                             background:#0f172a;
                             color:white;
                         ">
-                            <b style="font-size:16px;">{row['borrower']}</b> • SN {row['sn']}<br>
-                            <span style="color:#94a3b8; font-size:12px;">Cycle {row.get('cycle_no',1)}</span><br>
-                            
-                            <b style="font-size:16px;">{row['borrower']}</b> • SN {row['sn']}<br>
-                            <span style="color:#94a3b8; font-size:12px;">Cycle {row.get('cycle_no',1)}</span><br>
-                            <div style="margin-top:8px;">
-                                💰 {paid:,.0f} / {total:,.0f} UGX<br>
-                                ⚖️ Balance: <b>{balance:,.0f}</b><br>
-                                📅 Due: {str(row.get('end_date',''))[:10]} {'⚠️ <span style="color:#ef4444;font-weight:bold;">OVERDUE</span>' if overdue else ''}
+                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                <b style="font-size:16px;">{row['borrower']}</b>
+                                <span style="color:#94a3b8; font-size:12px;">SN: {row['sn']}</span>
                             </div>
 
-                            <!-- Progress Bar Container with overflow:hidden to stop leaks -->
-                            <div style="background:#1e293b; border-radius:8px; margin-top:10px; height:8px; overflow:hidden;">
+                            <div style="color:#94a3b8; font-size:12px; margin-top:4px;">
+                                Cycle {row.get('cycle_no',1)} • Due {str(row.get('end_date',''))[:10]}
+                                {' | ⚠️ OVERDUE' if overdue else ''}
+                            </div>
+
+                            <div style="margin-top:10px;">
+                                💰 Paid: {paid:,.0f} / {total:,.0f} UGX<br>
+                                ⚖️ Balance: <b>{balance:,.0f}</b>
+                            </div>
+
+                            <!-- Progress Bar (Bulletproof Fix) -->
+                            <div style="
+                                background:#1e293b;
+                                border-radius:10px;
+                                margin-top:10px;
+                                height:10px;
+                                width: 100%;
+                                position: relative;
+                                overflow:hidden;
+                                display: block;
+                            ">
                                 <div style="
                                     width:{progress}%;
                                     background:{color};
-                                    height:8px;
-                                    transition: width 0.5s ease-in-out;
+                                    height:10px;
+                                    position: absolute;
+                                    top: 0;
+                                    left: 0;
                                 "></div>
                             </div>
-                            <small style="color:#94a3b8;">{progress}% repaid</small>
+
+                            <div style="margin-top: 4px;">
+                                <small style="color:#94a3b8;">{progress}% repaid</small>
+                            </div>
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
-                    if clicked:
-                        st.session_state["selected_loan_id"] = row["id"]
 
                 # ------------------------------
-                # 🎯 PROCESS SELECTION
+                # 🎯 SELECTION HANDLER
                 # ------------------------------
+                
                 if "selected_loan_id" not in st.session_state:
                     st.info("👉 Click a 'Select' button above to continue")
                 else:
