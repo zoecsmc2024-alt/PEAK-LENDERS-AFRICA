@@ -1610,36 +1610,7 @@ def show_loans():
                 "status"
             ]
 
-            def style_entire_row(row):
-                val = str(row["status"]).upper().strip()
-                color_map = {
-                    "ACTIVE": "background-color:#dbeafe;color:#1e40af;font-weight:bold;",
-                    "PENDING": "background-color:#fee2e2;color:#991b1b;font-weight:bold;",
-                    "CLEARED": "background-color:#d1fae5;color:#065f46;",
-                    "BCF": "background-color:#ffedd5;color:#9a3412;",
-                    "CLOSED": "background-color:#f3f4f6;color:#374151;"
-                }
-                style = color_map.get(val, "")
-                return [style] * len(row)
-
-            # Apply styling and currency formatting
-            styled_df = (
-                filtered_loans[show_cols].style
-                .apply(style_entire_row, axis=1)
-                .format({
-                    "principal": "{:,.0f}",
-                    "total_repayable": "{:,.0f}",
-                    "balance": "{:,.0f}"
-                })
-            )
             
-            st.dataframe(styled_df, use_container_width=True, hide_index=True)
-            st.dataframe(
-                styled_df,
-                column_order=show_cols,
-                use_container_width=True,
-                hide_index=True
-            )
     # ==============================       
     # TAB ADD LOAN
     # ==============================
