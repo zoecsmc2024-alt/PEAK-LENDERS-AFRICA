@@ -1547,57 +1547,53 @@ def show_loans():
         if not filtered_loans.empty:
 
             total_loans = len(filtered_loans)
-
             total_principal = filtered_loans["principal"].sum()
             total_repayable = filtered_loans["total_repayable"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
 
+            col1, col2, col3, col4 = st.columns(4)
 
-            col1, col2, col3,  = st.columns(4)
-
-    col1.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, #3b82f6, #1e3a8a);
-        padding:15px;
-        border-radius:10px;
-        color:white;
-        text-align:center;">
-        <div style="font-size:14px;">📄 Total Loans</div>
-        <div style="font-size:22px;font-weight:bold;">{total_loans}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col2.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, #10b981, #065f46);
-        padding:15px;
-        border-radius:10px;
-        color:white;
-        text-align:center;">
-        <div style="font-size:14px;">💰 Principal</div>
-        <div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col3.markdown(f"""
-    <div style="
-        background: linear-gradient(135deg, #f59e0b, #92400e);
-        padding:15px;
-        border-radius:10px;
-        color:white;
-        text-align:center;">
-        <div style="font-size:14px;">💳 Paid</div>
-        <div style="font-size:22px;font-weight:bold;">{total_paid:,.0f}</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-            col1.metric("📄 Total Loans", f"{total_loans}")
-            col2.metric("💰 Principal", f"{total_principal:,.0f}")
-            col3.metric("💳 Paid", f"{total_paid:,.0f}")
-
+            col1.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #3b82f6, #1e3a8a);
+                padding:15px;
+                border-radius:10px;
+                color:white;
+                text-align:center;">
+                <div style="font-size:14px;">📄 Total Loans</div>
+                <div style="font-size:22px;font-weight:bold;">{total_loans}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col2.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #10b981, #065f46);
+                padding:15px;
+                border-radius:10px;
+                color:white;
+                text-align:center;">
+                <div style="font-size:14px;">💰 Principal</div>
+                <div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            col3.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #f59e0b, #92400e);
+                padding:15px;
+                border-radius:10px;
+                color:white;
+                text-align:center;">
+                <div style="font-size:14px;">💳 Paid</div>
+                <div style="font-size:22px;font-weight:bold;">{total_paid:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
             st.markdown("---")
 
+        # ------------------------------
+        # 📋 LOAN DATA TABLE
+        # ------------------------------
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
@@ -1628,7 +1624,7 @@ def show_loans():
 
             # Apply styling and currency formatting
             styled_df = (
-                filtered_loans.style
+                filtered_loans[show_cols].style
                 .apply(style_entire_row, axis=1)
                 .format({
                     "principal": "{:,.0f}",
@@ -1636,7 +1632,8 @@ def show_loans():
                     "balance": "{:,.0f}"
                 })
             )
-
+            
+            st.dataframe(styled_df, use_container_width=True, hide_index=True)
             st.dataframe(
                 styled_df,
                 column_order=show_cols,
