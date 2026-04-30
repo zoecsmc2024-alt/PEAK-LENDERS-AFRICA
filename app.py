@@ -1976,28 +1976,21 @@ def generate_receipt_pdf(data, filename):
     doc = SimpleDocTemplate(filename)
     styles = getSampleStyleSheet()
     content = []
-
     content.append(Paragraph("<b>PAYMENT RECEIPT</b>", styles["Title"]))
     content.append(Spacer(1, 12))
-
     for k, v in data.items():
         content.append(Paragraph(f"<b>{k}:</b> {v}", styles["Normal"]))
         content.append(Spacer(1, 8))
-
     doc.build(content)
 
-
-# ==============================
-# 💵 RECEIPT NO GENERATOR
-# ==============================
+# ✅ SINGLE SOURCE OF TRUTH (RPC)
 def generate_receipt_no(supabase, tenant_id):
     try:
         res = supabase.rpc("get_next_receipt", {"p_tenant": tenant_id}).execute()
         return res.data
     except Exception as e:
-        st.warning(f"Receipt RPC failed: {e}")
+        st.error(f"Receipt generation failed: {e}")
         return f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
-
 
 # ==============================
 # 💵 PAYMENTS MODULE
@@ -2005,217 +1998,226 @@ def generate_receipt_no(supabase, tenant_id):
 def show_payments():
     st.markdown("## 💵 Payments Management")
 
-    # ------------------------------
-    # 📦 LOAD DATA SAFELY
-    # ------------------------------
+    # ==============================
+    # 📦 LOAD DATA (SAFE)
+    # ==============================
     try:
+        # Utilizing your global get_data/get_cached_data helpers
         loans_raw = get_cached_data("loans")
         payments_raw = get_cached_data("payments")
         borrowers_raw = get_cached_data("borrowers")
     except Exception as e:
-        st.error(f"Data load error: {e}")
+        st.error(f"❌ Data load error: {e}")
         return
 
-    loans_df = pd.DataFrame(loans_raw or [])
-    payments_df = pd.DataFrame(payments_raw or [])
-    borrowers_df = pd.DataFrame(borrowers_raw or [])
+    loans_df = pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame()
+    payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
+    borrowers_df = pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame()
 
     if loans_df.empty:
-        st.info("No loans available.")
+        st.info("ℹ️ No loans available.")
         return
+    loans_df["id"] = loans_df["id"].astype(str)
+    borrowers_df["id"] = borrowers_df["id"].astype(str)
 
-    # ------------------------------
-    # 🧹 NORMALIZATION
-    # ------------------------------
-    for df_norm in [loans_df, payments_df, borrowers_df]:
-        if not df_norm.empty:
-            df_norm.columns = df_norm.columns.str.lower().str.strip().str.replace(" ", "_")
+    if "loan_id" in payments_df.columns:
+        payments_df["loan_id"] = payments_df["loan_id"].astype(str)
+    # ==============================
+    # 🛡️ NORMALIZATION
+    # ==============================
+    for df in [loans_df, payments_df, borrowers_df]:
+        if not df.empty:
+            df.columns = df.columns.str.lower().str.strip().str.replace(" ", "_")
 
-    # ID safety
-    for df_id, col in [(loans_df, "id"), (loans_df, "borrower_id"),
-                    (payments_df, "loan_id"), (borrowers_df, "id")]:
-        if col in df_id.columns:
-            df_id[col] = df_id[col].astype(str)
+    # Ensure IDs are strings for mapping
+    for df, col in [(borrowers_df, "id"), (loans_df, "borrower_id"), (loans_df, "id"), (payments_df, "loan_id")]:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
 
-    # Numeric safety
+    # ==============================
+    # 👤 BORROWER NAME RESOLUTION
+    # ==============================
+    if not borrowers_df.empty and "id" in borrowers_df.columns and "name" in borrowers_df.columns:
+        borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+        loans_df["borrower"] = loans_df["borrower_id"].map(borrower_map).fillna("Unknown")
+    else:
+        if "borrower" not in loans_df.columns:
+            loans_df["borrower"] = "Unknown"
+
+    # ==============================
+    # 📊 FIELD PREP
+    # ==============================
+    if "status" not in loans_df.columns:
+        loans_df["status"] = "ACTIVE"
+    loans_df["status"] = loans_df["status"].astype(str).str.upper()
+
     loans_df["amount_paid"] = pd.to_numeric(loans_df.get("amount_paid", 0), errors="coerce").fillna(0)
     loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", 0), errors="coerce").fillna(0)
 
-    # Sync Payments to Loans
+    # ==============================
+    # 🔥 CRITICAL FIX: SYNC PAYMENTS → LOANS
+    # ==============================
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["amount"] = pd.to_numeric(payments_df.get("amount", 0), errors="coerce").fillna(0)
         payment_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
+        # Recalculate to ensure absolute accuracy after any Edits/Deletes
         loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(0)
 
-    # ------------------------------
+    # ==============================
     # 📑 TABS
-    # ------------------------------
+    # ==============================
     tab1, tab2 = st.tabs(["➕ Record Payment", "📜 History"])
 
-    # =========================================================
-    # TAB 1: PAYMENT ENTRY
-    # =========================================================
+    # --- TAB 1: RECORD PAYMENT ---
     with tab1:
-        st.markdown("### 📌 Select Loan to Pay")
-        
-        # 🎯 FILTERS
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            search = st.text_input("🔍 Search borrower / SN")
-        with col2:
-            status_filter = st.selectbox("Status", ["ALL", "ACTIVE", "PENDING", "OVERDUE", "CLEARED"])
-        with col3:
-            sort_by = st.selectbox("Sort by", ["sn", "balance", "progress"])
-
-        # 🧮 PRE-PROCESSING
-        active_loans = loans_df.copy()
-        active_loans["balance"] = active_loans["total_repayable"] - active_loans["amount_paid"]
-        active_loans["progress"] = ((active_loans["amount_paid"] / active_loans["total_repayable"]) * 100).fillna(0).clip(0, 100)
-
-        # Overdue Calculation
-        try:
-            active_loans["end_date"] = pd.to_datetime(active_loans.get("end_date"), errors="coerce")
-            active_loans["overdue"] = (active_loans["end_date"] < datetime.now()) & (active_loans["balance"] > 0)
-        except:
-            active_loans["overdue"] = False
-
-        # ------------------------------
-        # 🧠 STATUS NORMALIZATION
-        # ------------------------------
-        active_loans["status_calc"] = "ACTIVE"
-        active_loans.loc[active_loans["balance"] <= 0, "status_calc"] = "CLEARED"
-        active_loans.loc[active_loans["overdue"], "status_calc"] = "OVERDUE"
-
-        # ------------------------------
-        # 🔎 FILTERING LOGIC
-        # ------------------------------
-        if search:
-            s = search.lower()
-            # Use a mask to avoid truth value ambiguity
-            mask = active_loans.apply(
-                lambda r: s in str(r.get("borrower", "")).lower() 
-                or s in str(r.get("sn", "")).lower(), 
-                axis=1
-            )
-            active_loans = active_loans[mask]
-
-        if status_filter != "ALL":
-            active_loans = active_loans[active_loans["status_calc"] == status_filter]
-
-        # ------------------------------
-        # 📊 SORTING (Move this UP before the UI check)
-        # ------------------------------
-        if sort_by == "balance":
-            active_loans = active_loans.sort_values("balance", ascending=False)
-        elif sort_by == "progress":
-            active_loans = active_loans.sort_values("progress", ascending=True)
-        else:
-            active_loans = active_loans.sort_values("sn")
-
-        # ------------------------------
-        # 📋 UI RENDER CHECK
-        # ------------------------------
+        active_loans = loans_df[
+            loans_df["status"].isin(["ACTIVE", "BCF", "PENDING", "OVERDUE"])
+        ].copy()
+    
         if active_loans.empty:
-            st.warning("No loans match your filters.")
+            st.success("🎉 No active loans requiring payment.")
         else:
-        
-            # ------------------------------
-            # 📋 SELECT BOX
-            # ------------------------------
-            loan_options = {
-                f"{r['borrower']} | SN:{r['sn']} | Balance:{r['balance']:,.0f} | {r['status_calc']}": r["id"]
-                for _, r in active_loans.iterrows()
-            }
-        
-            selected_label = st.selectbox("Choose Loan", list(loan_options.keys()))
-            selected_id = loan_options[selected_label]
-        
-            # ------------------------------
-            # 🧠 SAFE LOAN SELECTION (FIXED CRASH)
-            # ------------------------------
-            match = active_loans[active_loans["id"] == selected_id]
-        
-            if match.empty:
-                st.error("Selected loan not found.")
-                st.stop()
-        
-            loan = match.iloc[0]
-        
-            # ------------------------------
-            # 📊 PREVIEW PANEL
-            # ------------------------------
-            st.divider()
-        
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Borrower", loan["borrower"])
-            c2.metric("Paid", f"UGX {loan['amount_paid']:,.0f}")
-            c3.metric("Balance", f"UGX {loan['balance']:,.0f}")
-        
-            st.progress(float(loan["progress"]) / 100)
-            st.caption(f"{float(loan['progress']):.1f}% repaid")
-        
-            # ------------------------------
-            # 💳 PAYMENT FORM
-            # ------------------------------
-            with st.form("payment_form"):
-                amount = st.number_input("Amount", min_value=0.0, step=1000.0)
-                method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
-                pay_date = st.date_input("Date", datetime.now())
-                submit = st.form_submit_button("Post Payment")
-        
-            if submit:
-        
-                if amount <= 0:
-                    st.warning("Invalid amount")
-                    st.stop()
-        
-                try:
-                    tenant_id = st.session_state.get("tenant_id")
-                    if not tenant_id:
-                        st.error("Missing tenant session")
-                        st.stop()
-        
-                    receipt_no = generate_receipt_no(supabase, tenant_id)
-        
-                    supabase.table("payments").insert({
-                        "receipt_no": receipt_no,
-                        "loan_id": loan["id"],
-                        "borrower": loan["borrower"],
-                        "amount": float(amount),
-                        "date": pay_date.strftime("%Y-%m-%d"),
-                        "method": method,
-                        "tenant_id": tenant_id
-                    }).execute()
-        
-                    new_paid = float(loan["amount_paid"]) + float(amount)
-                    total = float(loan["total_repayable"])
-        
-                    new_status = "CLEARED" if new_paid >= total else "ACTIVE"
-        
-                    supabase.table("loans").update({
-                        "amount_paid": float(new_paid),
-                        "status": new_status
-                    }).eq("id", loan["id"]).execute()
-        
-                    st.success("Payment recorded successfully")
-                    st.cache_data.clear()
-                    st.rerun()
-        
-                except Exception as e:
-                    st.error(f"Payment failed: {e}")
-    # =========================================================
-    # TAB 2: HISTORY & MANAGEMENT
-    # =========================================================
+            search = st.text_input("🔍 Search borrower or loan")
+    
+            if search:
+                search = search.lower()
+                active_loans = active_loans[
+                    active_loans.apply(
+                        lambda r: search in str(r.get("borrower", "")).lower()
+                        or search in str(r.get("sn", "")).lower(),
+                        axis=1
+                    )
+                ]
+    
+            if active_loans.empty:
+                st.warning("No matching loans found.")
+            else:
+    
+                # =========================
+                # ✅ BETTER LOAN LABEL
+                # =========================
+                def format_loan(row):
+                    balance = float(row["total_repayable"]) - float(row["amount_paid"])
+                    loan_id_short = str(row["id"])[:8]
+                    return f"{row['borrower']} | SN: {row['sn']} | ID: {loan_id_short} | Bal: UGX {balance:,.0f}"
+    
+                # Create label column (more stable than dict mapping)
+                active_loans = active_loans.copy()
+                active_loans["label"] = active_loans.apply(format_loan, axis=1)
+    
+                # =========================
+                # ✅ SAFE SELECTION
+                # =========================
+                selected_label = st.selectbox(
+                    "Select Loan",
+                    active_loans["label"].tolist()
+                )
+    
+                loan = active_loans[active_loans["label"] == selected_label].iloc[0]
+                loan_id = loan["id"]
+    
+                # =========================
+                # 💰 CALCULATIONS
+                # =========================
+                total = float(loan["total_repayable"])
+                paid = float(loan["amount_paid"])
+                balance = total - paid
+    
+                c1, c2 = st.columns(2)
+                c1.metric("👤 Borrower", loan["borrower"])
+                c2.metric("💰 Balance", f"UGX {balance:,.0f}")
+    
+                # =========================
+                # 💵 PAYMENT FORM
+                # =========================
+                with st.form("payment_form"):
+                    amount = st.number_input("Amount", min_value=0.0, step=1000.0)
+                    method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
+                    date = st.date_input("Date", datetime.now())
+                    submit = st.form_submit_button("Post Payment", use_container_width=True)
+    
+                # =========================
+                # 🚀 SUBMIT PAYMENT
+                # =========================
+                if submit:
+                    if amount <= 0:
+                        st.warning("Enter valid payment amount.")
+                    else:
+                        try:
+                            tenant_id = st.session_state.get("tenant_id")
+                            if not tenant_id:
+                                st.error("❌ Authentication error. Please login again.")
+                                st.stop()
+
+                            receipt_no = generate_receipt_no(supabase, tenant_id)
+                            current_label = str(loan.get("loan_id_label", loan["sn"]))
+
+                            # STEP 1: INSERT PAYMENT RECORD
+                            supabase.table("payments").insert({
+                                "receipt_no": receipt_no,
+                                "loan_id": loan_id,
+                                "borrower": loan["borrower"],
+                                "amount": float(amount),
+                                "date": date.strftime("%Y-%m-%d"),
+                                "method": method,
+                                "recorded_by": st.session_state.get("user", "Staff"),
+                                "tenant_id": tenant_id
+                            }).execute()
+
+                            # STEP 2: UPDATE MASTER LOAN RECORD
+                            new_paid = paid + amount
+                            new_status = "CLEARED" if new_paid >= total else loan["status"]
+
+                            supabase.table("loans").update({
+                                "amount_paid": float(new_paid),
+                                "status": new_status,
+                                "loan_id_label": current_label
+                            }).eq("id", loan_id).execute()
+
+                            # STEP 3: GENERATE PDF RECEIPT
+                            file_path = f"/tmp/{receipt_no}.pdf"
+                            generate_receipt_pdf({
+                                "Receipt No": receipt_no,
+                                "Borrower": loan["borrower"],
+                                "Amount": f"UGX {amount:,.0f}",
+                                "Method": method,
+                                "Date": date.strftime("%Y-%m-%d"),
+                                "Recorded By": st.session_state.get("user", "Staff")
+                            }, file_path)
+
+                            with open(file_path, "rb") as f:
+                                st.session_state["receipt_pdf"] = f.read()
+                                st.session_state["show_receipt"] = True
+
+                            st.success(f"✅ Payment Success! New Balance: {max(0, total-new_paid):,.0f}")
+                            st.cache_data.clear()
+                            st.rerun()
+
+                        except Exception as e:
+                            st.error(f"❌ Error: {e}")
+
+        if st.session_state.get("show_receipt"):
+            st.download_button(
+                "📥 Download Receipt",
+                data=st.session_state["receipt_pdf"],
+                file_name=f"receipt_{datetime.now().strftime('%Y%m%d')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+            if st.button("Clear Receipt View"):
+                st.session_state["show_receipt"] = False
+                st.rerun()
+
+    # --- TAB 2: HISTORY & MANAGEMENT ---
     with tab2:
         if payments_df.empty:
             st.info("No payment history found.")
         else:
             df_hist = payments_df.copy()
             df_hist["amount_display"] = df_hist["amount"].apply(lambda x: f"UGX {x:,.0f}")
-            
             if "date" in df_hist.columns:
                 df_hist = df_hist.sort_values("date", ascending=False)
-            
+
             display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
             st.dataframe(df_hist[display_cols], use_container_width=True, hide_index=True)
 
@@ -2228,13 +2230,13 @@ def show_payments():
             
             target_pay_id = pay_map[selected_pay]
             target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0]
-            
+
             p_col1, p_col2 = st.columns(2)
-            
+
             if p_col1.button("🗑️ Delete Payment", use_container_width=True):
                 try:
                     supabase.table("payments").delete().eq("id", target_pay_id).execute()
-                    st.cache_data.clear() 
+                    st.cache_data.clear() # Triggers the Sync logic at top
                     st.warning(f"Payment {target_pay['receipt_no']} removed.")
                     st.rerun()
                 except Exception as e:
@@ -2243,14 +2245,12 @@ def show_payments():
             if p_col2.button("📝 Edit Payment", use_container_width=True):
                 st.session_state["edit_pay_mode"] = True
 
-            # --- EDIT FORM LOGIC ---
             if st.session_state.get("edit_pay_mode"):
                 with st.form("edit_payment_form"):
                     st.info(f"Modifying: {target_pay['receipt_no']}")
                     new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
-                    methods = ["Cash", "Mobile Money", "Bank"]
-                    current_method_idx = methods.index(target_pay['method']) if target_pay['method'] in methods else 0
-                    new_method = st.selectbox("Revised Method", methods, index=current_method_idx)
+                    new_method = st.selectbox("Revised Method", ["Cash", "Mobile Money", "Bank"], 
+                                             index=["Cash", "Mobile Money", "Bank"].index(target_pay['method']))
                     
                     eb1, eb2 = st.columns(2)
                     if eb1.form_submit_button("💾 Save Changes"):
