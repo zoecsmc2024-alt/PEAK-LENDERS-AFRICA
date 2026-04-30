@@ -2112,7 +2112,7 @@ def show_payments():
                     progress = 0 if total == 0 else min(int((paid / total) * 100), 100)
 
                    # ------------------------------
-                    # 🎨 STYLE
+                    # 🎨 STYLE & STRICT CALCULATION
                     # ------------------------------
                     color = "#10b981" # Green
                     if overdue:
@@ -2122,8 +2122,13 @@ def show_payments():
                     elif row["status"] == "PENDING":
                         color = "#f59e0b" # Orange
 
+                    # STRICT CALC: Ensures width never exceeds 100% or drops below 0%
+                    total = float(row.get("total_repayable", 0))
+                    paid = float(row.get("amount_paid", 0))
+                    progress = min(max(int((paid / total) * 100), 0), 100) if total > 0 else 0
+
                     # ------------------------------
-                    # 🧾 CLICKABLE LOAN CARD (FIXED LAYOUT)
+                    # 🧾 CLICKABLE LOAN CARD (IRONCLAD FIX)
                     # ------------------------------
                     card_clicked = st.button(
                         f"📌 Select {row['borrower']} | SN:{row['sn']} | Cycle:{row.get('cycle_no',1)}",
@@ -2157,28 +2162,31 @@ def show_payments():
                                 ⚖️ Balance: <b>{balance:,.0f}</b>
                             </div>
 
-                            <!-- Progress Bar (Bulletproof Fix) -->
+                            <!-- Progress Bar (IRONCLAD CLIP-PATH FIX) -->
                             <div style="
-                                background:#1e293b;
-                                border-radius:10px;
-                                margin-top:10px;
-                                height:10px;
+                                background: #1e293b; 
+                                border-radius: 10px; 
+                                margin-top: 12px; 
+                                height: 10px; 
                                 width: 100%;
                                 position: relative;
-                                overflow:hidden;
+                                overflow: hidden;
                                 display: block;
+                                -webkit-mask-image: -webkit-radial-gradient(white, black);
+                                clip-path: inset(0 round 10px);
                             ">
                                 <div style="
-                                    width:{progress}%;
-                                    background:{color};
-                                    height:10px;
+                                    width: {progress}%;
+                                    background: {color};
+                                    height: 100%;
                                     position: absolute;
                                     top: 0;
                                     left: 0;
+                                    transition: width 0.4s ease-in-out;
                                 "></div>
                             </div>
 
-                            <div style="margin-top: 4px;">
+                            <div style="margin-top: 6px;">
                                 <small style="color:#94a3b8;">{progress}% repaid</small>
                             </div>
                         </div>
