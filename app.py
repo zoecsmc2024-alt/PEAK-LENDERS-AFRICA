@@ -2160,7 +2160,7 @@ def show_payments():
                                     ⚖️ Balance: <b style="color:{color};">{balance:,.0f}</b>
                                 </div>
                                 
-                                <!-- PROGRESS BAR WITH IRONCLAD MASKING -->
+                                <div style="display:none;">PROGRESS BAR WITH IRONCLAD MASKING</div>
                                 <div style="
                                     background: #1e293b; 
                                     border-radius: 10px; 
