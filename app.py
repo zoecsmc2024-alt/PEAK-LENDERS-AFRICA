@@ -2070,6 +2070,7 @@ def show_payments():
 
     # --- TAB 1: RECORD PAYMENT ---
     with tab1:
+        # Filter for actionable loans
         active_loans = loans_df[
             loans_df["status"].isin(["ACTIVE", "BCF", "PENDING", "OVERDUE"])
         ].copy()
@@ -2077,50 +2078,46 @@ def show_payments():
         if active_loans.empty:
             st.success("🎉 No active loans requiring payment.")
         else:
+            # =========================================================
+            # ✅ FIX 1: DEFINE FORMATTER (Targeting 'loan_id_label')
+            # =========================================================
+            def format_loan(row):
+                balance = float(row.get("total_repayable", 0)) - float(row.get("amount_paid", 0))
+                
+                # Use 'loan_id_label' from image_f3bbed.png
+                sn_raw = row.get("loan_id_label") or row.get("sn")
+                sn_display = str(sn_raw).strip().zfill(4) if sn_raw else "N/A"
+                
+                cycle = row.get("cycle_no", "1")
+                borrower = row.get("borrower", "Unknown")
+                loan_short = str(row.get("id", ""))[:6]
+    
+                return f"{loan_short} | SN: {sn_display} | CYCLE: {cycle} | {borrower} | BAL: UGX {balance:,.0f}"
+    
+            # =========================================================
+            # ✅ FIX 2: PRE-INITIALIZE 'label' (Prevents error in image_f3bff4.png)
+            # =========================================================
+            active_loans["label"] = active_loans.apply(format_loan, axis=1)
+    
             search = st.text_input("🔍 Search borrower or loan")
     
             if search:
                 search = search.lower()
-                active_loans = active_loans[
-                    active_loans.apply(
-                        lambda r: search in str(r.get("borrower", "")).lower()
-                        or search in str(r.get("sn", "")).lower(), axis=1)
-                ]
+                # Search logic using a mask to avoid ambiguity errors
+                mask = active_loans.apply(
+                    lambda r: search in str(r.get("borrower", "")).lower()
+                    or search in str(r.get("loan_id_label", "")).lower(), axis=1
+                )
+                active_loans = active_loans[mask]
     
             if active_loans.empty:
                 st.warning("No matching loans found.")
             else:
-    
-                # =========================
-                # ✅ STRONG LOAN IDENTIFIER (REPAIRED)
-                # =========================
-                def format_loan(row):
-                    # Calculate balance safely
-                    total = float(row.get("total_repayable", 0))
-                    paid = float(row.get("amount_paid", 0))
-                    balance = total - paid
+                # =========================================================
+                # ✅ SAFE SELECTION
+                # =========================================================
+                active_loans = active_loans.reset_index(drop=True)
                 
-                    # Get SN from common keys: 'sn', 'serial_no', or 'loan_no'
-                    raw_sn = row.get("sn") or row.get("serial_no") or row.get("loan_no")
-                    
-                    if raw_sn:
-                        # Convert to string and strip spaces before zfill
-                        sn_display = str(raw_sn).strip().zfill(4)
-                    else:
-                        # Fallback if no SN is found at all
-                        sn_display = "N/A"
-                
-                    cycle = row.get("cycle_no", row.get("cycle", "1"))
-                    loan_short = str(row["id"])[:6]
-                
-                    return (
-                        f"{loan_short} | SN: {sn_display} | CYCLE: {cycle} | "
-                        f"{row.get('borrower', 'Unknown')} | BAL: UGX {balance:,.0f}"
-                    )
-    
-                # =========================
-                # ✅ SAFE SELECTION (NO DUPLICATES BUG)
-                # =========================
                 selected_index = st.selectbox(
                     "Select Loan (SN + Cycle)",
                     active_loans.index,
