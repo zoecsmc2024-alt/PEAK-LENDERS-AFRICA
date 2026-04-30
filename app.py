@@ -2003,7 +2003,6 @@ def generate_receipt_no(supabase, tenant_id):
 # 💵 PAYMENTS MODULE
 # ==============================
 def show_payments():
-
     st.markdown("## 💵 Payments Management")
 
     # ------------------------------
@@ -2028,25 +2027,21 @@ def show_payments():
     # ------------------------------
     # 🧹 NORMALIZATION
     # ------------------------------
-    for df in [loans_df, payments_df, borrowers_df]:
-        if not df.empty:
-            df.columns = df.columns.str.lower().str.strip().str.replace(" ", "_")
+    for df_norm in [loans_df, payments_df, borrowers_df]:
+        if not df_norm.empty:
+            df_norm.columns = df_norm.columns.str.lower().str.strip().str.replace(" ", "_")
 
     # ID safety
-    for df, col in [(loans_df, "id"), (loans_df, "borrower_id"),
+    for df_id, col in [(loans_df, "id"), (loans_df, "borrower_id"),
                     (payments_df, "loan_id"), (borrowers_df, "id")]:
-        if col in df.columns:
-            df[col] = df[col].astype(str)
+        if col in df_id.columns:
+            df_id[col] = df_id[col].astype(str)
 
-    # ------------------------------
-    # 💰 NUMERIC SAFETY
-    # ------------------------------
+    # Numeric safety
     loans_df["amount_paid"] = pd.to_numeric(loans_df.get("amount_paid", 0), errors="coerce").fillna(0)
     loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", 0), errors="coerce").fillna(0)
 
-    # ------------------------------
-    # 🔄 SYNC PAYMENTS → LOANS
-    # ------------------------------
+    # Sync Payments to Loans
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["amount"] = pd.to_numeric(payments_df.get("amount", 0), errors="coerce").fillna(0)
         payment_sums = payments_df.groupby("loan_id")["amount"].sum().to_dict()
@@ -2061,279 +2056,177 @@ def show_payments():
     # TAB 1: PAYMENT ENTRY
     # =========================================================
     with tab1:
+        st.markdown("### 📌 Select Loan to Pay")
+        
+        # 🎯 FILTERS
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            search = st.text_input("🔍 Search borrower / SN")
+        with col2:
+            status_filter = st.selectbox("Status", ["ALL", "ACTIVE", "PENDING", "OVERDUE", "CLEARED"])
+        with col3:
+            sort_by = st.selectbox("Sort by", ["sn", "balance", "progress"])
 
+        # 🧮 PRE-PROCESSING
         active_loans = loans_df.copy()
-
         active_loans["balance"] = active_loans["total_repayable"] - active_loans["amount_paid"]
+        active_loans["progress"] = ((active_loans["amount_paid"] / active_loans["total_repayable"]) * 100).fillna(0).clip(0, 100)
 
-        active_loans["progress"] = (
-            (active_loans["amount_paid"] / active_loans["total_repayable"]) * 100
-        ).fillna(0).clip(0, 100)
+        # Overdue Calculation
+        try:
+            active_loans["end_date"] = pd.to_datetime(active_loans.get("end_date"), errors="coerce")
+            active_loans["overdue"] = (active_loans["end_date"] < datetime.now()) & (active_loans["balance"] > 0)
+        except:
+            active_loans["overdue"] = False
 
-        active_loans = active_loans.sort_values(["sn", "cycle_no"], na_position="last")
+        # Status Normalization
+        active_loans["status_calc"] = "ACTIVE"
+        active_loans.loc[active_loans["balance"] <= 0, "status_calc"] = "CLEARED"
+        active_loans.loc[active_loans["overdue"], "status_calc"] = "OVERDUE"
 
-        search = st.text_input("🔍 Search borrower / SN")
-
+        # 🔎 FILTERING LOGIC
         if search:
-            search = search.lower()
+            s = search.lower()
             active_loans = active_loans[
-                active_loans.apply(
-                    lambda r: search in str(r.get("borrower", "")).lower()
-                    or search in str(r.get("sn", "")).lower(),
-                    axis=1
-                )
+                active_loans.apply(lambda r: s in str(r.get("borrower", "")).lower() or s in str(r.get("sn", "")).lower(), axis=1)
             ]
 
+        if status_filter != "ALL":
+            active_loans = active_loans[active_loans["status_calc"] == status_filter]
+
+        # 📊 SORTING
+        if sort_by == "balance":
+            active_loans = active_loans.sort_values("balance", ascending=False)
+        elif sort_by == "progress":
+            active_loans = active_loans.sort_values("progress", ascending=True)
+        else:
+            active_loans = active_loans.sort_values("sn")
+
         if active_loans.empty:
-            st.warning("No loans found.")
-            return
+            st.warning("No loans match your filters.")
+        else:
+            # 📋 SELECT BOX
+            loan_options = {
+                f"{r['borrower']} | SN:{r['sn']} | Balance:{r['balance']:,.0f} | {r['status_calc']}": r["id"]
+                for _, r in active_loans.iterrows()
+            }
+            selected_label = st.selectbox("Choose Loan", list(loan_options.keys()))
+            selected_id = loan_options[selected_label]
+            loan = active_loans[active_loans["id"] == selected_id].iloc[0]
 
-        # ------------------------------
-# 📌 FILTER-FIRST LOAN SELECTOR
-# ------------------------------
-st.markdown("### 📌 Select Loan to Pay")
+            # 📊 PREVIEW PANEL
+            st.divider()
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Borrower", loan["borrower"])
+            c2.metric("Paid", f"UGX {loan['amount_paid']:,.0f}")
+            c3.metric("Balance", f"UGX {loan['balance']:,.0f}")
+            st.progress(loan["progress"] / 100)
+            st.caption(f"{loan['progress']:.1f}% repaid")
 
-# ------------------------------
-# 🎯 FILTERS
-# ------------------------------
-col1, col2, col3 = st.columns(3)
+            # 💳 PAYMENT FORM
+            with st.form("payment_form"):
+                amount = st.number_input("Amount", min_value=0.0, step=1000.0)
+                method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
+                pay_date = st.date_input("Date", datetime.now())
+                submit = st.form_submit_button("Post Payment")
 
-with col1:
-    search = st.text_input("🔍 Search borrower / SN")
-
-with col2:
-    status_filter = st.selectbox(
-        "Status",
-        ["ALL", "ACTIVE", "PENDING", "OVERDUE", "CLEARED"]
-    )
-
-with col3:
-    sort_by = st.selectbox(
-        "Sort by",
-        ["sn", "balance", "progress"]
-    )
-
-# ------------------------------
-# 🧮 DERIVED FIELDS
-# ------------------------------
-df = Active_loans.copy()
-
-df["total_repayable"] = pd.to_numeric(df["total_repayable"], errors="coerce").fillna(0)
-df["amount_paid"] = pd.to_numeric(df["amount_paid"], errors="coerce").fillna(0)
-
-df["balance"] = df["total_repayable"] - df["amount_paid"]
-
-df["progress"] = (
-    (df["amount_paid"] / df["total_repayable"]) * 100
-).fillna(0).clip(0, 100)
-
-# overdue calc
-try:
-    df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
-    df["overdue"] = (df["end_date"] < datetime.now()) & (df["balance"] > 0)
-except:
-    df["overdue"] = False
-
-# ------------------------------
-# 🧠 STATUS NORMALIZATION
-# ------------------------------
-df["status_calc"] = "ACTIVE"
-df.loc[df["balance"] <= 0, "status_calc"] = "CLEARED"
-df.loc[df["overdue"], "status_calc"] = "OVERDUE"
-
-# ------------------------------
-# 🔎 FILTERING
-# ------------------------------
-if search:
-    s = search.lower()
-    df = df[
-        df.apply(
-            lambda r: s in str(r.get("borrower", "")).lower()
-            or s in str(r.get("sn", "")).lower(),
-            axis=1
-        )
-    ]
-
-if status_filter != "ALL":
-    df = df[df["status_calc"] == status_filter]
-
-# ------------------------------
-# 📊 SORTING
-# ------------------------------
-if sort_by == "balance":
-    df = df.sort_values("balance", ascending=False)
-elif sort_by == "progress":
-    df = df.sort_values("progress", ascending=True)
-else:
-    df = df.sort_values("sn")
-
-# ------------------------------
-# 📋 SELECT BOX (REPLACES CARDS)
-# ------------------------------
-if df.empty:
-    st.warning("No loans match your filters.")
-    st.stop()
-
-loan_options = {
-    f"{r['borrower']} | SN:{r['sn']} | Balance:{r['balance']:,.0f} | {r['status_calc']}": r["id"]
-    for _, r in df.iterrows()
-}
-
-selected_label = st.selectbox("Choose Loan", list(loan_options.keys()))
-selected_id = loan_options[selected_label]
-
-# ------------------------------
-# 🎯 LOAD SELECTED LOAN
-# ------------------------------
-loan = df[df["id"] == selected_id].iloc[0]
-
-total = float(loan["total_repayable"])
-paid = float(loan["amount_paid"])
-balance = total - paid
-
-st.divider()
-
-# ------------------------------
-# 📊 PREVIEW PANEL (NO CARDS)
-# ------------------------------
-c1, c2, c3 = st.columns(3)
-
-c1.metric("Borrower", loan["borrower"])
-c2.metric("Paid", f"UGX {paid:,.0f}")
-c3.metric("Balance", f"UGX {balance:,.0f}")
-
-st.progress(loan["progress"] / 100)
-st.caption(f"{loan['progress']:.1f}% repaid")
-
-if loan["status_calc"] == "OVERDUE":
-    st.error("⚠️ Overdue Loan")
-elif loan["status_calc"] == "CLEARED":
-    st.success("Fully Paid")
-else:
-    st.info(loan["status_calc"])
-
-# ------------------------------
-# 💳 PAYMENT FORM
-# ------------------------------
-with st.form("payment_form"):
-
-    amount = st.number_input("Amount", min_value=0.0, step=1000.0)
-    method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
-    date = st.date_input("Date", datetime.now())
-
-    submit = st.form_submit_button("Post Payment")
-
-if submit:
-
-    if amount <= 0:
-        st.warning("Invalid amount")
-        st.stop()
-
-    try:
-        tenant_id = st.session_state.get("tenant_id")
-
-        if not tenant_id:
-            st.error("Login required")
-            st.stop()
-
-        receipt_no = generate_receipt_no(supabase, tenant_id)
-
-        supabase.table("payments").insert({
-            "receipt_no": receipt_no,
-            "loan_id": loan["id"],
-            "borrower": loan["borrower"],
-            "amount": float(amount),
-            "date": date.strftime("%Y-%m-%d"),
-            "method": method,
-            "tenant_id": tenant_id
-        }).execute()
-
-        new_paid = paid + amount
-        new_status = "CLEARED" if new_paid >= total else loan.get("status", "ACTIVE")
-
-        supabase.table("loans").update({
-            "amount_paid": float(new_paid),
-            "status": new_status
-        }).eq("id", loan["id"]).execute()
-
-        st.success("Payment recorded successfully")
-        st.cache_data.clear()
-        st.rerun()
-
-    except Exception as e:
-        st.error(f"Payment failed: {e}")
-
-    #====================================    
-    # --- TAB 2: HISTORY & MANAGEMENT ---
-    #====================================
-        with tab2:
-            if payments_df.empty:
-                st.info("No payment history found.")
-            else:
-                df_hist = payments_df.copy()
-                df_hist["amount_display"] = df_hist["amount"].apply(lambda x: f"UGX {x:,.0f}")
-                
-                if "date" in df_hist.columns:
-                    df_hist = df_hist.sort_values("date", ascending=False)
-                
-                display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
-                st.dataframe(df_hist[display_cols], use_container_width=True, hide_index=True)
-
-                # --- 🛠️ EDIT/DELETE MANAGEMENT ---
-                st.markdown("---")
-                st.markdown("### ⚙️ Payment Maintenance")
-                
-                pay_map = {f"{row['receipt_no']} | {row['borrower']}": row['id'] for _, row in df_hist.iterrows()}
-                selected_pay = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
-                
-                target_pay_id = pay_map[selected_pay]
-                target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0]
-                
-                p_col1, p_col2 = st.columns(2)
-                
-                if p_col1.button("🗑️ Delete Payment", use_container_width=True):
+            if submit:
+                if amount <= 0:
+                    st.warning("Invalid amount")
+                else:
                     try:
-                        supabase.table("payments").delete().eq("id", target_pay_id).execute()
-                        st.cache_data.clear() # Triggers the Sync logic at top
-                        st.warning(f"Payment {target_pay['receipt_no']} removed.")
+                        tenant_id = st.session_state.get("tenant_id")
+                        receipt_no = generate_receipt_no(supabase, tenant_id)
+                        
+                        supabase.table("payments").insert({
+                            "receipt_no": receipt_no,
+                            "loan_id": loan["id"],
+                            "borrower": loan["borrower"],
+                            "amount": float(amount),
+                            "date": pay_date.strftime("%Y-%m-%d"),
+                            "method": method,
+                            "tenant_id": tenant_id
+                        }).execute()
+
+                        new_paid = float(loan["amount_paid"]) + amount
+                        new_status = "CLEARED" if new_paid >= float(loan["total_repayable"]) else "ACTIVE"
+
+                        supabase.table("loans").update({
+                            "amount_paid": float(new_paid),
+                            "status": new_status
+                        }).eq("id", loan["id"]).execute()
+
+                        st.success("Payment recorded successfully")
+                        st.cache_data.clear()
                         st.rerun()
                     except Exception as e:
-                        st.error(f"Delete failed: {e}")
+                        st.error(f"Payment failed: {e}")
 
-                if p_col2.button("📝 Edit Payment", use_container_width=True):
-                    st.session_state["edit_pay_mode"] = True
+    # =========================================================
+    # TAB 2: HISTORY & MANAGEMENT
+    # =========================================================
+    with tab2:
+        if payments_df.empty:
+            st.info("No payment history found.")
+        else:
+            df_hist = payments_df.copy()
+            df_hist["amount_display"] = df_hist["amount"].apply(lambda x: f"UGX {x:,.0f}")
+            
+            if "date" in df_hist.columns:
+                df_hist = df_hist.sort_values("date", ascending=False)
+            
+            display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
+            st.dataframe(df_hist[display_cols], use_container_width=True, hide_index=True)
 
-                # --- EDIT FORM LOGIC ---
-                if st.session_state.get("edit_pay_mode"):
-                    with st.form("edit_payment_form"):
-                        st.info(f"Modifying: {target_pay['receipt_no']}")
-                        
-                        new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
-                        
-                        # Set default index for selectbox
-                        methods = ["Cash", "Mobile Money", "Bank"]
-                        current_method_idx = methods.index(target_pay['method']) if target_pay['method'] in methods else 0
-                        new_method = st.selectbox("Revised Method", methods, index=current_method_idx)
-                        
-                        eb1, eb2 = st.columns(2)
-                        
-                        if eb1.form_submit_button("💾 Save Changes"):
-                            try:
-                                supabase.table("payments").update({
-                                    "amount": new_amt,
-                                    "method": new_method
-                                }).eq("id", target_pay_id).execute()
-                                
-                                st.session_state["edit_pay_mode"] = False
-                                st.cache_data.clear()
-                                st.success("Payment updated successfully!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Update failed: {e}")
-                        
-                        if eb2.form_submit_button("❌ Cancel"):
+            # --- 🛠️ EDIT/DELETE MANAGEMENT ---
+            st.markdown("---")
+            st.markdown("### ⚙️ Payment Maintenance")
+            
+            pay_map = {f"{row['receipt_no']} | {row['borrower']}": row['id'] for _, row in df_hist.iterrows()}
+            selected_pay = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
+            
+            target_pay_id = pay_map[selected_pay]
+            target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0]
+            
+            p_col1, p_col2 = st.columns(2)
+            
+            if p_col1.button("🗑️ Delete Payment", use_container_width=True):
+                try:
+                    supabase.table("payments").delete().eq("id", target_pay_id).execute()
+                    st.cache_data.clear() 
+                    st.warning(f"Payment {target_pay['receipt_no']} removed.")
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Delete failed: {e}")
+
+            if p_col2.button("📝 Edit Payment", use_container_width=True):
+                st.session_state["edit_pay_mode"] = True
+
+            # --- EDIT FORM LOGIC ---
+            if st.session_state.get("edit_pay_mode"):
+                with st.form("edit_payment_form"):
+                    st.info(f"Modifying: {target_pay['receipt_no']}")
+                    new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
+                    methods = ["Cash", "Mobile Money", "Bank"]
+                    current_method_idx = methods.index(target_pay['method']) if target_pay['method'] in methods else 0
+                    new_method = st.selectbox("Revised Method", methods, index=current_method_idx)
+                    
+                    eb1, eb2 = st.columns(2)
+                    if eb1.form_submit_button("💾 Save Changes"):
+                        try:
+                            supabase.table("payments").update({
+                                "amount": new_amt,
+                                "method": new_method
+                            }).eq("id", target_pay_id).execute()
                             st.session_state["edit_pay_mode"] = False
+                            st.cache_data.clear()
                             st.rerun()
+                        except Exception as e:
+                            st.error(f"Update failed: {e}")
+                    
+                    if eb2.form_submit_button("❌ Cancel"):
+                        st.session_state["edit_pay_mode"] = False
+                        st.rerun()
 
 # ==============================                           
 # 🛡️ 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
