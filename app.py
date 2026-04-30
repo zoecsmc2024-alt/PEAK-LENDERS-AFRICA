@@ -2092,22 +2092,31 @@ def show_payments():
             else:
     
                 # =========================
-                # ✅ STRONG LOAN IDENTIFIER (SN + CYCLE)
+                # ✅ STRONG LOAN IDENTIFIER (REPAIRED)
                 # =========================
                 def format_loan(row):
-                    balance = float(row["total_repayable"]) - float(row["amount_paid"])
-    
-                    sn = str(row.get("sn", "")).zfill(4)
-                    cycle = row.get("cycle_no", row.get("cycle", "?"))
+                    # Calculate balance safely
+                    total = float(row.get("total_repayable", 0))
+                    paid = float(row.get("amount_paid", 0))
+                    balance = total - paid
+                
+                    # Get SN from common keys: 'sn', 'serial_no', or 'loan_no'
+                    raw_sn = row.get("sn") or row.get("serial_no") or row.get("loan_no")
+                    
+                    if raw_sn:
+                        # Convert to string and strip spaces before zfill
+                        sn_display = str(raw_sn).strip().zfill(4)
+                    else:
+                        # Fallback if no SN is found at all
+                        sn_display = "N/A"
+                
+                    cycle = row.get("cycle_no", row.get("cycle", "1"))
                     loan_short = str(row["id"])[:6]
-    
+                
                     return (
-                        f"{loan_short} | SN: {sn} | CYCLE: {cycle} | "
-                        f"{row['borrower']} | BAL: UGX {balance:,.0f}"
+                        f"{loan_short} | SN: {sn_display} | CYCLE: {cycle} | "
+                        f"{row.get('borrower', 'Unknown')} | BAL: UGX {balance:,.0f}"
                     )
-    
-                active_loans = active_loans.reset_index(drop=True)
-                active_loans["label"] = active_loans.apply(format_loan, axis=1)
     
                 # =========================
                 # ✅ SAFE SELECTION (NO DUPLICATES BUG)
