@@ -2082,16 +2082,32 @@ def show_payments():
             # ✅ FIX 1: DEFINE FORMATTER (Targeting 'loan_id_label')
             # =========================================================
             def format_loan(row):
-                balance = float(row.get("total_repayable", 0)) - float(row.get("amount_paid", 0))
+                # 1. Calculate balance safely
+                total = float(row.get("total_repayable", 0))
+                paid = float(row.get("amount_paid", 0))
+                balance = total - paid
+            
+                # 2. Aggressive SN Lookup
+                # We check the specific label first, then common alternatives, then case-insensitive keys
+                raw_sn = row.get("loan_id_label")
                 
-                # Use 'loan_id_label' from image_f3bbed.png
-                sn_raw = row.get("loan_id_label") or row.get("sn")
-                sn_display = str(sn_raw).strip().zfill(4) if sn_raw else "N/A"
-                
-                cycle = row.get("cycle_no", "1")
+                if raw_sn is None:
+                    # If it's still N/A, try to find any column that contains 'label' or 'sn'
+                    cols = row.index.tolist()
+                    possible_keys = [k for k in cols if 'label' in k.lower() or 'sn' in k.lower()]
+                    if possible_keys:
+                        raw_sn = row.get(possible_keys[0])
+            
+                # 3. Final Formatting
+                if raw_sn and str(raw_sn).strip():
+                    sn_display = str(raw_sn).strip().zfill(4)
+                else:
+                    sn_display = "N/A"
+            
+                cycle = row.get("cycle_no", row.get("cycle", "1"))
                 borrower = row.get("borrower", "Unknown")
                 loan_short = str(row.get("id", ""))[:6]
-    
+            
                 return f"{loan_short} | SN: {sn_display} | CYCLE: {cycle} | {borrower} | BAL: UGX {balance:,.0f}"
     
             # =========================================================
