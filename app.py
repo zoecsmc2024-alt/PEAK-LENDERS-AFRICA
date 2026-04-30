@@ -2079,12 +2079,16 @@ def show_payments():
         except:
             active_loans["overdue"] = False
 
-        # Status Normalization
+        # ------------------------------
+        # 🧠 STATUS NORMALIZATION
+        # ------------------------------
         active_loans["status_calc"] = "ACTIVE"
         active_loans.loc[active_loans["balance"] <= 0, "status_calc"] = "CLEARED"
         active_loans.loc[active_loans["overdue"], "status_calc"] = "OVERDUE"
 
+        # ------------------------------
         # 🔎 FILTERING LOGIC
+        # ------------------------------
         if search:
             s = search.lower()
             # Use a mask to avoid truth value ambiguity
@@ -2098,13 +2102,9 @@ def show_payments():
         if status_filter != "ALL":
             active_loans = active_loans[active_loans["status_calc"] == status_filter]
 
-        # Use .empty instead of "if active_loans:"
-        if active_loans.empty:
-            st.warning("No loans match your filters.")
-        else:
-            # Proceed with selection logic...
-
-        # 📊 SORTING
+        # ------------------------------
+        # 📊 SORTING (Move this UP before the UI check)
+        # ------------------------------
         if sort_by == "balance":
             active_loans = active_loans.sort_values("balance", ascending=False)
         elif sort_by == "progress":
@@ -2112,6 +2112,19 @@ def show_payments():
         else:
             active_loans = active_loans.sort_values("sn")
 
+        # ------------------------------
+        # 📋 UI RENDER CHECK
+        # ------------------------------
+        # Use .empty as suggested in image_fe4b23.png to avoid ambiguity errors
+        if active_loans.empty:
+            st.warning("No loans match your filters.")
+        else:
+            # Proceed with selection logic (e.g., st.selectbox or cards)
+            loan_options = {
+                f"{r['borrower']} | SN:{r['sn']} | Balance:{r['balance']:,.0f}": r["id"]
+                for _, r in active_loans.iterrows()
+            }
+            
         if active_loans.empty:
             st.warning("No loans match your filters.")
         else:
