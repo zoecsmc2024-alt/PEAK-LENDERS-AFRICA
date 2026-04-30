@@ -2116,72 +2116,72 @@ def show_payments():
                     # ------------------------------
                     # 🎨 STYLE LOGIC
                     # ------------------------------
-                    color = "#10b981"  # Default: Green
+                    # Define light background colors based on status
+                    bg_color = "#f0f2f6"  # Default light gray
+                    border_color = "#d1d5db"
+                    
                     if overdue:
-                        color = "#ef4444"  # Red
+                        bg_color = "#fff5f5"  # Very light red
+                        border_color = "#feb2b2"
                     elif balance <= 0:
-                        color = "#3b82f6"  # Blue
+                        bg_color = "#f0fff4"  # Very light green
+                        border_color = "#9ae6b4"
                     elif str(row.get("status")).upper() == "PENDING":
-                        color = "#f59e0b"  # Orange
+                        bg_color = "#fffaf0"  # Very light orange
+                        border_color = "#fbd38d"
 
                     # ------------------------------
-                    # 🧾 RENDER BOX & SELECTION (PURE STREAMLIT)
+                    # 🧾 RENDER COLORED CARDS
                     # ------------------------------
-                    with st.container(border=True): # Added border=True for card effect
+                    # Injecting a tiny bit of CSS to color the container background
+                    st.markdown(f"""
+                        <style>
+                        div[data-testid="stVerticalBlock"] > div:has(div[key="container_{row['id']}"]) {{
+                            background-color: {bg_color} !important;
+                            border: 1px solid {border_color} !important;
+                            border-radius: 10px;
+                            padding: 10px;
+                        }}
+                        </style>
+                    """, unsafe_allow_html=True)
 
+                    with st.container():
+                        # We use an empty div with a key so our CSS above can find this specific container
+                        st.markdown(f'<div key="container_{row["id"]}"></div>', unsafe_allow_html=True)
+                        
                         borrower = str(row["borrower"])
                         sn = str(row["sn"])
                         cycle_no = row.get("cycle_no", 1)
                         end_date = str(row.get("end_date", ""))[:10]
 
-                        # ------------------------------
-                        # CARD HEADER
-                        # ------------------------------
+                        # --- Header ---
                         col1, col2 = st.columns([3, 1])
-
                         with col1:
-                            st.markdown(f"### {borrower}")
-
+                            st.subheader(borrower)
                         with col2:
                             st.caption(f"SN: {sn}")
 
-                        # ------------------------------
-                        # META INFO
-                        # ------------------------------
-                        overdue_text = "⚠️ OVERDUE" if overdue else ""
-                        st.caption(f"Cycle {cycle_no} • Due {end_date} {overdue_text}")
-
-                        # ------------------------------
-                        # FINANCIALS
-                        # ------------------------------
-                        st.write(f"💰 Paid: {paid:,.0f} / {total:,.0f} UGX")
-                        st.write(f"⚖️ Balance: **{balance:,.0f}**")
-
-                        # ------------------------------
-                        # PROGRESS BAR (STREAMLIT NATIVE)
-                        # ------------------------------
-                        # Ensure progress is a float between 0.0 and 1.0
-                        st.progress(min(max(float(progress / 100), 0.0), 1.0))
-                        st.caption(f"{progress}% repaid")
-
-                        # ------------------------------
-                        # COLOR INDICATOR (NO HTML VERSION)
-                        # ------------------------------
+                        # --- Meta Info ---
                         if overdue:
-                            st.error("Overdue Loan")
-                        elif balance <= 0:
-                            st.success("Fully Paid") # Success is usually better for paid
-                        elif str(row.get("status")).upper() == "PENDING":
-                            st.warning("Pending Approval")
+                            st.error(f"⚠️ OVERDUE - Due {end_date}")
+                        else:
+                            st.caption(f"Cycle {cycle_no} • Due {end_date}")
 
-                        # ------------------------------
-                        # ACTION BUTTON
-                        # ------------------------------
+                        # --- Financials ---
+                        c1, c2 = st.columns(2)
+                        c1.metric("Paid", f"{paid:,.0f} UGX")
+                        c2.metric("Balance", f"{balance:,.0f} UGX", delta_color="inverse")
+
+                        # --- Progress ---
+                        st.progress(min(max(float(progress / 100), 0.0), 1.0))
+                        st.caption(f"✨ {progress}% of total repaid")
+
+                        # --- Action ---
                         if st.button(
-                            f"Select {borrower} (SN:{sn})",
+                            f"Select {borrower}",
                             key=f"loan_btn_{row['id']}",
                             use_container_width=True,
-                            type="primary" if not overdue else "secondary"
+                            type="primary"
                         ):
                             st.session_state["selected_loan_id"] = row["id"]
                             st.rerun()
