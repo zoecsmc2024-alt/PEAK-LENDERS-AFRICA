@@ -1358,71 +1358,106 @@ def show_loans():
     # SERIAL ENGINE (MOVE UP)
     # ==============================
     existing_nums = []
-
-    for val in loans_df["sn"].astype(str):
+    
+    # ------------------------------
+    # 🔒 NORMALIZE EXISTING SNs
+    # ------------------------------
+    loans_df["sn"] = loans_df["sn"].astype(str).str.strip()
+    
+    # Map existing SNs (immutability protection)
+    existing_sn_map = dict(zip(loans_df["id"], loans_df["sn"]))
+    
+    for val in loans_df["sn"]:
         val = val.strip()
         if val.startswith("LN-"):
             try:
                 existing_nums.append(int(val.replace("LN-", "")))
             except:
                 pass
-
+    
     next_sn_val = max(existing_nums, default=0)
-
+    
+    # ------------------------------
+    # 🔁 SAFE SN ASSIGNMENT
+    # ------------------------------
     for i in loans_df.index:
+    
+        current_id = loans_df.at[i, "id"]
+    
+        # 🔒 NEVER touch already valid SN
+        existing_sn = str(existing_sn_map.get(current_id, "")).strip()
+        if existing_sn.startswith("LN-"):
+            continue
+    
         parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
-
-        if parent_id != "":
+    
+        inherited_sn = ""
+    
+        # 🔗 WALK FULL LINEAGE (not just direct parent)
+        while parent_id != "":
             parent_match = loans_df[loans_df["id"] == parent_id]
-            if not parent_match.empty:
-                parent_sn = str(parent_match.iloc[0]["sn"]).strip()
-                if parent_sn.startswith("LN-"):
-                    loans_df.at[i, "sn"] = parent_sn
-
+    
+            if parent_match.empty:
+                break
+    
+            parent_row = parent_match.iloc[0]
+            parent_sn = str(parent_row["sn"]).strip()
+    
+            if parent_sn.startswith("LN-"):
+                inherited_sn = parent_sn
+                break
+    
+            parent_id = str(parent_row["parent_loan_id"]).strip()
+    
+        # ✅ APPLY INHERITED SN
+        if inherited_sn:
+            loans_df.at[i, "sn"] = inherited_sn
+    
+        # 🆕 CREATE NEW SN ONLY IF STILL MISSING
         if not str(loans_df.at[i, "sn"]).startswith("LN-"):
             next_sn_val += 1
             loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
-
+    
     # ✅ SORT BEFORE ASSIGNING CYCLES (Ensures Parent is Cycle 1)
     loans_df = loans_df.sort_values(by=["sn", "start_date", "id"])
-
+    
     loans_df["cycle_no"] = (
         loans_df.groupby("sn").cumcount() + 1
     )
-
+    
     # ------------------------------
     # SMART STATUS LOGIC (NOW CORRECT)
     # ------------------------------
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
     loans_df["status"] = "CLEARED"
     loans_df.loc[loans_df["balance"] > 0, "status"] = "ACTIVE"
-
+    
     # Process each SN family separately
     for sn_val, grp in loans_df.groupby("sn"):
         # Only open loans within this specific family
         open_grp = grp[grp["balance"] > 0].copy()
-
+    
         if open_grp.empty:
             continue
-
+    
         # Sort within family to find the absolute latest row
         open_grp = open_grp.sort_values(
             by=["cycle_no", "start_date", "id"]
         )
-
+    
         latest_row = open_grp.iloc[-1]
         latest_id = latest_row["id"]
         latest_cycle = int(latest_row["cycle_no"])
-
+    
         older_ids = open_grp.iloc[:-1]["id"].tolist()
-
+    
         # Mark all unpaid historical links as BCF
         if older_ids:
             loans_df.loc[
                 loans_df["id"].isin(older_ids),
                 "status"
             ] = "BCF"
-
+    
         # Mark the current active link
         if latest_cycle == 1:
             loans_df.loc[
@@ -1435,7 +1470,7 @@ def show_loans():
                 loans_df["id"] == latest_id,
                 "status"
             ] = "PENDING"
-
+    
     # ------------------------------
     # FINAL SORT
     # ------------------------------
@@ -1443,7 +1478,7 @@ def show_loans():
         by=["sn", "cycle_no"],
         ascending=[True, True]
     ).reset_index(drop=True)
-
+    
     # ------------------------------
     # LABELS
     # ------------------------------
@@ -1452,7 +1487,6 @@ def show_loans():
         .str.replace("LN-", "", regex=False)
         .str.zfill(4)
     )
-
     # ------------------------------
     # BORROWER MAP
     # ------------------------------
@@ -1507,6 +1541,49 @@ def show_loans():
                     axis=1
                 )
             ]
+        # ------------------------------
+        # 📊 PORTFOLIO METRICS
+        # ------------------------------
+        if not filtered_loans.empty:
+
+            total_loans = len(filtered_loans)
+
+            total_principal = filtered_loans["principal"].sum()
+            total_repayable = filtered_loans["total_repayable"].sum()
+            total_paid = filtered_loans["amount_paid"].sum()
+            total_balance = filtered_loans["balance"].sum()
+
+            active_loans = filtered_loans[
+                filtered_loans["status"] == "ACTIVE"
+            ].shape[0]
+
+            pending_loans = filtered_loans[
+                filtered_loans["status"] == "PENDING"
+            ].shape[0]
+
+            cleared_loans = filtered_loans[
+                filtered_loans["status"] == "CLEARED"
+            ].shape[0]
+
+            bcf_loans = filtered_loans[
+                filtered_loans["status"] == "BCF"
+            ].shape[0]
+
+            col1, col2, col3, col4 = st.columns(4)
+
+            col1.metric("📄 Total Loans", f"{total_loans}")
+            col2.metric("💰 Principal", f"{total_principal:,.0f}")
+            col3.metric("💳 Paid", f"{total_paid:,.0f}")
+            col4.metric("⚖️ Balance", f"{total_balance:,.0f}")
+
+            col5, col6, col7, col8 = st.columns(4)
+
+            col5.metric("🟢 Active", active_loans)
+            col6.metric("🟡 Pending", pending_loans)
+            col7.metric("✅ Cleared", cleared_loans)
+            col8.metric("🟠 BCF", bcf_loans)
+
+            st.markdown("---")
 
         if filtered_loans.empty:
             st.warning("No matching loans found.")
