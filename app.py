@@ -2104,51 +2104,51 @@ def show_payments():
                     balance = total - paid
 
                     try:
-                        # Ensure we handle date parsing safely
                         due_date = pd.to_datetime(row.get("end_date"))
                         overdue = due_date < datetime.now() and balance > 0
                     except:
                         overdue = False
 
-                    # Strict Progress Calculation (Ironclad 0-100%)
                     progress = min(max(int((paid / total) * 100), 0), 100) if total > 0 else 0
 
                     # ------------------------------
                     # 🎨 STYLE LOGIC
                     # ------------------------------
-                    # Define light background colors based on status
-                    bg_color = "#f0f2f6"  # Default light gray
-                    border_color = "#d1d5db"
-                    
+                    color = "#10b981"  # Default: Green
                     if overdue:
-                        bg_color = "#fff5f5"  # Very light red
-                        border_color = "#feb2b2"
+                        color = "#ef4444"  # Red
                     elif balance <= 0:
-                        bg_color = "#f0fff4"  # Very light green
-                        border_color = "#9ae6b4"
+                        color = "#3b82f6"  # Blue
                     elif str(row.get("status")).upper() == "PENDING":
-                        bg_color = "#fffaf0"  # Very light orange
-                        border_color = "#fbd38d"
+                        color = "#f59e0b"  # Orange
+
+                    # Soft background tint (Subtle & Professional)
+                    if overdue:
+                        bg_color = "rgba(239, 68, 68, 0.08)"   # light red
+                    elif balance <= 0:
+                        bg_color = "rgba(59, 130, 246, 0.08)"  # light blue
+                    elif str(row.get("status")).upper() == "PENDING":
+                        bg_color = "rgba(245, 158, 11, 0.08)"  # light orange
+                    else:
+                        bg_color = "rgba(16, 185, 129, 0.06)"  # light green
 
                     # ------------------------------
-                    # 🧾 RENDER COLORED CARDS
+                    # 🧾 RENDER BOX & SELECTION
                     # ------------------------------
-                    # Injecting a tiny bit of CSS to color the container background
-                    st.markdown(f"""
-                        <style>
-                        div[data-testid="stVerticalBlock"] > div:has(div[key="container_{row['id']}"]) {{
-                            background-color: {bg_color} !important;
-                            border: 1px solid {border_color} !important;
-                            border-radius: 10px;
-                            padding: 10px;
-                        }}
-                        </style>
-                    """, unsafe_allow_html=True)
+                    with st.container(border=True):
+                        # Background tint using the div-wrap trick
+                        st.markdown(
+                            f"""
+                            <div style="
+                                background-color: {bg_color};
+                                padding: 15px;
+                                border-radius: 10px;
+                                border: 1px solid {color}22;
+                            ">
+                            """,
+                            unsafe_allow_html=True
+                        )
 
-                    with st.container():
-                        # We use an empty div with a key so our CSS above can find this specific container
-                        st.markdown(f'<div key="container_{row["id"]}"></div>', unsafe_allow_html=True)
-                        
                         borrower = str(row["borrower"])
                         sn = str(row["sn"])
                         cycle_no = row.get("cycle_no", 1)
@@ -2157,34 +2157,42 @@ def show_payments():
                         # --- Header ---
                         col1, col2 = st.columns([3, 1])
                         with col1:
-                            st.subheader(borrower)
+                            st.markdown(f"### {borrower}")
                         with col2:
                             st.caption(f"SN: {sn}")
 
                         # --- Meta Info ---
-                        if overdue:
-                            st.error(f"⚠️ OVERDUE - Due {end_date}")
-                        else:
-                            st.caption(f"Cycle {cycle_no} • Due {end_date}")
+                        overdue_text = "⚠️ OVERDUE" if overdue else ""
+                        st.caption(f"Cycle {cycle_no} • Due {end_date} {overdue_text}")
 
                         # --- Financials ---
-                        c1, c2 = st.columns(2)
-                        c1.metric("Paid", f"{paid:,.0f} UGX")
-                        c2.metric("Balance", f"{balance:,.0f} UGX", delta_color="inverse")
+                        st.write(f"💰 Paid: {paid:,.0f} / {total:,.0f} UGX")
+                        st.write(f"⚖️ Balance: **{balance:,.0f}**")
 
-                        # --- Progress ---
+                        # --- Progress Bar ---
                         st.progress(min(max(float(progress / 100), 0.0), 1.0))
-                        st.caption(f"✨ {progress}% of total repaid")
+                        st.caption(f"{progress}% repaid")
 
-                        # --- Action ---
+                        # --- Status Indicator ---
+                        if overdue:
+                            st.error("Overdue Loan")
+                        elif balance <= 0:
+                            st.success("Fully Paid")
+                        elif str(row.get("status")).upper() == "PENDING":
+                            st.warning("Pending Approval")
+
+                        # --- Action Button ---
                         if st.button(
-                            f"Select {borrower}",
+                            f"Select {borrower} (SN:{sn})",
                             key=f"loan_btn_{row['id']}",
                             use_container_width=True,
-                            type="primary"
+                            type="primary" if not overdue else "secondary"
                         ):
                             st.session_state["selected_loan_id"] = row["id"]
                             st.rerun()
+
+                        # Close background div
+                        st.markdown("</div>", unsafe_allow_html=True)
                 # ------------------------------
                 # 🎯 SELECTION HANDLER
                 # ------------------------------
