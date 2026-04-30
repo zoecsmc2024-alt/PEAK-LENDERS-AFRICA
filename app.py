@@ -2129,6 +2129,11 @@ def show_payments():
                     # ------------------------------
                     with st.container():
                         # Visual Card (The UI)
+                        import html
+                        borrower = html.escape(str(row['borrower']))
+                        sn = html.escape(str(row['sn']))
+                        end_date = html.escape(str(row.get('end_date', ''))[:10])
+
                         st.markdown(
                             f"""
                             <div style="
@@ -2143,11 +2148,11 @@ def show_payments():
                                 clip-path: inset(0 round 12px);
                             ">
                                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <b style="font-size:16px;">{row['borrower']}</b>
-                                    <span style="color:#94a3b8; font-size:12px;">SN: {row['sn']}</span>
+                                    <b style="font-size:16px;">{borrower}</b>
+                                    <span style="color:#94a3b8; font-size:12px;">SN: {sn}</span>
                                 </div>
                                 <div style="color:#94a3b8; font-size:12px; margin-top:4px;">
-                                    Cycle {row.get('cycle_no',1)} • Due {str(row.get('end_date',''))[:10]}
+                                    Cycle {row.get('cycle_no',1)} • Due {end_date}
                                     {' | <span style="color:#ef4444; font-weight:bold;">⚠️ OVERDUE</span>' if overdue else ''}
                                 </div>
                                 <div style="margin-top:10px;">
