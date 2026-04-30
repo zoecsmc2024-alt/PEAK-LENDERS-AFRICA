@@ -2095,105 +2095,103 @@ def show_payments():
 
                 st.markdown("### 📌 Select Loan to Pay")
 
-                for _, row in active_loans.iterrows():
+                for index, row in active_loans.iterrows():
+                    # ------------------------------
+                    # ⏰ OVERDUE & CALC CHECK
+                    # ------------------------------
                     total = float(row.get("total_repayable", 0))
                     paid = float(row.get("amount_paid", 0))
                     balance = total - paid
 
-                    # ------------------------------
-                    # ⏰ OVERDUE CHECK
-                    # ------------------------------
                     try:
-                        due = pd.to_datetime(row.get("end_date"))
-                        overdue = due < datetime.now() and balance > 0
+                        # Ensure we handle date parsing safely
+                        due_date = pd.to_datetime(row.get("end_date"))
+                        overdue = due_date < datetime.now() and balance > 0
                     except:
                         overdue = False
 
-                    progress = 0 if total == 0 else min(int((paid / total) * 100), 100)
-
-                   # ------------------------------
-                    # 🎨 STYLE & STRICT CALCULATION
-                    # ------------------------------
-                    color = "#10b981" # Green
-                    if overdue:
-                        color = "#ef4444" # Red
-                    elif balance <= 0:
-                        color = "#3b82f6" # Blue
-                    elif row["status"] == "PENDING":
-                        color = "#f59e0b" # Orange
-
-                    # STRICT CALC: Ensures width never exceeds 100% or drops below 0%
-                    total = float(row.get("total_repayable", 0))
-                    paid = float(row.get("amount_paid", 0))
+                    # Strict Progress Calculation (Ironclad 0-100%)
                     progress = min(max(int((paid / total) * 100), 0), 100) if total > 0 else 0
 
                     # ------------------------------
-                    # 🧾 CLICKABLE LOAN CARD (IRONCLAD FIX)
+                    # 🎨 STYLE LOGIC
                     # ------------------------------
-                    card_clicked = st.button(
-                        f"📌 Select {row['borrower']} | SN:{row['sn']} | Cycle:{row.get('cycle_no',1)}",
-                        key=f"loan_btn_{row['id']}",
-                        use_container_width=True
-                    )
+                    color = "#10b981"  # Default: Green
+                    if overdue:
+                        color = "#ef4444"  # Red
+                    elif balance <= 0:
+                        color = "#3b82f6"  # Blue
+                    elif str(row.get("status")).upper() == "PENDING":
+                        color = "#f59e0b"  # Orange
 
-                    st.markdown(
-                        f"""
-                        <div style="
-                            border:2px solid {color};
-                            border-radius:12px;
-                            padding:12px;
-                            margin-top:-8px;
-                            margin-bottom:12px;
-                            background:#0f172a;
-                            color:white;
-                        ">
-                            <div style="display:flex; justify-content:space-between; align-items:center;">
-                                <b style="font-size:16px;">{row['borrower']}</b>
-                                <span style="color:#94a3b8; font-size:12px;">SN: {row['sn']}</span>
-                            </div>
-
-                            <div style="color:#94a3b8; font-size:12px; margin-top:4px;">
-                                Cycle {row.get('cycle_no',1)} • Due {str(row.get('end_date',''))[:10]}
-                                {' | ⚠️ OVERDUE' if overdue else ''}
-                            </div>
-
-                            <div style="margin-top:10px;">
-                                💰 Paid: {paid:,.0f} / {total:,.0f} UGX<br>
-                                ⚖️ Balance: <b>{balance:,.0f}</b>
-                            </div>
-
-                            <!-- Progress Bar (IRONCLAD CLIP-PATH FIX) -->
+                    # ------------------------------
+                    # 🧾 RENDER BOX & SELECTION
+                    # ------------------------------
+                    with st.container():
+                        # Visual Card (The UI)
+                        st.markdown(
+                            f"""
                             <div style="
-                                background: #1e293b; 
-                                border-radius: 10px; 
-                                margin-top: 12px; 
-                                height: 10px; 
-                                width: 100%;
-                                position: relative;
-                                overflow: hidden;
-                                display: block;
-                                -webkit-mask-image: -webkit-radial-gradient(white, black);
-                                clip-path: inset(0 round 10px);
+                                border:2px solid {color};
+                                border-radius:12px;
+                                padding:12px;
+                                margin-bottom:-42px;
+                                background:#0f172a;
+                                color:white;
+                                position:relative;
+                                z-index:1;
+                                clip-path: inset(0 round 12px);
                             ">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <b style="font-size:16px;">{row['borrower']}</b>
+                                    <span style="color:#94a3b8; font-size:12px;">SN: {row['sn']}</span>
+                                </div>
+                                <div style="color:#94a3b8; font-size:12px; margin-top:4px;">
+                                    Cycle {row.get('cycle_no',1)} • Due {str(row.get('end_date',''))[:10]}
+                                    {' | <span style="color:#ef4444; font-weight:bold;">⚠️ OVERDUE</span>' if overdue else ''}
+                                </div>
+                                <div style="margin-top:10px;">
+                                    💰 Paid: {paid:,.0f} / {total:,.0f} UGX<br>
+                                    ⚖️ Balance: <b style="color:{color};">{balance:,.0f}</b>
+                                </div>
+                                
+                                <!-- PROGRESS BAR WITH IRONCLAD MASKING -->
                                 <div style="
-                                    width: {progress}%;
-                                    background: {color};
-                                    height: 100%;
-                                    position: absolute;
-                                    top: 0;
-                                    left: 0;
-                                    transition: width 0.4s ease-in-out;
-                                "></div>
+                                    background: #1e293b; 
+                                    border-radius: 10px; 
+                                    margin-top: 12px; 
+                                    height: 10px; 
+                                    width: 100%; 
+                                    overflow: hidden;
+                                    position: relative;
+                                    -webkit-mask-image: -webkit-radial-gradient(white, black);
+                                ">
+                                    <div style="
+                                        width: {progress}%; 
+                                        background: {color}; 
+                                        height: 100%; 
+                                        position: absolute;
+                                        top: 0;
+                                        left: 0;
+                                        transition: width 0.4s ease-in-out;
+                                    "></div>
+                                </div>
+                                <div style="margin-top: 6px;">
+                                    <small style="color:#94a3b8;">{progress}% repaid</small>
+                                </div>
                             </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
 
-                            <div style="margin-top: 6px;">
-                                <small style="color:#94a3b8;">{progress}% repaid</small>
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
-
+                        # Functional Button (The Logic)
+                        if st.button(
+                            f"Select {row['borrower']} (SN:{row['sn']})", 
+                            key=f"loan_btn_{row['id']}", 
+                            use_container_width=True
+                        ):
+                            st.session_state["selected_loan_id"] = row["id"]
+                            st.rerun()
                 # ------------------------------
                 # 🎯 SELECTION HANDLER
                 # ------------------------------
