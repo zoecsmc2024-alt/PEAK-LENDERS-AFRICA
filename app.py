@@ -2070,7 +2070,7 @@ def show_payments():
 
     # --- TAB 1: RECORD PAYMENT ---
     with tab1:
-        active_loans = loans_df[loans_df["status"].isin(["ACTIVE", "BCF", "PENDING", "OVERDUE"])].copy()
+        active_loans = loans_df[loans_df["status"].str.upper().isin(["ACTIVE", "BCF", "PENDING", "OVERDUE"])].copy()
 
         if active_loans.empty:
             st.success("🎉 No active loans requiring payment.")
@@ -2086,14 +2086,101 @@ def show_payments():
             if active_loans.empty:
                 st.warning("No matching loans found.")
             else:
-                def format_loan(row):
-                    balance = row["total_repayable"] - row["amount_paid"]
-                    return f"{row['borrower']} • SN: {row['sn']} • Bal: UGX {balance:,.0f}"
+                # ------------------------------
+                # 🧾 LOAN CARD SELECTOR (SAFE DROP-IN)
+                # ------------------------------
+                active_loans = active_loans.sort_values(
+                    by=["sn", "cycle_no", "end_date"]
+                )
 
-                options = {format_loan(row): row["id"] for _, row in active_loans.iterrows()}
-                selected_label = st.selectbox("Select Loan", list(options.keys()))
-                loan_id = options[selected_label]
-                loan = active_loans[active_loans["id"] == loan_id].iloc[0]
+                st.markdown("### 📌 Select Loan to Pay")
+
+                for _, row in active_loans.iterrows():
+                    total = float(row.get("total_repayable", 0))
+                    paid = float(row.get("amount_paid", 0))
+                    balance = total - paid
+
+                    # ------------------------------
+                    # ⏰ OVERDUE CHECK
+                    # ------------------------------
+                    try:
+                        due = pd.to_datetime(row.get("end_date"))
+                        overdue = due < datetime.now() and balance > 0
+                    except:
+                        overdue = False
+
+                    progress = 0 if total == 0 else min(int((paid / total) * 100), 100)
+
+                    # ------------------------------
+                    # 🎨 STYLE
+                    # ------------------------------
+                    color = "#10b981" # Green
+                    if overdue:
+                        color = "#ef4444" # Red
+                    elif balance <= 0:
+                        color = "#3b82f6" # Blue
+                    elif row["status"] == "PENDING":
+                        color = "#f59e0b" # Orange
+
+                    # ------------------------------
+                    # 🧾 CARD BUTTON
+                    # ------------------------------
+                    # Using columns to put button and visual card together
+                    clicked = st.button(
+                        f"Select: {row['borrower']} (SN:{row['sn']})",
+                        key=f"loan_btn_{row['id']}",
+                        use_container_width=True
+                    )
+
+                    st.markdown(
+                        f"""
+                        <div style="
+                            border:2px solid {color};
+                            border-radius:10px;
+                            padding:10px;
+                            margin-bottom:15px;
+                            background:#0f172a;
+                            color:white;
+                        ">
+                            <b>{row['borrower']}</b> • SN {row['sn']} • Cycle {row.get('cycle_no',1)}<br>
+                            💰 {paid:,.0f} / {total:,.0f} UGX<br>
+                            ⚖️ Balance: <b>{balance:,.0f}</b><br>
+                            📅 Due: {str(row.get('end_date',''))[:10]} {'⚠️ <span style="color:#ef4444;font-weight:bold;">OVERDUE</span>' if overdue else ''}
+
+                            <div style="background:#1e293b;border-radius:8px;margin-top:6px; height:6px;">
+                                <div style="
+                                    width:{progress}%;
+                                    background:{color};
+                                    height:6px;
+                                    border-radius:6px;
+                                "></div>
+                            </div>
+                            <small style="color:#94a3b8;">{progress}% repaid</small>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
+
+                    if clicked:
+                        st.session_state["selected_loan_id"] = row["id"]
+
+                # ------------------------------
+                # 🎯 PROCESS SELECTION
+                # ------------------------------
+                if "selected_loan_id" not in st.session_state:
+                    st.info("👉 Click a 'Select' button above to continue")
+                else:
+                    loan_id = st.session_state["selected_loan_id"]
+                    # Ensure the selected loan still exists in current filtered view
+                    match = active_loans[active_loans["id"] == loan_id]
+                    
+                    if not match.empty:
+                        loan = match.iloc[0]
+                        st.success(f"Selected: {loan['borrower']} (ID: {loan_id})")
+                        # You can place your payment input form here
+                    else:
+                        st.session_state.pop("selected_loan_id")
+                        st.rerun()
 
                 total = float(loan["total_repayable"])
                 paid = float(loan["amount_paid"])
