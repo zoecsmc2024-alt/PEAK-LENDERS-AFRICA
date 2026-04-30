@@ -2094,26 +2094,33 @@ def show_payments():
             else:
     
                 # =========================
-                # ✅ BETTER LOAN LABEL
+                # ✅ STRONG LOAN IDENTIFIER (SN + CYCLE)
                 # =========================
                 def format_loan(row):
                     balance = float(row["total_repayable"]) - float(row["amount_paid"])
-                    loan_id_short = str(row["id"])[:8]
-                    return f"{row['borrower']} | SN: {row['sn']} | ID: {loan_id_short} | Bal: UGX {balance:,.0f}"
     
-                # Create label column (more stable than dict mapping)
-                active_loans = active_loans.copy()
+                    sn = str(row.get("sn", "")).zfill(4)
+                    cycle = row.get("cycle_no", row.get("cycle", "?"))
+                    loan_short = str(row["id"])[:6]
+    
+                    return (
+                        f"{loan_short} | SN: {sn} | CYCLE: {cycle} | "
+                        f"{row['borrower']} | BAL: UGX {balance:,.0f}"
+                    )
+    
+                active_loans = active_loans.reset_index(drop=True)
                 active_loans["label"] = active_loans.apply(format_loan, axis=1)
     
                 # =========================
-                # ✅ SAFE SELECTION
+                # ✅ SAFE SELECTION (NO DUPLICATES BUG)
                 # =========================
-                selected_label = st.selectbox(
-                    "Select Loan",
-                    active_loans["label"].tolist()
+                selected_index = st.selectbox(
+                    "Select Loan (SN + Cycle)",
+                    active_loans.index,
+                    format_func=lambda i: active_loans.loc[i, "label"]
                 )
     
-                loan = active_loans[active_loans["label"] == selected_label].iloc[0]
+                loan = active_loans.loc[selected_index]
                 loan_id = loan["id"]
     
                 # =========================
