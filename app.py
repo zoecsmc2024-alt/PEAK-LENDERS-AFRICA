@@ -2248,8 +2248,7 @@ def show_payments():
                                 }).eq("id", child_id).execute()
                                 
                                 st.info(f"🔄 Child Loan (Cycle {child_data['cycle_no']}) updated to reflect new balance.")
-                            except Exception as e:
-                                st.error(f"Error processing payment: {e}")
+
 
 
                             # 4. Continue with receipt generation
