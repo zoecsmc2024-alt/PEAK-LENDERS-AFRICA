@@ -1528,7 +1528,7 @@ def show_loans():
             status.update(label="✅ Database Serial Numbers Synced!", state="complete", expanded=False)
             st.rerun()
     # ------------------------------
-    # BORROWER MAP
+    # borrower MAP
     # ------------------------------
     if not borrowers_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
@@ -1541,7 +1541,7 @@ def show_loans():
         loans_df["borrower"] = mapped_names.fillna(loans_df["borrower"]).fillna("Unknown")
 
     # ------------------------------
-    # ACTIVE BORROWERS
+    # ACTIVE borrowerS
     # ------------------------------
     if not borrowers_df.empty and "status" in borrowers_df.columns:
         Active_borrowers = borrowers_df[
@@ -1567,7 +1567,7 @@ def show_loans():
     # ==============================
     with tab_view:
         search_query = st.text_input(
-            "🔍 Search Loan / Borrower",
+            "🔍 Search Loan / borrower",
             key="loan_search_main"
         )
 
@@ -1729,7 +1729,7 @@ def show_loans():
                 )
 
                 selected_name = col1.selectbox(
-                    "Select Borrower",
+                    "Select borrower",
                     list(borrower_map.keys())
                 )
 
@@ -1785,7 +1785,7 @@ def show_loans():
                         st.stop()
 
                     if selected_id == "":
-                        st.error("Borrower ID missing.")
+                        st.error("borrower ID missing.")
                         st.stop()
 
                     loan_data = {
@@ -2085,7 +2085,7 @@ def show_payments():
         if col in df.columns:
             df[col] = df[col].astype(str)
 
-    # Borrower mapping
+    # borrower mapping
     if not borrowers_df.empty and "name" in borrowers_df.columns:
         borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
         loans_df["borrower"] = loans_df["borrower_id"].map(borrower_map).fillna("Unknown")
@@ -2194,7 +2194,7 @@ def show_payments():
                 file_path = f"/tmp/{receipt_no}.pdf"
                 generate_receipt_pdf({
                     "Receipt No": receipt_no,
-                    "Borrower": active_loan["borrower"],
+                    "borrower": active_loan["borrower"],
                     "Amount": f"UGX {amount:,.0f}",
                     "Method": method,
                     "Date": date.strftime("%Y-%m-%d"),
@@ -2349,7 +2349,7 @@ def show_collateral():
                     loan_id = row['id']
                     
                     # Pull name from our master lookup
-                    b_name = name_lookup.get(loan_id, "Unknown Borrower")
+                    b_name = name_lookup.get(loan_id, "Unknown borrower")
                     
                     ref = row.get('loan_id_label', 'N/A')
                     amt = f"UGX {row['principal']:,.0f}" if 'principal' in row else ""
@@ -2359,7 +2359,7 @@ def show_collateral():
                     loan_map[loan_id] = clean_label
 
                 selected_loan_id = c1.selectbox(
-                    "Select Loan/Borrower",
+                    "Select Loan/borrower",
                     options=list(loan_map.keys()),
                     format_func=lambda x: loan_map.get(x, "Select Loan")
                 )
@@ -2566,7 +2566,7 @@ def show_calendar():
                     <span style="background:#2B3F87;color:white;padding:2px 8px;border-radius:10px;font-size:10px;">💰 COLLECT NOW</span>
                 </td>
             </tr>""" for _, r in due_today_df.iterrows()])
-        st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px;text-align:right;">Amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">Amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
     # 5. 🔴 OVERDUE FOLLOW-UP (Now safely inside the function)
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
@@ -2589,7 +2589,7 @@ def show_calendar():
                             <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span>
                         </td>
                     </tr>"""
-            st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px; text-align:left;">Loan ID</th><th style="padding:10px; text-align:left;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+            st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px; text-align:left;">Loan ID</th><th style="padding:10px; text-align:left;">borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
         else:
             st.info("No overdue loans currently. Everything is on track! ✨")
     except Exception as e:
