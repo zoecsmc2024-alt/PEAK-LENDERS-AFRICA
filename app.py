@@ -3509,14 +3509,13 @@ def show_reports():
     # ==============================
     # 📈 TREND ANALYSIS
     # ==============================
-    st.markdown("<br>### 📈 Monthly Profit & Loss Trend", unsafe_allow_html=True)
+    st.markdown("### 📈 Monthly Profit & Loss Trend", unsafe_allow_html=True)
     
-    # Prepare Time Series
+    # Prepare Time Series (Ensuring 'ME' for newest Pandas versions)
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
     
-    # Aggregate Income/Expense by Month - Updated 'M' to 'ME'
-    # We use 'ME' to avoid the ValueError shown in your screenshot
+    # Aggregate Income/Expense by Month
     inc_m = payments.set_index("date").resample("ME")["amount"].sum() if not payments.empty else pd.Series()
     exp_m = expenses.set_index("date").resample("ME")["amount"].sum() if not expenses.empty else pd.Series()
     
@@ -3524,12 +3523,23 @@ def show_reports():
     pl_combined.columns = ["Income", "Expenses"]
     pl_combined["Net"] = pl_combined["Income"] - pl_combined["Expenses"]
     
-    # Ensure the index is valid before formatting
     if not pl_combined.empty:
         pl_combined.index = pl_combined.index.strftime('%b %Y')
     
-    fig_trend = px.area(pl_combined, barmode='group', color_discrete_map={"Income": "#059669", "Expenses": "#EF4444", "Net": "#1E3A8A"})
-    fig_trend.update_layout(hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
+    # FIX: Removed 'barmode' which caused the error in image_9c6e92.png
+    fig_trend = px.area(
+        pl_combined, 
+        color_discrete_map={"Income": "#059669", "Expenses": "#EF4444", "Net": "#1E3A8A"},
+        line_shape="spline" # Makes the transitions look smoother/premium
+    )
+    
+    fig_trend.update_layout(
+        hovermode="x unified", 
+        paper_bgcolor="rgba(0,0,0,0)", 
+        plot_bgcolor="rgba(0,0,0,0)",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
     st.plotly_chart(fig_trend, use_container_width=True)
 
     # ==============================
