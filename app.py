@@ -2335,35 +2335,28 @@ def show_collateral():
         if available_loans.empty:
             st.info("ℹ️ No Active or Overdue loans found to attach collateral to.")
         else:
+            # 1. Create a master lookup for names from the ORIGINAL loans_df
+            # This ensures we get the 'borrower' column correctly
+            name_lookup = dict(zip(loans_df['id'], loans_df['borrower']))
+
             with st.form("collateral_reg_form", clear_on_submit=True):
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # --- BRUTE-FORCE NAME RECOVERY ---
+                # --- CLEAN SELECTION LOGIC ---
                 loan_map = {}
-                # Ensure we have a fresh copy of the columns for debugging
-                cols = available_loans.columns.tolist()
-                
                 for _, row in available_loans.iterrows():
-                    # 1. Direct Case-Insensitive check
-                    b_name = "Unknown"
-                    for col in cols:
-                        if col.lower() == 'borrower':
-                            b_name = str(row[col])
-                            break
+                    loan_id = row['id']
                     
-                    # 2. Backup: If still 'Unknown', search for any value that looks like a name
-                    if b_name == "Unknown" or b_name == "nan":
-                        # Usually, borrower is one of the first 4 columns
-                        potential_name = str(row.iloc[2]) if len(row) > 2 else "Unknown"
-                        b_name = potential_name if potential_name != "nan" else "Unknown"
-
-                    ref = row.get('loan_id_label', row.get('id', 'N/A')[:4])
+                    # Pull name from our master lookup
+                    b_name = name_lookup.get(loan_id, "Unknown Borrower")
+                    
+                    ref = row.get('loan_id_label', 'N/A')
                     amt = f"UGX {row['principal']:,.0f}" if 'principal' in row else ""
                     
-                    # Create the final display label
+                    # Final clean label: "NAME | AMOUNT (Ref: 0035)"
                     clean_label = f"{b_name} | {amt} (Ref: {ref})"
-                    loan_map[row['id']] = clean_label
+                    loan_map[loan_id] = clean_label
 
                 selected_loan_id = c1.selectbox(
                     "Select Loan/Borrower",
@@ -2390,14 +2383,14 @@ def show_collateral():
                     st.error("❌ Please provide a description and valid market value.")
                 else:
                     try:
-                        # Get the clean name for saving in the 'borrower' field of the collateral table
+                        # Extract just the Name for the record
                         full_label = loan_map[selected_loan_id]
-                        borrower_name_only = full_label.split(" | ")[0]
+                        borrower_for_db = full_label.split(" | ")[0]
 
                         new_asset = pd.DataFrame([{
-                            "loan_id": selected_loan_id, # This is the long UUID
+                            "loan_id": selected_loan_id,
                             "tenant_id": str(current_tenant),
-                            "borrower": borrower_name_only,
+                            "borrower": borrower_for_db,
                             "type": asset_type,
                             "description": desc,
                             "value": float(est_value),
@@ -2406,7 +2399,7 @@ def show_collateral():
                         }])
 
                         if save_data_saas("collateral", new_asset):
-                            st.success(f"✅ Asset secured for {borrower_name_only}!")
+                            st.success(f"✅ Asset secured for {borrower_for_db}!")
                             st.cache_data.clear()
                             st.rerun()
                     except Exception as e:
