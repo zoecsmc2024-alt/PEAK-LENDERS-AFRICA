@@ -721,7 +721,9 @@ def render_sidebar():
             )
 
             active_company = tenant_map.get(selected_name)
-
+            
+            # ✅ ADD THIS LINE to define the missing variable
+            active_company_name = selected_name
             # 🔑 Show login form only if user hasn't logged into this tenant yet
             if active_company and (st.session_state.get('tenant_id') != active_company['id']):
                 st.markdown(f"## 🔑 Login to {selected_name}")
