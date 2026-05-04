@@ -2338,23 +2338,26 @@ def show_collateral():
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # --- PRECISION LABELING ---
-                loan_options = []
+                # --- CLEAN SELECTION LOGIC ---
+                # 1. Create a dictionary mapping the long 'id' to a clean 'label'
+                loan_map = {}
                 for _, row in available_loans.iterrows():
-                    # Pull from the 'borrower' column seen in your screenshot
                     b_name = str(row.get('borrower', 'Unknown'))
+                    ref = row.get('loan_id_label', 'N/A')
+                    amt = f"UGX {row['principal']:,.0f}" if 'principal' in row else ""
                     
-                    # Use the clean 'loan_id_label' (e.g., 0001) instead of the long ID
-                    display_id = row.get('loan_id_label', row.get('id', 'N/A'))
-                    
-                    amt = f" | UGX {row['principal']:,.0f}" if 'principal' in row else ""
-                    
-                    # We keep the real 'id' at the end for the database link
-                    label = f"{b_name}{amt} (Ref: {display_id}) | DB_ID:{row['id']}"
-                    loan_options.append(label)
-                
-                selected_label = c1.selectbox("Select Loan/Borrower", options=loan_options)
-                # --------------------------
+                    # This is what the USER sees
+                    clean_label = f"{b_name} | {amt} (Ref: {ref})"
+                    # Map the actual database ID to this clean label
+                    loan_map[row['id']] = clean_label
+
+                # 2. The selectbox uses the IDs as values, but shows clean_label to the user
+                selected_loan_id = c1.selectbox(
+                    "Select Loan/Borrower",
+                    options=list(loan_map.keys()),
+                    format_func=lambda x: loan_map[x]
+                )
+                # ----------------------------
 
                 asset_type = c2.selectbox(
                     "Asset Type",
@@ -2374,15 +2377,14 @@ def show_collateral():
                     st.error("❌ Please provide a description and valid market value.")
                 else:
                     try:
-                        # Extract the real UUID from our hidden marker
-                        actual_loan_id = selected_label.split("| DB_ID:")[1]
-                        # Extract just the Name for the record
-                        borrower_for_db = selected_label.split(" | ")[0].split(" (Ref:")[0]
+                        # Get the clean name for saving in the 'borrower' field of the collateral table
+                        full_label = loan_map[selected_loan_id]
+                        borrower_name_only = full_label.split(" | ")[0]
 
                         new_asset = pd.DataFrame([{
-                            "loan_id": actual_loan_id,
+                            "loan_id": selected_loan_id, # This is the long UUID
                             "tenant_id": str(current_tenant),
-                            "borrower": borrower_for_db,
+                            "borrower": borrower_name_only,
                             "type": asset_type,
                             "description": desc,
                             "value": float(est_value),
@@ -2391,7 +2393,7 @@ def show_collateral():
                         }])
 
                         if save_data_saas("collateral", new_asset):
-                            st.success(f"✅ Asset secured for {borrower_for_db}!")
+                            st.success(f"✅ Asset secured for {borrower_name_only}!")
                             st.cache_data.clear()
                             st.rerun()
                     except Exception as e:
