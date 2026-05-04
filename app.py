@@ -699,13 +699,31 @@ def render_sidebar():
     with st.sidebar:
         st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
 
+        active_company = None  # ✅ Initialize to avoid undefined variable
+
         if tenant_map:
             options = list(tenant_map.keys())
-            selected_name = st.selectbox("🏢 Business Portal", options, key="sidebar_portal_select")
-            selected_tenant = tenant_map[selected_name]
+            current_tenant_id = st.session_state.get('tenant_id')
 
-            # 3️⃣ Show Login Form for Selected Company
-            if 'tenant_id' not in st.session_state or st.session_state.get('tenant_id') != selected_tenant['id']:
+            # Determine default index in dropdown
+            default_index = 0
+            if current_tenant_id:
+                for i, name in enumerate(options):
+                    if str(tenant_map[name]['id']) == str(current_tenant_id):
+                        default_index = i
+                        break
+
+            selected_name = st.selectbox(
+                "🏢 Business Portal",
+                options,
+                index=default_index,
+                key="sidebar_portal_select"
+            )
+
+            active_company = tenant_map.get(selected_name)
+
+            # 🔑 Show login form only if user hasn't logged into this tenant yet
+            if active_company and (st.session_state.get('tenant_id') != active_company['id']):
                 st.markdown(f"## 🔑 Login to {selected_name}")
                 email = st.text_input("Email", key="login_email")
                 pwd = st.text_input("Password", type="password", key="login_pwd")
@@ -716,11 +734,11 @@ def render_sidebar():
                         if not res.user:
                             st.error("Login failed. Check credentials.")
                         else:
-                            # Successful login → update session
+                            # Successful login → update session state
                             st.session_state.update({
-                                'tenant_id': selected_tenant['id'],
+                                'tenant_id': active_company['id'],
                                 'company': selected_name,
-                                'theme_color': selected_tenant.get('brand_color', '#1E3A8A'),
+                                'theme_color': active_company.get('brand_color', '#1E3A8A'),
                                 'user_id': res.user.id,
                                 'logged_in': True
                             })
@@ -729,6 +747,7 @@ def render_sidebar():
                             st.rerun()
                     except Exception as e:
                         st.error(f"Login error: {e}")
+
         else:
             st.sidebar.warning("No business entities found.")
             st.stop()
