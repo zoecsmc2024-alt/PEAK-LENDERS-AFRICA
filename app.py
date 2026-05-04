@@ -2300,7 +2300,7 @@ def show_collateral():
     current_tenant = st.session_state.get('tenant_id')
 
     # ==============================
-    # 🔐 SAFETY CHECK (HARDENED)
+    # 🔐 SAFETY CHECK
     # ==============================
     if not current_tenant:
         st.error("🔐 Session expired. Please log in.")
@@ -2309,25 +2309,23 @@ def show_collateral():
     st.markdown(f"<h2 style='color: {brand_color};'>🛡️ Collateral & Security</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # 📦 FETCH DATA (SAFE ADAPTERS)
+    # 📦 FETCH DATA
     # ==============================
     collateral_df = get_data("collateral") 
     loans_df = get_data("loans")
 
     # ==============================
-    # 🔍 FILTER ELIGIBLE loans
+    # 🔍 FILTER ELIGIBLE LOANS
     # ==============================
     if loans_df is not None and not loans_df.empty:
-        # Standardize columns to avoid case-sensitivity issues
         loans_df.columns = loans_df.columns.str.lower()
-        # Filter for loans that actually need collateral coverage
         active_statuses = ["active", "overdue", "pending", "bcf"]
         available_loans = loans_df[loans_df["status"].str.lower().isin(active_statuses)].copy()
     else:
         available_loans = pd.DataFrame()
 
     # --- TABS ---
-    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & status"])
+    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
     # ==============================
     # ➕ TAB 1: REGISTER ASSET
@@ -2340,14 +2338,21 @@ def show_collateral():
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # Robust label generation using the standardized columns
-                loan_labels = available_loans.apply(
-                    lambda x: f"{x['borrower']} (ID: {x['id']})", axis=1
-                ).tolist()
+                # Check for borrower column specifically to avoid KeyError
+                b_col = 'borrower' if 'borrower' in available_loans.columns else None
                 
-                selected_label = c1.selectbox("Select Loan/borrower", options=loan_labels)
+                if b_col:
+                    loan_labels = available_loans.apply(
+                        lambda x: f"{x[b_col]} (ID: {x['id']})", axis=1
+                    ).tolist()
+                else:
+                    loan_labels = available_loans.apply(
+                        lambda x: f"Loan ID: {x['id']}", axis=1
+                    ).tolist()
+                
+                selected_label = c1.selectbox("Select Loan/Borrower", options=loan_labels)
                 asset_type = c2.selectbox(
-                    "Asset type",
+                    "Asset Type",
                     ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
                 )
 
@@ -2355,16 +2360,18 @@ def show_collateral():
                 est_value = st.number_input("Estimated Market Value (UGX)", min_value=0, step=100000)
                 
                 st.markdown("---")
-                # Photo upload placeholder (Linked to future Supabase Storage integration)
                 uploaded_photo = st.file_uploader("Upload Asset Photo (Verification)", type=["jpg", "png", "jpeg"])
 
-                if st.form_submit_button("💾 Save & Secure Asset", use_container_width=True):
-                    if not desc or est_value <= 0:
-                        st.error("❌ Please provide a description and valid market value.")
-                    else:
-                        # Logic to extract the specific DB ID from the dropdown label
+                # Submit button inside the form
+                submit_save = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+
+            if submit_save:
+                if not desc or est_value <= 0:
+                    st.error("❌ Please provide a description and valid market value.")
+                else:
+                    try:
                         actual_loan_id = selected_label.split("(ID: ")[1].replace(")", "")
-                        borrower_name = selected_label.split(" (ID:")[0]
+                        borrower_name = selected_label.split(" (ID:")[0] if " (ID:" in selected_label else "Unknown"
 
                         new_asset = pd.DataFrame([{
                             "loan_id": actual_loan_id,
@@ -2381,9 +2388,11 @@ def show_collateral():
                             st.success(f"✅ Asset secured for {borrower_name}!")
                             st.cache_data.clear()
                             st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Save failed: {e}")
 
     # ==============================
-    # 📋 TAB 2: INVENTORY & status
+    # 📋 TAB 2: INVENTORY & STATUS
     # ==============================
     with tab_view:
         if collateral_df is None or collateral_df.empty:
@@ -2400,7 +2409,6 @@ def show_collateral():
 
             st.markdown("### Asset Ledger")
             
-            # Formatting for display
             display_df = collateral_df.copy()
             display_df["value_fmt"] = display_df["value"].apply(lambda x: f"{x:,.0f}")
             
@@ -2413,11 +2421,10 @@ def show_collateral():
             )
 
             # ==============================
-            # ⚙️ ASSET MANAGEMENT (RELEASE/DISPOSE)
+            # ⚙️ ASSET MANAGEMENT
             # ==============================
             st.markdown("---")
             with st.expander("🛠️ Manage Asset Lifecycle"):
-                # Filter for assets still under control
                 manageable = collateral_df[collateral_df["status"] != "Released"].copy()
                 
                 if manageable.empty:
@@ -2426,18 +2433,16 @@ def show_collateral():
                     asset_labels = manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1).tolist()
                     asset_to_manage = st.selectbox("Select Asset to Update", options=asset_labels)
                     
-                    # Target specific ID for update
                     selected_idx = manageable.index[manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1) == asset_to_manage][0]
                     asset_id = manageable.at[selected_idx, "id"]
 
                     col_stat, col_btn = st.columns([2,1])
                     new_stat = col_stat.selectbox(
-                        "Set New status", 
+                        "Set New Status", 
                         ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"]
                     )
                     
-                    if col_btn.button("Update status", use_container_width=True):
-                        # Constructing the update payload
+                    if col_btn.button("Update Status", use_container_width=True):
                         update_row = pd.DataFrame([{
                             "id": asset_id, 
                             "status": new_stat,
@@ -2445,7 +2450,7 @@ def show_collateral():
                         }])
                         
                         if save_data_saas("collateral", update_row):
-                            st.success("✅ Asset status updated successfully!")
+                            st.success("✅ Asset status updated!")
                             st.cache_data.clear()
                             st.rerun()
             
