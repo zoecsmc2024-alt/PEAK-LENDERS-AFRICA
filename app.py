@@ -1487,30 +1487,46 @@ def show_loans():
         .str.replace("LN-", "", regex=False)
         .str.zfill(4)
     )
+    
+
     # ==============================
-    # 🔄 DATABASE SYNC ENGINE
+    # 🔄 DATABASE SYNC ENGINE (OPTIMIZED)
     # ==============================
-    # Filter for rows that need syncing (where DB currently shows empty/null)
-    # We only sync rows that have a valid calculated SN
-    to_sync = loans_df[loans_df["sn"].str.startswith("LN-")]
+    # 1. Fetch the raw data from cache to see what's actually in the DB right now
+    raw_db_df = get_cached_data("loans")
+    
+    # 2. Identify only rows where our calculated SN/Cycle differs from the DB
+    def needs_update(row):
+        db_match = raw_db_df[raw_db_df["id"] == row["id"]]
+        if db_match.empty:
+            return True
+        db_row = db_match.iloc[0]
+        # Only sync if SN, Label, or Cycle has changed or is missing in DB
+        return (str(db_row.get("sn", "")) != str(row["sn"]) or 
+                str(db_row.get("loan_id_label", "")) != str(row["loan_id_label"]) or
+                int(db_row.get("cycle_no", 0)) != int(row["cycle_no"]))
+
+    # 3. Filter to_sync to only include actual changes
+    to_sync = loans_df[loans_df.apply(needs_update, axis=1)]
     
     if not to_sync.empty:
-        with st.spinner("🔄 Syncing Serial Numbers to Database..."):
+        # Use st.status for a cleaner look than st.spinner
+        with st.status("🔄 Syncing Serial Numbers to Database...", expanded=False) as status:
             for _, row in to_sync.iterrows():
                 sync_data = {
                     "sn": row["sn"],
                     "loan_id_label": row["loan_id_label"],
-                    "cycle_no": int(row["cycle_no"]) # Syncing cycle too is highly recommended
+                    "cycle_no": int(row["cycle_no"])
                 }
-                
                 try:
-                    # Update the database where the ID matches
                     supabase.table("loans").update(sync_data).eq("id", row["id"]).execute()
                 except Exception as e:
-                    # Log error but continue with others
-                    print(f"Error syncing row {row['id']}: {e}")
-                    
-        st.success("✅ Database Serial Numbers Synced!")
+                    st.error(f"Error syncing row {row['id']}: {e}")
+            
+            # Clear cache so the next run sees the updated data
+            st.cache_data.clear()
+            status.update(label="✅ Database Serial Numbers Synced!", state="complete", expanded=False)
+            st.rerun()
     # ------------------------------
     # BORROWER MAP
     # ------------------------------
