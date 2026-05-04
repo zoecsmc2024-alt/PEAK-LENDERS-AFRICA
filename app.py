@@ -1,22 +1,3 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import plotly.express as px
-import plotly.graph_objects as go
-from supabase import create_client, Client
-import io
-import base64
-import json
-import os
-import re
-from datetime import datetime, timedelta
-from fpdf import FPDF
-from streamlit_calendar import calendar
-import bcrypt
-from twilio.rest import Client as TwilioClient
-import time
-import uuid
-import extra_streamlit_components as stx
 
 st.set_page_config(
     page_title="Lending Manager Pro",
