@@ -2334,31 +2334,27 @@ def show_collateral():
         if available_loans.empty:
             st.info("ℹ️ No Active or Overdue loans found to attach collateral to.")
         else:
-            # DEBUG: Uncomment the line below if names are still "Unknown" to see column names in app
-            # st.write(available_loans.columns.tolist()) 
-
             with st.form("collateral_reg_form", clear_on_submit=True):
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # --- ADVANCED COLUMN PICKER ---
-                # This list covers almost all common naming conventions
-                name_targets = ['borrower', 'client', 'name', 'full_name', 'customer', 'borrower_name']
-                name_col = next((col for col in name_targets if col in available_loans.columns), None)
-                
+                # --- PRECISION LABELING ---
                 loan_options = []
                 for _, row in available_loans.iterrows():
-                    # 1. Try to get the name from the identified column
-                    # 2. If not found, try to use 'id' as a last resort but make it short
-                    b_name = str(row[name_col]) if name_col else "Unknown"
+                    # Pull from the 'borrower' column seen in your screenshot
+                    b_name = str(row.get('borrower', 'Unknown'))
+                    
+                    # Use the clean 'loan_id_label' (e.g., 0001) instead of the long ID
+                    display_id = row.get('loan_id_label', row.get('id', 'N/A'))
                     
                     amt = f" | UGX {row['principal']:,.0f}" if 'principal' in row else ""
                     
-                    # Create the label
-                    label = f"{b_name}{amt} (ID: {row['id']})"
+                    # We keep the real 'id' at the end for the database link
+                    label = f"{b_name}{amt} (Ref: {display_id}) | DB_ID:{row['id']}"
                     loan_options.append(label)
                 
                 selected_label = c1.selectbox("Select Loan/Borrower", options=loan_options)
+                # --------------------------
 
                 asset_type = c2.selectbox(
                     "Asset Type",
@@ -2378,9 +2374,10 @@ def show_collateral():
                     st.error("❌ Please provide a description and valid market value.")
                 else:
                     try:
-                        actual_loan_id = selected_label.split("(ID: ")[1].replace(")", "")
-                        # Save the name part only for the record
-                        borrower_for_db = selected_label.split(" | ")[0].split(" (ID:")[0]
+                        # Extract the real UUID from our hidden marker
+                        actual_loan_id = selected_label.split("| DB_ID:")[1]
+                        # Extract just the Name for the record
+                        borrower_for_db = selected_label.split(" | ")[0].split(" (Ref:")[0]
 
                         new_asset = pd.DataFrame([{
                             "loan_id": actual_loan_id,
