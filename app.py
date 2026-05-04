@@ -3230,9 +3230,8 @@ def show_payroll_enterprise():
         emp_df = pd.DataFrame()
 
     # Standardize column names
-    payroll_df.columns = payroll_df.columns.str.strip().str.lower().str.replace(" ", "_")
-    emp_df.columns = emp_df.columns.str.strip().str.lower().str.replace(" ", "_")
-
+    payroll_df.columns = payroll_df.columns.astype(str).str.strip().str.replace(" ", "_")
+    emp_df.columns = emp_df.columns.astype(str).str.strip().str.replace(" ", "_")
     # Filter by tenant
     payroll_df = payroll_df[payroll_df.get("tenant_id", "") == str(tenant)].copy() if not payroll_df.empty else pd.DataFrame()
     emp_df = emp_df[emp_df.get("tenant_id", "") == str(tenant)].copy() if not emp_df.empty else pd.DataFrame()
