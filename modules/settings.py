@@ -24,7 +24,7 @@ import extra_streamlit_components as stx
 import streamlit as st
 import time
 
-def show_settings():
+def show_settings_page():
     """
     Manages tenant identity and UI branding.
     Only displays when the 'Settings' page is selected.
