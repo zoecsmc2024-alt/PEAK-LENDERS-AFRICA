@@ -1591,6 +1591,9 @@ def show_loans():
             total_principal = original_loans["principal"].sum()
             total_repayable = filtered_loans["total_repayable"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
+            
+            # --- NEW CALCULATION ---
+            total_pending = filtered_loans[filtered_loans["status"] == "PENDING"]["total_repayable"].sum()
 
             col1, col2, col3, col4 = st.columns(4)
 
@@ -1630,8 +1633,20 @@ def show_loans():
             </div>
             """, unsafe_allow_html=True)
 
-            st.markdown("---")
+            # --- NEW METRIC CARD ---
+            col4.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #ef4444, #991b1b);
+                padding:15px;
+                border-radius:10px;
+                color:white;
+                text-align:center;">
+                <div style="font-size:14px;">⏳ Total Pending</div>
+                <div style="font-size:22px;font-weight:bold;">{total_pending:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
+            st.markdown("---")
         # ------------------------------
         # 📋 LOAN DATA TABLE
         # ------------------------------
