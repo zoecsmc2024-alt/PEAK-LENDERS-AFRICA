@@ -2462,25 +2462,45 @@ def show_collateral():
             )
 
             # ==============================
-            # ⚙️ ASSET MANAGEMENT
+            # ⚙️ ASSET MANAGEMENT & PHOTO VIEW
             # ==============================
             st.markdown("---")
-            with st.expander("🛠️ Manage Asset Lifecycle"):
-                manageable = collateral_df[collateral_df["status"] != "Released"].copy()
+            with st.expander("🛠️ View Details & Manage Lifecycle", expanded=True):
+                # Filter out released assets for the selection list
+                manageable = collateral_df.copy()
                 
                 if manageable.empty:
-                    st.write("All collateral assets have been released.")
+                    st.write("No assets found.")
                 else:
+                    # 1. Select the Asset
                     asset_labels = manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1).tolist()
-                    asset_to_manage = st.selectbox("Select Asset to Update", options=asset_labels)
+                    asset_to_manage = st.selectbox("Select Asset to View/Update", options=asset_labels)
                     
-                    selected_idx = manageable.index[manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1) == asset_to_manage][0]
-                    asset_id = manageable.at[selected_idx, "id"]
+                    # 2. Get the specific row for that asset
+                    selected_row = manageable[manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1) == asset_to_manage].iloc[0]
+                    asset_id = selected_row["id"]
 
+                    # --- PHOTO EVIDENCE SECTION ---
+                    st.markdown("#### 📸 Photo Evidence")
+                    
+                    # Check if 'photo' or 'image' column exists in your DB
+                    # If you saved the photo in the previous step, it's likely stored as a URL or Base64
+                    asset_photo = selected_row.get('photo', selected_row.get('image_url', None))
+
+                    if asset_photo:
+                        st.image(asset_photo, caption=f"Current Photo of {selected_row['description']}", use_column_width=True)
+                    else:
+                        st.warning("⚠️ No photo was uploaded for this asset.")
+                    
+                    st.markdown("---")
+
+                    # 3. Update Status Section
+                    st.markdown("#### 🔄 Update Status")
                     col_stat, col_btn = st.columns([2,1])
                     new_stat = col_stat.selectbox(
                         "Set New Status", 
-                        ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"]
+                        ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"],
+                        index=["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"].index(selected_row['status']) if selected_row['status'] in ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"] else 0
                     )
                     
                     if col_btn.button("Update Status", use_container_width=True):
