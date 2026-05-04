@@ -724,12 +724,21 @@ def render_sidebar():
             
             # ✅ ADD THIS LINE to define the missing variable
             active_company_name = selected_name
-            # 🔑 Show login form only if user hasn't logged into this tenant yet
+            # 🔑 Login form with forced white text for visibility
             if active_company and (st.session_state.get('tenant_id') != active_company['id']):
-                st.markdown(f"## 🔑 Login to {selected_name}")
-                email = st.text_input("Email", key="login_email")
-                pwd = st.text_input("Password", type="password", key="login_pwd")
-                if st.button("Access Dashboard", key="login_button"):
+                # Force the header to be white
+                st.markdown(f"<h3 style='color:white;'>🔑 Login to {selected_name}</h3>", unsafe_allow_html=True)
+                
+                # Use a container to target sub-labels if needed, 
+                # but standard markdown with styling is most reliable:
+                st.markdown("<p style='color:white; margin-bottom:-15px;'>Email</p>", unsafe_allow_html=True)
+                email = st.text_input("", key="login_email", placeholder="Enter your email")
+                
+                st.markdown("<p style='color:white; margin-bottom:-15px; margin-top:10px;'>Password</p>", unsafe_allow_html=True)
+                pwd = st.text_input("", type="password", key="login_pwd", placeholder="Enter password")
+                
+                if st.button("Access Dashboard", key="login_button", use_container_width=True):
+                    # ... (your existing login logic stays the same)
                     try:
                         # Attempt Supabase login
                         res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
