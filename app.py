@@ -3405,7 +3405,7 @@ def show_payroll():
         else:
             st.info("No payroll records found for this period.")
 # ==========================================
-# 🚀 BALLISTIC FINTECH REPORTS ENGINE (FINAL)
+# 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
 import plotly.express as px
 import pandas as pd
@@ -3415,15 +3415,16 @@ from datetime import datetime
 def show_reports():
     """
     Advanced financial reporting with multi-tenant isolation 
-    and Investor-grade intelligence metrics.
+    and investor-grade intelligence metrics.
     """
+
     # ==============================
     # 🎨 HEADER (EXECUTIVE UI)
     # ==============================
     st.markdown("""
     <div style='background: linear-gradient(90deg,#1E3A8A,#2B3F87); padding:20px; border-radius:15px; margin-bottom:25px;'>
         <h2 style='margin:0; color:white; font-size:24px;'>📊 Financial Intelligence Dashboard</h2>
-        <p style='margin:0; color:#DBEAFE; font-size:13px;'>Real-time P&L, balance Sheet, and Portfolio Yield Analysis</p>
+        <p style='margin:0; color:#DBEAFE; font-size:13px;'>Real-time P&L, Balance Sheet, and Portfolio Yield Analysis</p>
     </div>
     """, unsafe_allow_html=True)
 
@@ -3458,7 +3459,7 @@ def show_reports():
         return
 
     # ==============================
-    # ⚙️ CALCULATION HELPERS
+    # 🧰 REUSABLE HELPERS
     # ==============================
     def col_sum(df, col):
         if df.empty or col not in df.columns: return 0.0
@@ -3468,25 +3469,33 @@ def show_reports():
         if df.empty or col not in df.columns: return pd.Series(dtype=float)
         return pd.to_numeric(df[col], errors="coerce").fillna(0)
 
+    def attach_borrower_names(loans_df, borrowers_df):
+        if borrowers_df.empty or "id" not in borrowers_df.columns or "name" not in borrowers_df.columns:
+            loans_df["borrower"] = loans_df.get("borrower", "Unknown")
+            return loans_df
+        borrowers_df["id"] = borrowers_df["id"].astype(str)
+        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+        mapped = loans_df["borrower_id"].map(bor_map)
+        loans_df["borrower"] = mapped.fillna(loans_df.get("borrower")).fillna("Unknown")
+        return loans_df
+
+    loans = attach_borrower_names(loans, borrowers)
+
     # ==============================
     # 🔢 CORE FINANCIAL ACCOUNTING
     # ==============================
-    # Capital and Revenue
     total_capital_out = col_sum(loans, "principal")
     projected_interest = col_sum(loans, "interest")
     actual_collected = col_sum(payments, "amount")
-    
-    # Operational Costs (OpEx)
+
     direct_expenses = col_sum(expenses, "amount")
     nssf_tax = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10")
     paye_tax = col_sum(payroll, "paye")
     salary_net = col_sum(payroll, "net_pay")
-    petty_out = col_sum(petty[petty["type"] == "Out"], "amount") if not petty.empty else 0
+    petty_out = col_sum(petty[petty.get("type") == "Out"], "amount") if not petty.empty else 0
 
     total_opex = direct_expenses + petty_out + nssf_tax + paye_tax + salary_net
-    
-    # Bottom Line
-    # Profit here is calculated as (Collected - Operating Costs)
+
     cash_profit = actual_collected - total_opex
 
     # ==============================
@@ -3494,7 +3503,7 @@ def show_reports():
     # ==============================
     def render_kpi(title, value, color, icon="💰"):
         st.markdown(f"""
-            <div style="padding:16px; border-radius:12px; background:white; border:1px solid #E5E7EB; box-shadow:0 2px 4px rgba(0,0,0,0.02);">
+            <div style="padding:16px; border-radius:12px; background:white; border:1px solid #E5E7EB; box-shadow:0 2px 4px rgba(0,0,0,0.02); margin-bottom:10px;">
                 <p style="font-size:11px; color:#6B7280; margin:0; font-weight:600;">{icon} {title}</p>
                 <h3 style="margin:0; color:{color}; font-size:20px;">UGX {value:,.0f}</h3>
             </div>
@@ -3510,52 +3519,49 @@ def show_reports():
     # 📈 TREND ANALYSIS
     # ==============================
     st.markdown("### 📈 Monthly Profit & Loss Trend", unsafe_allow_html=True)
-    
-    # Prepare Time Series (Ensuring 'ME' for newest Pandas versions)
+
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
-    
-    # Aggregate Income/Expense by Month
-    inc_m = payments.set_index("date").resample("ME")["amount"].sum() if not payments.empty else pd.Series()
-    exp_m = expenses.set_index("date").resample("ME")["amount"].sum() if not expenses.empty else pd.Series()
-    
+
+    if not payments.empty:
+        inc_m = payments.set_index("date").resample("M")["amount"].sum()
+        inc_m.name = "Income"
+    else:
+        inc_m = pd.Series(dtype=float, name="Income")
+
+    if not expenses.empty:
+        exp_m = expenses.set_index("date").resample("M")["amount"].sum()
+        exp_m.name = "Expenses"
+    else:
+        exp_m = pd.Series(dtype=float, name="Expenses")
+
     pl_combined = pd.concat([inc_m, exp_m], axis=1).fillna(0)
-    pl_combined.columns = ["Income", "Expenses"]
     pl_combined["Net"] = pl_combined["Income"] - pl_combined["Expenses"]
-    
+
     if not pl_combined.empty:
-        pl_combined.index = pl_combined.index.strftime('%b %Y')
-    
-    # FIX: Removed 'barmode' which caused the error in image_9c6e92.png
-    fig_trend = px.area(
-        pl_combined, 
-        color_discrete_map={"Income": "#059669", "Expenses": "#EF4444", "Net": "#1E3A8A"},
-        line_shape="spline" # Makes the transitions look smoother/premium
-    )
-    
-    fig_trend.update_layout(
-        hovermode="x unified", 
-        paper_bgcolor="rgba(0,0,0,0)", 
-        plot_bgcolor="rgba(0,0,0,0)",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-    )
-    
-    st.plotly_chart(fig_trend, use_container_width=True)
+        fig_trend = px.area(
+            pl_combined,
+            color_discrete_map={"Income": "#059669", "Expenses": "#EF4444", "Net": "#1E3A8A"},
+            line_shape="spline",
+            labels={"index":"Month", "value":"UGX"}
+        )
+        fig_trend.update_layout(
+            hovermode="x unified",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_trend, use_container_width=True)
+    else:
+        st.info("📉 No trend data available yet.")
 
     # ==============================
-    # 🧠 INVESTOR INTELLIGENCE (PAR & YIELD)
+    # 🧠 INVESTOR INTELLIGENCE METRICS
     # ==============================
-    st.markdown("### 🧠 Investor Intelligence Portfolio Metrics")
-    
-    # 1. PAR (Portfolio At Risk)
     overdue_loans = loans[loans["status"].astype(str).str.upper().str.contains("OVERDUE", na=False)]
     par_value = col_sum(overdue_loans, "balance")
     par_ratio = (par_value / total_capital_out * 100) if total_capital_out > 0 else 0
-    
-    # 2. Portfolio Yield
     yield_pct = (projected_interest / total_capital_out * 100) if total_capital_out > 0 else 0
-    
-    # 3. Collection Efficiency
     coll_eff = (actual_collected / (total_capital_out + projected_interest) * 100) if (total_capital_out + projected_interest) > 0 else 0
 
     m1, m2, m3, m4 = st.columns(4)
@@ -3567,7 +3573,6 @@ def show_reports():
     # ==============================
     # 🧾 STATEMENTS
     # ==============================
-    st.markdown("<br>", unsafe_allow_html=True)
     s1, s2 = st.columns(2)
 
     with s1:
@@ -3582,7 +3587,7 @@ def show_reports():
         """, unsafe_allow_html=True)
 
     with s2:
-        st.markdown("#### 🧾 balance Sheet Position")
+        st.markdown("#### 🧾 Balance Sheet Position")
         loan_book_value = col_sum(loans, "balance")
         total_assets = cash_profit + loan_book_value
         st.markdown(f"""
@@ -3599,12 +3604,12 @@ def show_reports():
     # ==============================
     with st.expander("📥 Export Financial Data for Auditors"):
         report_data = {
-            "Metric": ["Capital Out", "interest Revenue", "Total OpEx", "Cash Profit", "Portfolio Yield %", "PAR %"],
+            "Metric": ["Capital Out", "Interest Revenue", "Total OpEx", "Cash Profit", "Portfolio Yield %", "PAR %"],
             "Value": [total_capital_out, projected_interest, total_opex, cash_profit, f"{yield_pct:.2f}%", f"{par_ratio:.2f}%"]
         }
         export_df = pd.DataFrame(report_data)
         st.table(export_df)
-        
+
         csv = export_df.to_csv(index=False).encode('utf-8')
         st.download_button(
             label="⬇️ Download Full Executive Report",
