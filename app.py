@@ -1,5 +1,5 @@
 import streamlit as st
-from database import supabase  # Moving supabase logic to database.py
+from database import supabase, run_auth_ui
 from modules import overview
 from modules import loans
 from modules import borrowers
