@@ -685,66 +685,53 @@ def run_auth_ui(supabase):
 
 def render_sidebar():
     """Renders the business selector, branding, and main navigation."""
-    # ==============================
-    # 1. FETCH TENANTS (CENTRALIZED)
-    # ==============================
+    # 1️⃣ Fetch tenants
     try:
-        # We fetch all tenants so the user can see their available businesses
         tenants_res = supabase.table("tenants")\
             .select("id, name, brand_color, logo_url")\
             .execute()
-
-        tenant_map = {
-            row['name']: row for row in tenants_res.data
-        } if tenants_res.data else {}
-
+        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
     except Exception as e:
         st.sidebar.error(f"Error fetching tenants: {e}")
         tenant_map = {}
 
-    current_tenant_id = st.session_state.get('tenant_id')
-
-    # ==============================
-    # 2. SIDEBAR UI & SELECTOR
-    # ==============================
+    # 2️⃣ Sidebar UI
     with st.sidebar:
         st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
 
         if tenant_map:
             options = list(tenant_map.keys())
-            
-            # Find the index of the currently active tenant
-            default_index = 0
-            if current_tenant_id:
-                for i, name in enumerate(options):
-                    if str(tenant_map[name]['id']) == str(current_tenant_id):
-                        default_index = i
-                        break
+            selected_name = st.selectbox("🏢 Business Portal", options, key="sidebar_portal_select")
+            selected_tenant = tenant_map[selected_name]
 
-            active_company_name = st.selectbox(
-                "🏢 Business Portal",
-                options,
-                index=default_index,
-                key="sidebar_portal_select"
-            )
-
-            active_company = tenant_map.get(active_company_name)
-
-            # 🔁 TENANT SYNC: If user switches business in the dropdown
-            if active_company:
-                if str(st.session_state.get('tenant_id')) != str(active_company['id']):
-                    st.session_state.update({
-                        'tenant_id': active_company['id'],
-                        'theme_color': active_company.get('brand_color', '#1E3A8A'),
-                        'company': active_company.get('name')
-                    })
-                    # Clear cache to ensure new business data is loaded
-                    st.cache_data.clear()
-                    st.rerun()
+            # 3️⃣ Show Login Form for Selected Company
+            if 'tenant_id' not in st.session_state or st.session_state.get('tenant_id') != selected_tenant['id']:
+                st.markdown(f"## 🔑 Login to {selected_name}")
+                email = st.text_input("Email", key="login_email")
+                pwd = st.text_input("Password", type="password", key="login_pwd")
+                if st.button("Access Dashboard", key="login_button"):
+                    try:
+                        # Attempt Supabase login
+                        res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
+                        if not res.user:
+                            st.error("Login failed. Check credentials.")
+                        else:
+                            # Successful login → update session
+                            st.session_state.update({
+                                'tenant_id': selected_tenant['id'],
+                                'company': selected_name,
+                                'theme_color': selected_tenant.get('brand_color', '#1E3A8A'),
+                                'user_id': res.user.id,
+                                'logged_in': True
+                            })
+                            st.success(f"✅ Logged in to {selected_name}")
+                            st.cache_data.clear()
+                            st.rerun()
+                    except Exception as e:
+                        st.error(f"Login error: {e}")
         else:
             st.sidebar.warning("No business entities found.")
             st.stop()
-
         # ==============================
         # 💎 BRANDING (LOGO & name)
         # ==============================
