@@ -2524,44 +2524,64 @@ def show_calendar():
     # 5. 🔴 OVERDUE FOLLOW-UP
 st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
 
-# Ensure 'today' is a datetime object and 'end_date' is converted to datetime
-today_dt = pd.to_datetime(datetime.now().date())
-active_loans['end_date'] = pd.to_datetime(active_loans['end_date']).dt.tz_localize(None)
+try:
+    # Re-verify definitions to prevent NameError seen in image_ab02b3.png
+    import pandas as pd
+    from datetime import datetime
 
-overdue_df = active_loans[active_loans["end_date"] < today_dt].copy()
+    # 1. Standardize Today's Date
+    today_dt = pd.to_datetime(datetime.now().date())
 
-if not overdue_df.empty:
-    overdue_df["days_late"] = (today_dt - overdue_df["end_date"]).dt.days
-    od_rows = ""
-    
-    for _, r in overdue_df.iterrows():
-        late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-        # Generate the row string
-        od_rows += f"""
-            <tr style="background:#FFF5F5;">
-                <td style="padding:10px; border-bottom:1px solid #eee;"><b>#{r.get('loan_id_label', str(r['id'])[:8])}</b></td>
-                <td style="padding:10px; border-bottom:1px solid #eee;">{r['borrower']}</td>
-                <td style="padding:10px; border-bottom:1px solid #eee; color:{late_color}; font-weight:bold;">{r['days_late']} Days</td>
-                <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
-                    <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span>
-                </td>
-            </tr>"""
+    # 2. Robust Date Conversion
+    # We use errors='coerce' to handle any empty or malformed date strings
+    active_loans['end_date_dt'] = pd.to_datetime(active_loans['end_date'], errors='coerce').dt.tz_localize(None)
+
+    # 3. Filter for truly overdue loans
+    overdue_df = active_loans[
+        (active_loans["end_date_dt"] < today_dt) & 
+        (active_loans["status"] != "CLEARED")
+    ].copy()
+
+    if not overdue_df.empty:
+        # Calculate days late
+        overdue_df["days_late"] = (today_dt - overdue_df["end_date_dt"]).dt.days
+        od_rows = ""
+        
+        for _, r in overdue_df.iterrows():
+            # Logic: Red if > 7 days, Orange otherwise
+            late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
             
-    # Combine everything into the final table
-    st.markdown(f"""
-        <div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;">
-            <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                <tr style="background:#FF4B4B; color:white;">
-                    <th style="padding:10px; text-align:left;">Loan ID</th>
-                    <th style="padding:10px; text-align:left;">Borrower</th>
-                    <th style="padding:10px; text-align:center;">Late By</th>
-                    <th style="padding:10px; text-align:center;">Status</th>
-                </tr>
-                {od_rows}
-            </table>
-        </div>""", unsafe_allow_html=True)
-else:
-    st.info("No overdue loans currently. Everything is on track! ✨")                                                                                                                                                                                                                                   
+            # Use loan_id_label if available, else fallback to short ID
+            label = r.get('loan_id_label') if pd.notna(r.get('loan_id_label')) else str(r['id'])[:8]
+            
+            od_rows += f"""
+                <tr style="background:#FFF5F5;">
+                    <td style="padding:10px; border-bottom:1px solid #eee;"><b>#{label}</b></td>
+                    <td style="padding:10px; border-bottom:1px solid #eee;">{r['borrower']}</td>
+                    <td style="padding:10px; border-bottom:1px solid #eee; color:{late_color}; font-weight:bold;">{r['days_late']} Days</td>
+                    <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
+                        <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span>
+                    </td>
+                </tr>"""
+                
+        # 4. Final HTML Render
+        st.markdown(f"""
+            <div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;">
+                <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                    <tr style="background:#FF4B4B; color:white;">
+                        <th style="padding:10px; text-align:left;">Loan ID</th>
+                        <th style="padding:10px; text-align:left;">Borrower</th>
+                        <th style="padding:10px; text-align:center;">Late By</th>
+                        <th style="padding:10px; text-align:center;">Status</th>
+                    </tr>
+                    {od_rows}
+                </table>
+            </div>""", unsafe_allow_html=True)
+    else:
+        st.info("No overdue loans currently. Everything is on track! ✨")
+
+except Exception as e:
+    st.error(f"Error generating overdue table: {e}")                                                                                                                                                                                                                                   
 # ==============================
 # 📁 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
