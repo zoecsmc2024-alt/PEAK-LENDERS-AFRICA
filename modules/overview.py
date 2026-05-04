@@ -148,7 +148,7 @@ def first_existing(df, cols):
 # ------------------------------
 # MAIN DASHBOARD
 # ------------------------------
-def show_dashboard_view():
+def show_overview_page():
 
     brand_color = get_Active_color()
 
