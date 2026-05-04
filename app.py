@@ -4506,7 +4506,7 @@ if __name__ == "__main__":
                 show_overdue_tracker()
                 
             elif page == "Payroll":
-                show_payroll()
+                show_payroll_enterprise()
                 
             elif page == "Reports":
                 show_reports()
