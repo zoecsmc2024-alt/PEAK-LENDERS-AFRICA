@@ -3202,15 +3202,15 @@ def show_overdue_tracker():
                 st.cache_data.clear()
                 st.rerun()
 
+# =================================
+# 🏢 Enterprise Payroll Engine (Fixed Truth-Value Errors)
+# =================================
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 import uuid
 
-# =================================
-# 🏢 Enterprise Payroll Engine
-# =================================
-def show_payroll_enterprise():
+def show_payroll_enterprise_fixed():
     tenant = st.session_state.get("tenant_id")
     role = st.session_state.get("role")
     if not tenant or role != "Admin":
@@ -3222,22 +3222,25 @@ def show_payroll_enterprise():
     # -----------------------------
     # 1. Load Payroll & Employees
     # -----------------------------
-    payroll_df = get_cached_data("payroll") or pd.DataFrame()
-    emp_df = get_cached_data("employees") or pd.DataFrame()
+    payroll_df = get_cached_data("payroll")
+    if payroll_df is None:
+        payroll_df = pd.DataFrame()
+    emp_df = get_cached_data("employees")
+    if emp_df is None:
+        emp_df = pd.DataFrame()
 
     # Standardize column names
     payroll_df.columns = payroll_df.columns.str.strip().str.lower().str.replace(" ", "_")
     emp_df.columns = emp_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
     # Filter by tenant
-    payroll_df = payroll_df[payroll_df.get("tenant_id", "") == str(tenant)].copy()
-    emp_df = emp_df[emp_df.get("tenant_id", "") == str(tenant)].copy()
+    payroll_df = payroll_df[payroll_df.get("tenant_id", "") == str(tenant)].copy() if not payroll_df.empty else pd.DataFrame()
+    emp_df = emp_df[emp_df.get("tenant_id", "") == str(tenant)].copy() if not emp_df.empty else pd.DataFrame()
 
     # -----------------------------
     # 2. Payroll Calculations
     # -----------------------------
     def calculate_paye(gross):
-        # Uganda progressive PAYE bands
         if gross <= 235000: return 0
         elif gross <= 335000: return (gross - 235000) * 0.10
         elif gross <= 410000: return 10000 + (gross - 335000) * 0.20
@@ -3249,9 +3252,7 @@ def show_payroll_enterprise():
         return round(n5), round(n10), round(n5+n10)
 
     def calculate_lst(gross):
-        # Simple LST threshold
-        if gross*12 > 1200000: return round(100000/12)
-        return 0
+        return round(100000/12) if gross*12 > 1200000 else 0
 
     def compute_payroll(basic, arrears, absent, advance, other):
         gross = round(float(basic) + float(arrears) - float(absent))
@@ -3271,7 +3272,11 @@ def show_payroll_enterprise():
             st.subheader("👤 Employee Info")
             emp_options = emp_df.get("employee_name", []).tolist() if not emp_df.empty else []
             selected_emp = st.selectbox("Select Employee", emp_options)
-            emp_record = emp_df[emp_df["employee_name"] == selected_emp].iloc[0] if not emp_df.empty else {}
+            emp_record = {}
+            if not emp_df.empty:
+                temp = emp_df[emp_df["employee_name"] == selected_emp]
+                if not temp.empty:
+                    emp_record = temp.iloc[0].to_dict()
 
             c1, c2, c3 = st.columns(3)
             f_tin = c1.text_input("TIN", emp_record.get("tin",""))
@@ -3301,7 +3306,8 @@ def show_payroll_enterprise():
                     duplicate_check = payroll_df[
                         (payroll_df.get("employee","") == selected_emp) &
                         (payroll_df.get("month","") == month_str)
-                    ]
+                    ] if not payroll_df.empty else pd.DataFrame()
+
                     if not duplicate_check.empty:
                         st.warning("⚠️ Payroll for this employee already exists this month.")
                     else:
