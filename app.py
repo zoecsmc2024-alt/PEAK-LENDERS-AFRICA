@@ -1,11 +1,20 @@
 import streamlit as st
 from database import supabase  # Moving supabase logic to database.py
-from modules import (
-    overview, loans, borrowers, collateral, 
-    calendar, ledger, payroll, expenses, 
-    petty_cash, overdue_tracker, payments, 
-    reports, settings
-)
+from modules import overview
+from modules import loans
+from modules import borrowers
+from modules import collateral
+from modules import calendar
+from modules import ledger
+from modules import payroll
+from modules import expenses
+from modules import petty_cash
+from modules import payments
+from modules import reports
+from modules import settings
+
+# Special fix for the filename with a space
+import modules.overdue_tracker as overdue_tracker
 import time
 
 # --- Page Config stays here ---
