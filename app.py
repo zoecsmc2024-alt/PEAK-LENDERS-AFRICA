@@ -2202,28 +2202,37 @@ def show_payments():
         if payments_df.empty:
             st.info("No payment history")
         else:
+            # 1. Prepare Display Data
             payments_df["amount_display"] = payments_df["amount"].apply(lambda x: f"UGX {x:,.0f}")
-            st.dataframe(payments_df[["date", "borrower", "amount_display", "method"]])
-
+            # Ensure ID and Receipt exist for the logic below
+            payments_df["id"] = payments_df["id"].astype(str)
+            payments_df["receipt_no"] = payments_df["receipt_no"].fillna("No Receipt")
+            
             display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
-            st.dataframe(df_hist[display_cols], use_container_width=True, hide_index=True)
+            st.dataframe(payments_df[display_cols], use_container_width=True, hide_index=True)
 
             # --- 🛠️ EDIT/DELETE MANAGEMENT ---
             st.markdown("---")
             st.markdown("### ⚙️ Payment Maintenance")
             
-            pay_map = {f"{row['receipt_no']} | {row['borrower']}": row['id'] for _, row in df_hist.iterrows()}
-            selected_pay = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
+            # Create the selection map using payments_df
+            pay_map = {
+                f"{row['receipt_no']} | {row['borrower']} | {row['amount_display']}": row['id'] 
+                for _, row in payments_df.iterrows()
+            }
             
-            target_pay_id = pay_map[selected_pay]
-            target_pay = df_hist[df_hist['id'] == target_pay_id].iloc[0]
+            selected_pay_label = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
+            
+            target_pay_id = pay_map[selected_pay_label]
+            # Fetch the specific record from payments_df
+            target_pay = payments_df[payments_df['id'] == target_pay_id].iloc[0]
 
             p_col1, p_col2 = st.columns(2)
 
             if p_col1.button("🗑️ Delete Payment", use_container_width=True):
                 try:
                     supabase.table("payments").delete().eq("id", target_pay_id).execute()
-                    st.cache_data.clear() # Triggers the Sync logic at top
+                    st.cache_data.clear() 
                     st.warning(f"Payment {target_pay['receipt_no']} removed.")
                     st.rerun()
                 except Exception as e:
@@ -2236,8 +2245,13 @@ def show_payments():
                 with st.form("edit_payment_form"):
                     st.info(f"Modifying: {target_pay['receipt_no']}")
                     new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
-                    new_method = st.selectbox("Revised Method", ["Cash", "Mobile Money", "Bank"], 
-                                             index=["Cash", "Mobile Money", "Bank"].index(target_pay['method']))
+                    
+                    # Safe index lookup for the method
+                    current_method = target_pay['method']
+                    method_options = ["Cash", "Mobile Money", "Bank"]
+                    method_idx = method_options.index(current_method) if current_method in method_options else 0
+                    
+                    new_method = st.selectbox("Revised Method", method_options, index=method_idx)
                     
                     eb1, eb2 = st.columns(2)
                     if eb1.form_submit_button("💾 Save Changes"):
@@ -2246,8 +2260,10 @@ def show_payments():
                                 "amount": new_amt,
                                 "method": new_method
                             }).eq("id", target_pay_id).execute()
+                            
                             st.session_state["edit_pay_mode"] = False
                             st.cache_data.clear()
+                            st.success("Payment updated successfully!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Update failed: {e}")
