@@ -8,7 +8,7 @@ from modules import calendar
 from modules import ledger
 from modules import payroll
 from modules import expenses
-from modules import pettycash
+from modules import petty_cash_page
 from modules import payments
 from modules import reports
 from modules import settings
