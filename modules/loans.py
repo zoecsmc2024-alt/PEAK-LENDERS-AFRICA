@@ -65,7 +65,7 @@ def save_data_saas(table_name, df):
 # ==============================
 # 13. LOANS MANAGEMENT PAGE
 # ==============================
-def show_loans():
+def show_loans_page():
 
     st.markdown(
         "<h2 style='color: #0A192F;'>💵 Loans Management</h2>",
