@@ -2334,28 +2334,31 @@ def show_collateral():
         if available_loans.empty:
             st.info("ℹ️ No Active or Overdue loans found to attach collateral to.")
         else:
+            # DEBUG: Uncomment the line below if names are still "Unknown" to see column names in app
+            # st.write(available_loans.columns.tolist()) 
+
             with st.form("collateral_reg_form", clear_on_submit=True):
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # --- IMPROVED LABEL LOGIC ---
-                # Define possible name columns in your DB
-                possible_name_cols = ['borrower', 'client', 'name', 'borrower_name']
-                name_col = next((col for col in possible_name_cols if col in available_loans.columns), None)
+                # --- ADVANCED COLUMN PICKER ---
+                # This list covers almost all common naming conventions
+                name_targets = ['borrower', 'client', 'name', 'full_name', 'customer', 'borrower_name']
+                name_col = next((col for col in name_targets if col in available_loans.columns), None)
                 
-                # Create a readable label list
                 loan_options = []
                 for _, row in available_loans.iterrows():
-                    b_name = row[name_col] if name_col else "Unknown Borrower"
-                    # Add amount if available to help distinguish between loans for same person
-                    amt = f" | UGX {row['principal']:,.0f}" if 'principal' in row else ""
-                    date = f" | {row['date']}" if 'date' in row else ""
+                    # 1. Try to get the name from the identified column
+                    # 2. If not found, try to use 'id' as a last resort but make it short
+                    b_name = str(row[name_col]) if name_col else "Unknown"
                     
-                    label = f"{b_name}{amt}{date} (ID: {row['id']})"
+                    amt = f" | UGX {row['principal']:,.0f}" if 'principal' in row else ""
+                    
+                    # Create the label
+                    label = f"{b_name}{amt} (ID: {row['id']})"
                     loan_options.append(label)
                 
                 selected_label = c1.selectbox("Select Loan/Borrower", options=loan_options)
-                # ----------------------------
 
                 asset_type = c2.selectbox(
                     "Asset Type",
@@ -2375,14 +2378,14 @@ def show_collateral():
                     st.error("❌ Please provide a description and valid market value.")
                 else:
                     try:
-                        # Extract the UUID and the name from our new friendly label
                         actual_loan_id = selected_label.split("(ID: ")[1].replace(")", "")
-                        borrower_display_name = selected_label.split(" | ")[0] # Gets the name before the first separator
+                        # Save the name part only for the record
+                        borrower_for_db = selected_label.split(" | ")[0].split(" (ID:")[0]
 
                         new_asset = pd.DataFrame([{
                             "loan_id": actual_loan_id,
                             "tenant_id": str(current_tenant),
-                            "borrower": borrower_display_name,
+                            "borrower": borrower_for_db,
                             "type": asset_type,
                             "description": desc,
                             "value": float(est_value),
@@ -2391,7 +2394,7 @@ def show_collateral():
                         }])
 
                         if save_data_saas("collateral", new_asset):
-                            st.success(f"✅ Asset secured for {borrower_display_name}!")
+                            st.success(f"✅ Asset secured for {borrower_for_db}!")
                             st.cache_data.clear()
                             st.rerun()
                     except Exception as e:
