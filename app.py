@@ -2339,24 +2339,36 @@ def show_collateral():
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # --- CLEAN SELECTION LOGIC ---
-                # 1. Create a dictionary mapping the long 'id' to a clean 'label'
+                # --- BRUTE-FORCE NAME RECOVERY ---
                 loan_map = {}
+                # Ensure we have a fresh copy of the columns for debugging
+                cols = available_loans.columns.tolist()
+                
                 for _, row in available_loans.iterrows():
-                    b_name = str(row.get('borrower', 'Unknown'))
-                    ref = row.get('loan_id_label', 'N/A')
+                    # 1. Direct Case-Insensitive check
+                    b_name = "Unknown"
+                    for col in cols:
+                        if col.lower() == 'borrower':
+                            b_name = str(row[col])
+                            break
+                    
+                    # 2. Backup: If still 'Unknown', search for any value that looks like a name
+                    if b_name == "Unknown" or b_name == "nan":
+                        # Usually, borrower is one of the first 4 columns
+                        potential_name = str(row.iloc[2]) if len(row) > 2 else "Unknown"
+                        b_name = potential_name if potential_name != "nan" else "Unknown"
+
+                    ref = row.get('loan_id_label', row.get('id', 'N/A')[:4])
                     amt = f"UGX {row['principal']:,.0f}" if 'principal' in row else ""
                     
-                    # This is what the USER sees
+                    # Create the final display label
                     clean_label = f"{b_name} | {amt} (Ref: {ref})"
-                    # Map the actual database ID to this clean label
                     loan_map[row['id']] = clean_label
 
-                # 2. The selectbox uses the IDs as values, but shows clean_label to the user
                 selected_loan_id = c1.selectbox(
                     "Select Loan/Borrower",
                     options=list(loan_map.keys()),
-                    format_func=lambda x: loan_map[x]
+                    format_func=lambda x: loan_map.get(x, "Select Loan")
                 )
                 # ----------------------------
 
