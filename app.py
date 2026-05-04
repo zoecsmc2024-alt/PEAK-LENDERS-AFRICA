@@ -3864,7 +3864,7 @@ def show_settings():
             st.error("❌ Business profile not found.")
             return
 
-        Active_company = tenant_resp.data[0]
+        active_company = tenant_resp.data[0]
 
     except Exception as e:
         st.error(f"❌ Connection Error: {e}")
@@ -3876,7 +3876,7 @@ def show_settings():
     # Priority: Session State -> Database -> Default Navy
     brand_color = st.session_state.get(
         "theme_color", 
-        Active_company.get("brand_color", "#2B3F87")
+        active_company.get("brand_color", "#2B3F87")
     )
 
     st.markdown(
@@ -3890,11 +3890,11 @@ def show_settings():
     col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.markdown(f"**Current Business name:** {Active_company.get('name', 'Unknown')}")
+        st.markdown(f"**Current Business name:** {active_company.get('name', 'Unknown')}")
 
         new_color = st.color_picker(
             "🎨 Change Brand Color",
-            Active_company.get('brand_color', '#2B3F87'),
+            active_company.get('brand_color', '#2B3F87'),
             key="settings_color_picker"
         )
 
@@ -3916,7 +3916,7 @@ def show_settings():
     with col2:
         st.markdown("**Company Logo:**")
         
-        logo_url = Active_company.get("logo_url")
+        logo_url = active_company.get("logo_url")
 
         # ==============================
         # LOGO DISPLAY SAFETY (CACHE BUSTING)
@@ -3947,7 +3947,7 @@ def show_settings():
             try:
                 bucket_name = "company-logos"
                 # Use tenant ID in file path to ensure uniqueness and security
-                file_path = f"logos/{Active_company.get('id')}_logo.png"
+                file_path = f"logos/{active_company.get('id')}_logo.png"
 
                 # Upload to Supabase Storage with upsert enabled
                 supabase.storage.from_(bucket_name).upload(
@@ -3971,7 +3971,7 @@ def show_settings():
         # DATABASE UPDATE (PERSISTENCE)
         # ==============================
         try:
-            supabase.table("tenants").update(updated_data).eq("id", Active_company.get("id")).execute()
+            supabase.table("tenants").update(updated_data).eq("id", active_company.get("id")).execute()
             
             # Immediately update session state for real-time UI feel
             st.session_state["theme_color"] = new_color
