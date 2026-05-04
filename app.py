@@ -1794,6 +1794,7 @@ def show_loans():
                         "loan_id_label": "",
                         "parent_loan_id": None,
                         "borrower_id": selected_id,
+                        "borrower": selected_name,
                         "loan_type": loan_type,
                         "principal": float(amount),
                         "interest": float(
