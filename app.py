@@ -2342,29 +2342,45 @@ def show_collateral():
         if available_loans.empty:
             st.info("ℹ️ No Active or Overdue loans found to attach collateral to.")
         else:
-            # SAFETY: Use .get() to create the lookup so it never throws a KeyError
-            # This ensures that even if 'borrower' is missing, the app doesn't crash
-            name_lookup = {
-                row['id']: row.get('borrower', "Unnamed Borrower") 
-                for _, row in loans_df.iterrows()
-            }
+            # 1. FIND THE BORROWER COLUMN DYNAMICALLY
+            all_cols = [str(c).strip().lower() for c in loans_df.columns]
+            borrower_col = None
+            
+            # Look for any column that sounds like 'borrower' or 'client'
+            for col in loans_df.columns:
+                c_clean = str(col).strip().lower()
+                if c_clean in ['borrower', 'client', 'borrower_name', 'client_name']:
+                    borrower_col = col
+                    break
+            
+            # Fallback: if no name match, use the 3rd column (index 2) 
+            # based on your previous table screenshots
+            if borrower_col is None and len(loans_df.columns) >= 3:
+                borrower_col = loans_df.columns[2]
+
+            # 2. CREATE MASTER LOOKUP
+            if borrower_col:
+                name_lookup = dict(zip(loans_df['id'], loans_df[borrower_col]))
+            else:
+                name_lookup = {}
 
             with st.form("collateral_reg_form", clear_on_submit=True):
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # --- CLEAN SELECTION LOGIC ---
                 loan_map = {}
                 for _, row in available_loans.iterrows():
                     loan_id = row['id']
                     
-                    # Pull name from our safe lookup
-                    b_name = name_lookup.get(loan_id, "Unknown Borrower")
+                    # Pull name using our dynamic column discovery
+                    b_name = name_lookup.get(loan_id, "Unknown")
                     
-                    # Safe retrieval of other fields
+                    # Double-check for 'nan' or empty strings
+                    if str(b_name).lower() in ['nan', 'none', '']:
+                        b_name = "Unknown"
+
                     ref = row.get('loan_id_label', 'N/A')
-                    principal = row.get('principal', 0)
-                    amt = f"UGX {principal:,.0f}"
+                    amt = f"UGX {row.get('principal', 0):,.0f}"
                     
                     clean_label = f"{b_name} | {amt} (Ref: {ref})"
                     loan_map[loan_id] = clean_label
