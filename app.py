@@ -1,11 +1,20 @@
+import streamlit as st
+from database import supabase  # Moving supabase logic to database.py
+from modules import (
+    overview, loans, borrowers, collateral, 
+    calendar, ledger, payroll, expenses, 
+    petty_cash, overdue_tracker, payments, 
+    reports, settings
+)
+import time
 
+# --- Page Config stays here ---
 st.set_page_config(
     page_title="Lending Manager Pro",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
 # Constants
 SESSION_TIMEOUT = 30
 
@@ -174,101 +183,63 @@ def render_sidebar():
 
 
 
-                                                                                                                                                                                                                       
-
-
-
-
-
-
-
-
-
-
 # ==========================================
-# FINAL APP ROUTER (REACTIVE & STABLE)
+# FINAL APP ROUTER
 # ==========================================
-
 if __name__ == "__main__":
-
-    # 1. Initialize Default State
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
 
-    if "view" not in st.session_state:
-        st.session_state["view"] = "login"
-
-    # 2. 🔐 AUTH FLOW
     if not st.session_state.get("logged_in"):
-        st.session_state['theme_color'] = "#1E3A8A"
-        apply_master_theme()
-        run_auth_ui(supabase)
-        # Note: run_auth_ui handles its own views. 
-        # We don't want the rest of the script to run if not logged in.
-    
-    # 3. 🚀 MAIN APP (Only runs if logged_in is True)
+        # Your existing Auth UI call
+        run_auth_ui(supabase) 
     else:
         try:
-            check_session_timeout()
-
-            # Sidebar (Get the selected page)
-            raw_page = render_sidebar()
+            # check_session_timeout() # Ensure this is defined or imported
             
-            # Theme
-            apply_master_theme()
-
-            # 🔥 Clean the page string to ensure matching works perfectly
-            # This handles any accidental spaces or casing issues
-            page = str(raw_page).strip()
-
-            # 4. 🗺️ NAVIGATION ROUTER
+            # Sidebar Navigation
+            page = render_sidebar().strip()
+            
+            # 🗺️ NEW MODULAR ROUTER
+            # We call the functions from the files in your /modules folder
             if page == "Overview":
-                show_dashboard_view()
+                overview.show_overview_page()
                 
             elif page == "loans":
-                show_loans()
+                loans.show_loans_page()
                 
             elif page == "borrowers":
-                show_borrowers()
+                borrowers.show_borrowers_page()
                 
             elif page == "Collateral":
-                show_collateral()
+                collateral.show_collateral_page()
                 
             elif page == "Calendar":
-                show_calendar()
+                calendar.show_calendar_page()
                 
             elif page == "Ledger":
-                show_ledger()
+                ledger.show_ledger_page()
                 
             elif page == "Payments":
-                show_payments()
+                payments.show_payments_page()
                 
             elif page == "Expenses":
-                show_expenses()
+                expenses.show_expenses_page()
                 
             elif page == "Petty Cash":
-                show_petty_cash()
+                petty_cash.show_petty_cash_page()
                 
             elif page == "Overdue Tracker":
-                show_overdue_tracker()
+                overdue_tracker.show_overdue_tracker_page()
                 
             elif page == "Payroll":
-                show_payroll_enterprise()
+                payroll.show_payroll_page()
                 
             elif page == "Reports":
-                show_reports()
+                reports.show_reports_page()
                 
             elif page == "Settings":
-                show_settings()
+                settings.show_settings_page()
                 
-            else:
-                # If it falls through here, we show what exactly was received
-                st.info(f"Module '{page}' is coming online soon.")
-                # Debugging help:
-                # st.write(f"DEBUG: Sidebar returned '{page}'")
-
         except Exception as e:
             st.error(f"🚨 Application Error: {e}")
-            if st.button("Clear Cache & Retry"):
-                st.cache_data.clear()
-                st.rerun()
