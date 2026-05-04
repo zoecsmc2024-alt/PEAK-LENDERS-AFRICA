@@ -1536,9 +1536,9 @@ def show_loans():
             borrowers_df["id"],
             borrowers_df["name"]
         ))
-        loans_df["borrower"] = loans_df["borrower_id"].map(
-            bor_map
-        ).fillna("Unknown")
+        mapped_names = loans_df["borrower_id"].map(bor_map)
+
+        loans_df["borrower"] = mapped_names.fillna(loans_df["borrower"]).fillna("Unknown")
 
     # ------------------------------
     # ACTIVE BORROWERS
