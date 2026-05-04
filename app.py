@@ -3264,7 +3264,50 @@ def show_payroll_enterprise():
     # -----------------------------
     # 3. Process Payroll Form
     # -----------------------------
-    tab_process, tab_history = st.tabs(["➕ Process Payroll", "📜 Payroll History"])
+    tab_employees, tab_process, tab_history = st.tabs([
+        "🧑‍💼 Employees",
+        "💳 Process Payroll",
+        "📜 Payroll History"
+    ])
+
+    # -----------------------------
+    # Tab 1: Employees
+    # -----------------------------
+    with tab_employees:
+        st.subheader("Manage Employees")
+        
+        # Add new employee form
+        with st.form("add_employee_form"):
+            name = st.text_input("Employee Name")
+            tin = st.text_input("TIN")
+            desig = st.text_input("Designation")
+            mob = st.text_input("Mobile No.")
+            acc = st.text_input("Account No.")
+            nssf = st.text_input("NSSF No.")
+            
+            if st.form_submit_button("Add Employee"):
+                if not name:
+                    st.error("Employee name is required")
+                else:
+                    emp_row = pd.DataFrame([{
+                        "employee_id": str(uuid.uuid4()),
+                        "employee_name": name,
+                        "tin": tin,
+                        "designation": desig,
+                        "mob_no": mob,
+                        "account_no": acc,
+                        "nssf_no": nssf,
+                        "tenant_id": str(st.session_state.get("tenant_id"))
+                    }])
+                    save_data_saas("employees", emp_row)
+                    st.success(f"✅ Employee {name} added")
+        
+        # Show existing employees
+        emp_df = get_data("employees")
+        if not emp_df.empty:
+            st.dataframe(emp_df[["employee_name", "designation", "tin", "mob_no"]])
+        else:
+            st.info("No employees added yet.")
 
     with tab_process:
         with st.form("payroll_form", clear_on_submit=True):
