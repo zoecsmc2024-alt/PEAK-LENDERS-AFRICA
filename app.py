@@ -3210,7 +3210,7 @@ import pandas as pd
 from datetime import datetime
 import uuid
 
-def show_payroll_enterprise_fixed():
+def show_payroll_enterprise():
     tenant = st.session_state.get("tenant_id")
     role = st.session_state.get("role")
     if not tenant or role != "Admin":
