@@ -2522,35 +2522,46 @@ def show_calendar():
             </div>""", unsafe_allow_html=True)
 
     # 5. 🔴 OVERDUE FOLLOW-UP
-    st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
-    overdue_df = active_loans[active_loans["end_date"] < today].copy()
-    if not overdue_df.empty:
-        overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
-        od_rows = ""
-        for _, r in overdue_df.iterrows():
-            late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-            od_rows += f"""
-                <tr style="background:#FFF5F5;">
-                    <td style="padding:10px;"><b>#{r.get('loan_id_label', r['id'][:8])}</b></td>
-                    <td style="padding:10px;">{r['borrower']}</td>
-                    <td style="padding:10px;color:{late_color};font-weight:bold;">{r['days_late']} Days</td>
-                    <td style="padding:10px;text-align:center;">
-                        <span style="background:{late_color};color:white;padding:2px 8px;border-radius:10px;font-size:10px;">{r['status']}</span>
-                    </td>
-                </tr>"""
-                
-        st.markdown(f"""
-            <div style="border:2px solid #FF4B4B;border-radius:10px;overflow:hidden;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                    <tr style="background:#FF4B4B;color:white;">
-                        <th style="padding:10px;">Loan ID</th>
-                        <th style="padding:10px;">borrower</th>
-                        <th style="padding:10px;text-align:center;">Late By</th>
-                        <th style="padding:10px;text-align:center;">status</th>
-                    </tr>
-                    {od_rows}
-                </table>
-            </div>""", unsafe_allow_html=True)                                                                                                                                                                                                                                   
+st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
+
+# Ensure 'today' is a datetime object and 'end_date' is converted to datetime
+today_dt = pd.to_datetime(datetime.now().date())
+active_loans['end_date'] = pd.to_datetime(active_loans['end_date']).dt.tz_localize(None)
+
+overdue_df = active_loans[active_loans["end_date"] < today_dt].copy()
+
+if not overdue_df.empty:
+    overdue_df["days_late"] = (today_dt - overdue_df["end_date"]).dt.days
+    od_rows = ""
+    
+    for _, r in overdue_df.iterrows():
+        late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
+        # Generate the row string
+        od_rows += f"""
+            <tr style="background:#FFF5F5;">
+                <td style="padding:10px; border-bottom:1px solid #eee;"><b>#{r.get('loan_id_label', str(r['id'])[:8])}</b></td>
+                <td style="padding:10px; border-bottom:1px solid #eee;">{r['borrower']}</td>
+                <td style="padding:10px; border-bottom:1px solid #eee; color:{late_color}; font-weight:bold;">{r['days_late']} Days</td>
+                <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
+                    <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span>
+                </td>
+            </tr>"""
+            
+    # Combine everything into the final table
+    st.markdown(f"""
+        <div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;">
+            <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                <tr style="background:#FF4B4B; color:white;">
+                    <th style="padding:10px; text-align:left;">Loan ID</th>
+                    <th style="padding:10px; text-align:left;">Borrower</th>
+                    <th style="padding:10px; text-align:center;">Late By</th>
+                    <th style="padding:10px; text-align:center;">Status</th>
+                </tr>
+                {od_rows}
+            </table>
+        </div>""", unsafe_allow_html=True)
+else:
+    st.info("No overdue loans currently. Everything is on track! ✨")                                                                                                                                                                                                                                   
 # ==============================
 # 📁 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
