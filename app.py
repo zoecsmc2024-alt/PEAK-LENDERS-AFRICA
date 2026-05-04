@@ -3202,208 +3202,151 @@ def show_overdue_tracker():
                 st.cache_data.clear()
                 st.rerun()
 
-# ==============================
-# 20. PAYROLL MANAGEMENT PAGE (REBUILT)
-# ==============================
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+import uuid
 
-def show_payroll():
-    """
-    Rebuilt Payroll Management: Handles Uganda tax compliance (PAYE/LST/NSSF)
-    with enhanced stability and professional printable reporting.
-    """
-    # Early Initialization
-    df = pd.DataFrame() 
+# =================================
+# 🏢 Enterprise Payroll Engine
+# =================================
+def show_payroll_enterprise():
     tenant = st.session_state.get("tenant_id")
-    
-    # SaaS Access Control
-    if st.session_state.get("role") != "Admin":
-        st.error("🔒 Restricted Access: Only Administrators can process payroll.")
+    role = st.session_state.get("role")
+    if not tenant or role != "Admin":
+        st.error("🔒 Restricted: Only Admins with valid session can access payroll")
         return
 
-    if not tenant:
-        st.error("Session expired. Please log in.")
-        st.stop()
+    st.markdown("<h2 style='color:#4A90E2;'>🧾 Enterprise Payroll</h2>", unsafe_allow_html=True)
 
-    st.markdown("<h2 style='color: #4A90E2; font-family: sans-serif;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
+    # -----------------------------
+    # 1. Load Payroll & Employees
+    # -----------------------------
+    payroll_df = get_cached_data("payroll") or pd.DataFrame()
+    emp_df = get_cached_data("employees") or pd.DataFrame()
 
-    # 1. DATA SYNC & CLEANING
-    df_raw = get_cached_data("payroll")
-    if df_raw is None: df_raw = pd.DataFrame()
-    
-    # Remove duplicate columns and reset index immediately
-    df_raw = df_raw.loc[:, ~df_raw.columns.duplicated()]
-    df_raw = df_raw.reset_index(drop=True)
+    # Standardize column names
+    payroll_df.columns = payroll_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    emp_df.columns = emp_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    required_columns = [
-        "payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
-        "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
-        "PAYE", "NSSF_5", "Advance_DRS", "Other_Deductions", "Net_Pay", 
-        "NSSF_10", "NSSF_15", "Date", "tenant_id" 
-    ]
-    
-    if df_raw.empty:
-        df_all = pd.DataFrame(columns=required_columns)
-    else:
-        df_all = df_raw.copy()
-        df_all.columns = df_all.columns.str.strip().str.replace(" ", "_")
-        df_all = df_all.loc[:, ~df_all.columns.duplicated()]
-        df_all = df_all.reset_index(drop=True)
+    # Filter by tenant
+    payroll_df = payroll_df[payroll_df.get("tenant_id", "") == str(tenant)].copy()
+    emp_df = emp_df[emp_df.get("tenant_id", "") == str(tenant)].copy()
 
-        for col in required_columns:
-            if col not in df_all.columns: df_all[col] = 0
-        df_all = df_all.fillna(0)
+    # -----------------------------
+    # 2. Payroll Calculations
+    # -----------------------------
+    def calculate_paye(gross):
+        # Uganda progressive PAYE bands
+        if gross <= 235000: return 0
+        elif gross <= 335000: return (gross - 235000) * 0.10
+        elif gross <= 410000: return 10000 + (gross - 335000) * 0.20
+        else: return 25000 + (gross - 410000) * 0.30
 
-    # Filter for Tenant
-    df = df_all[df_all["tenant_id"].astype(str) == str(tenant)].copy() if "tenant_id" in df_all.columns else df_all.copy()
-    df = df.reset_index(drop=True)
+    def calculate_nssf(gross):
+        n5 = gross * 0.05
+        n10 = gross * 0.10
+        return round(n5), round(n10), round(n5+n10)
 
-    def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
-        gross = (float(basic) + float(arrears)) - float(absent_deduct)
-        lst = 100000 / 12 if gross > 1000000 else 0
-        n5, n10 = gross * 0.05, gross * 0.10
-        
-        # Uganda PAYE Logic
-        paye = 0
-        if gross > 410000: paye = 25000 + (0.30 * (gross - 410000))
-        elif gross > 235000: paye = (gross - 235000) * 0.10
-            
-        net = gross - (paye + lst + n5 + float(advance) + float(other))
-        return {"gross": round(gross), "lst": round(lst), "n5": round(n5), "n10": round(n10), "n15": round(n5+n10), "paye": round(paye), "net": round(net)}
+    def calculate_lst(gross):
+        # Simple LST threshold
+        if gross*12 > 1200000: return round(100000/12)
+        return 0
 
-    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 Payroll History"])
+    def compute_payroll(basic, arrears, absent, advance, other):
+        gross = round(float(basic) + float(arrears) - float(absent))
+        lst = calculate_lst(gross)
+        n5, n10, n15 = calculate_nssf(gross)
+        paye = round(calculate_paye(gross))
+        net = gross - (paye + lst + n5 + advance + other)
+        return {"gross": gross, "lst": lst, "n5": n5, "n10": n10, "n15": n15, "paye": paye, "net": net}
+
+    # -----------------------------
+    # 3. Process Payroll Form
+    # -----------------------------
+    tab_process, tab_history = st.tabs(["➕ Process Payroll", "📜 Payroll History"])
 
     with tab_process:
-        with st.form("new_payroll_form", clear_on_submit=True):
-            st.markdown("<h4 style='color: #2B3F87; font-family: sans-serif;'>👤 Employee Details</h4>", unsafe_allow_html=True)
-            name = st.text_input("Employee name")
+        with st.form("payroll_form", clear_on_submit=True):
+            st.subheader("👤 Employee Info")
+            emp_options = emp_df.get("employee_name", []).tolist() if not emp_df.empty else []
+            selected_emp = st.selectbox("Select Employee", emp_options)
+            emp_record = emp_df[emp_df["employee_name"] == selected_emp].iloc[0] if not emp_df.empty else {}
+
             c1, c2, c3 = st.columns(3)
-            f_tin = c1.text_input("TIN")
-            f_desig = c2.text_input("Designation")
-            f_mob = c3.text_input("Mob No.")
-            
+            f_tin = c1.text_input("TIN", emp_record.get("tin",""))
+            f_desig = c2.text_input("Designation", emp_record.get("designation",""))
+            f_mob = c3.text_input("Mobile No.", emp_record.get("mob_no",""))
+
             c4, c5 = st.columns(2)
-            f_acc = c4.text_input("Account No.")
-            f_nssf_no = c5.text_input("NSSF No.")
-            
-            st.write("---")
-            st.markdown("<h4 style='color: #2B3F87; font-family: sans-serif;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
+            f_acc = c4.text_input("Account No.", emp_record.get("account_no",""))
+            f_nssf_no = c5.text_input("NSSF No.", emp_record.get("nssf_no",""))
+
+            st.subheader("💰 Earnings & Deductions")
             c6, c7, c8 = st.columns(3)
-            f_arrears = c6.number_input("ARREARS", min_value=0.0)
-            f_basic = c7.number_input("SALARY (Basic)", min_value=0.0)
-            f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
-            
+            f_arrears = c6.number_input("Arrears", min_value=0.0)
+            f_basic = c7.number_input("Basic Salary", min_value=0.0)
+            f_absent = c8.number_input("Absent Deduction", min_value=0.0)
+
             c9, c10 = st.columns(2)
-            f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0)
+            f_adv = c9.number_input("Advance / DRS", min_value=0.0)
             f_other = c10.number_input("Other Deductions", min_value=0.0)
 
-            if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
-                if name and f_basic > 0:
-                    calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
-                    next_id = int(pd.to_numeric(df_all["payroll_ID"], errors="coerce").max() + 1) if not df_all.empty else 1
+            if st.form_submit_button("💳 Preview & Save"):
+                if not selected_emp or f_basic <= 0:
+                    st.error("Enter employee and valid salary.")
+                else:
+                    # Check duplicate payroll for same month
+                    month_str = datetime.now().strftime("%Y-%m")
+                    duplicate_check = payroll_df[
+                        (payroll_df.get("employee","") == selected_emp) &
+                        (payroll_df.get("month","") == month_str)
+                    ]
+                    if not duplicate_check.empty:
+                        st.warning("⚠️ Payroll for this employee already exists this month.")
+                    else:
+                        calc = compute_payroll(f_basic, f_arrears, f_absent, f_adv, f_other)
+                        new_row = pd.DataFrame([{
+                            "payroll_id": str(uuid.uuid4()),
+                            "employee": selected_emp,
+                            "tin": f_tin,
+                            "designation": f_desig,
+                            "mob_no": f_mob,
+                            "account_no": f_acc,
+                            "nssf_no": f_nssf_no,
+                            "arrears": f_arrears,
+                            "basic_salary": f_basic,
+                            "absent_deduction": f_absent,
+                            "gross_salary": calc['gross'],
+                            "lst": calc['lst'],
+                            "paye": calc['paye'],
+                            "nssf_5": calc['n5'],
+                            "nssf_10": calc['n10'],
+                            "nssf_15": calc['n15'],
+                            "advance_drs": f_adv,
+                            "other_deductions": f_other,
+                            "net_pay": calc['net'],
+                            "date": datetime.now(),
+                            "month": month_str,
+                            "tenant_id": str(tenant)
+                        }])
+                        if save_data_saas("payroll", new_row):
+                            st.success(f"✅ Payroll for {selected_emp} saved successfully!")
 
-                    new_row = pd.DataFrame([{
-                        "payroll_ID": next_id, "Employee": name, "TIN": f_tin, "Designation": f_desig, 
-                        "Mob_No": f_mob, "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
-                        "Basic_Salary": f_basic, "Absent_Deduction": f_absent, "Gross_Salary": calc['gross'], 
-                        "LST": calc['lst'], "PAYE": calc['paye'], "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], 
-                        "NSSF_15": calc['n15'], "Advance_DRS": f_adv, "Other_Deductions": f_other, 
-                        "Net_Pay": calc['net'], "Date": datetime.now().strftime("%Y-%m-%d"), "tenant_id": str(tenant)
-                    }])
-                    
-                    final_save_df = pd.concat([df_all, new_row], ignore_index=True).fillna(0)
-                    final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
-                    
-                    if save_data("payroll", final_save_df):
-                        st.success(f"✅ Payroll for {name} saved!")
-                        st.rerun()
-
-    with tab_logs:
-        if not df.empty:
-            p_col1, p_col2 = st.columns([4, 1])
-            p_col1.markdown(f"<h3 style='color: #4A90E2; font-family: sans-serif;'>{datetime.now().strftime('%B %Y')} Summary</h3>", unsafe_allow_html=True)
-            
-            def fm(x): 
-                try: return f"{int(float(x)):,}" 
-                except: return "0"
-
-            # Enhanced HTML Template with proper Headings
-            header_style = "background:#2B3F87; color:white; padding:10px; border:1px solid #ddd; font-size:11px;"
-            cell_style = "border:1px solid #ddd; padding:8px; font-size:11px; font-family: sans-serif;"
-            
-            rows_html = f"""
-            <thead>
-                <tr style="{header_style}">
-                    <th>S/N</th><th>Employee Details</th><th>TIN/NSSF/ACC</th><th>Arrears</th><th>Basic</th>
-                    <th>Gross</th><th>PAYE</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th>
-                </tr>
-            </thead>
-            <tbody>"""
-            
-            for i, r in df.iterrows():
-                rows_html += f"""
-                <tr>
-                    <td style='{cell_style} text-align:center;'>{i+1}</td>
-                    <td style='{cell_style}'>
-                        <b>{r['Employee']}</b><br><small>{r.get('Designation', '-')}</small>
-                    </td>
-                    <td style='{cell_style} font-size:9px;'>
-                        TIN: {r.get('TIN','-')}<br>ACC: {r.get('Account_No','-')}<br>NSSF: {r.get('NSSF_No','-')}
-                    </td>
-                    <td style='{cell_style} text-align:right;'>{fm(r['Arrears'])}</td>
-                    <td style='{cell_style} text-align:right;'>{fm(r['Basic_Salary'])}</td>
-                    <td style='{cell_style} text-align:right; font-weight:bold;'>{fm(r['Gross_Salary'])}</td>
-                    <td style='{cell_style} text-align:right;'>{fm(r['PAYE'])}</td>
-                    <td style='{cell_style} text-align:right;'>{fm(r['NSSF_5'])}</td>
-                    <td style='{cell_style} text-align:right; background:#E3F2FD; font-weight:bold;'>{fm(r['Net_Pay'])}</td>
-                    <td style='{cell_style} text-align:right; background:#FFF9C4;'>{fm(r['NSSF_10'])}</td>
-                </tr>"""
-
-            rows_html += f"""
-                <tr style="background:#2B3F87; color:white; font-weight:bold; font-family: sans-serif;">
-                    <td colspan="3" style="text-align:center; padding:12px;">GRAND TOTALS</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['Arrears'].sum())}</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['Basic_Salary'].sum())}</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['Gross_Salary'].sum())}</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['PAYE'].sum())}</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['NSSF_5'].sum())}</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['Net_Pay'].sum())}</td>
-                    <td style='text-align:right; padding:12px;'>{fm(df['NSSF_10'].sum())}</td>
-                </tr>
-            </tbody>"""
-
-            printable_html = f"""
-            <html><head><style>body{{font-family:sans-serif;}} table{{width:100%; border-collapse:collapse;}}</style></head>
-            <body><table>{rows_html}</table></body></html>"""
-
-            if p_col2.button("📥 Print PDF", key="print_payroll_trigger"):
-                st.components.v1.html(printable_html + "<script>window.print();</script>", height=0)
-
-            st.components.v1.html(printable_html, height=600, scrolling=True)
-            st.download_button("📄 Download CSV", data=df.to_csv(index=False), file_name="payroll_export.csv")
-            
-            st.write("---")
-            with st.expander("⚙️ Modify / Delete Record"):
-                pay_opts = [f"{r['Employee']} (ID: {r['payroll_ID']})" for _, r in df.iterrows()]
-                if pay_opts:
-                    sel_opt = st.selectbox("Select Record to Manage", pay_opts, key="payroll_edit_selectbox")
-                    try:
-                        sid = str(sel_opt.split("(ID: ")[1].replace(")", ""))
-                        # Final protection against reindexing crash during selection
-                        item = df[df['payroll_ID'].astype(str) == sid].iloc[0]
-                        st.info("Direct modification locked. Delete and re-process for errors.")
-                        
-                        if st.button("🗑️ Delete This Record", use_container_width=True):
-                            # Filter using df_all to preserve other tenants' data
-                            df_new = df_all[df_all['payroll_ID'].astype(str) != sid].copy()
-                            df_new.columns = [c.replace("_", " ") for c in df_new.columns]
-                            
-                            if save_data("payroll", df_new):
-                                st.warning("payroll record deleted.")
-                                st.rerun()
-                    except Exception as e:
-                        st.error(f"Selection error: {e}")
+    # -----------------------------
+    # 4. Payroll History & Reporting
+    # -----------------------------
+    with tab_history:
+        if payroll_df.empty:
+            st.info("No payroll records found.")
         else:
-            st.info("No payroll records found for this period.")
+            # Sort latest first
+            payroll_df = payroll_df.sort_values(by=["date"], ascending=False)
+            st.dataframe(payroll_df, use_container_width=True)
+
+            # Export & Printable
+            csv = payroll_df.to_csv(index=False).encode("utf-8")
+            st.download_button("📄 Download CSV", data=csv, file_name=f"Payroll_{datetime.now().strftime('%Y%m')}.csv")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
