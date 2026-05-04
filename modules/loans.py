@@ -20,7 +20,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
+from database import supabase, get_cached_data
 def get_current_tenant():
     """Returns tenant UUID only"""
     tenant_id = st.session_state.get("tenant_id", None)
