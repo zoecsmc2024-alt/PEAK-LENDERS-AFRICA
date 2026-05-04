@@ -3524,17 +3524,16 @@ def show_reports():
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
 
     if not payments.empty:
-        inc_m = payments.set_index("date").resample("M")["amount"].sum()
+        inc_m = payments.set_index("date").resample("ME")["amount"].sum()
         inc_m.name = "Income"
     else:
         inc_m = pd.Series(dtype=float, name="Income")
 
     if not expenses.empty:
-        exp_m = expenses.set_index("date").resample("M")["amount"].sum()
+        exp_m = expenses.set_index("date").resample("ME")["amount"].sum()
         exp_m.name = "Expenses"
     else:
         exp_m = pd.Series(dtype=float, name="Expenses")
-
     pl_combined = pd.concat([inc_m, exp_m], axis=1).fillna(0)
     pl_combined["Net"] = pl_combined["Income"] - pl_combined["Expenses"]
 
