@@ -3515,14 +3515,18 @@ def show_reports():
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
     
-    # Aggregate Income/Expense by Month
-    inc_m = payments.set_index("date").resample("M")["amount"].sum() if not payments.empty else pd.Series()
-    exp_m = expenses.set_index("date").resample("M")["amount"].sum() if not expenses.empty else pd.Series()
+    # Aggregate Income/Expense by Month - Updated 'M' to 'ME'
+    # We use 'ME' to avoid the ValueError shown in your screenshot
+    inc_m = payments.set_index("date").resample("ME")["amount"].sum() if not payments.empty else pd.Series()
+    exp_m = expenses.set_index("date").resample("ME")["amount"].sum() if not expenses.empty else pd.Series()
     
     pl_combined = pd.concat([inc_m, exp_m], axis=1).fillna(0)
     pl_combined.columns = ["Income", "Expenses"]
     pl_combined["Net"] = pl_combined["Income"] - pl_combined["Expenses"]
-    pl_combined.index = pl_combined.index.strftime('%b %Y')
+    
+    # Ensure the index is valid before formatting
+    if not pl_combined.empty:
+        pl_combined.index = pl_combined.index.strftime('%b %Y')
     
     fig_trend = px.area(pl_combined, barmode='group', color_discrete_map={"Income": "#059669", "Expenses": "#EF4444", "Net": "#1E3A8A"})
     fig_trend.update_layout(hovermode="x unified", paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)")
