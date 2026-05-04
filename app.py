@@ -2338,19 +2338,25 @@ def show_collateral():
                 st.write("### Link Asset to Loan")
                 c1, c2 = st.columns(2)
 
-                # Check for borrower column specifically to avoid KeyError
-                b_col = 'borrower' if 'borrower' in available_loans.columns else None
+                # --- IMPROVED LABEL LOGIC ---
+                # Define possible name columns in your DB
+                possible_name_cols = ['borrower', 'client', 'name', 'borrower_name']
+                name_col = next((col for col in possible_name_cols if col in available_loans.columns), None)
                 
-                if b_col:
-                    loan_labels = available_loans.apply(
-                        lambda x: f"{x[b_col]} (ID: {x['id']})", axis=1
-                    ).tolist()
-                else:
-                    loan_labels = available_loans.apply(
-                        lambda x: f"Loan ID: {x['id']}", axis=1
-                    ).tolist()
+                # Create a readable label list
+                loan_options = []
+                for _, row in available_loans.iterrows():
+                    b_name = row[name_col] if name_col else "Unknown Borrower"
+                    # Add amount if available to help distinguish between loans for same person
+                    amt = f" | UGX {row['principal']:,.0f}" if 'principal' in row else ""
+                    date = f" | {row['date']}" if 'date' in row else ""
+                    
+                    label = f"{b_name}{amt}{date} (ID: {row['id']})"
+                    loan_options.append(label)
                 
-                selected_label = c1.selectbox("Select Loan/Borrower", options=loan_labels)
+                selected_label = c1.selectbox("Select Loan/Borrower", options=loan_options)
+                # ----------------------------
+
                 asset_type = c2.selectbox(
                     "Asset Type",
                     ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
@@ -2362,7 +2368,6 @@ def show_collateral():
                 st.markdown("---")
                 uploaded_photo = st.file_uploader("Upload Asset Photo (Verification)", type=["jpg", "png", "jpeg"])
 
-                # Submit button inside the form
                 submit_save = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
 
             if submit_save:
@@ -2370,13 +2375,14 @@ def show_collateral():
                     st.error("❌ Please provide a description and valid market value.")
                 else:
                     try:
+                        # Extract the UUID and the name from our new friendly label
                         actual_loan_id = selected_label.split("(ID: ")[1].replace(")", "")
-                        borrower_name = selected_label.split(" (ID:")[0] if " (ID:" in selected_label else "Unknown"
+                        borrower_display_name = selected_label.split(" | ")[0] # Gets the name before the first separator
 
                         new_asset = pd.DataFrame([{
                             "loan_id": actual_loan_id,
                             "tenant_id": str(current_tenant),
-                            "borrower": borrower_name,
+                            "borrower": borrower_display_name,
                             "type": asset_type,
                             "description": desc,
                             "value": float(est_value),
@@ -2385,7 +2391,7 @@ def show_collateral():
                         }])
 
                         if save_data_saas("collateral", new_asset):
-                            st.success(f"✅ Asset secured for {borrower_name}!")
+                            st.success(f"✅ Asset secured for {borrower_display_name}!")
                             st.cache_data.clear()
                             st.rerun()
                     except Exception as e:
