@@ -2525,34 +2525,34 @@ def show_calendar():
 st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
 
 try:
-    # Re-verify definitions to prevent NameError seen in image_ab02b3.png
     import pandas as pd
     from datetime import datetime
+
+    # --- DEFINE ACTIVE LOANS HERE TO PREVENT NAMEERROR ---
+    # We filter the main dataframe for any loan that isn't cleared
+    if 'loans_df' in locals() or 'loans_df' in globals():
+        active_loans = loans_df[loans_df["status"] != "CLEARED"].copy()
+    else:
+        # Fallback if your main dataframe has a different name (e.g., df)
+        st.error("Main loan data not found. Please check your data loading section.")
+        st.stop()
 
     # 1. Standardize Today's Date
     today_dt = pd.to_datetime(datetime.now().date())
 
     # 2. Robust Date Conversion
-    # We use errors='coerce' to handle any empty or malformed date strings
     active_loans['end_date_dt'] = pd.to_datetime(active_loans['end_date'], errors='coerce').dt.tz_localize(None)
 
     # 3. Filter for truly overdue loans
-    overdue_df = active_loans[
-        (active_loans["end_date_dt"] < today_dt) & 
-        (active_loans["status"] != "CLEARED")
-    ].copy()
+    overdue_df = active_loans[active_loans["end_date_dt"] < today_dt].copy()
 
     if not overdue_df.empty:
-        # Calculate days late
         overdue_df["days_late"] = (today_dt - overdue_df["end_date_dt"]).dt.days
         od_rows = ""
         
         for _, r in overdue_df.iterrows():
-            # Logic: Red if > 7 days, Orange otherwise
             late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-            
-            # Use loan_id_label if available, else fallback to short ID
-            label = r.get('loan_id_label') if pd.notna(r.get('loan_id_label')) else str(r['id'])[:8]
+            label = r.get('loan_id_label') if pd.notna(r.get('loan_id_label')) else str(r['sn'])
             
             od_rows += f"""
                 <tr style="background:#FFF5F5;">
@@ -2564,7 +2564,6 @@ try:
                     </td>
                 </tr>"""
                 
-        # 4. Final HTML Render
         st.markdown(f"""
             <div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;">
                 <table style="width:100%; border-collapse:collapse; font-size:12px;">
@@ -2581,7 +2580,7 @@ try:
         st.info("No overdue loans currently. Everything is on track! ✨")
 
 except Exception as e:
-    st.error(f"Error generating overdue table: {e}")                                                                                                                                                                                                                                   
+    st.error(f"Error generating overdue table: {e}")                                                                                                                                                                                                                               
 # ==============================
 # 📁 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
 # ==============================
