@@ -18,9 +18,6 @@ import time
 import uuid
 import extra_streamlit_components as stx
 
-# ============================================================
-# ⚙️ CONFIGURATION (Must be the very first Streamlit command)
-# ============================================================
 st.set_page_config(
     page_title="Lending Manager Pro",
     page_icon="💰",
@@ -34,7 +31,6 @@ SESSION_TIMEOUT = 30
 # ==============================
 # 🔒 INITIALIZE SUPABASE
 # ==============================
-# Ensure these environment variables are set in your secrets
 if "supabase" not in st.session_state:
     try:
         url = st.secrets["SUPABASE_URL"]
@@ -66,7 +62,6 @@ if "data_version" not in st.session_state:
     st.session_state["data_version"] = 0
 
 def restore_session():
-    # Note: Ensure 'cookie_manager' is initialized before calling this
     user_id = cookie_manager.get("user_id")
     if user_id:
         st.session_state["authenticated"] = True
@@ -83,7 +78,6 @@ def get_cached_data(table_name, version):
         if supabase is None:
             return pd.DataFrame()
 
-        # These functions must be defined in your logic
         # require_tenant() 
         tenant_id = st.session_state.get("tenant_id")
 
@@ -110,7 +104,6 @@ def get_cached_data(table_name, version):
 # 🎨 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
 def apply_master_theme():
-    # Fallback color if "theme_color" isn't set yet
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
 
     st.markdown(f"""
@@ -198,7 +191,6 @@ def apply_master_theme():
 def init_supabase():
     """Initializes the Supabase client once and caches it."""
     try:
-        # Check secrets first, then environment variables
         url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
         key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
 
@@ -226,8 +218,6 @@ def save_data(table_name, dataframe):
         if supabase is None:
             st.error("❌ Database not connected")
             return False
-
-        # ensure require_tenant() and get_tenant_id() are defined in your helper section
         # require_tenant() 
         tenant_id = st.session_state.get("tenant_id")
 
@@ -461,11 +451,23 @@ def authenticate(supabase_client, company_code, email, password):
     except Exception as e:
         return {"success": False, "error": str(e)}
 
-# ============================================================
-# 🚀 6. SESSION CREATION & SECURITY
-# ============================================================
+import streamlit as st
+import uuid
+import time
+from datetime import datetime, timedelta
+
+# =========================================
+# 🔒 CONFIGURATION
+# =========================================
+SESSION_TIMEOUT = 15  # minutes
+MAX_ATTEMPTS = 5
+LOCKOUT_MINUTES = 10
+
+# =========================================
+# 🏢 SESSION MANAGEMENT
+# =========================================
 def create_session(user_data, remember_me=False):
-    """Initializes the session state variables upon successful login."""
+    """Initialize session after login."""
     st.session_state.update({
         "logged_in": True,
         "authenticated": True,
@@ -474,18 +476,18 @@ def create_session(user_data, remember_me=False):
         "role": user_data["role"],
         "company": user_data["company"],
         "last_activity": datetime.now(),
-        "view": "dashboard"
+        "current_view": "dashboard"
     })
-
     if remember_me:
         st.session_state["remember"] = True
 
     st.success(f"Welcome back to {user_data['company']}!")
-    time.sleep(1) # Brief pause for UX
+    time.sleep(0.5)
     st.rerun()
 
+
 def check_session_timeout():
-    """Monitor inactivity and logs out user after SESSION_TIMEOUT minutes."""
+    """Logout after inactivity."""
     if not st.session_state.get("logged_in"):
         return
 
@@ -493,26 +495,23 @@ def check_session_timeout():
     idle_time = (datetime.now() - last_activity).total_seconds() / 60
 
     if idle_time > SESSION_TIMEOUT:
-        # ✅ Selective cleanup (keep non-sensitive UI states, clear auth)
+        # Clear sensitive session keys
         auth_keys = ["logged_in", "authenticated", "user_id", "tenant_id", "company", "auth_session"]
         for key in auth_keys:
             st.session_state.pop(key, None)
+        st.warning("Session timed out due to inactivity. Redirecting to login...")
+        st.session_state["view"] = "login"
+        st.rerun()
 
-        st.warning("Session timed out due to inactivity. Please log in again.")
-        st.stop()
-
-    # Update timestamp for current interaction
+    # Update last activity
     st.session_state["last_activity"] = datetime.now()
 
-# ============================================================
-# 🛡️ 7. RATE LIMITING (Brute Force Protection)
-# ============================================================
-MAX_ATTEMPTS = 5
-LOCKOUT_MINUTES = 10
-
+# =========================================
+# ⚡ RATE LIMITING / BRUTE FORCE
+# =========================================
 def check_rate_limit(email):
-    """Checks if the user is currently locked out."""
-    attempts = st.session_state.get("login_attempts", {})
+    """Check if user is locked out due to repeated failed login."""
+    attempts = st.session_state.setdefault("login_attempts", {})
     if email in attempts:
         count, last_time = attempts[email]
         if count >= MAX_ATTEMPTS and (datetime.now() - last_time) < timedelta(minutes=LOCKOUT_MINUTES):
@@ -520,59 +519,56 @@ def check_rate_limit(email):
     return True
 
 def record_failed_attempt(email):
-    """Increments the failed login counter for an email."""
+    """Record failed login attempt with timestamp."""
     attempts = st.session_state.setdefault("login_attempts", {})
     count, _ = attempts.get(email, (0, datetime.now()))
     attempts[email] = (count + 1, datetime.now())
 
-# ============================================================
-# 🏢 10. TENANT UTILITIES
-# ============================================================
+# =========================================
+# 🏢 TENANT UTILS
+# =========================================
 def tenant_filter(df):
-    """Filters any dataframe to only show records for the active tenant."""
+    """Filter dataframe by tenant."""
     if df is None or df.empty:
-        return df
+        return pd.DataFrame()
     if "tenant_id" not in df.columns:
         return df
-    
-    current_tenant = st.session_state.get("tenant_id")
-    return df[df["tenant_id"] == current_tenant].copy()
+    return df[df["tenant_id"] == st.session_state.get("tenant_id")].copy()
 
-# ============================================================
-# 🏭 ADMIN COMPANY REGISTRATION
-# ============================================================
+# =========================================
+# 👥 EMPLOYEE MANAGEMENT IN LOGIN FLOW
+# =========================================
 def admin_company_registration(supabase):
-    st.header("🏢 Register Your Company")
-    
-    with st.form("company_reg_form", clear_on_submit=False):
-        company_name = st.text_input("Organization name")
-        admin_name = st.text_input("Admin Full name")
-        email = st.text_input("Business Email").strip().lower()
-        password = st.text_input("Password", type="password", help="Minimum 6 characters")
+    st.markdown("## 🏢 Register Your Company", unsafe_allow_html=True)
+    with st.form("company_reg_form"):
+        st.text_input("Organization name", key="company_name")
+        st.text_input("Admin Full name", key="admin_name")
+        st.text_input("Business Email", key="admin_email")
+        st.text_input("Password", type="password", key="admin_pwd")
         submit = st.form_submit_button("Create Organization", use_container_width=True)
 
     if submit:
-        if not all([company_name, email, password, admin_name]):
-            st.error("Please fill in all fields.")
+        company_name = st.session_state.get("company_name", "").strip()
+        admin_name = st.session_state.get("admin_name", "").strip()
+        email = st.session_state.get("admin_email", "").strip().lower()
+        pwd = st.session_state.get("admin_pwd", "").strip()
+
+        if not all([company_name, admin_name, email, pwd]):
+            st.error("All fields are required")
             return
 
+        # 1. Sign up user
         try:
-            # 1. Sign up the user in Supabase Auth
-            res = supabase.auth.sign_up({"email": email, "password": password})
-            
+            res = supabase.auth.sign_up({"email": email, "password": pwd})
             if res.user:
                 tenant_id = str(uuid.uuid4())
-                # 2. Create the Tenant entry
-                # We use a random code for the "Company Code" security check
-                comp_code = f"{company_name[:3].upper()}{random.randint(100, 999)}"
-                
+                company_code = f"{company_name[:3].upper()}{uuid.uuid4().int % 999}"
                 supabase.table("tenants").insert({
                     "id": tenant_id,
                     "name": company_name,
-                    "company_code": comp_code
+                    "company_code": company_code
                 }).execute()
 
-                # 3. Create the User profile linked to Tenant
                 supabase.table("users").insert({
                     "id": res.user.id,
                     "name": admin_name,
@@ -581,146 +577,107 @@ def admin_company_registration(supabase):
                     "role": "Admin"
                 }).execute()
 
-                st.success(f"✅ {company_name} registered! Your Company Code is: **{comp_code}**")
-                st.info("Please login to continue.")
-                st.session_state["view"] = "login"
-                st.rerun()
-        except Exception as e:
-            st.error(f"Registration Error: {e}")
-
-# ============================================================
-# 👥 STAFF SIGNUP
-# ============================================================
-def view_staff_signup(supabase):
-    st.header("🆕 Join Organization")
-    st.info("Ask your Admin for the exact Business name registered.")
-    
-    with st.form("staff_form"):
-        company_input = st.text_input("Company name to Join").strip()
-        name = st.text_input("Your Full name")
-        email = st.text_input("Email").strip().lower()
-        pwd = st.text_input("Password", type="password")
-        submit = st.form_submit_button("Request Access", use_container_width=True)
-
-    if submit:
-        try:
-            # 1. Find the company (Case-insensitive)
-            tenant_query = supabase.table("tenants").select("id").ilike("name", company_input).execute()
-
-            if not tenant_query.data:
-                st.error("Company not found. Please verify the name with your administrator.")
-                return
-
-            t_id = tenant_query.data[0]["id"]
-
-            # 2. Create Auth Account
-            res = supabase.auth.sign_up({"email": email, "password": pwd})
-
-            if res.user:
-                # 3. Create Profile linked to found Tenant
-                supabase.table("users").insert({
-                    "id": res.user.id,
-                    "name": name,
-                    "email": email,
-                    "tenant_id": t_id,
-                    "role": "Staff"
+                # Audit log
+                supabase.table("audit_logs").insert({
+                    "user_id": res.user.id,
+                    "action": "CREATE_COMPANY",
+                    "tenant_id": tenant_id,
+                    "timestamp": datetime.now()
                 }).execute()
 
-                st.success("Account created! Please log in.")
+                st.success(f"✅ {company_name} registered! Company Code: {company_code}")
                 st.session_state["view"] = "login"
                 st.rerun()
         except Exception as e:
-            st.error(f"Signup Error: {e}")
+            st.error(f"Registration failed: {e}")
 
-# ============================================================
-# 🔑 LOGIN PAGE
-# ============================================================
+# =========================================
+# 🔑 LOGIN PAGE WITH MODERN UI
+# =========================================
 def login_page(supabase):
-    st.markdown("## PEAK-LENDERS AFRICA 💰")
-    
-    with st.container():
-        company_name = st.text_input("Business name").strip()
-        email = st.text_input("Email").strip().lower()
-        pwd = st.text_input("Password", type="password")
-        
-        if st.button("Access Dashboard", use_container_width=True, type="primary"):
-            if not all([company_name, email, pwd]):
-                st.error("Please fill in all fields.")
-            else:
-                try:
-                    # 1. Identity Check
-                    auth_res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
-                    
-                    if auth_res.user:
-                        st.session_state["auth_session"] = auth_res.session
+    st.markdown("""
+        <div style="background: linear-gradient(90deg,#1E3A8A,#2B3F87); padding:20px; border-radius:15px;">
+            <h2 style="color:white;">💰 PEAK-LENDERS AFRICA</h2>
+            <p style="color:#DBEAFE;">Secure Login Portal</p>
+        </div>
+        """, unsafe_allow_html=True)
 
-                        # 2. Profile & Tenant Validation
-                        user_query = supabase.table("users")\
-                            .select("*, tenants(name)")\
-                            .eq("id", auth_res.user.id)\
-                            .execute()
+    with st.form("login_form"):
+        st.text_input("Business name", key="login_company")
+        st.text_input("Email", key="login_email")
+        st.text_input("Password", type="password", key="login_pwd")
+        submit = st.form_submit_button("Access Dashboard", use_container_width=True)
 
-                        if user_query.data:
-                            user = user_query.data[0]
-                            db_company = user.get("tenants", {}).get("name", "").strip().lower()
+    if submit:
+        email = st.session_state.get("login_email", "").strip().lower()
+        company_name = st.session_state.get("login_company", "").strip().lower()
+        pwd = st.session_state.get("login_pwd", "")
 
-                            # Security: Ensure input matches DB record
-                            if db_company != company_name.lower():
-                                st.error(f"Membership Error: User not linked to '{company_name}'")
-                                return
+        # 1. Rate limit
+        if not check_rate_limit(email):
+            st.error(f"Too many failed attempts. Wait {LOCKOUT_MINUTES} minutes.")
+            return
 
-                            # 3. Set Session
-                            st.session_state.update({
-                                "authenticated": True,
-                                "logged_in": True,
-                                "user_id": user["id"],
-                                "tenant_id": user["tenant_id"],
-                                "company": user.get("tenants", {}).get("name"),
-                                "role": user.get("role", "Staff"),
-                                "last_activity": datetime.now(),
-                                "current_page": "Overview" 
-                            })
-                            st.success("Access Granted!")
-                            time.sleep(0.5)
-                            st.rerun()
-                        else:
-                            st.error("Profile not found. Please contact your administrator.")
-                except Exception as e:
-                    st.error(f"Login failed: {e}")
+        try:
+            res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
+            if not res.user:
+                record_failed_attempt(email)
+                st.error("Login failed. Please check credentials.")
+                return
 
-        st.markdown("---")
-        
-        # Navigation to Registration
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("🏢 Register Company", use_container_width=True):
-                st.session_state["view"] = "create_company"
-                st.rerun()
-        with col2:
-            if st.button("🆕 Staff Signup", use_container_width=True):
-                st.session_state["view"] = "signup"
-                st.rerun()
+            # 2. Tenant validation
+            user_query = supabase.table("users")\
+                .select("*, tenants(name)")\
+                .eq("id", res.user.id)\
+                .execute()
+            if not user_query.data:
+                st.error("Profile not found.")
+                return
 
-# ============================================================
-# 🚦 AUTH ROUTER
-# ============================================================
+            user = user_query.data[0]
+            db_company = user.get("tenants", {}).get("name", "").lower()
+            if db_company != company_name:
+                st.error(f"Membership Error: Not linked to '{company_name}'")
+                return
+
+            # 3. Create session
+            create_session({
+                "user_id": user["id"],
+                "tenant_id": user["tenant_id"],
+                "role": user.get("role", "Staff"),
+                "company": user.get("tenants", {}).get("name")
+            })
+            
+            # Audit log
+            supabase.table("audit_logs").insert({
+                "user_id": user["id"],
+                "action": "LOGIN",
+                "tenant_id": user["tenant_id"],
+                "timestamp": datetime.now()
+            }).execute()
+
+        except Exception as e:
+            st.error(f"Login failed: {e}")
+
+# =========================================
+# 🌐 AUTH ROUTER
+# =========================================
 def run_auth_ui(supabase):
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
-    # Show 'Back' button only on registration pages
-    if st.session_state["view"] != "login":
+    # Modern back button
+    if st.session_state["view"] in ["signup", "create_company"]:
         if st.button("⬅️ Back to Login"):
             st.session_state["view"] = "login"
             st.rerun()
 
-    # View Switching Logic
-    current_view = st.session_state["view"]
-    if current_view == "login":
+    view = st.session_state["view"]
+    if view == "login":
         login_page(supabase)
-    elif current_view == "signup":
+    elif view == "signup":
         view_staff_signup(supabase)
-    elif current_view == "create_company":
+    elif view == "create_company":
         admin_company_registration(supabase)
 
 
