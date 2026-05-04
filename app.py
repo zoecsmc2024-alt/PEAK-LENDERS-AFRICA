@@ -2319,9 +2319,16 @@ def show_collateral():
     # 🔍 FILTER ELIGIBLE LOANS
     # ==============================
     if loans_df is not None and not loans_df.empty:
-        loans_df.columns = loans_df.columns.str.lower()
+        # Clean column names: remove spaces and make lowercase
+        loans_df.columns = [str(c).strip().lower() for c in loans_df.columns]
+        
         active_statuses = ["active", "overdue", "pending", "bcf"]
-        available_loans = loans_df[loans_df["status"].str.lower().isin(active_statuses)].copy()
+        
+        # Safely filter by status if it exists
+        if 'status' in loans_df.columns:
+            available_loans = loans_df[loans_df["status"].str.lower().isin(active_statuses)].copy()
+        else:
+            available_loans = loans_df.copy()
     else:
         available_loans = pd.DataFrame()
 
@@ -2335,9 +2342,12 @@ def show_collateral():
         if available_loans.empty:
             st.info("ℹ️ No Active or Overdue loans found to attach collateral to.")
         else:
-            # 1. Create a master lookup for names from the ORIGINAL loans_df
-            # This ensures we get the 'borrower' column correctly
-            name_lookup = dict(zip(loans_df['id'], loans_df['borrower']))
+            # SAFETY: Use .get() to create the lookup so it never throws a KeyError
+            # This ensures that even if 'borrower' is missing, the app doesn't crash
+            name_lookup = {
+                row['id']: row.get('borrower', "Unnamed Borrower") 
+                for _, row in loans_df.iterrows()
+            }
 
             with st.form("collateral_reg_form", clear_on_submit=True):
                 st.write("### Link Asset to Loan")
@@ -2348,18 +2358,19 @@ def show_collateral():
                 for _, row in available_loans.iterrows():
                     loan_id = row['id']
                     
-                    # Pull name from our master lookup
-                    b_name = name_lookup.get(loan_id, "Unknown borrower")
+                    # Pull name from our safe lookup
+                    b_name = name_lookup.get(loan_id, "Unknown Borrower")
                     
+                    # Safe retrieval of other fields
                     ref = row.get('loan_id_label', 'N/A')
-                    amt = f"UGX {row['principal']:,.0f}" if 'principal' in row else ""
+                    principal = row.get('principal', 0)
+                    amt = f"UGX {principal:,.0f}"
                     
-                    # Final clean label: "NAME | AMOUNT (Ref: 0035)"
                     clean_label = f"{b_name} | {amt} (Ref: {ref})"
                     loan_map[loan_id] = clean_label
 
                 selected_loan_id = c1.selectbox(
-                    "Select Loan/borrower",
+                    "Select Loan/Borrower",
                     options=list(loan_map.keys()),
                     format_func=lambda x: loan_map.get(x, "Select Loan")
                 )
