@@ -3026,36 +3026,36 @@ def show_payroll():
     # =================================
     with tab_history:
 
-    if payroll_df.empty:
-        st.info("No payroll records")
-        return
+        if payroll_df.empty:
+            st.info("No payroll records")
+            return
 
-    st.markdown("### 📊 Payroll Sheet")
+        st.markdown("### 📊 Payroll Sheet")
 
-    st.dataframe(payroll_df, use_container_width=True)
+        st.dataframe(payroll_df, use_container_width=True)
 
-    # -----------------------------
-    # 📄 CSV DOWNLOAD
-    # -----------------------------
-    csv = payroll_df.to_csv(index=False).encode("utf-8")
-    st.download_button(
-        "📄 Download CSV",
-        data=csv,
-        file_name="Payroll.csv"
-    )
-
-    # -----------------------------
-    # 📥 STYLED EXCEL DOWNLOAD
-    # -----------------------------
-    file_path = export_styled_excel(payroll_df)
-
-    with open(file_path, "rb") as f:
+        # -----------------------------
+        # 📄 CSV DOWNLOAD
+        # -----------------------------
+        csv = payroll_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            "📥 Download Styled Payroll (Exact Excel)",
-            data=f,
-            file_name="Payroll_Styled.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            "📄 Download CSV",
+            data=csv,
+            file_name="Payroll.csv"
         )
+
+        # -----------------------------
+        # 📥 STYLED EXCEL DOWNLOAD
+        # -----------------------------
+        file_path = export_styled_excel(payroll_df)
+
+        with open(file_path, "rb") as f:
+            st.download_button(
+                "📥 Download Styled Payroll (Exact Excel)",
+                data=f,
+                file_name="Payroll_Styled.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
 # ==============================
 # 💵 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
