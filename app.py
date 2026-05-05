@@ -2713,7 +2713,17 @@ import pandas as pd
 import uuid
 from datetime import datetime
 from io import BytesIO
-
+def delete_data_saas(table_name, filters):
+    """
+    Deletes a record from Supabase based on a filter (e.g., payroll_id).
+    """
+    try:
+        # Assuming 'supabase' is your initialized client in database.py
+        response = supabase.table(table_name).delete().match(filters).execute()
+        return True
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+        return False
 def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -3159,7 +3169,7 @@ def show_payroll():
             
             with col_del:
                 if st.button("🗑️ Delete Record", type="primary"):
-                    # Call your database module to remove the entry
+                    # This will now find the function in your imported modules
                     if delete_data_saas("payroll", {"payroll_id": full_record['payroll_id']}):
                         get_cached_data.clear()
                         st.success(f"Deleted payroll for {full_record['employee']}")
