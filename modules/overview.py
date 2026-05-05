@@ -25,7 +25,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
+from database import supabase, get_cached_data
 # =========================================================
 # FULLY RECREATED / CRASH-PROOF / PERFORMANCE VERSION
 # Keeps every line, layout, feature & structure
