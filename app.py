@@ -2705,20 +2705,21 @@ def show_payroll():
         st.error("🔒 Restricted: Only Admins can access payroll")
         return
 
-    st.markdown("<h2 style='color:#4A90E2;'>🧾 Enterprise Payroll</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#4A90E2;'>🧾Payroll</h2>", unsafe_allow_html=True)
 
     # -----------------------------
-    # Load Payroll ONLY
+    # Load Payroll with Safety
     # -----------------------------
     payroll_df = get_cached_data("payroll")
-    if payroll_df is None:
+    
+    if payroll_df is not None and not payroll_df.empty:
+        # Clean columns
+        payroll_df.columns = payroll_df.columns.astype(str).str.strip().str.replace(" ", "_")
+        
+        # Filter by Tenant
+        payroll_df = payroll_df[payroll_df["tenant_id"].astype(str) == str(tenant)]
+    else:
         payroll_df = pd.DataFrame()
-
-    payroll_df.columns = payroll_df.columns.astype(str).str.strip().str.replace(" ", "_")
-
-    payroll_df = payroll_df[
-        payroll_df.get("tenant_id", "").astype(str) == str(tenant)
-    ] if not payroll_df.empty else pd.DataFrame()
 
     # -----------------------------
     # Build Employee List FROM Payroll
@@ -2846,6 +2847,8 @@ def show_payroll():
                 }])
 
                 if save_data_saas("payroll", new_row):
+                    # Invalidate the cache so the next rerun pulls fresh data
+                    get_cached_data.clear() 
                     st.success(f"✅ Payroll saved for {employee_name}")
                     st.rerun()
 
