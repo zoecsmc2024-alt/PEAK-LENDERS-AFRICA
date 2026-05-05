@@ -35,16 +35,22 @@ SESSION_TIMEOUT = 30
 # ==============================
 # 🔒 INITIALIZE SUPABASE
 # ==============================
-if "supabase" not in st.session_state:
-    try:
+def get_supabase():
+    supa = st.session_state.get("supabase")
+    if supa is None:
         url = st.secrets["SUPABASE_URL"]
         key = st.secrets["SUPABASE_KEY"]
-        st.session_state.supabase = create_client(url, key)
-    except Exception as e:
-        st.error("Failed to connect to Supabase. Check your secrets.")
-        st.session_state.supabase = None
+        supa = create_client(url, key)
+        st.session_state["supabase"] = supa
 
-supabase = st.session_state.supabase
+    # Set current session if exists
+    if "auth_session" in st.session_state:
+        session = st.session_state["auth_session"]
+        supa.auth.set_session(
+            session.access_token,
+            session.refresh_token
+        )
+    return supa
 
 # ==============================
 # 🔄 SESSION & AUTH MANAGEMENT
@@ -66,40 +72,30 @@ if "data_version" not in st.session_state:
     st.session_state["data_version"] = 0
 
 def restore_session():
-    user_id = cookie_manager.get("user_id")
-    if user_id:
+    session_data = cookie_manager.get("auth_session")
+    if session_data:
+        st.session_state["auth_session"] = session_data
         st.session_state["authenticated"] = True
-        st.session_state["user_id"] = user_id
+        st.session_state["user_id"] = cookie_manager.get("user_id")
         st.session_state["tenant_id"] = cookie_manager.get("tenant_id")
 
 # ==============================
 # ⚡ CORE DATA ENGINE
 # ==============================
 @st.cache_data(show_spinner=False)
-def get_cached_data(table_name, version):
-    """Fetches data from Supabase with caching."""
+def get_cached_data(table_name):
+    supa = get_supabase()
+    tenant_id = st.session_state.get("tenant_id")
+    if not tenant_id:
+        return pd.DataFrame()
+    
     try:
-        if supabase is None:
-            return pd.DataFrame()
-
-        # require_tenant() 
-        tenant_id = st.session_state.get("tenant_id")
-
-        if not tenant_id:
-            return pd.DataFrame()
-
-        res = supabase.table(table_name)\
-            .select("*")\
-            .eq("tenant_id", tenant_id)\
-            .execute()
-
+        res = supa.table(table_name).select("*").eq("tenant_id", tenant_id).execute()
         if res.data:
             df = pd.DataFrame(res.data)
             df.columns = df.columns.str.strip().str.lower()
             return df
-
         return pd.DataFrame()
-
     except Exception as e:
         st.error(f"Database Fetch Error [{table_name}]: {e}")
         return pd.DataFrame()
