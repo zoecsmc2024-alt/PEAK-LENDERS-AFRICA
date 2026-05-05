@@ -2692,7 +2692,18 @@ def show_payments():
                     if eb2.form_submit_button("❌ Cancel"):
                         st.session_state["edit_pay_mode"] = False
                         st.rerun()
+def format_with_commas(df):
+    if df.empty:
+        return df
 
+    df = df.copy()
+
+    numeric_cols = df.select_dtypes(include=["number"]).columns
+
+    for col in numeric_cols:
+        df[col] = df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "")
+
+    return df
 # =================================
 # 🏢 Enterprise Payroll Engine (Clean + Excel Export)
 # =================================
@@ -2708,16 +2719,20 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
     from datetime import datetime
+    from io import BytesIO
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Payroll"
 
+    # -----------------------------
     # Styles
+    # -----------------------------
     blue = PatternFill("solid", fgColor="4A90E2")
     white_font = Font(color="FFFFFF", bold=True)
     bold = Font(bold=True)
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    right = Alignment(horizontal="right")
 
     thin = Border(
         left=Side(style='thin'),
@@ -2726,13 +2741,17 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
         bottom=Side(style='thin')
     )
 
+    # -----------------------------
     # Title
+    # -----------------------------
     ws.merge_cells("A1:W1")
     ws["A1"] = f"{datetime.now().strftime('%B %Y').upper()} PAYROLL ({company})"
     ws["A1"].font = Font(bold=True, size=14)
     ws["A1"].alignment = center
 
+    # -----------------------------
     # Header Row 1
+    # -----------------------------
     ws.append([
         "S/NO","Employee Name","TIN","Designation","Mob No",
         "Account No","NSSF No",
@@ -2753,7 +2772,9 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     ws.merge_cells("J2:K2")
     ws.merge_cells("O2:Q2")
 
+    # -----------------------------
     # Header Row 2
+    # -----------------------------
     ws.append([
         "No","","","","","","",
         "ARREARS","Salary",
@@ -2777,7 +2798,9 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
             cell.alignment = center
             cell.border = thin
 
+    # -----------------------------
     # Data
+    # -----------------------------
     for i, r in df.iterrows():
         ws.append([
             i+1,
@@ -2805,7 +2828,18 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
             r["nssf_15"]
         ])
 
+    # -----------------------------
+    # Number formatting (DATA)
+    # -----------------------------
+    for row in ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=8, max_col=23):
+        for cell in row:
+            cell.number_format = '#,##0'
+            cell.alignment = right
+            cell.border = thin
+
+    # -----------------------------
     # Totals
+    # -----------------------------
     total_row = ws.max_row + 1
     ws[f"A{total_row}"] = "TOTAL"
 
@@ -2813,10 +2847,33 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
         letter = get_column_letter(col)
         ws[f"{letter}{total_row}"] = f"=SUM({letter}4:{letter}{total_row-1})"
 
+    # Style totals row
     for col in range(1, 24):
-        ws[f"{get_column_letter(col)}{total_row}"].font = bold
+        cell = ws[f"{get_column_letter(col)}{total_row}"]
+        cell.font = bold
+        cell.fill = blue
+        cell.border = thin
 
-    # Save to memory instead of disk
+    for col in range(8, 24):
+        cell = ws[f"{get_column_letter(col)}{total_row}"]
+        cell.number_format = '#,##0'
+        cell.alignment = right
+
+    # -----------------------------
+    # Column widths
+    # -----------------------------
+    widths = [6,22,15,25,15,20,20] + [12]*16
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    # -----------------------------
+    # Freeze header
+    # -----------------------------
+    ws.freeze_panes = "A4"
+
+    # -----------------------------
+    # Save to memory
+    # -----------------------------
     buffer = BytesIO()
     wb.save(buffer)
     buffer.seek(0)
@@ -3064,8 +3121,9 @@ def show_payroll():
 
         st.markdown("### 📊 Payroll Sheet")
 
-        st.dataframe(payroll_df, use_container_width=True)
+        formatted_df = format_with_commas(display_df)
 
+        st.dataframe(formatted_df, use_container_width=True)
         # -----------------------------
         # 📄 CSV DOWNLOAD
         # -----------------------------
