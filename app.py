@@ -2701,9 +2701,8 @@ import streamlit as st
 import pandas as pd
 import uuid
 from datetime import datetime
-# ==============================
-# 📥 Styled Excel Export Function
-# ==============================
+from io import BytesIO
+
 def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -2714,6 +2713,7 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     ws = wb.active
     ws.title = "Payroll"
 
+    # Styles
     blue = PatternFill("solid", fgColor="4A90E2")
     white_font = Font(color="FFFFFF", bold=True)
     bold = Font(bold=True)
@@ -2816,11 +2816,12 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     for col in range(1, 24):
         ws[f"{get_column_letter(col)}{total_row}"].font = bold
 
-    # Save
-    path = f"/mnt/data/payroll_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
-    wb.save(path)
+    # Save to memory instead of disk
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
 
-    return path
+    return buffer
 # ---------------------------------
 # Payroll Calculation
 # ---------------------------------
@@ -3047,15 +3048,14 @@ def show_payroll():
         # -----------------------------
         # 📥 STYLED EXCEL DOWNLOAD
         # -----------------------------
-        file_path = export_styled_excel(payroll_df)
+        excel_file = export_styled_excel(payroll_df)
 
-        with open(file_path, "rb") as f:
-            st.download_button(
-                "📥 Download Styled Payroll (Exact Excel)",
-                data=f,
-                file_name="Payroll_Styled.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+        st.download_button(
+            "📥 Download Styled Payroll (Exact Excel)",
+            data=excel_file,
+            file_name="Payroll_Styled.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 # ==============================
 # 💵 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
