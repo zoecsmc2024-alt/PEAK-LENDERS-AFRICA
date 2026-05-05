@@ -970,7 +970,7 @@ def first_existing(df, cols):
 # ------------------------------
 # MAIN DASHBOARD
 # ------------------------------
-def show_overview_page():
+def show_overview():
 
     brand_color = get_Active_color()
 
@@ -4415,62 +4415,89 @@ def show_settings_page():
 
 
 # ==========================================
-# FINAL APP ROUTER
+# FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
+
 if __name__ == "__main__":
+
+    # 1. Initialize Default State
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False
 
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
+
+    # 2. 🔐 AUTH FLOW
     if not st.session_state.get("logged_in"):
-        # Your existing Auth UI call
-        run_auth_ui(supabase) 
+        st.session_state['theme_color'] = "#1E3A8A"
+        apply_master_theme()
+        run_auth_ui(supabase)
+        # Note: run_auth_ui handles its own views. 
+        # We don't want the rest of the script to run if not logged in.
+    
+    # 3. 🚀 MAIN APP (Only runs if logged_in is True)
     else:
         try:
-            # check_session_timeout() # Ensure this is defined or imported
+            check_session_timeout()
+
+            # Sidebar (Get the selected page)
+            raw_page = render_sidebar()
             
-            # Sidebar Navigation
-            page = render_sidebar().strip()
-            
-            # 🗺️ NEW MODULAR ROUTER
-            # We call the functions from the files in your /modules folder
+            # Theme
+            apply_master_theme()
+
+            # 🔥 Clean the page string to ensure matching works perfectly
+            # This handles any accidental spaces or casing issues
+            page = str(raw_page).strip()
+
+            # 4. 🗺️ NAVIGATION ROUTER
             if page == "Overview":
-                overview.show_overview_page()
+                show_dashboard_view()
                 
             elif page == "loans":
-                loans.show_loans_page()
+                show_loans()
                 
             elif page == "borrowers":
-                borrowers.show_borrowers_page()
+                show_borrowers()
                 
             elif page == "Collateral":
-                collateral.show_collateral_page()
+                show_collateral()
                 
             elif page == "Calendar":
-                calendar.show_calendar_page()
+                show_calendar()
                 
             elif page == "Ledger":
-                ledger.show_ledger_page()
+                show_ledger()
                 
             elif page == "Payments":
-                payments.show_payments_page()
+                show_payments()
                 
             elif page == "Expenses":
-                expenses.show_expenses_page()
+                show_expenses()
                 
             elif page == "Petty Cash":
-                petty_cash.show_petty_cash_page()
+                show_petty_cash()
                 
             elif page == "Overdue Tracker":
-                overdue_tracker.show_overdue_tracker_page()
+                show_overdue_tracker()
                 
             elif page == "Payroll":
-                payroll.show_payroll_page()
+                show_payroll()
                 
             elif page == "Reports":
-                reports.show_reports_page()
+                show_reports()
                 
             elif page == "Settings":
-                settings.show_settings_page()
+                show_settings()
                 
+            else:
+                # If it falls through here, we show what exactly was received
+                st.info(f"Module '{page}' is coming online soon.")
+                # Debugging help:
+                # st.write(f"DEBUG: Sidebar returned '{page}'")
+
         except Exception as e:
             st.error(f"🚨 Application Error: {e}")
+            if st.button("Clear Cache & Retry"):
+                st.cache_data.clear()
+                st.rerun()
