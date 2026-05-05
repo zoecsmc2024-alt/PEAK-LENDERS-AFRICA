@@ -2694,102 +2694,272 @@ def show_payments():
                         st.rerun()
 
 # =================================
-# 🏢 Enterprise Payroll Engine (Fixed Truth-Value Errors)
+# 🏢 Enterprise Payroll Engine (Clean + Excel Export)
 # =================================
 
+import streamlit as st
+import pandas as pd
+import uuid
+from datetime import datetime
+# ==============================
+# 📥 Styled Excel Export Function
+# ==============================
+def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    from datetime import datetime
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Payroll"
+
+    blue = PatternFill("solid", fgColor="4A90E2")
+    white_font = Font(color="FFFFFF", bold=True)
+    bold = Font(bold=True)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    thin = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Title
+    ws.merge_cells("A1:W1")
+    ws["A1"] = f"{datetime.now().strftime('%B %Y').upper()} PAYROLL ({company})"
+    ws["A1"].font = Font(bold=True, size=14)
+    ws["A1"].alignment = center
+
+    # Header Row 1
+    ws.append([
+        "S/NO","Employee Name","TIN","Designation","Mob No",
+        "Account No","NSSF No",
+        "Salary","Basic",
+        "NO PAY","",
+        "LST",
+        "Gross Salary",
+        "Deductions",
+        "If yes calculate","","",
+        "Other",
+        "Total Deductions",
+        "Nett Pay",
+        "Total Tax",
+        "10% NSSF",
+        "15% NSSF"
+    ])
+
+    ws.merge_cells("J2:K2")
+    ws.merge_cells("O2:Q2")
+
+    # Header Row 2
+    ws.append([
+        "No","","","","","","",
+        "ARREARS","Salary",
+        "DAYS","Absenteeism",
+        "Deductions",
+        "",
+        "P.A.Y.E","N.S.S.F","S.DRS/ADV",
+        "Deduction",
+        "",
+        "",
+        "",
+        "",
+        ""
+    ])
+
+    # Style headers
+    for row in ws.iter_rows(min_row=2, max_row=3, min_col=1, max_col=23):
+        for cell in row:
+            cell.fill = blue
+            cell.font = white_font
+            cell.alignment = center
+            cell.border = thin
+
+    # Data
+    for i, r in df.iterrows():
+        ws.append([
+            i+1,
+            r["employee"],
+            r["tin"],
+            r["designation"],
+            r["mob_no"],
+            r["account_no"],
+            r["nssf_no"],
+            r["arrears"],
+            r["basic_salary"],
+            0,
+            r["absent_deduction"],
+            r["lst"],
+            r["gross_salary"],
+            r["paye"],
+            r["paye"],
+            r["nssf_5"],
+            r["advance_drs"],
+            r["other_deductions"],
+            r["paye"] + r["nssf_5"] + r["advance_drs"] + r["other_deductions"],
+            r["net_pay"],
+            r["paye"],
+            r["nssf_10"],
+            r["nssf_15"]
+        ])
+
+    # Totals
+    total_row = ws.max_row + 1
+    ws[f"A{total_row}"] = "TOTAL"
+
+    for col in range(8, 24):
+        letter = get_column_letter(col)
+        ws[f"{letter}{total_row}"] = f"=SUM({letter}4:{letter}{total_row-1})"
+
+    for col in range(1, 24):
+        ws[f"{get_column_letter(col)}{total_row}"].font = bold
+
+    # Save
+    path = f"/mnt/data/payroll_{datetime.now().strftime('%Y%m%d%H%M%S')}.xlsx"
+    wb.save(path)
+
+    return path
+# ---------------------------------
+# Payroll Calculation
+# ---------------------------------
+def compute_payroll(basic, arrears, absent, advance, other):
+    gross = round(float(basic) + float(arrears) - float(absent))
+    lst = round(100000/12) if gross * 12 > 1200000 else 0
+
+    n5 = round(gross * 0.05)
+    n10 = round(gross * 0.10)
+
+    paye = 0
+    if gross > 410000:
+        paye = 25000 + (0.30 * (gross - 410000))
+    elif gross > 235000:
+        paye = (gross - 235000) * 0.10
+
+    net = gross - (paye + lst + n5 + advance + other)
+
+    return {
+        "gross": gross,
+        "lst": lst,
+        "n5": n5,
+        "n10": n10,
+        "n15": n5 + n10,
+        "paye": round(paye),
+        "net": round(net)
+    }
+
+# ---------------------------------
+# Format Display Table
+# ---------------------------------
+def format_payroll_display(df):
+    if df.empty:
+        return df
+
+    df = df.copy()
+
+    df["NO"] = range(1, len(df) + 1)
+    df["Salary"] = df["gross_salary"]
+    df["Basic"] = df["basic_salary"]
+    df["NO PAY DAYS"] = 0
+    df["Absenteeism"] = df["absent_deduction"]
+
+    df["Gross Salary"] = df["gross_salary"]
+    df["Deductions"] = df["paye"]
+
+    df["P.A.Y.E"] = df["paye"]
+    df["N.S.S.F"] = df["nssf_5"]
+    df["S.DRS/ADV"] = df["advance_drs"]
+    df["Other"] = df["other_deductions"]
+
+    df["Total Deductions"] = (
+        df["paye"] + df["nssf_5"] + df["advance_drs"] + df["other_deductions"]
+    )
+
+    df["Nett Pay"] = df["net_pay"]
+    df["Total Tax on Salary"] = df["paye"]
+    df["10% NSSF"] = df["nssf_10"]
+    df["15% NSSF"] = df["nssf_15"]
+
+    return df[
+        [
+            "NO",
+            "employee",
+            "tin",
+            "designation",
+            "mob_no",
+            "account_no",
+            "nssf_no",
+            "Salary",
+            "Basic",
+            "NO PAY DAYS",
+            "Absenteeism",
+            "Gross Salary",
+            "Deductions",
+            "P.A.Y.E",
+            "N.S.S.F",
+            "S.DRS/ADV",
+            "Other",
+            "Total Deductions",
+            "Nett Pay",
+            "Total Tax on Salary",
+            "10% NSSF",
+            "15% NSSF",
+        ]
+    ]
+
+# ---------------------------------
+# MAIN FUNCTION
+# ---------------------------------
 def show_payroll():
+
     tenant = st.session_state.get("tenant_id")
     role = st.session_state.get("role")
 
     if not tenant or role != "Admin":
-        st.error("🔒 Restricted: Only Admins can access payroll")
+        st.error("🔒 Restricted: Only Admins only")
         return
 
-    st.markdown("<h2 style='color:#4A90E2;'>🧾Payroll</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#4A90E2;'>🧾 Payroll</h2>", unsafe_allow_html=True)
 
-    # -----------------------------
-    # Load Payroll with Safety
-    # -----------------------------
+    # Load Data
     payroll_df = get_cached_data("payroll")
-    
+
     if payroll_df is not None and not payroll_df.empty:
-        # Clean columns
         payroll_df.columns = payroll_df.columns.astype(str).str.strip().str.replace(" ", "_")
-        
-        # Filter by Tenant
         payroll_df = payroll_df[payroll_df["tenant_id"].astype(str) == str(tenant)]
     else:
         payroll_df = pd.DataFrame()
 
-    # -----------------------------
-    # Build Employee List FROM Payroll
-    # -----------------------------
+    # Employee List
+    employee_list = []
     if not payroll_df.empty and "employee" in payroll_df.columns:
         employee_list = sorted(payroll_df["employee"].dropna().astype(str).unique())
-    else:
-        employee_list = []
 
-    # -----------------------------
-    # Payroll Calculations
-    # -----------------------------
-    def compute_payroll(basic, arrears, absent, advance, other):
-        gross = round(float(basic) + float(arrears) - float(absent))
-        lst = round(100000/12) if gross*12 > 1200000 else 0
-        n5, n10 = round(gross * 0.05), round(gross * 0.10)
+    # Tabs
+    tab_process, tab_history = st.tabs(["💳 Process Payroll", "📜 Payroll History"])
 
-        paye = 0
-        if gross > 410000:
-            paye = 25000 + (0.30 * (gross - 410000))
-        elif gross > 235000:
-            paye = (gross - 235000) * 0.10
-
-        net = gross - (paye + lst + n5 + advance + other)
-
-        return {
-            "gross": gross,
-            "lst": lst,
-            "n5": n5,
-            "n10": n10,
-            "n15": n5 + n10,
-            "paye": round(paye),
-            "net": round(net)
-        }
-
-    # -----------------------------
-    # UI Tabs (NO Employees Tab)
-    # -----------------------------
-    tab_process, tab_history = st.tabs([
-        "💳 Process Payroll",
-        "📜 Payroll History"
-    ])
-
-    # -----------------------------
-    # PROCESS PAYROLL
-    # -----------------------------
+    # =================================
+    # PROCESS TAB
+    # =================================
     with tab_process:
         with st.form("payroll_form", clear_on_submit=True):
 
             st.subheader("👤 Employee Info")
 
-            selected_emp = st.selectbox(
-                "Select or Type Employee",
-                options=employee_list,
-                index=0 if employee_list else None
-            )
-
-            # Allow new employee entry
-            new_emp = st.text_input("Or Enter New Employee Name")
+            selected_emp = st.selectbox("Select Employee", employee_list) if employee_list else None
+            new_emp = st.text_input("Or Enter New Employee")
 
             employee_name = new_emp if new_emp else selected_emp
 
             c1, c2, c3 = st.columns(3)
             f_tin = c1.text_input("TIN")
             f_desig = c2.text_input("Designation")
-            f_mob = c3.text_input("Mobile No.")
+            f_mob = c3.text_input("Mobile")
 
             c4, c5 = st.columns(2)
-            f_acc = c4.text_input("Account No.")
-            f_nssf_no = c5.text_input("NSSF No.")
+            f_acc = c4.text_input("Account No")
+            f_nssf = c5.text_input("NSSF No")
 
             st.subheader("💰 Earnings & Deductions")
 
@@ -2799,25 +2969,25 @@ def show_payroll():
             f_absent = c8.number_input("Absent Deduction", min_value=0.0)
 
             c9, c10 = st.columns(2)
-            f_adv = c9.number_input("Advance / DRS", min_value=0.0)
+            f_adv = c9.number_input("Advance", min_value=0.0)
             f_other = c10.number_input("Other Deductions", min_value=0.0)
 
             if st.form_submit_button("💳 Save Payroll"):
 
                 if not employee_name or f_basic <= 0:
-                    st.error("Enter employee and valid salary.")
+                    st.error("Enter valid employee & salary")
                     return
 
                 month_str = datetime.now().strftime("%Y-%m")
 
-                duplicate_check = payroll_df[
-                    (payroll_df.get("employee", "").astype(str) == employee_name) &
-                    (payroll_df.get("month", "").astype(str) == month_str)
-                ] if not payroll_df.empty else pd.DataFrame()
-
-                if not duplicate_check.empty:
-                    st.warning("⚠️ Payroll already exists for this employee this month.")
-                    return
+                if not payroll_df.empty:
+                    duplicate = payroll_df[
+                        (payroll_df["employee"] == employee_name) &
+                        (payroll_df["month"] == month_str)
+                    ]
+                    if not duplicate.empty:
+                        st.warning("Payroll already exists for this month")
+                        return
 
                 calc = compute_payroll(f_basic, f_arrears, f_absent, f_adv, f_other)
 
@@ -2828,47 +2998,64 @@ def show_payroll():
                     "designation": f_desig,
                     "mob_no": f_mob,
                     "account_no": f_acc,
-                    "nssf_no": f_nssf_no,
+                    "nssf_no": f_nssf,
                     "arrears": f_arrears,
                     "basic_salary": f_basic,
                     "absent_deduction": f_absent,
-                    "gross_salary": calc['gross'],
-                    "lst": calc['lst'],
-                    "paye": calc['paye'],
-                    "nssf_5": calc['n5'],
-                    "nssf_10": calc['n10'],
-                    "nssf_15": calc['n15'],
+                    "gross_salary": calc["gross"],
+                    "lst": calc["lst"],
+                    "paye": calc["paye"],
+                    "nssf_5": calc["n5"],
+                    "nssf_10": calc["n10"],
+                    "nssf_15": calc["n15"],
                     "advance_drs": f_adv,
                     "other_deductions": f_other,
-                    "net_pay": calc['net'],
+                    "net_pay": calc["net"],
                     "date": datetime.utcnow().isoformat(),
                     "month": month_str,
                     "tenant_id": str(tenant)
                 }])
 
                 if save_data_saas("payroll", new_row):
-                    # Invalidate the cache so the next rerun pulls fresh data
-                    get_cached_data.clear() 
-                    st.success(f"✅ Payroll saved for {employee_name}")
+                    get_cached_data.clear()
+                    st.success(f"✅ Saved for {employee_name}")
                     st.rerun()
 
-    # -----------------------------
-    # HISTORY
-    # -----------------------------
+    # =================================
+    # HISTORY TAB
+    # =================================
     with tab_history:
-        if payroll_df.empty:
-            st.info("No payroll records found.")
-        else:
-            payroll_df = payroll_df.sort_values(by="date", ascending=False)
-            st.dataframe(payroll_df, use_container_width=True)
 
-            csv = payroll_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "📄 Download CSV",
-                data=csv,
-                file_name=f"Payroll_{datetime.now().strftime('%Y%m')}.csv"
-            )
+    if payroll_df.empty:
+        st.info("No payroll records")
+        return
 
+    st.markdown("### 📊 Payroll Sheet")
+
+    st.dataframe(payroll_df, use_container_width=True)
+
+    # -----------------------------
+    # 📄 CSV DOWNLOAD
+    # -----------------------------
+    csv = payroll_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "📄 Download CSV",
+        data=csv,
+        file_name="Payroll.csv"
+    )
+
+    # -----------------------------
+    # 📥 STYLED EXCEL DOWNLOAD
+    # -----------------------------
+    file_path = export_styled_excel(payroll_df)
+
+    with open(file_path, "rb") as f:
+        st.download_button(
+            "📥 Download Styled Payroll (Exact Excel)",
+            data=f,
+            file_name="Payroll_Styled.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
 # ==============================
 # 💵 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
