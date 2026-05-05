@@ -22,7 +22,7 @@ import uuid
 import extra_streamlit_components as stx
 from database import supabase, get_cached_data
 
-def show_calendar():
+def show_calendar_page():
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
     # 1. FETCH DATA (SAFE ADAPTERS)
