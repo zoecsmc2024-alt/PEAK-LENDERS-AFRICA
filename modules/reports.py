@@ -24,8 +24,10 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
+from database import supabase, get_cached_data
 
-def show_reports():
+
+def show_reports_page():
     """
     Advanced financial reporting with multi-tenant isolation 
     and investor-grade intelligence metrics.
