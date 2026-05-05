@@ -2844,7 +2844,7 @@ def show_payroll():
                     "advance_drs": f_adv,
                     "other_deductions": f_other,
                     "net_pay": calc['net'],
-                    "date": datetime.now(),
+                    "date": datetime.utcnow().isoformat()
                     "month": month_str,
                     "tenant_id": str(tenant)
                 }])
