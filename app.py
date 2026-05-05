@@ -3126,41 +3126,68 @@ def show_payroll():
 
         st.markdown("### 📊 Payroll Sheet")
 
-        # 1. Create the display version of the dataframe using your function
+        # Display Dataframe
         display_df = format_payroll_display(payroll_df)
-
-        # 2. If you have a comma-formatting function, apply it to the display version
-        # If format_with_commas isn't defined, you can use: display_df.style.format("{:,}")
         try:
             formatted_df = format_with_commas(display_df)
         except NameError:
-            formatted_df = display_df # Fallback if helper is missing
+            formatted_df = display_df 
 
         st.dataframe(formatted_df, use_container_width=True)
 
         # -----------------------------
-        # 📄 CSV DOWNLOAD
+        # 🛠️ EDIT / DELETE SECTION
         # -----------------------------
-        # Use raw data for CSV to avoid formatting characters in numbers
-        csv = payroll_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            "📄 Download CSV",
-            data=csv,
-            file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv"
-        )
+        st.markdown("---")
+        st.subheader("🛠️ Manage Records")
+        
+        # Select record by Employee and Date for clarity
+        record_options = payroll_df.apply(lambda x: f"{x['employee']} ({x['month']}) | ID: {x['payroll_id'][:8]}", axis=1).tolist()
+        selected_record_str = st.selectbox("Select a record to Edit or Delete", options=record_options)
 
-        # -----------------------------
-        # 📥 STYLED EXCEL DOWNLOAD
-        # -----------------------------
-        # Pass the original payroll_df; the excel function handles its own formatting
-        excel_file = export_styled_excel(payroll_df)
+        if selected_record_str:
+            # Extract the actual payroll_id from the selection string
+            sel_id = selected_record_str.split("| ID: ")[1].strip()
+            # Match back to the full ID in the dataframe
+            full_record = payroll_df[payroll_df['payroll_id'].str.contains(sel_id)].iloc[0]
 
-        st.download_button(
-            "📥 Download Styled Payroll (Exact Excel)",
-            data=excel_file,
-            file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            col_edit, col_del = st.columns(2)
+
+            with col_edit:
+                if st.button("📝 Edit Selected Record"):
+                    st.warning("To edit: Adjust details in the 'Process Payroll' tab with the same name and month to overwrite, or use the database editor.")
+            
+            with col_del:
+                if st.button("🗑️ Delete Record", type="primary"):
+                    # Call your database module to remove the entry
+                    if delete_data_saas("payroll", {"payroll_id": full_record['payroll_id']}):
+                        get_cached_data.clear()
+                        st.success(f"Deleted payroll for {full_record['employee']}")
+                        st.rerun()
+
+        st.markdown("---")
+        # -----------------------------
+        # 📄 DOWNLOADS
+        # -----------------------------
+        c1, c2 = st.columns(2)
+        with c1:
+            csv = payroll_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                "📄 Download CSV",
+                data=csv,
+                file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv",
+                use_container_width=True
+            )
+
+        with c2:
+            excel_file = export_styled_excel(payroll_df)
+            st.download_button(
+                "📥 Download Styled Excel",
+                data=excel_file,
+                file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
 # ==============================
 # 💵 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
