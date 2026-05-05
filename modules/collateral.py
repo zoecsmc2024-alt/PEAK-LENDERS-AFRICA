@@ -24,8 +24,10 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
+from database import supabase, get_cached_data
 
-def show_collateral():
+
+def show_collateral_page():
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
 
