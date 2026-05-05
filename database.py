@@ -177,19 +177,20 @@ def apply_master_theme():
 # 🔌 2. SUPABASE INIT (SAFE GLOBAL)
 # ==============================
 
+# FIND THIS SECTION IN YOUR database.py
 @st.cache_resource
 def init_supabase():
-    """Initializes the Supabase client once and caches it."""
     try:
-        url = st.secrets.get("SUPABASE_URL") or os.getenv("SUPABASE_URL")
-        key = st.secrets.get("SUPABASE_KEY") or os.getenv("SUPABASE_KEY")
-
+        url = st.secrets.get("SUPABASE_URL")
+        key = st.secrets.get("SUPABASE_KEY")
         if not url or not key:
             return None
-
         return create_client(url, key)
     except Exception:
         return None
+
+# THIS LINE IS THE KEY: It makes 'supabase' available to other files
+supabase = init_supabase()
 
 # Global Instance
 supabase = init_supabase()
