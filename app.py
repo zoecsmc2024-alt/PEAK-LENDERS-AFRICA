@@ -970,7 +970,7 @@ def first_existing(df, cols):
 # ------------------------------
 # MAIN DASHBOARD
 # ------------------------------
-def show_overview():
+def show_dashboard_view():
 
     brand_color = get_Active_color()
 
@@ -1292,7 +1292,7 @@ def show_overview():
 # 🚀 borrowers ENGINE (PRODUCTION)
 # ==============================
 
-def show_borrowers_page():
+def show_borrowers():
 
     # ==============================
     # 🎨 BRANDING & THEME
@@ -1650,7 +1650,7 @@ def save_data_saas(table_name, df):
 # ==============================
 # 13. LOANS MANAGEMENT PAGE
 # ==============================
-def show_loans_page():
+def show_loans():
 
     st.markdown(
         "<h2 style='color: #0A192F;'>💵 Loans Management</h2>",
@@ -2465,7 +2465,7 @@ def generate_receipt_no(supabase, tenant_id):
 # ==============================
 # 💵 PAYMENTS MODULE
 # ==============================
-def show_payments_page():
+def show_payments():
     st.markdown("## 💵 Payments Management")
 
     try:
@@ -2701,7 +2701,7 @@ def show_payments_page():
 # 🏢 Enterprise Payroll Engine (Fixed Truth-Value Errors)
 # =================================
 
-def show_payroll_page():
+def show_payroll():
     tenant = st.session_state.get("tenant_id")
     role = st.session_state.get("role")
     if not tenant or role != "Admin":
@@ -2892,7 +2892,7 @@ def show_payroll_page():
 # 💵 19. PETTY CASH MANAGEMENT PAGE
 # ==============================
 
-def show_petty_cash_page():
+def show_petty_cash():
     """
     Manages daily office cash transactions with a modern Banking UI.
     Tracks inflows/outflows for specific tenants with real-time balance alerts.
@@ -3065,7 +3065,7 @@ def show_petty_cash_page():
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
 
-def show_reports_page():
+def show_reports():
     """
     Advanced financial reporting with multi-tenant isolation 
     and investor-grade intelligence metrics.
@@ -3274,9 +3274,9 @@ def show_reports_page():
 
             
 # ==============================
-# 🚨 20. AI OVERDUE TRACKER (BULLETPROOF)
+# 🚨 20.OVERDUE TRACKER 
 # ==============================
-def show_overdue_tracker_page():
+def show_overdue_tracker():
     """
     Tracks overdue loans with AI-style risk scoring and tenant isolation.
     """
@@ -3458,7 +3458,7 @@ def show_overdue_tracker_page():
 
 
 
-def show_calendar_page():
+def show_calendar():
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
     # 1. FETCH DATA (SAFE ADAPTERS)
@@ -3581,10 +3581,10 @@ def show_calendar_page():
 
 
 # ==============================                           
-# 🛡️ 15. COLLATERAL MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
+# 🛡️ 15. COLLATERAL MANAGEMENT
 # ==============================
 
-def show_collateral_page():
+def show_collateral():
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
 
@@ -3804,10 +3804,10 @@ def show_collateral_page():
                             st.rerun()
 
 # ==============================
-# 📁 18. EXPENSE MANAGEMENT PAGE (SAAS + ENTERPRISE UPGRADE)
+# 📁 18. EXPENSE MANAGEMENT 
 # ==============================
 
-def show_expenses_page():
+def show_expenses():
     """
     Tracks business operational costs for specific tenants.
     """
@@ -3999,23 +3999,18 @@ def show_expenses_page():
                             st.rerun()
 
 # ==============================
-# 21. MASTER LEDGER (SAAS + ENTERPRISE)
+# 21. MASTER LEDGER 
 # ==============================
-
 def generate_pdf_statement(client_name, loans_df, payments_df):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
-
     styles = getSampleStyleSheet()
     elements = []
-
     elements.append(Paragraph(f"<b>{st.session_state.get('company_name', 'ZOE CONSULTS').upper()}</b>", styles["Title"]))
     elements.append(Paragraph(f"Client: {client_name}", styles["Normal"]))
     elements.append(Paragraph(f"Statement Date: {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
     elements.append(Spacer(1, 20))
-
     grand_total = 0
-
     for _, loan in loans_df.iterrows():
         loan_id = str(loan["id"])
         # We use a readable label if possible, or truncate the long UUID for the header
@@ -4023,28 +4018,21 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
         principal = float(loan.get("principal", 0))
         interest = float(loan.get("interest", 0))
         initial_amount = principal + interest
-
         loan_payments = pd.DataFrame()
         if payments_df is not None and not payments_df.empty:
             loan_payments = payments_df[
                 payments_df["loan_id"].astype(str) == loan_id
             ].copy()
-
         if not loan_payments.empty:
             date_col = "payment_date" if "payment_date" in loan_payments.columns else "date"
             if date_col in loan_payments.columns:
                 loan_payments = loan_payments.sort_values(by=date_col)
-
         balance = initial_amount
-
         elements.append(Paragraph(f"<b>Loan Ref:</b> {display_id}", styles["Heading3"]))
-
         data = [["Date", "Description", "Debit", "Credit", "balance"]]
-
         # Truncate dates to YYYY-MM-DD to prevent overwriting
         start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
         clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
-
         data.append([
             clean_start_date,
             "Loan Disbursement",
@@ -4088,14 +4076,10 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
         elements.append(table)
         elements.append(Spacer(1, 20))
-
     elements.append(Paragraph(f"<b>Total Outstanding: {grand_total:,.0f} UGX</b>", styles["Title"]))
-
     doc.build(elements)
     buffer.seek(0)
     return buffer
-
-
 # ==============================
 # MAIN LEDGER FUNCTION (BABY BLUE EDITION)
 # ==============================
@@ -4129,17 +4113,13 @@ def show_ledger_page():
         st.info("💡 Your system is clear! No active loans found.")
         return
 
-    # Normalize column names
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     if payments_df is not None and not payments_df.empty:
         payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-    # Map borrower names
     bor_map = {}
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
         bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
-
     if "borrower" not in loans_df.columns:
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
 
@@ -4150,16 +4130,12 @@ def show_ledger_page():
         f"ID: {r.get('loan_id_label', r['id'])} - {r['borrower']}": str(r["id"])
         for _, r in loans_df.iterrows()
     }
-
     selected_label = st.selectbox("🎯 Select Loan Account", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
-    
-    # Corrected data check to avoid nameError 'df'
     filtered_loan = loans_df[loans_df["id"].astype(str) == raw_id]
     if filtered_loan.empty:
         st.error("Loan data not found.")
         return
-        
     loan_info = filtered_loan.iloc[0]
 
     # ==============================
@@ -4172,8 +4148,6 @@ def show_ledger_page():
     total_due = p + i
     paid = float(loan_info.get("amount_paid", 0))
     bal = float(loan_info.get("balance", 0))
-
-    # Metric Cards with Styled Font
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("principal", f"UGX {p:,.0f}")
     m2.metric("Total interest", f"UGX {i:,.0f}")
@@ -4266,12 +4240,11 @@ def show_ledger_page():
         )
 
 
-def show_settings_page():
+def show_settings():
     """
     Manages tenant identity and UI branding.
     Only displays when the 'Settings' page is selected.
     """
-
     # ==============================
     # 🔐 TENANT SAFETY LAYER (HARD GUARD)
     # ==============================
