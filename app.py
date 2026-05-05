@@ -3034,87 +3034,87 @@ def show_payroll():
     # PROCESS TAB
     # =================================
     with tab_process:
-    with st.form("payroll_form", clear_on_submit=True):
-
-        st.subheader("👤 Employee Info")
-
-        selected_emp = st.selectbox("Select Employee", employee_list) if employee_list else None
-        new_emp = st.text_input("Or Enter New Employee")
-
-        employee_name = new_emp if new_emp else selected_emp
-
-        c1, c2, c3 = st.columns(3)
-        f_tin = c1.text_input("TIN")
-        f_desig = c2.text_input("Designation")
-        f_mob = c3.text_input("Mobile")
-
-        c4, c5 = st.columns(2)
-        f_acc = c4.text_input("Account No")
-        f_nssf = c5.text_input("NSSF No")
-
-        st.subheader("💰 Earnings & Deductions")
-
-        # Added the LST toggle as requested to make it optional
-        f_apply_lst = st.checkbox("Deduct Local Service Tax (LST)?", value=True)
-
-        c6, c7, c8 = st.columns(3)
-        f_arrears = c6.number_input("Arrears", min_value=0.0)
-        f_basic = c7.number_input("Basic Salary", min_value=0.0)
-        f_absent = c8.number_input("Absent Deduction", min_value=0.0)
-
-        c9, c10 = st.columns(2)
-        f_adv = c9.number_input("Advance", min_value=0.0)
-        f_other = c10.number_input("Other Deductions", min_value=0.0)
-
-        if st.form_submit_button("💳 Save Payroll"):
-
-            if not employee_name or f_basic <= 0:
-                st.error("Enter valid employee & salary")
-                return
-
-            month_str = datetime.now().strftime("%Y-%m")
-
-            if not payroll_df.empty:
-                duplicate = payroll_df[
-                    (payroll_df["employee"] == employee_name) &
-                    (payroll_df["month"] == month_str)
-                ]
-                if not duplicate.empty:
-                    st.warning("Payroll already exists for this month")
+        with st.form("payroll_form", clear_on_submit=True):
+    
+            st.subheader("👤 Employee Info")
+    
+            selected_emp = st.selectbox("Select Employee", employee_list) if employee_list else None
+            new_emp = st.text_input("Or Enter New Employee")
+    
+            employee_name = new_emp if new_emp else selected_emp
+    
+            c1, c2, c3 = st.columns(3)
+            f_tin = c1.text_input("TIN")
+            f_desig = c2.text_input("Designation")
+            f_mob = c3.text_input("Mobile")
+    
+            c4, c5 = st.columns(2)
+            f_acc = c4.text_input("Account No")
+            f_nssf = c5.text_input("NSSF No")
+    
+            st.subheader("💰 Earnings & Deductions")
+    
+            # Added the LST toggle as requested to make it optional
+            f_apply_lst = st.checkbox("Deduct Local Service Tax (LST)?", value=True)
+    
+            c6, c7, c8 = st.columns(3)
+            f_arrears = c6.number_input("Arrears", min_value=0.0)
+            f_basic = c7.number_input("Basic Salary", min_value=0.0)
+            f_absent = c8.number_input("Absent Deduction", min_value=0.0)
+    
+            c9, c10 = st.columns(2)
+            f_adv = c9.number_input("Advance", min_value=0.0)
+            f_other = c10.number_input("Other Deductions", min_value=0.0)
+    
+            if st.form_submit_button("💳 Save Payroll"):
+    
+                if not employee_name or f_basic <= 0:
+                    st.error("Enter valid employee & salary")
                     return
-
-            # Updated to pass the f_apply_lst toggle to your compute_payroll function
-            calc = compute_payroll(f_basic, f_arrears, f_absent, f_adv, f_other, apply_lst=f_apply_lst)
-
-            new_row = pd.DataFrame([{
-                "payroll_id": str(uuid.uuid4()),
-                "employee": employee_name,
-                "tin": f_tin,
-                "designation": f_desig,
-                "mob_no": f_mob,
-                "account_no": f_acc,
-                "nssf_no": f_nssf,
-                "arrears": f_arrears,
-                "basic_salary": f_basic,
-                "absent_deduction": f_absent,
-                "gross_salary": calc["gross"],
-                "lst": calc["lst"],
-                "paye": calc["paye"],
-                "nssf_5": calc["n5"],
-                "nssf_10": calc["n10"],
-                "nssf_15": calc["n15"],
-                "advance_drs": f_adv,
-                "other_deductions": f_other,
-                "net_pay": calc["net"],
-                "date": datetime.utcnow().isoformat(),
-                "month": month_str,
-                "tenant_id": str(tenant)
-            }])
-
-            if save_data_saas("payroll", new_row):
-                get_cached_data.clear()
-                st.success(f"✅ Saved for {employee_name}")
-                st.rerun()
+    
+                month_str = datetime.now().strftime("%Y-%m")
+    
+                if not payroll_df.empty:
+                    duplicate = payroll_df[
+                        (payroll_df["employee"] == employee_name) &
+                        (payroll_df["month"] == month_str)
+                    ]
+                    if not duplicate.empty:
+                        st.warning("Payroll already exists for this month")
+                        return
+    
+                # Updated to pass the f_apply_lst toggle to your compute_payroll function
+                calc = compute_payroll(f_basic, f_arrears, f_absent, f_adv, f_other, apply_lst=f_apply_lst)
+    
+                new_row = pd.DataFrame([{
+                    "payroll_id": str(uuid.uuid4()),
+                    "employee": employee_name,
+                    "tin": f_tin,
+                    "designation": f_desig,
+                    "mob_no": f_mob,
+                    "account_no": f_acc,
+                    "nssf_no": f_nssf,
+                    "arrears": f_arrears,
+                    "basic_salary": f_basic,
+                    "absent_deduction": f_absent,
+                    "gross_salary": calc["gross"],
+                    "lst": calc["lst"],
+                    "paye": calc["paye"],
+                    "nssf_5": calc["n5"],
+                    "nssf_10": calc["n10"],
+                    "nssf_15": calc["n15"],
+                    "advance_drs": f_adv,
+                    "other_deductions": f_other,
+                    "net_pay": calc["net"],
+                    "date": datetime.utcnow().isoformat(),
+                    "month": month_str,
+                    "tenant_id": str(tenant)
+                }])
+    
+                if save_data_saas("payroll", new_row):
+                    get_cached_data.clear()
+                    st.success(f"✅ Saved for {employee_name}")
+                    st.rerun()
     # =================================
     # HISTORY TAB
     # =================================
