@@ -2827,26 +2827,57 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
 # ---------------------------------
 def compute_payroll(basic, arrears, absent, advance, other):
     gross = round(float(basic) + float(arrears) - float(absent))
-    lst = round(100000/12) if gross * 12 > 1200000 else 0
 
-    n5 = round(gross * 0.05)
-    n10 = round(gross * 0.10)
+    # -----------------------------
+    # NSSF
+    # -----------------------------
+    nssf_5 = round(gross * 0.05)   # Employee deduction
+    nssf_10 = round(gross * 0.10)  # Employer (NOT deducted)
+    nssf_15 = nssf_5 + nssf_10
 
+    # -----------------------------
+    # TAXABLE INCOME
+    # -----------------------------
+    taxable_income = gross - nssf_5
+
+    # -----------------------------
+    # PAYE (Uganda)
+    # -----------------------------
     paye = 0
-    if gross > 410000:
-        paye = 25000 + (0.30 * (gross - 410000))
-    elif gross > 235000:
-        paye = (gross - 235000) * 0.10
 
-    net = gross - (paye + lst + n5 + advance + other)
+    if taxable_income <= 235000:
+        paye = 0
+    elif taxable_income <= 335000:
+        paye = (taxable_income - 235000) * 0.10
+    elif taxable_income <= 410000:
+        paye = 10000 + (taxable_income - 335000) * 0.20
+    else:
+        paye = 25000 + (taxable_income - 410000) * 0.30
+
+    paye = round(paye)
+
+    # -----------------------------
+    # LST (if applicable)
+    # -----------------------------
+    lst = round(100000 / 12) if gross * 12 > 1200000 else 0
+
+    # -----------------------------
+    # TOTAL DEDUCTIONS
+    # -----------------------------
+    total_deductions = paye + nssf_5 + advance + other + lst
+
+    # -----------------------------
+    # NET PAY
+    # -----------------------------
+    net = gross - total_deductions
 
     return {
         "gross": gross,
         "lst": lst,
-        "n5": n5,
-        "n10": n10,
-        "n15": n5 + n10,
-        "paye": round(paye),
+        "n5": nssf_5,
+        "n10": nssf_10,
+        "n15": nssf_15,
+        "paye": paye,
         "net": round(net)
     }
 
