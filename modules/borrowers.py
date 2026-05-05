@@ -22,7 +22,7 @@ import uuid
 import extra_streamlit_components as stx
 
 
-def show_borrowers():
+def show_borrowers_page():
 
     # ==============================
     # 🎨 BRANDING & THEME
