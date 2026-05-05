@@ -23,7 +23,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
+from database import supabase, get_cached_data
 # ==============================
 # 🧾 RECEIPT GENERATION
 # ==============================
@@ -50,7 +50,7 @@ def generate_receipt_no(supabase, tenant_id):
 # ==============================
 # 💵 PAYMENTS MODULE
 # ==============================
-def show_payments():
+def show_payments_page():
     st.markdown("## 💵 Payments Management")
 
     try:
