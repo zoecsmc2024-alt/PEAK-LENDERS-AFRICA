@@ -29,7 +29,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
+from database import supabase, get_cached_data
 
 # ==============================
 # PDF GENERATION BACKEND
@@ -131,7 +131,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 # ==============================
 # MAIN LEDGER FUNCTION (BABY BLUE EDITION)
 # ==============================
-def show_ledger():
+def show_ledger_page():
     # 🎨 THEME COLORS & FONTS
     baby_blue = "#89CFF0"
     st.markdown(f"""
