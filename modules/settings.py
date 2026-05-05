@@ -20,7 +20,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
+from database import supabase, get_cached_data
 import streamlit as st
 import time
 
