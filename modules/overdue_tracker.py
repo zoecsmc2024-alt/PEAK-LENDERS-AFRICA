@@ -23,8 +23,8 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
-def show_overdue_tracker():
+from database import supabase, get_cached_data
+def show_overdue_tracker_page():
     """
     Tracks overdue loans with AI-style risk scoring and tenant isolation.
     """
