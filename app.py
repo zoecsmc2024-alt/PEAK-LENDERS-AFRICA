@@ -4083,7 +4083,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 # ==============================
 # MAIN LEDGER FUNCTION (BABY BLUE EDITION)
 # ==============================
-def show_ledger_page():
+def show_ledger():
     # 🎨 THEME COLORS & FONTS
     baby_blue = "#89CFF0"
     st.markdown(f"""
