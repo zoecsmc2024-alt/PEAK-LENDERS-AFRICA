@@ -25,8 +25,10 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
+from database import supabase, get_cached_data
 
-def show_expenses():
+
+def show_expenses_page():
     """
     Tracks business operational costs for specific tenants.
     """
