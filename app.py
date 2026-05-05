@@ -3121,28 +3121,39 @@ def show_payroll():
 
         st.markdown("### 📊 Payroll Sheet")
 
-        formatted_df = format_with_commas(display_df)
+        # 1. Create the display version of the dataframe using your function
+        display_df = format_payroll_display(payroll_df)
+
+        # 2. If you have a comma-formatting function, apply it to the display version
+        # If format_with_commas isn't defined, you can use: display_df.style.format("{:,}")
+        try:
+            formatted_df = format_with_commas(display_df)
+        except NameError:
+            formatted_df = display_df # Fallback if helper is missing
 
         st.dataframe(formatted_df, use_container_width=True)
+
         # -----------------------------
         # 📄 CSV DOWNLOAD
         # -----------------------------
+        # Use raw data for CSV to avoid formatting characters in numbers
         csv = payroll_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             "📄 Download CSV",
             data=csv,
-            file_name="Payroll.csv"
+            file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv"
         )
 
         # -----------------------------
         # 📥 STYLED EXCEL DOWNLOAD
         # -----------------------------
+        # Pass the original payroll_df; the excel function handles its own formatting
         excel_file = export_styled_excel(payroll_df)
 
         st.download_button(
             "📥 Download Styled Payroll (Exact Excel)",
             data=excel_file,
-            file_name="Payroll_Styled.xlsx",
+            file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 # ==============================
