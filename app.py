@@ -4113,13 +4113,21 @@ def show_collateral():
                             st.cache_data.clear()
                             st.rerun()
 
+import streamlit as st
+import pandas as pd
+import uuid
+import plotly.express as px
+from datetime import datetime
+# Import your established database adapters
+from database import get_cached_data, save_data
+
 # ==============================
 # 📁 18. EXPENSE MANAGEMENT 
 # ==============================
 
 def show_expenses():
     """
-    Tracks business operational costs for specific tenants.
+    Tracks business operational costs with Financial Year grouping.
     """
     st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
     
@@ -4132,43 +4140,54 @@ def show_expenses():
         st.stop()
 
     # ==============================
-    # 📦 1. FETCH DATA (SAFE ADAPTER)
+    # 🧠 HELPER: FINANCIAL YEAR LOGIC
+    # ==============================
+    def get_fy_label(date_val):
+        try:
+            dt = pd.to_datetime(date_val)
+            year = dt.year
+            # FY runs July to June
+            if dt.month >= 7:
+                return f"FY{year}-{year + 1}"
+            else:
+                return f"FY{year - 1}-{year}"
+        except:
+            return "Unknown FY"
+
+    # ==============================
+    # 📦 1. FETCH & NORMALIZE DATA
     # ==============================
     try:
-        # Pulling data using your existing cache logic
         df = get_cached_data("expenses")
     except Exception:
         df = pd.DataFrame()
 
-    # ==============================
-    # 🛡️ SAAS FILTER & NORMALIZATION
-    # ==============================
     if df is not None and not df.empty:
-        # Standardize column naming
         df.columns = df.columns.str.lower().str.strip()
-        
         # Enforce Tenant Isolation
         if "tenant_id" in df.columns:
             df = df[df["tenant_id"].astype(str) == str(current_tenant)].copy()
-        else:
-            df["tenant_id"] = current_tenant
+        
+        # Ensure numeric amounts
+        df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+        # Apply Financial Year Labeling
+        df["financial_year"] = df["payment_date"].apply(get_fy_label)
     else:
-        # Initialize empty schema if no data exists
         df = pd.DataFrame(columns=[
             "id", "category", "amount", "date",
-            "description", "payment_date", "receipt_no", "tenant_id"
+            "description", "payment_date", "receipt_no", "tenant_id", "financial_year"
         ])
 
     EXPENSE_CATS = ["Rent", "Insurance", "Utilities", "Salaries", "Marketing", "Office Expenses", "Taxes", "Other"]
 
     # ==============================
-    # 📑 TABS
+    # 📑 UI TABS
     # ==============================
     tab_add, tab_view, tab_manage = st.tabs([
         "➕ Record Expense", "📊 Spending Analysis", "⚙️ Manage Records"
     ])
 
-    # --- TAB 1: RECORD EXPENSE ---
+    # --- TAB 1: RECORD EXPENSE (FIXED FOR HISTORICAL DATES) ---
     with tab_add:
         with st.form("add_expense_form", clear_on_submit=True):
             st.write("### Log Operational Cost")
@@ -4179,30 +4198,32 @@ def show_expenses():
             desc = st.text_input("Description / Particulars")
 
             c_date, c_receipt = st.columns(2)
-            # This is the date the user selects in the UI
+            # User picks the date (e.g., in 2025)
             p_date = c_date.date_input("Actual Payment Date", value=datetime.now())
             receipt_no = c_receipt.text_input("Receipt / Invoice Reference #")
 
             if st.form_submit_button("🚀 Save Expense Record", use_container_width=True):
                 if amount > 0 and desc:
                     try:
-                        # Format the user's selected date
                         formatted_date = p_date.strftime("%Y-%m-%d")
-
+                        
                         new_entry = pd.DataFrame([{
                             "id": str(uuid.uuid4()),
                             "category": category,
                             "amount": float(amount),
-                            # FIX: Use formatted_date instead of datetime.now()
-                            "date": formatted_date, 
+                            "date": formatted_date, # Use selected date, not datetime.now()
                             "description": desc,
                             "payment_date": formatted_date,
                             "receipt_no": receipt_no,
                             "tenant_id": str(current_tenant)
                         }])
 
-                        # Utilize your global save_data adapter
-                        if save_data("expenses", pd.concat([df, new_entry], ignore_index=True)):
+                        # Append to existing data and save
+                        updated_df = pd.concat([df, new_entry], ignore_index=True)
+                        # Remove helper columns before saving to DB
+                        save_df = updated_df.drop(columns=['financial_year'], errors='ignore')
+                        
+                        if save_data("expenses", save_df):
                             st.success(f"✅ Expense for {formatted_date} successfully recorded!")
                             st.cache_data.clear() 
                             st.rerun()
@@ -4211,41 +4232,52 @@ def show_expenses():
                 else:
                     st.warning("⚠️ Please provide a valid amount and description.")
 
-    # --- TAB 2: SPENDING ANALYSIS ---
+    # --- TAB 2: SPENDING ANALYSIS (WITH FINANCIAL YEAR GROUPING) ---
     with tab_view:
         if df.empty:
-            st.info("💡 No expenses recorded yet for this period.")
+            st.info("💡 No expenses recorded yet.")
         else:
-            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
-            total_spent = df["amount"].sum()
+            # 1. Period Filter
+            all_fys = sorted(df["financial_year"].unique(), reverse=True)
+            sel_fy = st.selectbox("📅 Filter by Financial Year", ["All Time"] + all_fys)
             
-            # Metric Card
+            view_df = df.copy() if sel_fy == "All Time" else df[df["financial_year"] == sel_fy]
+            
+            # 2. Key Metrics
+            total_spent = view_df["amount"].sum()
             st.markdown(f"""
                 <div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);">
-                    <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">TOTAL CUMULATIVE OUTFLOW</p>
+                    <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">OUTFLOW FOR {sel_fy.upper()}</p>
                     <h2 style="margin:0;color:#FF4B4B;">UGX {total_spent:,.0f}</h2>
                 </div><br>""", unsafe_allow_html=True)
             
-            # 📊 PIE CHART ANALYSIS
-            cat_summary = df.groupby("category")["amount"].sum().reset_index()
-            fig_exp = px.pie(
-                cat_summary, 
-                names="category", 
-                values="amount", 
-                title="Spending Distribution by Category",
-                hole=0.4, 
-                color_discrete_sequence=px.colors.qualitative.Pastel
-            )
-            fig_exp.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
-            st.plotly_chart(fig_exp, use_container_width=True)
+            # 3. Charting
+            col_chart, col_table = st.columns([2, 1])
             
-            # 📋 DETAILED LEDGER
-            st.markdown("### Expense Ledger")
+            with col_chart:
+                cat_summary = view_df.groupby("category")["amount"].sum().reset_index()
+                fig_exp = px.pie(
+                    cat_summary, 
+                    names="category", 
+                    values="amount", 
+                    title=f"Category Breakdown ({sel_fy})",
+                    hole=0.4, 
+                    color_discrete_sequence=px.colors.qualitative.Pastel
+                )
+                st.plotly_chart(fig_exp, use_container_width=True)
+            
+            with col_table:
+                st.write("#### FY Summary")
+                fy_table = df.groupby("financial_year")["amount"].sum().reset_index()
+                st.dataframe(fy_table, hide_index=True)
+
+            # 4. Detailed Ledger
+            st.markdown("### 📋 Expense Ledger")
+            ledger_df = view_df.sort_values("payment_date", ascending=False)
+            
+            # Use a styled HTML table for the professional look
             rows_html = ""
-            # Sort by date descending
-            sorted_df = df.sort_values("payment_date", ascending=False).reset_index()
-            
-            for i, r in sorted_df.iterrows():
+            for i, r in ledger_df.reset_index().iterrows():
                 bg = "#F9FBFF" if i % 2 == 0 else "#FFFFFF"
                 rows_html += f"""
                     <tr style="background-color:{bg}; border-bottom: 1px solid #eee;">
@@ -4275,43 +4307,39 @@ def show_expenses():
     # --- TAB 3: MANAGE (CRUD) ---
     with tab_manage:
         st.markdown("### 🛠️ Record Maintenance")
-
         if df.empty:
-            st.info("No expense records available to modify.")
+            st.info("No expense records available.")
         else:
-            df["id"] = df["id"].astype(str)
-            # Create identifiable label for selection
-            df["selector_label"] = df.apply(
-                lambda r: f"{r['payment_date']} | {r['category']} | UGX {r['amount']:,.0f}", axis=1
-            )
+            # Identifier for selection
+            df["selector"] = df.apply(lambda r: f"{r['payment_date']} | {r['category']} | {r['amount']:,.0f}", axis=1)
+            records = df["selector"].tolist()
+            to_edit = st.selectbox("Select record to modify", records)
+            
+            target_id = df[df["selector"] == to_edit]["id"].values[0]
+            row = df[df["id"] == target_id].iloc[0]
 
-            record_map = {row["selector_label"]: row for _, row in df.iterrows()}
-            selected_label = st.selectbox("Select Record to Edit/Delete", list(record_map.keys()))
-
-            if selected_label:
-                target_record = record_map[selected_label]
+            with st.form("edit_expense"):
+                c1, c2 = st.columns(2)
+                upd_amt = c1.number_input("Amount", value=float(row['amount']))
+                upd_cat = c2.selectbox("Category", EXPENSE_CATS, index=EXPENSE_CATS.index(row['category']))
+                upd_desc = st.text_input("Description", value=row['description'])
                 
-                with st.form("edit_expense_form"):
-                    new_amt = st.number_input("Update Amount (UGX)", value=float(target_record['amount']))
-                    new_desc = st.text_input("Update Description", value=target_record['description'])
-                    
-                    c1, c2 = st.columns(2)
-                    save_btn = c1.form_submit_button("💾 Save Changes", use_container_width=True)
-                    delete_btn = c2.form_submit_button("🗑️ Delete Record", use_container_width=True)
-
-                    if save_btn:
-                        df.loc[df["id"] == target_record["id"], ["amount", "description"]] = [new_amt, new_desc]
-                        if save_data("expenses", df.drop(columns=['selector_label'])):
-                            st.success("✅ Record updated!")
-                            st.cache_data.clear()
-                            st.rerun()
-
-                    if delete_btn:
-                        df = df[df["id"] != target_record["id"]]
-                        if save_data("expenses", df.drop(columns=['selector_label'])):
-                            st.warning("🗑️ Record deleted.")
-                            st.cache_data.clear()
-                            st.rerun()
+                btn_save = st.form_submit_button("💾 Update Record")
+                if btn_save:
+                    df.loc[df["id"] == target_id, ["amount", "category", "description"]] = [upd_amt, upd_cat, upd_desc]
+                    # Drop helper columns before saving
+                    final_df = df.drop(columns=['selector', 'financial_year'], errors='ignore')
+                    if save_data("expenses", final_df):
+                        st.success("Record updated!")
+                        st.cache_data.clear()
+                        st.rerun()
+            
+            if st.button("🗑️ Permanently Delete Record"):
+                final_df = df[df["id"] != target_id].drop(columns=['selector', 'financial_year'], errors='ignore')
+                if save_data("expenses", final_df):
+                    st.warning("Record deleted.")
+                    st.cache_data.clear()
+                    st.rerun()
 
 # ==============================
 # 21. MASTER LEDGER 
