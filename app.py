@@ -1205,61 +1205,56 @@ def show_dashboard_view():
                 st.info("Growth chart unavailable.")
 
         with t2:
-            st.markdown("#### 💸 Latest Expenses")
+            st.markdown("### 💸 Latest Expenses")
         
             try:
                 if not expenses_df.empty:
-                    import html
         
-                    display_exp = expenses_df.head(5).copy()
+                    # --- Prepare data ---
+                    df = expenses_df.copy()
         
-                    rows = ""
+                    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+                    df["date"] = pd.to_datetime(df["date"], errors="coerce")
         
-                    for i, (_, r) in enumerate(display_exp.iterrows()):
-                        bg = "#FFFFFF" if i % 2 == 0 else "#F9FAFB"
+                    df = df.sort_values("date", ascending=False)
         
-                        # SAFE values (prevents HTML break)
-                        category = html.escape(str(r.get("category", "General")))
-                        date = html.escape(str(r.get("date", "-")))
+                    latest = df.head(5)
         
-                        try:
-                            amount_val = float(r.get("amount", 0))
-                        except:
-                            amount_val = 0
+                    # --- KPI Row ---
+                    total = latest["amount"].sum()
+                    avg = latest["amount"].mean()
+                    count = len(latest)
         
-                        rows += f"""
-                        <tr style="background:{bg}; border-bottom:1px solid #f0f0f0;">
-                            <td style="padding:12px;">{category}</td>
-                            <td style="padding:12px; text-align:right; color:#EF4444; font-weight:600;">
-                                -{amount_val:,.0f}
-                            </td>
-                            <td style="padding:12px; text-align:right; color:#64748B;">
-                                {date}
-                            </td>
-                        </tr>
-                        """
+                    k1, k2, k3 = st.columns(3)
         
-                    st.markdown(
-                        f"""
-                        <div style="border:1px solid #E5E7EB; border-radius:12px; overflow:hidden;">
-                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                                
-                                <thead>
-                                    <tr style="background:#F3F4F6;">
-                                        <th style="padding:12px; text-align:left;">Category</th>
-                                        <th style="padding:12px; text-align:right;">Amount (UGX)</th>
-                                        <th style="padding:12px; text-align:right;">Date</th>
-                                    </tr>
-                                </thead>
+                    k1.metric("Total (Top 5)", f"UGX {total:,.0f}")
+                    k2.metric("Average", f"UGX {avg:,.0f}")
+                    k3.metric("Entries", count)
         
-                                <tbody>
-                                    {rows}
-                                </tbody>
+                    st.divider()
         
-                            </table>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
+                    # --- Format table ---
+                    display_df = latest.copy()
+                    display_df["Category"] = display_df["category"].fillna("General")
+                    display_df["Date"] = display_df["date"].dt.strftime("%Y-%m-%d")
+        
+                    # Keep numeric for styling
+                    display_df["Amount"] = display_df["amount"]
+        
+                    final_df = display_df[["Category", "Amount", "Date"]]
+        
+                    # --- Styling (no HTML) ---
+                    def style_amount(val):
+                        return "color: #EF4444; font-weight: 600;"
+        
+                    styled_df = final_df.style\
+                        .format({"Amount": "UGX {:,.0f}"})\
+                        .map(style_amount, subset=["Amount"])
+        
+                    st.dataframe(
+                        styled_df,
+                        use_container_width=True,
+                        hide_index=True
                     )
         
                 else:
