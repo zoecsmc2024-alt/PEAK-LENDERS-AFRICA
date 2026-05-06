@@ -1166,43 +1166,43 @@ def show_dashboard_view():
         t1, t2 = st.columns(2)
 
         with t1:
-    st.markdown("#### 📊 Portfolio Growth vs. interest")
-    try:
-        graph_df = loans_df.copy()
-        graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
-        graph_df = graph_df.dropna(subset=["date_dt"])
-
-        if not graph_df.empty:
-            timeline_df = (
-                graph_df
-                .groupby("date_dt")[["principal_n", "interest_n"]]
-                .sum()
-                .sort_index()
-                .cumsum()
-                .reset_index()
-            )
-
-            fig_portfolio = px.line(
-                timeline_df,
-                x="date_dt",
-                y=["principal_n", "interest_n"],
-                template="plotly_white",
-                color_discrete_map={
-                    "principal_n": brand_color,
-                    "interest_n": "#10B981"
-                }
-            )
-
-            fig_portfolio.update_layout(
-                height=350,
-                hovermode="x unified"
-            )
-
-            st.plotly_chart(fig_portfolio, use_container_width=True)
-        else:
-            st.info("Not enough dated records to generate a trend.")
-    except:
-        st.info("Growth chart unavailable.")
+            st.markdown("#### 📊 Portfolio Growth vs. interest")
+            try:
+                graph_df = loans_df.copy()
+                graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
+                graph_df = graph_df.dropna(subset=["date_dt"])
+        
+                if not graph_df.empty:
+                    timeline_df = (
+                        graph_df
+                        .groupby("date_dt")[["principal_n", "interest_n"]]
+                        .sum()
+                        .sort_index()
+                        .cumsum()
+                        .reset_index()
+                    )
+        
+                    fig_portfolio = px.line(
+                        timeline_df,
+                        x="date_dt",
+                        y=["principal_n", "interest_n"],
+                        template="plotly_white",
+                        color_discrete_map={
+                            "principal_n": brand_color,
+                            "interest_n": "#10B981"
+                        }
+                    )
+        
+                    fig_portfolio.update_layout(
+                        height=350,
+                        hovermode="x unified"
+                    )
+        
+                    st.plotly_chart(fig_portfolio, use_container_width=True)
+                else:
+                    st.info("Not enough dated records to generate a trend.")
+            except:
+                st.info("Growth chart unavailable.")
 
         with t2:
             st.markdown("#### 💸 Latest Expenses")
