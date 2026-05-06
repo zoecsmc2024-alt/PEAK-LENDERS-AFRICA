@@ -3479,7 +3479,10 @@ def show_petty_cash():
 
                         if st.button("💾 Save Changes"):
                             df.loc[df["id"].astype(str) == rid, ["description","amount"]] = [new_desc, new_amt]
-                            if save_data("petty_cash", df[DB_COLUMNS]):
+                            clean_df = df[DB_COLUMNS].copy()  
+                            clean_df["date"] = pd.to_datetime(clean_df["date"], errors="coerce")\     
+                                .dt.strftime("%Y-%m-%d")  
+                                if save_data("petty_cash", clean_df):
                                 st.success("Updated")
                                 st.cache_data.clear()
                                 st.rerun()
