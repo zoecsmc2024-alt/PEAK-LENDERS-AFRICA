@@ -4308,37 +4308,55 @@ def show_expenses():
         if df.empty:
             st.info("No expense records available.")
         else:
-            # Identifier for selection
-            df["selector"] = df.apply(lambda r: f"{r['payment_date']} | {r['category']} | {r['amount']:,.0f}", axis=1)
-            records = df["selector"].tolist()
+            # 1. Create a clean copy for the selector
+            df_manage = df.copy()
+            df_manage["selector"] = df_manage.apply(
+                lambda r: f"{r['payment_date']} | {r['category']} | {r['amount']:,.0f}", axis=1
+            )
+            
+            records = df_manage["selector"].tolist()
             to_edit = st.selectbox("Select record to modify", records)
             
-            target_id = df[df["selector"] == to_edit]["id"].values[0]
+            # 2. Identify the target ID
+            target_id = df_manage[df_manage["selector"] == to_edit]["id"].values[0]
             row = df[df["id"] == target_id].iloc[0]
-
-            with st.form("edit_expense"):
-                c1, c2 = st.columns(2)
-                upd_amt = c1.number_input("Amount", value=float(row['amount']))
-                upd_cat = c2.selectbox("Category", EXPENSE_CATS, index=EXPENSE_CATS.index(row['category']))
-                upd_desc = st.text_input("Description", value=row['description'])
+    
+            # 3. Use a standard container for deletion to avoid Form issues
+            with st.container(border=True):
+                st.write(f"**Modifying Record:** {to_edit}")
                 
-                btn_save = st.form_submit_button("💾 Update Record")
-                if btn_save:
-                    df.loc[df["id"] == target_id, ["amount", "category", "description"]] = [upd_amt, upd_cat, upd_desc]
-                    # Drop helper columns before saving
-                    final_df = df.drop(columns=['selector', 'financial_year'], errors='ignore')
+                # Delete is OUTSIDE the Edit form for better reliability
+                if st.button("🗑️ Permanently Delete This Record", use_container_width=True):
+                    # Filter out the record
+                    final_df = df[df["id"] != target_id].copy()
+                    
+                    # CRITICAL: Drop helper columns before saving to database
+                    cols_to_drop = ['selector', 'financial_year', 'selector_label']
+                    final_df = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
+                    
                     if save_data("expenses", final_df):
-                        st.success("Record updated!")
-                        st.cache_data.clear()
-                        st.rerun()
-            
-            if st.button("🗑️ Permanently Delete Record"):
-                final_df = df[df["id"] != target_id].drop(columns=['selector', 'financial_year'], errors='ignore')
-                if save_data("expenses", final_df):
-                    st.warning("Record deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
-
+                        st.toast("Record deleted successfully!")
+                        st.cache_data.clear()  # This forces the app to fetch fresh data
+                        st.rerun()             # This refreshes the UI immediately
+                
+                st.write("---")
+                st.write("Edit Details:")
+                with st.form("edit_expense_inner"):
+                    c1, c2 = st.columns(2)
+                    upd_amt = c1.number_input("Amount", value=float(row['amount']))
+                    upd_cat = c2.selectbox("Category", EXPENSE_CATS, index=EXPENSE_CATS.index(row['category']))
+                    upd_desc = st.text_input("Description", value=row['description'])
+                    
+                    if st.form_submit_button("💾 Save Changes"):
+                        df.loc[df["id"] == target_id, ["amount", "category", "description"]] = [upd_amt, upd_cat, upd_desc]
+                        
+                        # Clean up before saving
+                        final_save = df.drop(columns=[c for c in cols_to_drop if c in df.columns])
+                        
+                        if save_data("expenses", final_save):
+                            st.success("Record updated!")
+                            st.cache_data.clear()
+                            st.rerun()
 # ==============================
 # 21. MASTER LEDGER 
 # ==============================
