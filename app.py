@@ -1470,81 +1470,98 @@ def show_borrowers():
                     st.error("⚠️ Full name and Phone Number are required.")
 
     with tab_view:
-        search = st.text_input("🔍 Search by name or phone...").lower()
 
-        if not borrowers_df.empty:
-            df_to_show = borrowers_df.copy()
-            for col in ["name", "phone", "national_id", "next_of_kin"]:
-                df_to_show[col] = df_to_show[col].astype(str)
+    st.markdown("### 👥 Borrowers Registry")
 
-            mask = (
-                df_to_show["name"].str.lower().str.contains(search, na=False) |
-                df_to_show["phone"].str.contains(search, na=False)
+    search = st.text_input("🔍 Search by name or phone...").lower()
+
+    if not borrowers_df.empty:
+
+        df = borrowers_df.copy()
+
+        # --- Clean types ---
+        for col in ["name", "phone", "national_id", "next_of_kin", "status"]:
+            df[col] = df[col].astype(str)
+
+        # --- Attach risk info safely ---
+        def get_risk_label(b_id):
+            r = risk_map.get(str(b_id), {})
+            return r.get("risk_label", "🟢 Healthy")
+
+        df["Risk Status"] = df["id"].apply(get_risk_label)
+
+        # --- Search filter ---
+        df_filtered = df[
+            df["name"].str.lower().str.contains(search, na=False) |
+            df["phone"].str.contains(search, na=False)
+        ]
+
+        if not df_filtered.empty:
+
+            # --- Color mapping (no HTML needed) ---
+            def style_risk(val):
+                if "🔴" in val:
+                    return "color: #EF4444; font-weight:700;"
+                elif "🟠" in val:
+                    return "color: #F97316; font-weight:700;"
+                elif "🟡" in val:
+                    return "color: #F59E0B; font-weight:700;"
+                else:
+                    return "color: #10B981; font-weight:700;"
+
+            # --- Display table ---
+            display_df = df_filtered[[
+                "name",
+                "phone",
+                "national_id",
+                "next_of_kin",
+                "Risk Status",
+                "status"
+            ]].copy()
+
+            display_df.columns = [
+                "Borrower Name",
+                "Phone",
+                "National ID",
+                "Next of Kin",
+                "Risk Status",
+                "Status"
+            ]
+
+            # --- Make status uppercase ---
+            display_df["Status"] = display_df["Status"].str.upper()
+
+            # --- Interactive table ---
+            styled_df = display_df.style.map(
+                style_risk,
+                subset=["Risk Status"]
             )
-            filtered_df = df_to_show[mask]
 
-            if not filtered_df.empty:
-                rows_html = ""
-                for i, r in filtered_df.reset_index().iterrows():
-                    zebra_striping = "#F8FAFC" if i % 2 == 0 else "#FFFFFF"
-                    b_id = str(r.get("id", ""))
-                    
-                    risk_data = risk_map.get(b_id, {})
-                    label = risk_data.get("risk_label", "🟢 Healthy")
-                    
-                    if "🔴" in label: badge_color = "#EF4444"
-                    elif "🟠" in label: badge_color = "#F97316"
-                    elif "🟡" in label: badge_color = "#F59E0B"
-                    else: badge_color = "#10B981"
+            st.dataframe(
+                styled_df,
+                use_container_width=True,
+                hide_index=True
+            )
 
-                    rows_html += f"""
-                    <tr style="background-color: {zebra_striping}; border-bottom: 1px solid #E2E8F0;">
-                        <td style="padding:12px; font-weight:600; color:#1E293B;">{r['name']}</td>
-                        <td style="padding:12px;">{r['phone']}</td>
-                        <td style="padding:12px; font-family:monospace; color:#64748B;">{r['national_id']}</td>
-                        <td style="padding:12px; font-size:11px;">{r['next_of_kin']}</td>
-                        <td style="padding:12px;">
-                            <span style="background:{badge_color}; color:white; padding:4px 10px; border-radius:20px; font-size:11px; font-weight:600;">
-                                {label}
-                            </span>
-                        </td>
-                        <td style="padding:12px; text-align:center;">
-                            <span style="background:{brand_color}22; color:{brand_color}; padding:4px 10px; border-radius:6px; font-size:10px; font-weight:700; border:1px solid {brand_color}44;">
-                                {str(r['status']).upper()}
-                            </span>
-                        </td>
-                    </tr>"""
+            # --- Select borrower (kept your logic) ---
+            st.markdown("### 🎯 Management Actions")
 
-                st.markdown(f"""
-                <div style='border:1px solid #E2E8F0; border-radius:12px; overflow:hidden; margin-top:10px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);'>
-                    <table style='width:100%; border-collapse:collapse; font-family:Inter, sans-serif; font-size:13px;'>
-                        <thead>
-                            <tr style='background:{brand_color}; color:white; text-align:left;'>
-                                <th style='padding:14px;'>borrower name</th>
-                                <th style='padding:14px;'>Phone</th>
-                                <th style='padding:14px;'>National ID</th>
-                                <th style='padding:14px;'>Next of Kin</th>
-                                <th style='padding:14px;'>Risk status</th>
-                                <th style='padding:14px; text-align:center;'>status</th>
-                            </tr>
-                        </thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                </div>""", unsafe_allow_html=True)
+            selected_name = st.selectbox(
+                "Select borrower:",
+                ["-- Choose borrower --"] + df_filtered["name"].tolist()
+            )
 
-                st.write("")
-                selected_name = st.selectbox(
-                    "🎯 Management Actions:", 
-                    options=["-- Select a borrower to edit/view profile --"] + filtered_df["name"].tolist()
-                )
-                if selected_name != "-- Select a borrower to edit/view profile --":
-                    sel_id = filtered_df[filtered_df["name"] == selected_name]["id"].values[0]
-                    st.session_state["selected_borrower"] = sel_id
-                
-            else:
-                st.info("No records match your search criteria.")
+            if selected_name != "-- Choose borrower --":
+                sel_id = df_filtered[df_filtered["name"] == selected_name]["id"].values[0]
+                st.session_state["selected_borrower"] = sel_id
+
+                st.success(f"Selected: {selected_name}")
+
         else:
-            st.info("The registry is currently empty.")
+            st.info("No records match your search criteria.")
+
+    else:
+        st.info("The registry is currently empty.")
 
     # ==============================
     # 👤 borrower PROFILE PANEL (EXPANDED)
