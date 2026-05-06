@@ -4670,12 +4670,40 @@ def show_ledger():
     total_due = p + i
     paid = float(loan_info.get("amount_paid", 0))
     bal = float(loan_info.get("balance", 0))
+    
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("principal", f"UGX {p:,.0f}")
-    m2.metric("Total interest", f"UGX {i:,.0f}")
-    m3.metric("Total Paid", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%}" if total_due > 0 else None)
-    m4.metric("Current balance", f"UGX {bal:,.0f}", delta_color="inverse", delta=f"-{paid:,.0f}")
-
+    
+    # 🟦 Principal (neutral blue feel via delta)
+    m1.metric(
+        "Principal",
+        f"UGX {p:,.0f}",
+        delta="Base loan",
+        delta_color="off"
+    )
+    
+    # 🟨 Interest (warning style via delta)
+    m2.metric(
+        "Total Interest",
+        f"UGX {i:,.0f}",
+        delta=f"{(i/total_due*100):.1f}% of total" if total_due > 0 else None,
+        delta_color="normal"
+    )
+    
+    # 🟢 Paid (good = positive green)
+    m3.metric(
+        "Total Paid",
+        f"UGX {paid:,.0f}",
+        delta=f"{paid/total_due:.1%}" if total_due > 0 else None,
+        delta_color="normal"
+    )
+    
+    # 🔴 Balance (inverse makes it red when high)
+    m4.metric(
+        "Current Balance",
+        f"UGX {bal:,.0f}",
+        delta=f"-{bal:,.0f}",
+        delta_color="inverse"
+    )
     # ==============================
     # 📜 TRANSACTION HISTORY (LEDGER)
     # ==============================
