@@ -3486,7 +3486,10 @@ def show_petty_cash():
 
                     with col_del:
                         if st.button("🗑️ Delete Record"):
-                            final_df = df[df["id"].astype(str) != rid][DB_COLUMNS]
+                            final_df = df[df["id"].astype(str) != rid][DB_COLUMNS].copy()  
+                            # 🔥 CRITICAL FIX 
+                            final_df["date"] = pd.to_datetime(final_df["date"], errors="coerce")\     
+                                .dt.strftime("%Y-%m-%d")
                             if save_data("petty_cash", final_df):
                                 st.warning("Deleted")
                                 st.cache_data.clear()
