@@ -1227,19 +1227,33 @@ def show_dashboard_view():
                     rows = ""
 
                     for i, (_, r) in enumerate(display_exp.iterrows()):
-
-                        amount_val = vals[i] if i < len(vals) else 0
-
+                        bg = "#FFFFFF" if i % 2 == 0 else "#F9FAFB"
+                    
                         rows += f"""
-                        <tr style='border-bottom:1px solid #f0f0f0;'>
+                        <tr style='background:{bg}; border-bottom:1px solid #f0f0f0;'>
                             <td style='padding:12px 5px;'>{r.get('category','General')}</td>
                             <td style='padding:12px 5px; text-align:right; color:#EF4444;'>-{amount_val:,.0f}</td>
                             <td style='padding:12px 5px; text-align:right; color:#64748B;'>{r.get('date','-')}</td>
                         </tr>
                         """
-
-                    st.markdown(
-                        f"<table style='width:100%; font-size:13px;'>{rows}</table>",
+                    
+                                        st.markdown(
+                        f"""
+                        <div style="border:1px solid #E5E7EB; border-radius:10px; overflow:hidden;">
+                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                <thead>
+                                    <tr style="background:#F9FAFB; text-align:left;">
+                                        <th style="padding:12px;">Category</th>
+                                        <th style="padding:12px; text-align:right;">Amount</th>
+                                        <th style="padding:12px; text-align:right;">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows}
+                                </tbody>
+                            </table>
+                        </div>
+                        """,
                         unsafe_allow_html=True
                     )
 
