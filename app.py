@@ -4507,31 +4507,32 @@ def show_expenses():
                     "amount",
                     "receipt_no"
                 ]].copy()
-            
-                final_display.columns = [
+                
+                final_display_df.columns = [
                     "Date",
                     "Category",
                     "Description",
                     "Amount (UGX)",
                     "Ref #"
                 ]
-            
-                final_display["Date"] = pd.to_datetime(final_display["Date"]).dt.strftime("%Y-%m-%d")
-            
-                # commas again after filtering
-                final_display["Amount (UGX)"] = final_display["Amount (UGX)"].apply(
+                
+                final_display_df["Date"] = pd.to_datetime(
+                    final_display_df["Date"],
+                    errors="coerce"
+                ).dt.strftime("%Y-%m-%d")
+                
+                final_display_df["Amount (UGX)"] = final_display_df["Amount (UGX)"].apply(
                     lambda x: f"{float(x):,.0f}"
                 )
-            
-                # --- COLOR styling (red amounts) ---
+                
                 def color_amount(val):
                     return "color: #D32F2F; font-weight: 700;"
-            
-                styled = final_display.style.map(
+                
+                styled = final_display_df.style.map(
                     color_amount,
                     subset=["Amount (UGX)"]
                 )
-            
+                
                 st.dataframe(
                     styled,
                     use_container_width=True,
