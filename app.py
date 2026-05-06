@@ -4326,19 +4326,33 @@ def show_expenses():
                 st.write(f"**Modifying Record:** {to_edit}")
                 
                 # Delete is OUTSIDE the Edit form for better reliability
-                if st.button("🗑️ Permanently Delete This Record", use_container_width=True):
-                    # Filter out the record
-                    final_df = df[df["id"] != target_id].copy()
-                    
-                    # CRITICAL: Drop helper columns before saving to database
-                    cols_to_drop = ['selector', 'financial_year', 'selector_label']
-                    final_df = final_df.drop(columns=[c for c in cols_to_drop if c in final_df.columns])
-                    
-                    if save_data("expenses", final_df):
-                        st.toast("Record deleted successfully!")
-                        st.cache_data.clear()  # This forces the app to fetch fresh data
-                        st.rerun()             # This refreshes the UI immediately
+                if st.button("🗑️ Permanently Delete Record"):
+                    try:
+                        # Ensure consistent types
+                        df["id"] = df["id"].astype(str)
+                        target_id_str = str(target_id)
                 
+                        # Perform delete
+                        updated_df = df[df["id"] != target_id_str].copy()
+                
+                        # Debug check
+                        if len(updated_df) == len(df):
+                            st.error("❌ Delete failed: Record not found.")
+                        else:
+                            final_df = updated_df.drop(columns=['selector', 'financial_year'], errors='ignore')
+                
+                            success = save_data("expenses", final_df)
+                
+                            if success:
+                                st.success("✅ Record permanently deleted.")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("❌ Save failed — data not updated.")
+                
+                    except Exception as e:
+                        st.error(f"🚨 Delete error: {e}")          # This refreshes the UI immediately
+                            
                 st.write("---")
                 st.write("Edit Details:")
                 with st.form("edit_expense_inner"):
