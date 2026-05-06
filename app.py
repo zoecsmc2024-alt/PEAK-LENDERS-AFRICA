@@ -4343,11 +4343,11 @@ def show_expenses():
             
                 # --- Apply filters ---
                 if selected_cat != "All":
-                    mask = ledger_df["category"] == selected_cat
+                    filtered = ledger_df[ledger_df["category"].fillna("General") == selected_cat]
                 else:
-                    mask = True
-            
-                filtered = ledger_df[mask]
+                    filtered = ledger_df.copy()
+                
+                # --- Amount filter ---
                 filtered = filtered[
                     (filtered["amount_num"] >= min_amt) &
                     (filtered["amount_num"] <= max_amt)
