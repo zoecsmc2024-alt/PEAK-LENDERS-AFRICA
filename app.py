@@ -1166,69 +1166,58 @@ def show_dashboard_view():
         t1, t2 = st.columns(2)
 
         with t1:
+    st.markdown("#### 📊 Portfolio Growth vs. interest")
+    try:
+        graph_df = loans_df.copy()
+        graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
+        graph_df = graph_df.dropna(subset=["date_dt"])
 
-            st.markdown("#### 📊 Portfolio Growth vs. interest")
+        if not graph_df.empty:
+            timeline_df = (
+                graph_df
+                .groupby("date_dt")[["principal_n", "interest_n"]]
+                .sum()
+                .sort_index()
+                .cumsum()
+                .reset_index()
+            )
 
-            try:
+            fig_portfolio = px.line(
+                timeline_df,
+                x="date_dt",
+                y=["principal_n", "interest_n"],
+                template="plotly_white",
+                color_discrete_map={
+                    "principal_n": brand_color,
+                    "interest_n": "#10B981"
+                }
+            )
 
-                graph_df = loans_df.copy()
+            fig_portfolio.update_layout(
+                height=350,
+                hovermode="x unified"
+            )
 
-                graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
-
-                graph_df = graph_df.dropna(subset=["date_dt"])
-
-                if not graph_df.empty:
-
-                    timeline_df = (
-                        graph_df
-                        .groupby("date_dt")[["principal_n", "interest_n"]]
-                        .sum()
-                        .sort_index()
-                        .cumsum()
-                        .reset_index()
-                    )
-
-                    fig_portfolio = px.line(
-                        timeline_df,
-                        x="date_dt",
-                        y=["principal_n", "interest_n"],
-                        template="plotly_white",
-                        color_discrete_map={
-                            "principal_n": brand_color,
-                            "interest_n": "#10B981"
-                        }
-                    )
-
-                    fig_portfolio.update_layout(
-                        height=350,
-                        hovermode="x unified"
-                    )
-
-                    st.plotly_chart(fig_portfolio, use_container_width=True)
-
-                else:
-                    st.info("Not enough dated records to generate a trend.")
-
-            except:
-                st.info("Growth chart unavailable.")
+            st.plotly_chart(fig_portfolio, use_container_width=True)
+        else:
+            st.info("Not enough dated records to generate a trend.")
+    except:
+        st.info("Growth chart unavailable.")
 
         with t2:
-
             st.markdown("#### 💸 Latest Expenses")
-
             try:
-
                 if not expenses_df.empty:
-
                     display_exp = expenses_df.head(5)
-
+                    # Ensure safe_numeric is used to prevent errors in formatting
                     vals = safe_numeric(display_exp, ["amount"]).tolist()
-
                     rows = ""
-
+        
                     for i, (_, r) in enumerate(display_exp.iterrows()):
                         bg = "#FFFFFF" if i % 2 == 0 else "#F9FAFB"
-                    
+                        # Using the value from the row directly for clarity
+                        amount_val = float(r.get('amount', 0))
+                        
                         rows += f"""
                         <tr style='background:{bg}; border-bottom:1px solid #f0f0f0;'>
                             <td style='padding:12px 5px;'>{r.get('category','General')}</td>
@@ -1237,29 +1226,27 @@ def show_dashboard_view():
                         </tr>
                         """
                     
-                                        st.markdown(
-                                            f"""
-                                            <div style="border:1px solid #E5E7EB; border-radius:10px; overflow:hidden;">
-                                                <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                                                    <thead>
-                                                        <tr style="background:#F9FAFB; text-align:left;">
-                                                            <th style="padding:12px;">Category</th>
-                                                            <th style="padding:12px; text-align:right;">Amount</th>
-                                                            <th style="padding:12px; text-align:right;">Date</th>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        {rows}
-                                                    </tbody>
-                                                </table>
-                                            </div>
-                                            """,
-                                            unsafe_allow_html=True
-                                        )
-
+                    st.markdown(
+                        f"""
+                        <div style="border:1px solid #E5E7EB; border-radius:10px; overflow:hidden;">
+                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                <thead>
+                                    <tr style="background:#F9FAFB; text-align:left;">
+                                        <th style="padding:12px;">Category</th>
+                                        <th style="padding:12px; text-align:right;">Amount</th>
+                                        <th style="padding:12px; text-align:right;">Date</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {rows}
+                                </tbody>
+                            </table>
+                        </div>
+                        """,
+                        unsafe_allow_html=True
+                    )
                 else:
                     st.info("No recorded expenses.")
-
             except:
                 st.info("Expenses feed unavailable.")
 
