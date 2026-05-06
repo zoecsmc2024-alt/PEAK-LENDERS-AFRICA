@@ -4118,8 +4118,6 @@ import pandas as pd
 import uuid
 import plotly.express as px
 from datetime import datetime
-# Import your established database adapters
-from database import get_cached_data, save_data
 
 # ==============================
 # 📁 18. EXPENSE MANAGEMENT 
