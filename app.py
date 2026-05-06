@@ -4084,88 +4084,152 @@ def show_collateral():
                         st.error(f"❌ Save failed: {e}")
 
     # ==============================
-    # 📋 TAB 2: INVENTORY & STATUS
+    # 📋 TAB 2: INVENTORY & STATUS (INTERACTIVE)
     # ==============================
     with tab_view:
+    
         if collateral_df is None or collateral_df.empty:
             st.info("💡 No assets currently in the registry.")
+    
         else:
+    
+            # ==============================
             # 📊 METRIC DASHBOARD
+            # ==============================
             collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors="coerce").fillna(0)
+    
             total_value = collateral_df["value"].sum()
             held_count = len(collateral_df[collateral_df["status"] == "In Custody"])
-            
+    
             m1, m2 = st.columns(2)
             m1.metric("Total Asset Value (Security)", f"UGX {total_value:,.0f}")
             m2.metric("Items in Custody", held_count)
-
+    
+            st.divider()
+    
+            # ==============================
+            # 🔍 FILTERS (NEW INTERACTIVE LAYER)
+            # ==============================
+            col1, col2 = st.columns(2)
+    
+            status_filter = col1.selectbox(
+                "Filter by Status",
+                ["All"] + sorted(collateral_df["status"].dropna().unique().tolist())
+            )
+    
+            borrower_filter = col2.text_input("Search borrower / description").lower()
+    
+            df = collateral_df.copy()
+    
+            # Apply filters
+            if status_filter != "All":
+                df = df[df["status"] == status_filter]
+    
+            if borrower_filter:
+                df = df[
+                    df["borrower"].str.lower().str.contains(borrower_filter, na=False) |
+                    df["description"].str.lower().str.contains(borrower_filter, na=False)
+                ]
+    
+            # ==============================
+            # 📊 INTERACTIVE TABLE (NO HTML)
+            # ==============================
             st.markdown("### Asset Ledger")
-            
-            display_df = collateral_df.copy()
-            display_df["value_fmt"] = display_df["value"].apply(lambda x: f"{x:,.0f}")
-            
+    
+            display_df = df.copy()
+    
+            display_df["Value (UGX)"] = display_df["value"].apply(lambda x: f"{x:,.0f}")
+            display_df = display_df.rename(columns={
+                "date_added": "Date Registered",
+                "borrower": "Borrower",
+                "type": "Type",
+                "description": "Description",
+                "status": "Status"
+            })
+    
+            table_df = display_df[[
+                "Date Registered",
+                "Borrower",
+                "Type",
+                "Description",
+                "Value (UGX)",
+                "Status"
+            ]]
+    
             st.dataframe(
-                display_df[["date_added", "borrower", "type", "description", "value_fmt", "status"]].rename(
-                    columns={"value_fmt": "Value (UGX)", "date_added": "Date Registered"}
-                ),
+                table_df,
                 use_container_width=True,
                 hide_index=True
             )
-
+    
+            st.divider()
+    
             # ==============================
             # ⚙️ ASSET MANAGEMENT & PHOTO VIEW
             # ==============================
-            st.markdown("---")
-            with st.expander("🛠️ View Details & Manage Lifecycle", expanded=True):
-                # Filter out released assets for the selection list
-                manageable = collateral_df.copy()
-                
-                if manageable.empty:
-                    st.write("No assets found.")
+            st.markdown("### 🛠️ View Details & Manage Lifecycle")
+    
+            manageable = df.copy()
+    
+            if manageable.empty:
+                st.warning("No assets match your filters.")
+            else:
+    
+                # Better labels (keeps your logic but cleaner UX)
+                manageable["label"] = manageable.apply(
+                    lambda x: f"{x['borrower']} — {x['description']}", axis=1
+                )
+    
+                selected_label = st.selectbox(
+                    "Select Asset",
+                    manageable["label"].tolist()
+                )
+    
+                selected_row = manageable[manageable["label"] == selected_label].iloc[0]
+                asset_id = selected_row["id"]
+    
+                # ==============================
+                # 📸 PHOTO EVIDENCE
+                # ==============================
+                st.markdown("#### 📸 Photo Evidence")
+    
+                asset_photo = selected_row.get("photo", selected_row.get("image_url", None))
+    
+                if asset_photo:
+                    st.image(asset_photo, caption=selected_row["description"], use_container_width=True)
                 else:
-                    # 1. Select the Asset
-                    asset_labels = manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1).tolist()
-                    asset_to_manage = st.selectbox("Select Asset to View/Update", options=asset_labels)
-                    
-                    # 2. Get the specific row for that asset
-                    selected_row = manageable[manageable.apply(lambda x: f"{x['borrower']} - {x['description']}", axis=1) == asset_to_manage].iloc[0]
-                    asset_id = selected_row["id"]
-
-                    # --- PHOTO EVIDENCE SECTION ---
-                    st.markdown("#### 📸 Photo Evidence")
-                    
-                    # Check if 'photo' or 'image' column exists in your DB
-                    # If you saved the photo in the previous step, it's likely stored as a URL or Base64
-                    asset_photo = selected_row.get('photo', selected_row.get('image_url', None))
-
-                    if asset_photo:
-                        st.image(asset_photo, caption=f"Current Photo of {selected_row['description']}", use_column_width=True)
-                    else:
-                        st.warning("⚠️ No photo was uploaded for this asset.")
-                    
-                    st.markdown("---")
-
-                    # 3. Update Status Section
-                    st.markdown("#### 🔄 Update Status")
-                    col_stat, col_btn = st.columns([2,1])
-                    new_stat = col_stat.selectbox(
-                        "Set New Status", 
-                        ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"],
-                        index=["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"].index(selected_row['status']) if selected_row['status'] in ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"] else 0
-                    )
-                    
-                    if col_btn.button("Update Status", use_container_width=True):
-                        update_row = pd.DataFrame([{
-                            "id": asset_id, 
-                            "status": new_stat,
-                            "tenant_id": str(current_tenant)
-                        }])
-                        
-                        if save_data_saas("collateral", update_row):
-                            st.success("✅ Asset status updated!")
-                            st.cache_data.clear()
-                            st.rerun()
-
+                    st.info("No photo uploaded for this asset.")
+    
+                st.divider()
+    
+                # ==============================
+                # 🔄 STATUS UPDATE (INTERACTIVE IMPROVED)
+                # ==============================
+                st.markdown("#### 🔄 Update Status")
+    
+                status_options = ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"]
+    
+                col_stat, col_btn = st.columns([3, 1])
+    
+                new_status = col_stat.selectbox(
+                    "Change Status",
+                    status_options,
+                    index=status_options.index(selected_row["status"])
+                    if selected_row["status"] in status_options else 0
+                )
+    
+                if col_btn.button("Update Status", use_container_width=True):
+    
+                    update_row = pd.DataFrame([{
+                        "id": asset_id,
+                        "status": new_status,
+                        "tenant_id": str(current_tenant)
+                    }])
+    
+                    if save_data_saas("collateral", update_row):
+                        st.success("✅ Asset status updated successfully!")
+                        st.cache_data.clear()
+                        st.rerun()
 import streamlit as st
 import pandas as pd
 import uuid
