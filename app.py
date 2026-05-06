@@ -4316,7 +4316,7 @@ def show_expenses():
             
             records = df_manage["selector"].tolist()
             to_edit = st.selectbox("Select record to modify", records)
-            
+            st.write("After delete:", len(updated_df))
             # 2. Identify the target ID
             target_id = df_manage[df_manage["selector"] == to_edit]["id"].values[0]
             row = df[df["id"] == target_id].iloc[0]
@@ -4324,7 +4324,8 @@ def show_expenses():
             # 3. Use a standard container for deletion to avoid Form issues
             with st.container(border=True):
                 st.write(f"**Modifying Record:** {to_edit}")
-                
+                st.write("Before delete:", len(df))
+                st.write("Target ID:", target_id)
                 # Delete is OUTSIDE the Edit form for better reliability
                 if st.button("🗑️ Permanently Delete Record"):
                     try:
