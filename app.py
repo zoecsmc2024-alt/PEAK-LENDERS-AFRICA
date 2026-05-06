@@ -4157,7 +4157,7 @@ def show_expenses():
             "payment_date","receipt_no","tenant_id","financial_year"
         ])
 
-    EXPENSE_CATS = ["Rent","Insurance","Utilities","Salaries","Marketing","Office Expenses","Operating Expenses","Taxes","Other"]
+    EXPENSE_CATS = ["Rent","Insurance","Utilities","Salaries","Marketing","Office Expenses","Operating Expenses","Fuel and Motor Vehicle","Taxes","Other"]
 
     tab_add, tab_view, tab_manage = st.tabs([
         "➕ Record Expense","📊 Spending Analysis","⚙️ Manage Records"
