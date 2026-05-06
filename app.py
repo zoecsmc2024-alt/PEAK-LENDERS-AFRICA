@@ -3394,105 +3394,98 @@ def show_petty_cash():
     # HISTORY
     # ------------------------------
     with tab_history:
-
         if df.empty:
             st.info("No transactions yet.")
-
         else:
-
-            cash_df = df.copy()
-
-            cash_df["Date"] = pd.to_datetime(cash_df["date"], errors="coerce")
-            cash_df["amount"] = pd.to_numeric(cash_df["amount"], errors="coerce").fillna(0)
-
+            # Create a localized copy for filtering and display
+            # DO NOT modify the original 'df' here with helper columns
+            view_df = df.copy()
+            view_df["Date"] = pd.to_datetime(view_df["date"], errors="coerce")
+            
             col1, col2 = st.columns(2)
-
             type_filter = col1.selectbox(
                 "Filter Type",
-                ["All"] + sorted(cash_df["type"].dropna().unique().tolist())
+                ["All"] + sorted(view_df["type"].dropna().unique().tolist())
             )
+            search = col2.text_input("Search Description").lower()
 
-            search = col2.text_input("Search").lower()
-
-            filtered = cash_df.copy()
-
+            # Apply Filtering
             if type_filter != "All":
-                filtered = filtered[filtered["type"] == type_filter]
-
+                view_df = view_df[view_df["type"] == type_filter]
             if search:
-                filtered = filtered[
-                    filtered["description"].str.lower().str.contains(search, na=False)
-                ]
+                view_df = view_df[view_df["description"].str.lower().str.contains(search, na=False)]
 
-            filtered = filtered.sort_values("Date", ascending=False)
+            view_df = view_df.sort_values("Date", ascending=False)
 
-            # IMPORTANT: keep ID for CRUD
-            display_df = filtered.copy()
-
-            display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
-
-            display_df["Amount (UGX)"] = display_df["amount"].apply(lambda x: f"{x:,.0f}")
-
-            def color_type(val):
-                return "color:#10B981;font-weight:700;" if val=="In" else "color:#EF4444;font-weight:700;"
-
+            # Display Table
+            display_table = view_df.copy()
+            display_table["Date"] = display_table["Date"].dt.strftime("%Y-%m-%d")
+            display_table["Amount (UGX)"] = display_table["amount"].apply(lambda x: f"{x:,.0f}")
+            
             st.dataframe(
-                display_df[["Date","type","description","Amount (UGX)"]],
-                use_container_width=True
+                display_table[["Date","type","description","Amount (UGX)"]],
+                use_container_width=True,
+                hide_index=True
             )
 
             # ==============================
-            # CRUD FIXED (SAFE ID HANDLING)
+            # CRUD (FIXED)
             # ==============================
-            with st.expander("🛠️ Edit / Delete"):
-
-                # IMPORTANT: keep original filtered dataframe with id intact
-                action_df = filtered.copy()
-            
-                # safe label
-                action_df["label"] = action_df.apply(
-                    lambda r: f"{r['date']} | {r['type']} | {r['description'][:20]}",
+            st.markdown("---")
+            with st.expander("🛠️ Edit / Delete Records"):
+                # Create labels for the selectbox
+                view_df["label"] = view_df.apply(
+                    lambda r: f"{r['date']} | {r['type']} | {r['description'][:20]}... | {r['amount']:,.0f}",
                     axis=1
                 )
-            
-                selected = st.selectbox("Select record", action_df["label"].tolist())
-            
-                selected_row = action_df[action_df["label"] == selected].iloc[0]
-                rid = selected_row["id"]
-            
-                col_a, col_b = st.columns(2)
-            
-                # ==============================
-                # DELETE (FIXED)
-                # ==============================
-                with col_a:
-                    if st.button("🗑️ Delete", use_container_width=True):
-            
-                        df = df[df["id"] != rid]   # 👈 THIS is the real fix
-            
-                        if save_data("petty_cash", df):
-                            st.success("Deleted successfully")
-                            st.cache_data.clear()
-                            st.rerun()
-            
-                # ==============================
-                # EDIT (SAFE)
-                # ==============================
-                with col_b:
-                    new_desc = st.text_input("Edit description", selected_row["description"])
-                    new_amt = st.number_input("Edit amount", float(selected_row["amount"]))
-            
-                    if st.button("💾 Save", use_container_width=True):
-            
-                        df.loc[df["id"] == rid, ["description", "amount"]] = [
-                            new_desc,
-                            new_amt
-                        ]
-            
-                        if save_data("petty_cash", df):
-                            st.success("Updated successfully")
-                            st.cache_data.clear()
-                            st.rerun()
+                
+                selected_label = st.selectbox("Choose a record to modify", view_df["label"].tolist())
+                
+                if selected_label:
+                    # Get the ID of the selected record
+                    selected_row = view_df[view_df["label"] == selected_label].iloc[0]
+                    rid = str(selected_row["id"]) # Ensure ID is string for comparison
+
+                    # Prepare the data to be saved (The original DF minus UI-only columns)
+                    # This is the "Strict Schema" fix
+                    DB_COLUMNS = ["id", "type", "amount", "date", "description", "tenant_id"]
+
+                    col_edit, col_del = st.columns([2, 1])
+
+                    with col_edit:
+                        st.write("**Edit Record**")
+                        new_desc = st.text_input("Update Description", selected_row["description"])
+                        new_amt = st.number_input("Update Amount", value=float(selected_row["amount"]))
+                        
+                        if st.button("💾 Save Changes", use_container_width=True):
+                            # Update the record in the main df
+                            df.loc[df["id"].astype(str) == rid, ["description", "amount"]] = [new_desc, new_amt]
+                            
+                            # Clean the df to only include DB columns
+                            final_df = df[DB_COLUMNS].copy()
+                            
+                            if save_data("petty_cash", final_df):
+                                st.success("Record Updated")
+                                st.cache_data.clear()
+                                st.rerun()
+
+                    with col_del:
+                        st.write("**Danger Zone**")
+                        st.write("Action is permanent.")
+                        if st.button("🗑️ Delete Record", use_container_width=True):
+                            # Filter out the ID from the main df
+                            # Use explicit string casting for UUID safety
+                            final_df = df[df["id"].astype(str) != rid].copy()
+                            
+                            # Clean the df to only include DB columns
+                            final_df = final_df[DB_COLUMNS]
+
+                            if save_data("petty_cash", final_df):
+                                st.warning("Record Deleted")
+                                st.cache_data.clear()
+                                st.rerun()
+                            else:
+                                st.error("Database failed to update.")
                             
 
 
