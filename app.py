@@ -3337,57 +3337,143 @@ def show_petty_cash():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==============================
-    # 📋 TABS: ACTION & LOG
+    # 📋 TABS: ACTION & LOG (INTERACTIVE UPGRADE)
     # ==============================
     tab_record, tab_history = st.tabs(["➕ Record Transaction", "📜 Digital Cashbook"])
-
+    
     # --- TAB 1: RECORD ENTRY ---
     with tab_record:
         with st.form("petty_cash_form", clear_on_submit=True):
-            st.write("### Log Cash Movement")
+    
+            st.markdown("### 💰 Log Cash Movement")
+    
             col_a, col_b = st.columns(2)
-            ttype = col_a.selectbox("Transaction type", ["Out", "In"], help="'In' for top-ups, 'Out' for expenses")
-            t_amount = col_b.number_input("Amount (UGX)", min_value=0, step=500)
-            desc = st.text_input("Purpose / Description", placeholder="e.g., Office Internet bundle, Cleaning supplies")
-
+    
+            ttype = col_a.selectbox(
+                "Transaction type",
+                ["Out", "In"],
+                help="'In' = money received, 'Out' = money spent"
+            )
+    
+            t_amount = col_b.number_input(
+                "Amount (UGX)",
+                min_value=0,
+                step=500
+            )
+    
+            desc = st.text_input(
+                "Purpose / Description",
+                placeholder="e.g., Office Internet bundle"
+            )
+    
             if st.form_submit_button("💾 Commit to Cashbook", use_container_width=True):
+    
                 if t_amount > 0 and desc:
+    
                     new_row = pd.DataFrame([{
-                        "id": str(uuid.uuid4()) if 'uuid' in globals() else datetime.now().strftime("%Y%m%d%H%M%S"),
+                        "id": str(uuid.uuid4()) if 'uuid' in globals()
+                        else datetime.now().strftime("%Y%m%d%H%M%S"),
                         "type": ttype,
                         "amount": float(t_amount),
                         "date": datetime.now().strftime("%Y-%m-%d"),
                         "description": desc,
                         "tenant_id": str(current_tenant)
                     }])
-                    
-                    # Merge with existing for the save_data function
-                    if save_data("petty_cash", pd.concat([df, new_row], ignore_index=True)):
+    
+                    updated_df = pd.concat([df, new_row], ignore_index=True)
+    
+                    if save_data("petty_cash", updated_df):
                         st.success(f"✅ Recorded {t_amount:,.0f} UGX {ttype}flow")
                         st.cache_data.clear()
                         st.rerun()
+    
                 else:
-                    st.error("⚠️ Please provide a valid amount and description.")
-
-    # --- TAB 2: TRANSACTION HISTORY ---
+                    st.error("⚠️ Please provide valid amount and description.")
+    
+    # --- TAB 2: TRANSACTION HISTORY (INTERACTIVE) ---
     with tab_history:
+    
         if df.empty:
             st.info("ℹ️ No cash transactions recorded yet.")
+    
         else:
             st.markdown("### 📜 Transaction Log")
-            
-            # Format the dataframe for professional display
-            display_df = df.sort_values("date", ascending=False).copy()
-            
-            # Stylized display using st.dataframe
+    
+            cash_df = df.copy()
+    
+            # ==============================
+            # CLEAN + FORMAT
+            # ==============================
+            cash_df["amount"] = pd.to_numeric(cash_df["amount"], errors="coerce").fillna(0)
+    
+            cash_df["Date"] = pd.to_datetime(cash_df["date"], errors="coerce")
+            cash_df["Description"] = cash_df["description"]
+    
+            # ==============================
+            # FILTERS (INTERACTIVE)
+            # ==============================
+            col1, col2 = st.columns(2)
+    
+            type_filter = col1.selectbox(
+                "Filter Type",
+                ["All"] + sorted(cash_df["type"].dropna().unique().tolist())
+            )
+    
+            search = col2.text_input("Search description").lower()
+    
+            # apply filters
+            filtered = cash_df.copy()
+    
+            if type_filter != "All":
+                filtered = filtered[filtered["type"] == type_filter]
+    
+            if search:
+                filtered = filtered[
+                    filtered["description"].str.lower().str.contains(search, na=False)
+                ]
+    
+            # sort newest first
+            filtered = filtered.sort_values("Date", ascending=False)
+    
+            # ==============================
+            # DISPLAY TABLE (NO HTML)
+            # ==============================
+            display = filtered[[
+                "Date",
+                "type",
+                "Description",
+                "amount"
+            ]].copy()
+    
+            display.columns = [
+                "Date",
+                "Type",
+                "Details",
+                "Amount (UGX)"
+            ]
+    
+            display["Date"] = display["Date"].dt.strftime("%Y-%m-%d")
+    
+            display["Amount (UGX)"] = display["Amount (UGX)"].apply(
+                lambda x: f"{x:,.0f}"
+            )
+    
+            # ==============================
+            # COLOR STYLING (In = green, Out = red)
+            # ==============================
+            def color_type(val):
+                if val == "In":
+                    return "color: #10B981; font-weight:700;"
+                else:
+                    return "color: #EF4444; font-weight:700;"
+    
+            styled = display.style.map(color_type, subset=["Type"])
+    
             st.dataframe(
-                display_df[["date", "type", "description", "amount"]].rename(
-                    columns={"date": "Date", "type": "type", "description": "Details", "amount": "Amount (UGX)"}
-                ),
+                styled,
                 use_container_width=True,
                 hide_index=True
             )
-
             # ==============================
             # ⚙️ ADVANCED MANAGEMENT (CRUD)
             # ==============================
