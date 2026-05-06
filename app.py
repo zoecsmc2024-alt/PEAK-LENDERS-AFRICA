@@ -4521,7 +4521,7 @@ def show_expenses():
                 ]
             
                 # --- Rebuild display after filtering ---
-                final_display = filtered[[
+                final_display_df = filtered[[
                     "payment_date",
                     "category",
                     "description",
