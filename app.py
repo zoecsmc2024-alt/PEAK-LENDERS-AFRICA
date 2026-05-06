@@ -3402,7 +3402,12 @@ def show_petty_cash():
                         "tenant_id": str(current_tenant)
                     }])
 
-                    updated_df = pd.concat([df.drop(columns=["financial_year"]), new_row], ignore_index=True)
+                    updated_df = pd.concat(     
+                        [df.drop(columns=["financial_year"]), new_row],     
+                        ignore_index=True 
+                    )  
+                    updated_df["date"] = pd.to_datetime(updated_df["date"], errors="coerce")\     
+                        .dt.strftime("%Y-%m-%d")
 
                     if save_data("petty_cash", updated_df):
                         st.success("Saved")
