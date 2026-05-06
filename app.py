@@ -3260,6 +3260,16 @@ def show_petty_cash():
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
 
+    # ==============================
+    # FY FUNCTION
+    # ==============================
+    def get_fy_label(date_val):
+        try:
+            dt = pd.to_datetime(date_val)
+            return f"FY{dt.year}-{dt.year+1}" if dt.month >= 7 else f"FY{dt.year-1}-{dt.year}"
+        except:
+            return "Unknown FY"
+
     st.markdown(f"""
     <style>
     .block-container {{ padding-top: 1.2rem; }}
@@ -3271,11 +3281,6 @@ def show_petty_cash():
         padding: 20px;
         border: 1px solid rgba(43,63,135,0.1);
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        transition: transform 0.2s ease;
-    }}
-
-    .glass-card:hover {{
-        transform: translateY(-3px);
     }}
 
     .metric-title {{
@@ -3314,7 +3319,16 @@ def show_petty_cash():
     else:
         df = df[df["tenant_id"].astype(str) == str(current_tenant)].copy()
 
-    df["amount"] = pd.to_numeric(df.get("amount", 0), errors="coerce").fillna(0)
+    # Ensure required columns exist
+    for col in ["id","type","amount","date","description","tenant_id"]:
+        if col not in df.columns:
+            df[col] = ""
+
+    df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+    df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+    # ADD FY
+    df["financial_year"] = df["date"].apply(get_fy_label)
 
     # ==============================
     # KPIs
@@ -3368,22 +3382,27 @@ def show_petty_cash():
 
             ttype = col_a.selectbox("Transaction type", ["Out", "In"])
             t_amount = col_b.number_input("Amount (UGX)", min_value=0, step=500)
-            desc = st.text_input("Purpose / Description")
+
+            c1, c2 = st.columns(2)
+            entry_date = c1.date_input("Transaction Date", value=datetime.now())
+            desc = c2.text_input("Purpose / Description")
 
             if st.form_submit_button("💾 Commit to Cashbook", use_container_width=True):
 
                 if t_amount > 0 and desc:
 
+                    d = entry_date.strftime("%Y-%m-%d")
+
                     new_row = pd.DataFrame([{
                         "id": str(uuid.uuid4()),
                         "type": ttype,
                         "amount": float(t_amount),
-                        "date": datetime.now().strftime("%Y-%m-%d"),
+                        "date": d,
                         "description": desc,
                         "tenant_id": str(current_tenant)
                     }])
 
-                    updated_df = pd.concat([df, new_row], ignore_index=True)
+                    updated_df = pd.concat([df.drop(columns=["financial_year"]), new_row], ignore_index=True)
 
                     if save_data("petty_cash", updated_df):
                         st.success("Saved")
@@ -3397,95 +3416,81 @@ def show_petty_cash():
         if df.empty:
             st.info("No transactions yet.")
         else:
-            # Create a localized copy for filtering and display
-            # DO NOT modify the original 'df' here with helper columns
             view_df = df.copy()
-            view_df["Date"] = pd.to_datetime(view_df["date"], errors="coerce")
-            
-            col1, col2 = st.columns(2)
+
+            col0, col1, col2 = st.columns(3)
+
+            fy_list = ["All"] + sorted(view_df["financial_year"].dropna().unique(), reverse=True)
+            fy_filter = col0.selectbox("📅 Financial Year", fy_list)
+
             type_filter = col1.selectbox(
                 "Filter Type",
                 ["All"] + sorted(view_df["type"].dropna().unique().tolist())
             )
+
             search = col2.text_input("Search Description").lower()
 
-            # Apply Filtering
+            # APPLY FILTERS
+            if fy_filter != "All":
+                view_df = view_df[view_df["financial_year"] == fy_filter]
+
             if type_filter != "All":
                 view_df = view_df[view_df["type"] == type_filter]
+
             if search:
                 view_df = view_df[view_df["description"].str.lower().str.contains(search, na=False)]
 
-            view_df = view_df.sort_values("Date", ascending=False)
+            view_df = view_df.sort_values("date", ascending=False)
 
-            # Display Table
             display_table = view_df.copy()
-            display_table["Date"] = display_table["Date"].dt.strftime("%Y-%m-%d")
+            display_table["Date"] = pd.to_datetime(display_table["date"], errors="coerce").dt.strftime("%Y-%m-%d")
             display_table["Amount (UGX)"] = display_table["amount"].apply(lambda x: f"{x:,.0f}")
-            
+
             st.dataframe(
-                display_table[["Date","type","description","Amount (UGX)"]],
+                display_table[["Date","type","description","Amount (UGX)","financial_year"]],
                 use_container_width=True,
                 hide_index=True
             )
 
             # ==============================
-            # CRUD (FIXED)
+            # CRUD
             # ==============================
             st.markdown("---")
             with st.expander("🛠️ Edit / Delete Records"):
-                # Create labels for the selectbox
+
                 view_df["label"] = view_df.apply(
                     lambda r: f"{r['date']} | {r['type']} | {r['description'][:20]}... | {r['amount']:,.0f}",
                     axis=1
                 )
-                
+
                 selected_label = st.selectbox("Choose a record to modify", view_df["label"].tolist())
-                
+
                 if selected_label:
-                    # Get the ID of the selected record
                     selected_row = view_df[view_df["label"] == selected_label].iloc[0]
-                    rid = str(selected_row["id"]) # Ensure ID is string for comparison
+                    rid = str(selected_row["id"])
 
-                    # Prepare the data to be saved (The original DF minus UI-only columns)
-                    # This is the "Strict Schema" fix
-                    DB_COLUMNS = ["id", "type", "amount", "date", "description", "tenant_id"]
+                    DB_COLUMNS = ["id","type","amount","date","description","tenant_id"]
 
-                    col_edit, col_del = st.columns([2, 1])
+                    col_edit, col_del = st.columns([2,1])
 
                     with col_edit:
-                        st.write("**Edit Record**")
                         new_desc = st.text_input("Update Description", selected_row["description"])
                         new_amt = st.number_input("Update Amount", value=float(selected_row["amount"]))
-                        
-                        if st.button("💾 Save Changes", use_container_width=True):
-                            # Update the record in the main df
-                            df.loc[df["id"].astype(str) == rid, ["description", "amount"]] = [new_desc, new_amt]
-                            
-                            # Clean the df to only include DB columns
-                            final_df = df[DB_COLUMNS].copy()
-                            
-                            if save_data("petty_cash", final_df):
-                                st.success("Record Updated")
+
+                        if st.button("💾 Save Changes"):
+                            df.loc[df["id"].astype(str) == rid, ["description","amount"]] = [new_desc, new_amt]
+                            if save_data("petty_cash", df[DB_COLUMNS]):
+                                st.success("Updated")
                                 st.cache_data.clear()
                                 st.rerun()
 
                     with col_del:
-                        st.write("**Danger Zone**")
-                        st.write("Action is permanent.")
-                        if st.button("🗑️ Delete Record", use_container_width=True):
-                            # Filter out the ID from the main df
-                            # Use explicit string casting for UUID safety
-                            final_df = df[df["id"].astype(str) != rid].copy()
-                            
-                            # Clean the df to only include DB columns
-                            final_df = final_df[DB_COLUMNS]
-
+                        if st.button("🗑️ Delete Record"):
+                            final_df = df[df["id"].astype(str) != rid][DB_COLUMNS]
                             if save_data("petty_cash", final_df):
-                                st.warning("Record Deleted")
+                                st.warning("Deleted")
                                 st.cache_data.clear()
                                 st.rerun()
-                            else:
-                                st.error("Database failed to update.")
                             
 
 
