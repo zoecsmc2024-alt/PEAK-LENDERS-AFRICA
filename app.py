@@ -4320,31 +4320,74 @@ def show_expenses():
                 # --- Format date ---
                 display_ledger["Date"] = display_ledger["Date"].dt.strftime("%Y-%m-%d")
             
-                # --- Add filters (interactive control) ---
+                # --- FORMAT commas (IMPORTANT) ---
+                display_ledger["Amount (UGX)"] = display_ledger["Amount (UGX)"].apply(
+                    lambda x: f"{x:,.0f}"
+                )
+            
+                # --- Filters ---
                 col1, col2 = st.columns(2)
             
                 categories = ["All"] + sorted(display_ledger["Category"].dropna().unique().tolist())
                 selected_cat = col1.selectbox("Filter Category", categories)
             
+                # convert back to numeric for filtering (because we formatted strings)
+                ledger_df["amount_num"] = pd.to_numeric(ledger_df["amount"], errors="coerce").fillna(0)
+            
                 min_amt, max_amt = col2.slider(
                     "Amount Range",
-                    float(display_ledger["Amount (UGX)"].min()),
-                    float(display_ledger["Amount (UGX)"].max()),
-                    (float(display_ledger["Amount (UGX)"].min()), float(display_ledger["Amount (UGX)"].max()))
+                    float(ledger_df["amount_num"].min()),
+                    float(ledger_df["amount_num"].max()),
+                    (float(ledger_df["amount_num"].min()), float(ledger_df["amount_num"].max()))
                 )
             
                 # --- Apply filters ---
                 if selected_cat != "All":
-                    display_ledger = display_ledger[display_ledger["Category"] == selected_cat]
+                    mask = ledger_df["category"] == selected_cat
+                else:
+                    mask = True
             
-                display_ledger = display_ledger[
-                    (display_ledger["Amount (UGX)"] >= min_amt) &
-                    (display_ledger["Amount (UGX)"] <= max_amt)
+                filtered = ledger_df[mask]
+                filtered = filtered[
+                    (filtered["amount_num"] >= min_amt) &
+                    (filtered["amount_num"] <= max_amt)
                 ]
             
-                # --- Interactive table ---
+                # --- Rebuild display after filtering ---
+                final_display = filtered[[
+                    "payment_date",
+                    "category",
+                    "description",
+                    "amount",
+                    "receipt_no"
+                ]].copy()
+            
+                final_display.columns = [
+                    "Date",
+                    "Category",
+                    "Description",
+                    "Amount (UGX)",
+                    "Ref #"
+                ]
+            
+                final_display["Date"] = pd.to_datetime(final_display["Date"]).dt.strftime("%Y-%m-%d")
+            
+                # commas again after filtering
+                final_display["Amount (UGX)"] = final_display["Amount (UGX)"].apply(
+                    lambda x: f"{float(x):,.0f}"
+                )
+            
+                # --- COLOR styling (red amounts) ---
+                def color_amount(val):
+                    return "color: #D32F2F; font-weight: 700;"
+            
+                styled = final_display.style.map(
+                    color_amount,
+                    subset=["Amount (UGX)"]
+                )
+            
                 st.dataframe(
-                    display_ledger,
+                    styled,
                     use_container_width=True,
                     hide_index=True
                 )
