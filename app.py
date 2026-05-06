@@ -1206,50 +1206,67 @@ def show_dashboard_view():
 
         with t2:
             st.markdown("#### 💸 Latest Expenses")
+        
             try:
                 if not expenses_df.empty:
-                    display_exp = expenses_df.head(5)
-                    # Ensure safe_numeric is used to prevent errors in formatting
-                    vals = safe_numeric(display_exp, ["amount"]).tolist()
+                    import html
+        
+                    display_exp = expenses_df.head(5).copy()
+        
                     rows = ""
         
                     for i, (_, r) in enumerate(display_exp.iterrows()):
                         bg = "#FFFFFF" if i % 2 == 0 else "#F9FAFB"
-                        # Using the value from the row directly for clarity
-                        amount_val = float(r.get('amount', 0))
-                        
+        
+                        # SAFE values (prevents HTML break)
+                        category = html.escape(str(r.get("category", "General")))
+                        date = html.escape(str(r.get("date", "-")))
+        
+                        try:
+                            amount_val = float(r.get("amount", 0))
+                        except:
+                            amount_val = 0
+        
                         rows += f"""
-                        <tr style='background:{bg}; border-bottom:1px solid #f0f0f0;'>
-                            <td style='padding:12px 5px;'>{r.get('category','General')}</td>
-                            <td style='padding:12px 5px; text-align:right; color:#EF4444;'>-{amount_val:,.0f}</td>
-                            <td style='padding:12px 5px; text-align:right; color:#64748B;'>{r.get('date','-')}</td>
+                        <tr style="background:{bg}; border-bottom:1px solid #f0f0f0;">
+                            <td style="padding:12px;">{category}</td>
+                            <td style="padding:12px; text-align:right; color:#EF4444; font-weight:600;">
+                                -{amount_val:,.0f}
+                            </td>
+                            <td style="padding:12px; text-align:right; color:#64748B;">
+                                {date}
+                            </td>
                         </tr>
                         """
-                    
+        
                     st.markdown(
                         f"""
-                        <div style="border:1px solid #E5E7EB; border-radius:10px; overflow:hidden;">
+                        <div style="border:1px solid #E5E7EB; border-radius:12px; overflow:hidden;">
                             <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                
                                 <thead>
-                                    <tr style="background:#F9FAFB; text-align:left;">
-                                        <th style="padding:12px;">Category</th>
-                                        <th style="padding:12px; text-align:right;">Amount</th>
+                                    <tr style="background:#F3F4F6;">
+                                        <th style="padding:12px; text-align:left;">Category</th>
+                                        <th style="padding:12px; text-align:right;">Amount (UGX)</th>
                                         <th style="padding:12px; text-align:right;">Date</th>
                                     </tr>
                                 </thead>
+        
                                 <tbody>
                                     {rows}
                                 </tbody>
+        
                             </table>
                         </div>
                         """,
                         unsafe_allow_html=True
                     )
+        
                 else:
                     st.info("No recorded expenses.")
-            except:
-                st.info("Expenses feed unavailable.")
-
+        
+            except Exception as e:
+                st.error(f"Expenses feed error: {e}")
         # --- EXPORT SECTION ---
         st.write("---")
 
