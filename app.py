@@ -4119,24 +4119,14 @@ import uuid
 import plotly.express as px
 from datetime import datetime
 
-# ==============================
-# 📁 18. EXPENSE MANAGEMENT 
-# ==============================
-
 def show_expenses():
     st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
 
-    # ==============================
-    # 🔐 SAAS TENANT CONTEXT
-    # ==============================
     current_tenant = st.session_state.get('tenant_id')
     if not current_tenant:
         st.error("🔐 Session expired. Please log in.")
         st.stop()
 
-    # ==============================
-    # 🧠 HELPER: FINANCIAL YEAR LOGIC
-    # ==============================
     def get_fy_label(date_val):
         try:
             dt = pd.to_datetime(date_val)
@@ -4145,7 +4135,7 @@ def show_expenses():
             return "Unknown FY"
 
     # ==============================
-    # 📦 FETCH DATA
+    # DATA
     # ==============================
     try:
         df = get_cached_data("expenses")
@@ -4174,19 +4164,20 @@ def show_expenses():
     ])
 
     # ==============================
-    # ➕ ADD
+    # ADD
     # ==============================
     with tab_add:
         with st.form("add_expense_form", clear_on_submit=True):
-            col1, col2 = st.columns(2)
+            st.write("### Log Operational Cost")
+            c1, c2 = st.columns(2)
 
-            category = col1.selectbox("Category", EXPENSE_CATS)
-            amount = col2.number_input("Amount (UGX)", min_value=0, step=1000)
+            category = c1.selectbox("Category", EXPENSE_CATS)
+            amount = c2.number_input("Amount (UGX)", min_value=0, step=1000)
             desc = st.text_input("Description")
 
-            c_date, c_receipt = st.columns(2)
-            p_date = c_date.date_input("Payment Date", value=datetime.now())
-            receipt_no = c_receipt.text_input("Receipt #")
+            c3, c4 = st.columns(2)
+            p_date = c3.date_input("Payment Date", value=datetime.now())
+            receipt_no = c4.text_input("Receipt #")
 
             if st.form_submit_button("🚀 Save Expense", use_container_width=True):
                 if amount > 0 and desc:
@@ -4208,56 +4199,102 @@ def show_expenses():
                             .drop(columns=["financial_year"], errors="ignore")
 
                         if save_data("expenses", save_df):
-                            st.success("✅ Saved")
+                            st.success(f"✅ Expense saved for {d}")
                             st.cache_data.clear()
                             st.rerun()
 
                     except Exception as e:
                         st.error(f"🚨 {e}")
                 else:
-                    st.warning("Fill all required fields")
+                    st.warning("⚠️ Fill all required fields")
 
     # ==============================
-    # 📊 VIEW
+    # VIEW
     # ==============================
     with tab_view:
         if df.empty:
-            st.info("No expenses yet")
+            st.info("💡 No expenses recorded yet.")
         else:
             fys = sorted(df["financial_year"].unique(), reverse=True)
-            fy = st.selectbox("Financial Year", ["All Time"] + fys)
+            fy = st.selectbox("📅 Financial Year", ["All Time"] + fys)
 
             view_df = df if fy == "All Time" else df[df["financial_year"] == fy]
 
             total = view_df["amount"].sum()
-            st.metric("Total Spend", f"UGX {total:,.0f}")
+
+            # 🎨 COLORED CARD
+            st.markdown(f"""
+                <div style="background-color:#fff;padding:20px;border-radius:15px;
+                border-left:6px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);">
+                    <p style="margin:0;font-size:12px;color:#666;font-weight:bold;">
+                        TOTAL OUTFLOW ({fy})
+                    </p>
+                    <h2 style="margin:0;color:#FF4B4B;">
+                        UGX {total:,.0f}
+                    </h2>
+                </div><br>
+            """, unsafe_allow_html=True)
 
             col1, col2 = st.columns([2,1])
 
             with col1:
                 fig = px.pie(
                     view_df.groupby("category")["amount"].sum().reset_index(),
-                    names="category", values="amount", hole=0.4
+                    names="category", values="amount",
+                    hole=0.4,
+                    color_discrete_sequence=px.colors.qualitative.Pastel
                 )
                 st.plotly_chart(fig, use_container_width=True)
 
             with col2:
-                st.dataframe(df.groupby("financial_year")["amount"].sum().reset_index(), hide_index=True)
+                st.write("#### FY Summary")
+                st.dataframe(
+                    df.groupby("financial_year")["amount"].sum().reset_index(),
+                    hide_index=True
+                )
 
-            st.markdown("### Ledger")
+            # 🎨 STYLED LEDGER
+            st.markdown("### 📋 Expense Ledger")
 
             ledger = view_df.sort_values("payment_date", ascending=False)
 
-            st.dataframe(
-                ledger[["payment_date","category","description","amount","receipt_no"]],
-                use_container_width=True,
-                hide_index=True
-            )
+            rows = ""
+            for i, r in ledger.reset_index().iterrows():
+                bg = "#F9FBFF" if i % 2 == 0 else "#FFFFFF"
+                rows += f"""
+                <tr style="background:{bg};border-bottom:1px solid #eee;">
+                    <td style="padding:10px;">{r['payment_date']}</td>
+                    <td style="padding:10px;"><b>{r['category']}</b></td>
+                    <td style="padding:10px;">{r['description']}</td>
+                    <td style="padding:10px;text-align:right;color:#D32F2F;font-weight:bold;">
+                        {r['amount']:,.0f}
+                    </td>
+                    <td style="padding:10px;text-align:center;">{r['receipt_no']}</td>
+                </tr>
+                """
+
+            st.markdown(f"""
+            <div style="border:1px solid #2B3F87;border-radius:10px;overflow:hidden;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead>
+                <tr style="background:#2B3F87;color:white;">
+                    <th style="padding:12px;">Date</th>
+                    <th style="padding:12px;">Category</th>
+                    <th style="padding:12px;">Description</th>
+                    <th style="padding:12px;text-align:right;">Amount (UGX)</th>
+                    <th style="padding:12px;text-align:center;">Ref</th>
+                </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+            </table></div>
+            """, unsafe_allow_html=True)
 
     # ==============================
-    # ⚙️ MANAGE
+    # MANAGE
     # ==============================
     with tab_manage:
+        st.markdown("### 🛠️ Record Maintenance")
+
         if df.empty:
             st.info("No records")
         else:
@@ -4267,20 +4304,12 @@ def show_expenses():
             )
 
             choice = st.selectbox("Select record", df["selector"])
-
-            selected = df[df["selector"] == choice]
-
-            if selected.empty:
-                st.error("Selection error")
-                st.stop()
-
-            row = selected.iloc[0]
+            row = df[df["selector"] == choice].iloc[0]
             target_id = str(row["id"])
 
-            # --- UPDATE ---
+            # UPDATE
             with st.form("edit"):
                 c1, c2 = st.columns(2)
-
                 amt = c1.number_input("Amount", value=float(row["amount"]))
                 cat = c2.selectbox("Category", EXPENSE_CATS, index=EXPENSE_CATS.index(row["category"]))
                 desc = st.text_input("Description", value=row["description"])
@@ -4291,27 +4320,27 @@ def show_expenses():
                     final_df = df.drop(columns=["selector","financial_year"], errors="ignore")
 
                     if save_data("expenses", final_df):
-                        st.success("Updated")
+                        st.success("✅ Updated")
                         st.cache_data.clear()
                         st.rerun()
 
-            # --- DELETE ---
+            # DELETE (FIXED)
             if st.button("🗑️ Delete Record"):
                 try:
                     mask = df["id"] != target_id
 
                     if mask.all():
-                        st.error("Record not found")
+                        st.error("❌ Record not found")
                         st.stop()
 
                     final_df = df[mask].drop(columns=["selector","financial_year"], errors="ignore")
 
                     if save_data("expenses", final_df):
-                        st.success("Deleted")
+                        st.warning("🗑️ Deleted")
                         st.cache_data.clear()
                         st.rerun()
                     else:
-                        st.error("Delete failed")
+                        st.error("❌ Delete failed")
 
                 except Exception as e:
                     st.error(f"🚨 {e}")
