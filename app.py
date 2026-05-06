@@ -1238,24 +1238,24 @@ def show_dashboard_view():
                         """
                     
                                         st.markdown(
-                        f"""
-                        <div style="border:1px solid #E5E7EB; border-radius:10px; overflow:hidden;">
-                            <table style="width:100%; border-collapse:collapse; font-size:13px;">
-                                <thead>
-                                    <tr style="background:#F9FAFB; text-align:left;">
-                                        <th style="padding:12px;">Category</th>
-                                        <th style="padding:12px; text-align:right;">Amount</th>
-                                        <th style="padding:12px; text-align:right;">Date</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {rows}
-                                </tbody>
-                            </table>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+                                            f"""
+                                            <div style="border:1px solid #E5E7EB; border-radius:10px; overflow:hidden;">
+                                                <table style="width:100%; border-collapse:collapse; font-size:13px;">
+                                                    <thead>
+                                                        <tr style="background:#F9FAFB; text-align:left;">
+                                                            <th style="padding:12px;">Category</th>
+                                                            <th style="padding:12px; text-align:right;">Amount</th>
+                                                            <th style="padding:12px; text-align:right;">Date</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {rows}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            """,
+                                            unsafe_allow_html=True
+                                        )
 
                 else:
                     st.info("No recorded expenses.")
