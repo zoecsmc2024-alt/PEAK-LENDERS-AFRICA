@@ -3439,36 +3439,37 @@ def show_petty_cash():
             # DISPLAY TABLE (NO HTML)
             # ==============================
             display_df = filtered[[
-                "Date",
+                "date",
                 "type",
-                "Description",
+                "description",
                 "amount"
             ]].copy()
-    
-            display.columns = [
+            
+            display_df.columns = [
                 "Date",
                 "Type",
                 "Details",
                 "Amount (UGX)"
             ]
-    
-            display["Date"] = display["Date"].dt.strftime("%Y-%m-%d")
-    
-            display["Amount (UGX)"] = display["Amount (UGX)"].apply(
+            
+            # format date
+            display_df["Date"] = pd.to_datetime(display_df["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
+            
+            # format currency
+            display_df["Amount (UGX)"] = display_df["Amount (UGX)"].apply(
                 lambda x: f"{x:,.0f}"
             )
-    
+            
             # ==============================
             # COLOR STYLING (In = green, Out = red)
             # ==============================
             def color_type(val):
                 if val == "In":
                     return "color: #10B981; font-weight:700;"
-                else:
-                    return "color: #EF4444; font-weight:700;"
-    
-            styled = display.style.map(color_type, subset=["Type"])
-    
+                return "color: #EF4444; font-weight:700;"
+            
+            styled = display_df.style.map(color_type, subset=["Type"])
+            
             st.dataframe(
                 styled,
                 use_container_width=True,
