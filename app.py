@@ -1471,97 +1471,97 @@ def show_borrowers():
 
     with tab_view:
 
-    st.markdown("### 👥 Borrowers Registry")
-
-    search = st.text_input("🔍 Search by name or phone...").lower()
-
-    if not borrowers_df.empty:
-
-        df = borrowers_df.copy()
-
-        # --- Clean types ---
-        for col in ["name", "phone", "national_id", "next_of_kin", "status"]:
-            df[col] = df[col].astype(str)
-
-        # --- Attach risk info safely ---
-        def get_risk_label(b_id):
-            r = risk_map.get(str(b_id), {})
-            return r.get("risk_label", "🟢 Healthy")
-
-        df["Risk Status"] = df["id"].apply(get_risk_label)
-
-        # --- Search filter ---
-        df_filtered = df[
-            df["name"].str.lower().str.contains(search, na=False) |
-            df["phone"].str.contains(search, na=False)
-        ]
-
-        if not df_filtered.empty:
-
-            # --- Color mapping (no HTML needed) ---
-            def style_risk(val):
-                if "🔴" in val:
-                    return "color: #EF4444; font-weight:700;"
-                elif "🟠" in val:
-                    return "color: #F97316; font-weight:700;"
-                elif "🟡" in val:
-                    return "color: #F59E0B; font-weight:700;"
-                else:
-                    return "color: #10B981; font-weight:700;"
-
-            # --- Display table ---
-            display_df = df_filtered[[
-                "name",
-                "phone",
-                "national_id",
-                "next_of_kin",
-                "Risk Status",
-                "status"
-            ]].copy()
-
-            display_df.columns = [
-                "Borrower Name",
-                "Phone",
-                "National ID",
-                "Next of Kin",
-                "Risk Status",
-                "Status"
+        st.markdown("### 👥 Borrowers Registry")
+    
+        search = st.text_input("🔍 Search by name or phone...").lower()
+    
+        if not borrowers_df.empty:
+    
+            df = borrowers_df.copy()
+    
+            # --- Clean types ---
+            for col in ["name", "phone", "national_id", "next_of_kin", "status"]:
+                df[col] = df[col].astype(str)
+    
+            # --- Attach risk info safely ---
+            def get_risk_label(b_id):
+                r = risk_map.get(str(b_id), {})
+                return r.get("risk_label", "🟢 Healthy")
+    
+            df["Risk Status"] = df["id"].apply(get_risk_label)
+    
+            # --- Search filter ---
+            df_filtered = df[
+                df["name"].str.lower().str.contains(search, na=False) |
+                df["phone"].str.contains(search, na=False)
             ]
-
-            # --- Make status uppercase ---
-            display_df["Status"] = display_df["Status"].str.upper()
-
-            # --- Interactive table ---
-            styled_df = display_df.style.map(
-                style_risk,
-                subset=["Risk Status"]
-            )
-
-            st.dataframe(
-                styled_df,
-                use_container_width=True,
-                hide_index=True
-            )
-
-            # --- Select borrower (kept your logic) ---
-            st.markdown("### 🎯 Management Actions")
-
-            selected_name = st.selectbox(
-                "Select borrower:",
-                ["-- Choose borrower --"] + df_filtered["name"].tolist()
-            )
-
-            if selected_name != "-- Choose borrower --":
-                sel_id = df_filtered[df_filtered["name"] == selected_name]["id"].values[0]
-                st.session_state["selected_borrower"] = sel_id
-
-                st.success(f"Selected: {selected_name}")
-
+    
+            if not df_filtered.empty:
+    
+                # --- Color mapping (no HTML needed) ---
+                def style_risk(val):
+                    if "🔴" in val:
+                        return "color: #EF4444; font-weight:700;"
+                    elif "🟠" in val:
+                        return "color: #F97316; font-weight:700;"
+                    elif "🟡" in val:
+                        return "color: #F59E0B; font-weight:700;"
+                    else:
+                        return "color: #10B981; font-weight:700;"
+    
+                # --- Display table ---
+                display_df = df_filtered[[
+                    "name",
+                    "phone",
+                    "national_id",
+                    "next_of_kin",
+                    "Risk Status",
+                    "status"
+                ]].copy()
+    
+                display_df.columns = [
+                    "Borrower Name",
+                    "Phone",
+                    "National ID",
+                    "Next of Kin",
+                    "Risk Status",
+                    "Status"
+                ]
+    
+                # --- Make status uppercase ---
+                display_df["Status"] = display_df["Status"].str.upper()
+    
+                # --- Interactive table ---
+                styled_df = display_df.style.map(
+                    style_risk,
+                    subset=["Risk Status"]
+                )
+    
+                st.dataframe(
+                    styled_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+    
+                # --- Select borrower (kept your logic) ---
+                st.markdown("### 🎯 Management Actions")
+    
+                selected_name = st.selectbox(
+                    "Select borrower:",
+                    ["-- Choose borrower --"] + df_filtered["name"].tolist()
+                )
+    
+                if selected_name != "-- Choose borrower --":
+                    sel_id = df_filtered[df_filtered["name"] == selected_name]["id"].values[0]
+                    st.session_state["selected_borrower"] = sel_id
+    
+                    st.success(f"Selected: {selected_name}")
+    
+            else:
+                st.info("No records match your search criteria.")
+    
         else:
-            st.info("No records match your search criteria.")
-
-    else:
-        st.info("The registry is currently empty.")
+            st.info("The registry is currently empty.")
 
     # ==============================
     # 👤 borrower PROFILE PANEL (EXPANDED)
