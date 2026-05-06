@@ -3438,7 +3438,7 @@ def show_petty_cash():
             # ==============================
             # DISPLAY TABLE (NO HTML)
             # ==============================
-            display = filtered[[
+            display_df = filtered[[
                 "Date",
                 "type",
                 "Description",
