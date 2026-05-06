@@ -4296,52 +4296,70 @@ def show_expenses():
         if df.empty:
             st.info("No records")
         else:
-            df["selector"] = df.apply(
-                lambda r: f"{r['payment_date']} | {r['category']} | {r['amount']:,.0f}",
+            # We create a local copy to avoid modifying the main df prematurely
+            df_manage = df.copy()
+            
+            # Ensure ID is a clean string for comparison
+            df_manage["id"] = df_manage["id"].astype(str).str.strip()
+
+            df_manage["selector"] = df_manage.apply(
+                lambda r: f"{r['payment_date']} | {r['category']} | {float(r['amount']):,.0f}",
                 axis=1
             )
 
-            choice = st.selectbox("Select record", df["selector"])
-            row = df[df["selector"] == choice].iloc[0]
-            target_id = str(row["id"])
+            choice = st.selectbox("Select record to Edit/Delete", df_manage["selector"])
+            
+            # Find the specific row and ID
+            selected_row = df_manage[df_manage["selector"] == choice].iloc[0]
+            target_id = str(selected_row["id"])
 
-            # UPDATE
-            with st.form("edit"):
+            # ---------------------------
+            # UPDATE FORM
+            # ---------------------------
+            with st.form("edit_expense_form"):
+                st.write("#### Update Details")
                 c1, c2 = st.columns(2)
-                amt = c1.number_input("Amount", value=float(row["amount"]))
-                cat = c2.selectbox("Category", EXPENSE_CATS, index=EXPENSE_CATS.index(row["category"]))
-                desc = st.text_input("Description", value=row["description"])
+                amt = c1.number_input("Amount", value=float(selected_row["amount"]))
+                cat = c2.selectbox("Category", EXPENSE_CATS, index=EXPENSE_CATS.index(selected_row["category"]))
+                description = st.text_input("Description", value=selected_row["description"])
 
-                if st.form_submit_button("💾 Update"):
-                    df.loc[df["id"] == target_id, ["amount","category","description"]] = [amt,cat,desc]
-
-                    final_df = df.drop(columns=["selector","financial_year"], errors="ignore")
-
+                if st.form_submit_button("💾 Save Changes", use_container_width=True):
+                    # Update local df
+                    df.loc[df["id"].astype(str) == target_id, ["amount","category","description"]] = [amt, cat, description]
+                    
+                    # Drop UI-only columns before saving
+                    final_df = df.drop(columns=["selector", "financial_year"], errors="ignore")
+                    
                     if save_data("expenses", final_df):
-                        st.success("✅ Updated")
+                        st.success("✅ Updated Successfully")
                         st.cache_data.clear()
                         st.rerun()
 
-            # DELETE (FIXED)
-            if st.button("🗑️ Delete Record"):
-                try:
-                    mask = df["id"] != target_id
+            st.write("---")
+            
+            # ---------------------------
+            # DELETE LOGIC (OUTSIDE FORM)
+            # ---------------------------
+            st.write("#### Danger Zone")
+            if st.button("🗑️ Permanently Delete Record", use_container_width=True, type="secondary"):
+                # Use a very explicit filter
+                # We filter the ORIGINAL df using the string version of the ID
+                initial_count = len(df)
+                df_filtered = df[df["id"].astype(str).str.strip() != target_id].copy()
+                new_count = len(df_filtered)
 
-                    if mask.all():
-                        st.error("❌ Record not found")
-                        st.stop()
-
-                    final_df = df[mask].drop(columns=["selector","financial_year"], errors="ignore")
-
-                    if save_data("expenses", final_df):
-                        st.warning("🗑️ Deleted")
+                if new_count < initial_count:
+                    # Clean helper columns
+                    final_to_save = df_filtered.drop(columns=["selector", "financial_year"], errors="ignore")
+                    
+                    if save_data("expenses", final_to_save):
+                        st.toast(f"Record {target_id} deleted.")
                         st.cache_data.clear()
                         st.rerun()
                     else:
-                        st.error("❌ Delete failed")
-
-                except Exception as e:
-                    st.error(f"🚨 {e}")
+                        st.error("❌ Database rejected the deletion.")
+                else:
+                    st.error("❌ Logic Error: ID match not found. Delete aborted.")
 # ==============================
 # 21. MASTER LEDGER 
 # ==============================
