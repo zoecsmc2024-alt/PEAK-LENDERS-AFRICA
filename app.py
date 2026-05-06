@@ -4328,15 +4328,14 @@ def show_expenses():
                 st.write("Target ID:", target_id)
                 # Delete is OUTSIDE the Edit form for better reliability
                 if st.button("🗑️ Permanently Delete Record"):
+                    updated_df = None  # 👈 ensure it's always defined
+                
                     try:
-                        # Ensure consistent types
                         df["id"] = df["id"].astype(str)
                         target_id_str = str(target_id)
                 
-                        # Perform delete
                         updated_df = df[df["id"] != target_id_str].copy()
                 
-                        # Debug check
                         if len(updated_df) == len(df):
                             st.error("❌ Delete failed: Record not found.")
                         else:
@@ -4352,8 +4351,8 @@ def show_expenses():
                                 st.error("❌ Save failed — data not updated.")
                 
                     except Exception as e:
-                        st.error(f"🚨 Delete error: {e}")          # This refreshes the UI immediately
-                            
+                        st.error(f"🚨 Delete error: {e}")
+                        st.write("DEBUG → updated_df:", updated_df)
                 st.write("---")
                 st.write("Edit Details:")
                 with st.form("edit_expense_inner"):
