@@ -4293,36 +4293,64 @@ def show_expenses():
 
             # 4. Detailed Ledger
             st.markdown("### 📋 Expense Ledger")
-            ledger_df = view_df.sort_values("payment_date", ascending=False)
             
-            # Use a styled HTML table for the professional look
-            rows_html = ""
-            for i, r in ledger_df.reset_index().iterrows():
-                bg = "#F9FBFF" if i % 2 == 0 else "#FFFFFF"
-                rows_html += f"""
-                    <tr style="background-color:{bg}; border-bottom: 1px solid #eee;">
-                        <td style="padding:10px;">{r['payment_date']}</td>
-                        <td style="padding:10px;"><b>{r['category']}</b></td>
-                        <td style="padding:10px; font-size:11px;">{r['description']}</td>
-                        <td style="padding:10px; text-align:right; font-weight:bold; color:#D32F2F;">{float(r['amount']):,.0f}</td>
-                        <td style="padding:10px; text-align:center; color:#666;">{r['receipt_no']}</td>
-                    </tr>"""
-
-            st.markdown(f"""
-                <div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;">
-                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
-                        <thead>
-                            <tr style="background:#2B3F87; color:white; text-align:left;">
-                                <th style="padding:12px;">Date</th>
-                                <th style="padding:12px;">Category</th>
-                                <th style="padding:12px;">Description</th>
-                                <th style="padding:12px; text-align:right;">Amount (UGX)</th>
-                                <th style="padding:12px; text-align:center;">Ref #</th>
-                            </tr>
-                        </thead>
-                        <tbody>{rows_html}</tbody>
-                    </table>
-                </div>""", unsafe_allow_html=True)
+            ledger_df = view_df.sort_values("payment_date", ascending=False).copy()
+            
+            try:
+                # --- Clean data ---
+                ledger_df["payment_date"] = pd.to_datetime(ledger_df["payment_date"], errors="coerce")
+                ledger_df["amount"] = pd.to_numeric(ledger_df["amount"], errors="coerce").fillna(0)
+            
+                display_ledger = ledger_df[[
+                    "payment_date",
+                    "category",
+                    "description",
+                    "amount",
+                    "receipt_no"
+                ]].copy()
+            
+                display_ledger.columns = [
+                    "Date",
+                    "Category",
+                    "Description",
+                    "Amount (UGX)",
+                    "Ref #"
+                ]
+            
+                # --- Format date ---
+                display_ledger["Date"] = display_ledger["Date"].dt.strftime("%Y-%m-%d")
+            
+                # --- Add filters (interactive control) ---
+                col1, col2 = st.columns(2)
+            
+                categories = ["All"] + sorted(display_ledger["Category"].dropna().unique().tolist())
+                selected_cat = col1.selectbox("Filter Category", categories)
+            
+                min_amt, max_amt = col2.slider(
+                    "Amount Range",
+                    float(display_ledger["Amount (UGX)"].min()),
+                    float(display_ledger["Amount (UGX)"].max()),
+                    (float(display_ledger["Amount (UGX)"].min()), float(display_ledger["Amount (UGX)"].max()))
+                )
+            
+                # --- Apply filters ---
+                if selected_cat != "All":
+                    display_ledger = display_ledger[display_ledger["Category"] == selected_cat]
+            
+                display_ledger = display_ledger[
+                    (display_ledger["Amount (UGX)"] >= min_amt) &
+                    (display_ledger["Amount (UGX)"] <= max_amt)
+                ]
+            
+                # --- Interactive table ---
+                st.dataframe(
+                    display_ledger,
+                    use_container_width=True,
+                    hide_index=True
+                )
+            
+            except Exception as e:
+                st.error(f"Ledger error: {e}")
     # --- TAB 3: MANAGE (CRUD) ---
     with tab_manage:
         st.markdown("### 🛠️ Record Maintenance")
