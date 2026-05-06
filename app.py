@@ -4258,37 +4258,34 @@ def show_expenses():
 
             ledger = view_df.sort_values("payment_date", ascending=False)
 
-            rows = ""
-            for i, r in ledger.reset_index().iterrows():
+            # Use a styled HTML table for the professional look
+            rows_html = ""
+            for i, r in ledger_df.reset_index().iterrows():
                 bg = "#F9FBFF" if i % 2 == 0 else "#FFFFFF"
-                rows += f"""
-                <tr style="background:{bg};border-bottom:1px solid #eee;">
-                    <td style="padding:10px;">{r['payment_date']}</td>
-                    <td style="padding:10px;"><b>{r['category']}</b></td>
-                    <td style="padding:10px;">{r['description']}</td>
-                    <td style="padding:10px;text-align:right;color:#D32F2F;font-weight:bold;">
-                        {r['amount']:,.0f}
-                    </td>
-                    <td style="padding:10px;text-align:center;">{r['receipt_no']}</td>
-                </tr>
-                """
+                rows_html += f"""
+                    <tr style="background-color:{bg}; border-bottom: 1px solid #eee;">
+                        <td style="padding:10px;">{r['payment_date']}</td>
+                        <td style="padding:10px;"><b>{r['category']}</b></td>
+                        <td style="padding:10px; font-size:11px;">{r['description']}</td>
+                        <td style="padding:10px; text-align:right; font-weight:bold; color:#D32F2F;">{float(r['amount']):,.0f}</td>
+                        <td style="padding:10px; text-align:center; color:#666;">{r['receipt_no']}</td>
+                    </tr>"""
 
             st.markdown(f"""
-            <div style="border:1px solid #2B3F87;border-radius:10px;overflow:hidden;">
-            <table style="width:100%;border-collapse:collapse;font-size:12px;">
-            <thead>
-                <tr style="background:#2B3F87;color:white;">
-                    <th style="padding:12px;">Date</th>
-                    <th style="padding:12px;">Category</th>
-                    <th style="padding:12px;">Description</th>
-                    <th style="padding:12px;text-align:right;">Amount (UGX)</th>
-                    <th style="padding:12px;text-align:center;">Ref</th>
-                </tr>
-            </thead>
-            <tbody>{rows}</tbody>
-            </table></div>
-            """, unsafe_allow_html=True)
-
+                <div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;">
+                    <table style="width:100%; border-collapse:collapse; font-size:12px;">
+                        <thead>
+                            <tr style="background:#2B3F87; color:white; text-align:left;">
+                                <th style="padding:12px;">Date</th>
+                                <th style="padding:12px;">Category</th>
+                                <th style="padding:12px;">Description</th>
+                                <th style="padding:12px; text-align:right;">Amount (UGX)</th>
+                                <th style="padding:12px; text-align:center;">Ref #</th>
+                            </tr>
+                        </thead>
+                        <tbody>{rows_html}</tbody>
+                    </table>
+                </div>""", unsafe_allow_html=True)
     # ==============================
     # MANAGE
     # ==============================
