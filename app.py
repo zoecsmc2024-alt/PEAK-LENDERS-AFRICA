@@ -3446,33 +3446,54 @@ def show_petty_cash():
             # ==============================
             with st.expander("🛠️ Edit / Delete"):
 
-                display_df["label"] = display_df.apply(
-                    lambda r: f"{r['Date']} | {r['type']} | {r['description'][:20]}",
+                # IMPORTANT: keep original filtered dataframe with id intact
+                action_df = filtered.copy()
+            
+                # safe label
+                action_df["label"] = action_df.apply(
+                    lambda r: f"{r['date']} | {r['type']} | {r['description'][:20]}",
                     axis=1
                 )
-
-                selected = st.selectbox("Select record", display_df["label"].tolist())
-
-                row = display_df[display_df["label"] == selected].iloc[0]
-                rid = row["id"]
-
+            
+                selected = st.selectbox("Select record", action_df["label"].tolist())
+            
+                selected_row = action_df[action_df["label"] == selected].iloc[0]
+                rid = selected_row["id"]
+            
                 col_a, col_b = st.columns(2)
-
+            
+                # ==============================
+                # DELETE (FIXED)
+                # ==============================
                 with col_a:
-                    if st.button("Delete"):
-                        df = df[df["id"] != rid]
-                        save_data("petty_cash", df)
-                        st.rerun()
-
+                    if st.button("🗑️ Delete", use_container_width=True):
+            
+                        df = df[df["id"] != rid]   # 👈 THIS is the real fix
+            
+                        if save_data("petty_cash", df):
+                            st.success("Deleted successfully")
+                            st.cache_data.clear()
+                            st.rerun()
+            
+                # ==============================
+                # EDIT (SAFE)
+                # ==============================
                 with col_b:
-                    new_desc = st.text_input("Edit desc", row["description"])
-                    new_amt = st.number_input("Edit amount", float(row["amount"]))
-
-                    if st.button("Save"):
-                        df.loc[df["id"] == rid, ["description","amount"]] = [new_desc, new_amt]
-                        save_data("petty_cash", df)
-                        st.rerun()
-                
+                    new_desc = st.text_input("Edit description", selected_row["description"])
+                    new_amt = st.number_input("Edit amount", float(selected_row["amount"]))
+            
+                    if st.button("💾 Save", use_container_width=True):
+            
+                        df.loc[df["id"] == rid, ["description", "amount"]] = [
+                            new_desc,
+                            new_amt
+                        ]
+            
+                        if save_data("petty_cash", df):
+                            st.success("Updated successfully")
+                            st.cache_data.clear()
+                            st.rerun()
+                            
 
 
 # ==========================================
