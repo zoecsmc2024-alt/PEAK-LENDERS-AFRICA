@@ -4179,26 +4179,31 @@ def show_expenses():
             desc = st.text_input("Description / Particulars")
 
             c_date, c_receipt = st.columns(2)
+            # This is the date the user selects in the UI
             p_date = c_date.date_input("Actual Payment Date", value=datetime.now())
             receipt_no = c_receipt.text_input("Receipt / Invoice Reference #")
 
             if st.form_submit_button("🚀 Save Expense Record", use_container_width=True):
                 if amount > 0 and desc:
                     try:
+                        # Format the user's selected date
+                        formatted_date = p_date.strftime("%Y-%m-%d")
+
                         new_entry = pd.DataFrame([{
                             "id": str(uuid.uuid4()),
                             "category": category,
                             "amount": float(amount),
-                            "date": datetime.now().strftime("%Y-%m-%d"),
+                            # FIX: Use formatted_date instead of datetime.now()
+                            "date": formatted_date, 
                             "description": desc,
-                            "payment_date": p_date.strftime("%Y-%m-%d"),
+                            "payment_date": formatted_date,
                             "receipt_no": receipt_no,
                             "tenant_id": str(current_tenant)
                         }])
 
                         # Utilize your global save_data adapter
                         if save_data("expenses", pd.concat([df, new_entry], ignore_index=True)):
-                            st.success("✅ Expense successfully recorded!")
+                            st.success(f"✅ Expense for {formatted_date} successfully recorded!")
                             st.cache_data.clear() 
                             st.rerun()
                     except Exception as e:
