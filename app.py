@@ -3256,21 +3256,14 @@ def show_payroll():
 # ==============================
 
 def show_petty_cash():
-    """
-    Manages daily office cash transactions with a modern Banking UI.
-    Tracks inflows/outflows for specific tenants with real-time balance alerts.
-    """
+
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
 
-    # ==============================
-    # 🎨 BANKING UI SYSTEM (ENHANCED)
-    # ==============================
     st.markdown(f"""
     <style>
     .block-container {{ padding-top: 1.2rem; }}
     
-    /* Glassmorphism Cards */
     .glass-card {{
         backdrop-filter: blur(10px);
         background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(240,244,255,0.7));
@@ -3280,13 +3273,30 @@ def show_petty_cash():
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
         transition: transform 0.2s ease;
     }}
-    .glass-card:hover {{ transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }}
 
-    .metric-title {{ font-size: 11px; color: #6b7280; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }}
-    .metric-value {{ font-size: 24px; font-weight: 700; margin-top: 4px; }}
-    
-    /* status Badges */
-    .status-badge {{ font-size: 10px; padding: 3px 10px; border-radius: 12px; font-weight: 700; float: right; }}
+    .glass-card:hover {{
+        transform: translateY(-3px);
+    }}
+
+    .metric-title {{
+        font-size: 11px;
+        color: #6b7280;
+        font-weight: 600;
+        text-transform: uppercase;
+    }}
+
+    .metric-value {{
+        font-size: 24px;
+        font-weight: 700;
+    }}
+
+    .status-badge {{
+        font-size: 10px;
+        padding: 3px 10px;
+        border-radius: 12px;
+        font-weight: 700;
+    }}
+
     .badge-safe {{ background: #E1F9F0; color: #10B981; }}
     .badge-low {{ background: #FFEBEB; color: #FF4B4B; }}
     </style>
@@ -3295,218 +3305,172 @@ def show_petty_cash():
     st.markdown(f"<h2 style='color:{brand_color};'>💵 Petty Cash Management</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # 📦 1. DATA ADAPTER & ISOLATION
+    # DATA
     # ==============================
     df = get_cached_data("petty_cash")
 
     if df is None or df.empty:
-        df = pd.DataFrame(columns=["id", "type", "amount", "date", "description", "tenant_id"])
+        df = pd.DataFrame(columns=["id","type","amount","date","description","tenant_id"])
     else:
-        # Enforce multi-tenancy
         df = df[df["tenant_id"].astype(str) == str(current_tenant)].copy()
-        df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+
+    df["amount"] = pd.to_numeric(df.get("amount", 0), errors="coerce").fillna(0)
 
     # ==============================
-    # 📈 2. LIQUIDITY CALCULATIONS
+    # KPIs
     # ==============================
     inflow = df[df["type"] == "In"]["amount"].sum()
     outflow = df[df["type"] == "Out"]["amount"].sum()
     balance = inflow - outflow
 
-    # Threshold for "Low balance" warning
     LOW_CASH_THRESHOLD = 50000
     bal_status = "SAFE" if balance >= LOW_CASH_THRESHOLD else "LOW"
     status_class = "badge-safe" if balance >= LOW_CASH_THRESHOLD else "badge-low"
     bal_color = "#10B981" if balance >= LOW_CASH_THRESHOLD else "#FF4B4B"
 
-    # ==============================
-    # 💎 KPI DASHBOARD
-    # ==============================
     c1, c2, c3 = st.columns(3)
 
-    c1.markdown(f"""<div class="glass-card"><div class="metric-title">Total Cash In</div>
-        <div class="metric-value" style="color:#10B981;">{inflow:,.0f} <span style="font-size:12px;">UGX</span></div></div>""", unsafe_allow_html=True)
+    c1.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">Total Cash In</div>
+        <div class="metric-value" style="color:#10B981;">{inflow:,.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    c2.markdown(f"""<div class="glass-card"><div class="metric-title">Total Cash Out</div>
-        <div class="metric-value" style="color:#FF4B4B;">{outflow:,.0f} <span style="font-size:12px;">UGX</span></div></div>""", unsafe_allow_html=True)
+    c2.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">Total Cash Out</div>
+        <div class="metric-value" style="color:#FF4B4B;">{outflow:,.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    c3.markdown(f"""<div class="glass-card">
-        <div class="metric-title">Current balance <span class="status-badge {status_class}">{bal_status}</span></div>
-        <div class="metric-value" style="color:{bal_color};">{balance:,.0f} <span style="font-size:12px;">UGX</span></div></div>""", unsafe_allow_html=True)
+    c3.markdown(f"""
+    <div class="glass-card">
+        <div class="metric-title">Balance <span class="status-badge {status_class}">{bal_status}</span></div>
+        <div class="metric-value" style="color:{bal_color};">{balance:,.0f}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==============================
-    # 📋 TABS: ACTION & LOG (INTERACTIVE UPGRADE)
+    # TABS
     # ==============================
     tab_record, tab_history = st.tabs(["➕ Record Transaction", "📜 Digital Cashbook"])
-    
-    # --- TAB 1: RECORD ENTRY ---
+
+    # ------------------------------
+    # RECORD
+    # ------------------------------
     with tab_record:
         with st.form("petty_cash_form", clear_on_submit=True):
-    
-            st.markdown("### 💰 Log Cash Movement")
-    
+
             col_a, col_b = st.columns(2)
-    
-            ttype = col_a.selectbox(
-                "Transaction type",
-                ["Out", "In"],
-                help="'In' = money received, 'Out' = money spent"
-            )
-    
-            t_amount = col_b.number_input(
-                "Amount (UGX)",
-                min_value=0,
-                step=500
-            )
-    
-            desc = st.text_input(
-                "Purpose / Description",
-                placeholder="e.g., Office Internet bundle"
-            )
-    
+
+            ttype = col_a.selectbox("Transaction type", ["Out", "In"])
+            t_amount = col_b.number_input("Amount (UGX)", min_value=0, step=500)
+            desc = st.text_input("Purpose / Description")
+
             if st.form_submit_button("💾 Commit to Cashbook", use_container_width=True):
-    
+
                 if t_amount > 0 and desc:
-    
+
                     new_row = pd.DataFrame([{
-                        "id": str(uuid.uuid4()) if 'uuid' in globals()
-                        else datetime.now().strftime("%Y%m%d%H%M%S"),
+                        "id": str(uuid.uuid4()),
                         "type": ttype,
                         "amount": float(t_amount),
                         "date": datetime.now().strftime("%Y-%m-%d"),
                         "description": desc,
                         "tenant_id": str(current_tenant)
                     }])
-    
+
                     updated_df = pd.concat([df, new_row], ignore_index=True)
-    
+
                     if save_data("petty_cash", updated_df):
-                        st.success(f"✅ Recorded {t_amount:,.0f} UGX {ttype}flow")
+                        st.success("Saved")
                         st.cache_data.clear()
                         st.rerun()
-    
-                else:
-                    st.error("⚠️ Please provide valid amount and description.")
-    
-    # --- TAB 2: TRANSACTION HISTORY (INTERACTIVE) ---
+
+    # ------------------------------
+    # HISTORY
+    # ------------------------------
     with tab_history:
-    
+
         if df.empty:
-            st.info("ℹ️ No cash transactions recorded yet.")
-    
+            st.info("No transactions yet.")
+
         else:
-            st.markdown("### 📜 Transaction Log")
-    
+
             cash_df = df.copy()
-    
-            # ==============================
-            # CLEAN + FORMAT
-            # ==============================
-            cash_df["amount"] = pd.to_numeric(cash_df["amount"], errors="coerce").fillna(0)
-    
+
             cash_df["Date"] = pd.to_datetime(cash_df["date"], errors="coerce")
-            cash_df["Description"] = cash_df["description"]
-    
-            # ==============================
-            # FILTERS (INTERACTIVE)
-            # ==============================
+            cash_df["amount"] = pd.to_numeric(cash_df["amount"], errors="coerce").fillna(0)
+
             col1, col2 = st.columns(2)
-    
+
             type_filter = col1.selectbox(
                 "Filter Type",
                 ["All"] + sorted(cash_df["type"].dropna().unique().tolist())
             )
-    
-            search = col2.text_input("Search description").lower()
-    
-            # apply filters
+
+            search = col2.text_input("Search").lower()
+
             filtered = cash_df.copy()
-    
+
             if type_filter != "All":
                 filtered = filtered[filtered["type"] == type_filter]
-    
+
             if search:
                 filtered = filtered[
                     filtered["description"].str.lower().str.contains(search, na=False)
                 ]
-    
-            # sort newest first
+
             filtered = filtered.sort_values("Date", ascending=False)
-    
-            # ==============================
-            # DISPLAY TABLE (NO HTML)
-            # ==============================
-            display_df = filtered[[
-                "date",
-                "type",
-                "description",
-                "amount"
-            ]].copy()
-            
-            display_df.columns = [
-                "Date",
-                "Type",
-                "Details",
-                "Amount (UGX)"
-            ]
-            
-            # format date
-            display_df["Date"] = pd.to_datetime(display_df["Date"], errors="coerce").dt.strftime("%Y-%m-%d")
-            
-            # format currency
-            display_df["Amount (UGX)"] = display_df["Amount (UGX)"].apply(
-                lambda x: f"{x:,.0f}"
-            )
-            
-            # ==============================
-            # COLOR STYLING (In = green, Out = red)
-            # ==============================
+
+            # IMPORTANT: keep ID for CRUD
+            display_df = filtered.copy()
+
+            display_df["Date"] = display_df["Date"].dt.strftime("%Y-%m-%d")
+
+            display_df["Amount (UGX)"] = display_df["amount"].apply(lambda x: f"{x:,.0f}")
+
             def color_type(val):
-                if val == "In":
-                    return "color: #10B981; font-weight:700;"
-                return "color: #EF4444; font-weight:700;"
-            
-            styled = display_df.style.map(color_type, subset=["Type"])
-            
+                return "color:#10B981;font-weight:700;" if val=="In" else "color:#EF4444;font-weight:700;"
+
             st.dataframe(
-                styled,
-                use_container_width=True,
-                hide_index=True
+                display_df[["Date","type","description","Amount (UGX)"]],
+                use_container_width=True
             )
-            # ==============================
-            # ⚙️ ADVANCED MANAGEMENT (CRUD)
-            # ==============================
-            with st.expander("🛠️ Correct or Remove Entry"):
-                # Use a specific list for the selectbox to prevent index errors
-                entry_list = display_df.apply(lambda r: f"{r['date']} | {r['type']} | {r['description'][:20]}... | {r['amount']:,.0f}", axis=1).tolist()
-                selected_label = st.selectbox("Select Entry to Modify", options=entry_list)
-                
-                # Get the original record
-                selected_idx = entry_list.index(selected_label)
-                original_record = display_df.iloc[selected_idx]
-                entry_id = original_record["id"]
 
-                c_edit, c_del = st.columns(2)
-                
-                # We use a sub-form for the edit to keep state clean
-                with st.popover("📝 Edit Record Details"):
-                    new_desc = st.text_input("Edit Description", value=original_record["description"])
-                    new_amt = st.number_input("Edit Amount", value=float(original_record["amount"]))
-                    if st.button("Save Changes"):
-                        df.loc[df["id"] == entry_id, ["description", "amount"]] = [new_desc, new_amt]
-                        if save_data("petty_cash", df):
-                            st.success("Entry Updated")
-                            st.cache_data.clear()
-                            st.rerun()
+            # ==============================
+            # CRUD FIXED (SAFE ID HANDLING)
+            # ==============================
+            with st.expander("🛠️ Edit / Delete"):
 
-                if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
-                    # Filter out the deleted ID
-                    df_filtered = df[df["id"] != entry_id]
-                    if save_data("petty_cash", df_filtered):
-                        st.warning("Entry removed from digital cashbook.")
-                        st.cache_data.clear()
+                display_df["label"] = display_df.apply(
+                    lambda r: f"{r['Date']} | {r['type']} | {r['description'][:20]}",
+                    axis=1
+                )
+
+                selected = st.selectbox("Select record", display_df["label"].tolist())
+
+                row = display_df[display_df["label"] == selected].iloc[0]
+                rid = row["id"]
+
+                col_a, col_b = st.columns(2)
+
+                with col_a:
+                    if st.button("Delete"):
+                        df = df[df["id"] != rid]
+                        save_data("petty_cash", df)
+                        st.rerun()
+
+                with col_b:
+                    new_desc = st.text_input("Edit desc", row["description"])
+                    new_amt = st.number_input("Edit amount", float(row["amount"]))
+
+                    if st.button("Save"):
+                        df.loc[df["id"] == rid, ["description","amount"]] = [new_desc, new_amt]
+                        save_data("petty_cash", df)
                         st.rerun()
                 
 
