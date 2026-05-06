@@ -1226,10 +1226,33 @@ def show_dashboard_view():
                     count = len(latest)
         
                     k1, k2, k3 = st.columns(3)
-        
-                    k1.metric("Total (Top 5)", f"UGX {total:,.0f}")
-                    k2.metric("Average", f"UGX {avg:,.0f}")
-                    k3.metric("Entries", count)
+
+                    k1.markdown(f"""
+                    <div style="background:#FEE2E2; padding:16px; border-radius:12px;">
+                        <div style="font-size:12px; color:#991B1B;">Total (Top 5)</div>
+                        <div style="font-size:22px; font-weight:700; color:#B91C1C;">
+                            UGX {total:,.0f}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    k2.markdown(f"""
+                    <div style="background:#E0F2FE; padding:16px; border-radius:12px;">
+                        <div style="font-size:12px; color:#075985;">Average</div>
+                        <div style="font-size:22px; font-weight:700; color:#0369A1;">
+                            UGX {avg:,.0f}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    k3.markdown(f"""
+                    <div style="background:#ECFDF5; padding:16px; border-radius:12px;">
+                        <div style="font-size:12px; color:#065F46;">Entries</div>
+                        <div style="font-size:22px; font-weight:700; color:#047857;">
+                            {count}
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
         
                     st.divider()
         
