@@ -4254,10 +4254,11 @@ def show_expenses():
                 )
 
             # 🎨 STYLED LEDGER
+
+            # 4. Detailed Ledger
             st.markdown("### 📋 Expense Ledger")
-
-            ledger = view_df.sort_values("payment_date", ascending=False)
-
+            ledger_df = view_df.sort_values("payment_date", ascending=False)
+            
             # Use a styled HTML table for the professional look
             rows_html = ""
             for i, r in ledger_df.reset_index().iterrows():
