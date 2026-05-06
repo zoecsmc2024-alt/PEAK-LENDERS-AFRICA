@@ -4322,8 +4322,13 @@ def show_expenses():
                             st.rerun()
 
                     if delete_btn:
-                        df = df[df["id"] != target_record["id"]]
-                        if save_data("expenses", df.drop(columns=['selector_label'])):
+                        full_df = get_cached_data("expenses")  # reload FULL dataset
+                    
+                        full_df["id"] = full_df["id"].astype(str)
+                    
+                        updated_df = full_df[full_df["id"] != str(target_record["id"])]
+                    
+                        if save_data("expenses", updated_df):
                             st.warning("🗑️ Record deleted.")
                             st.cache_data.clear()
                             st.rerun()
