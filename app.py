@@ -4008,84 +4008,85 @@ def show_petty_cash():
             # ------------------------------
             st.markdown("---")
             with st.expander("🛠️ Edit / Delete Records"):
-
-                # Helper function to sanitize DataFrame for DB without converting to list
+            
+                # 1. Helper function to sanitize DataFrame for DB
                 def prepare_df_for_db(input_df):
                     cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
-                    # 1. Filter columns
+                    # Filter only existing columns
                     out_df = input_df[[c for c in cols_to_keep if c in input_df.columns]].copy()
-                    # 2. Force date to string YYYY-MM-DD
+                    # Force date to string YYYY-MM-DD
                     out_df["date"] = pd.to_datetime(out_df["date"]).dt.strftime("%Y-%m-%d")
-                    # 3. Cast to object to prevent Pandas from re-converting to Timestamp
+                    # Cast to object to prevent Pandas from re-converting to Timestamp
                     out_df["date"] = out_df["date"].astype(object)
                     return out_df
-
-                # Ensure Date exists for the selection label
+            
+                # 2. Prepare the labels for the dropdown
                 display_df["Date"] = pd.to_datetime(display_df["date"]).dt.strftime("%Y-%m-%d")
                 
                 display_df["label"] = display_df.apply(
                     lambda r: f"{r['Date']} | {r['type']} | {r['description'][:20]}... | {r['amount']}",
                     axis=1
                 )
-
+            
                 selected_label = st.selectbox("Select Record to Modify", display_df["label"])
-
+            
                 if selected_label:
                     selected_idx = display_df[display_df["label"] == selected_label].index[0]
                     record = display_df.loc[selected_idx]
-                    rid = record["id"]
-
+                    
+                    # KEY FIX: Define the ID variable clearly
+                    rid = record["id"] 
+            
                     c_edit, c_del = st.columns(2)
-
+            
                     # --- EDIT SECTION ---
                     with c_edit:
                         new_desc = st.text_input("Update Description", record["description"])
                         new_amt = st.number_input("Update amount", value=float(record["amount"]))
                         new_date = st.date_input("Update Date", pd.to_datetime(record["date"]))
-
+            
                         if st.button("💾 Save Changes", key=f"edit_{rid}"):
-                            # Update the main dataframe
+                            # Update the master dataframe
                             df.loc[df["id"] == rid, ["description", "amount", "date"]] = [
                                 new_desc,
                                 float(new_amt),
                                 new_date.strftime("%Y-%m-%d")
                             ]
                             
-                            # Clean and Save as DataFrame
+                            # Sanitize and Save
                             clean_save_df = prepare_df_for_db(df)
                             
                             if save_data("petty_cash", clean_save_df):
                                 st.success("Entry updated")
                                 st.cache_data.clear()
                                 st.rerun()
-
+            
                     # --- DELETE SECTION ---
-                    if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
-                        # 1. Grab the ID and force it to a string to prevent "shuffling"
-                        target_id = str(entry_id)
-                        
-                        # 2. Filter the master 'df' using string-based comparison
-                        # We use a unique name 'df_to_save' to avoid scope errors
-                        df_to_save = df[df["id"].astype(str) != target_id].copy()
-                        
-                        # 3. Validation Check: Did we actually remove a row?
-                        if len(df_to_save) < len(df):
-                            # 4. Clean the date column (Crucial to prevent the JSON error)
-                            if "date" in df_to_save.columns:
-                                df_to_save["date"] = pd.to_datetime(df_to_save["date"]).dt.strftime("%Y-%m-%d")
-                                df_to_save["date"] = df_to_save["date"].astype(object)
-                    
-                            # 5. Save the filtered DataFrame
-                            if save_data("petty_cash", df_to_save):
-                                st.cache_data.clear() 
-                                st.warning("Entry removed from digital cashbook.")
-                                st.rerun()
+                    with c_del:
+                        # Add a small buffer/header for the danger zone
+                        st.write(" ") 
+                        if st.button("🗑️ Delete Permanently", key=f"del_{rid}", use_container_width=True, type="secondary"):
+                            # Use the 'rid' defined above (the fix for your NameError)
+                            target_id = str(rid)
+                            
+                            # Filter the master 'df' using string-based comparison
+                            df_to_save = df[df["id"].astype(str) != target_id].copy()
+                            
+                            # Check if we actually dropped a row
+                            if len(df_to_save) < len(df):
+                                # Use the helper function to clean the data (Fixes the JSON issue)
+                                final_clean_df = prepare_df_for_db(df_to_save)
+                                
+                                if save_data("petty_cash", final_clean_df):
+                                    st.cache_data.clear() 
+                                    st.warning("Entry removed from digital cashbook.")
+                                    st.rerun()
+                                else:
+                                    st.error("Database save failed.")
                             else:
-                                st.error("Database save failed.")
-                        else:
-                            # If this triggers, your 'entry_id' didn't match anything in the 'id' column
-                            st.error(f"Could not find ID {target_id} in current data.")
-                            st.write("Available IDs:", df["id"].astype(str).tolist())
+                                st.error(f"Could not find ID {target_id} in current data.")
+                                # Helpful debug if it fails to find the ID
+                                st.write("Row IDs:", df["id"].astype(str).tolist())
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
