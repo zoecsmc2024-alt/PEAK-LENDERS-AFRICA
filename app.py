@@ -4126,111 +4126,132 @@ def show_reports():
     m4.metric("OpEx Ratio", f"{(total_opex/actual_collected*100 if actual_collected > 0 else 0):.1f}%")
 
     # ==============================
-    # 🧾 STATEMENTS (REFINED FINANCIAL STRUCTURE)
+    # 🧾 FINANCIAL STATEMENTS (CYCLE-AWARE)
     # ==============================
     s1, s2 = st.columns(2)
     
-    # ==============================
+    # ------------------------------
+    # Compute fiscal year: July–June
+    # ------------------------------
+    def fiscal_year(dt):
+        if pd.isna(dt):
+            return "Unknown"
+        return f"{dt.year}-{dt.year+1}" if dt.month >= 7 else f"{dt.year-1}-{dt.year}"
+    
+    loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
+    payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
+    expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
+    
+    loans["fiscal_year"] = loans["start_date"].apply(fiscal_year)
+    payments["fiscal_year"] = payments["date"].apply(fiscal_year)
+    expenses["fiscal_year"] = expenses["date"].apply(fiscal_year)
+    
+    fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
+    
+    # ------------------------------
     # 💰 INCOME STATEMENT
-    # ==============================
+    # ------------------------------
     with s1:
-        gross_revenue = projected_interest
+        st.subheader("💰 Income Statement (Profit & Loss)")
     
-        operating_expenses = total_opex
+        for fy in fiscal_years:
+            fy_loans = loans[loans["fiscal_year"] == fy]
     
-        net_profit = gross_revenue - operating_expenses
+            # Active Capital → Cycle 1 PENDING
+            active_capital = fy_loans[
+                (fy_loans["cycle_no"] == 1) & (fy_loans["status"].str.upper() == "PENDING")
+            ]["principal"].sum()
     
-        st.markdown("#### 💰 Income Statement (Profit & Loss)")
+            # Interest Revenue → All CLEARED cycles
+            int_revenue = fy_loans[
+                fy_loans["status"].str.upper() == "CLEARED"
+            ]["interest"].sum()
     
-        st.markdown(f"""
-        <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
+            # Expenses
+            fy_expenses = expenses[expenses["fiscal_year"] == fy]
+            direct_exp = col_sum(fy_expenses, "amount")  # petty cash included in expenses
+            salary_exp = col_sum(payroll, "net_pay")
+            tax_exp = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10") + col_sum(payroll, "paye")
+            total_opex = direct_exp + salary_exp + tax_exp
     
-            <small><b>REVENUE</b></small><br>
-            Interest Income (Realized): <b>UGX {gross_revenue:,.0f}</b>
+            net_profit = int_revenue - total_opex
     
-            <hr>
+            st.write(f"**Fiscal Year {fy}**")
+            st.dataframe(pd.DataFrame({
+                "Description": ["Active Capital (Cycle 1 Pending)", "Interest Revenue (All Cleared Loans)", 
+                                "Salaries", "Taxes (NSSF+PAYE)", "Direct Expenses", "Total OPEX", "Net Profit"],
+                "Amount (UGX)": [active_capital, int_revenue, salary_exp, tax_exp, direct_exp, total_opex, net_profit]
+            }))
     
-            <small><b>OPERATING EXPENSES BREAKDOWN</b></small><br>
-            Salaries: UGX {salary_net:,.0f}<br>
-            Taxes (NSSF + PAYE): UGX {(nssf_tax + paye_tax):,.0f}<br>
-            Direct Expenses: UGX {direct_expenses:,.0f}<br>
-            Petty Cash (Included in Expenses): UGX {petty_out:,.0f}<br>
-    
-            <hr>
-    
-            <small><b>TOTAL OPEX</b></small><br>
-            <b>UGX {operating_expenses:,.0f}</b>
-    
-            <hr>
-    
-            <h4 style="color:#1E3A8A;">NET PROFIT: UGX {net_profit:,.0f}</h4>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # ==============================
+    # ------------------------------
     # 🧾 BALANCE SHEET
-    # ==============================
+    # ------------------------------
     with s2:
+        st.subheader("🧾 Balance Sheet")
     
-        loan_book_value = col_sum(loans, "balance")
-        cash_position = cash_profit
+        for fy in fiscal_years:
+            fy_loans = loans[loans["fiscal_year"] == fy]
+            fy_payments = payments[payments["fiscal_year"] == fy]
+            fy_expenses = expenses[expenses["fiscal_year"] == fy]
     
-        total_assets = cash_position + loan_book_value
+            # Loan Book → all cycles
+            loan_book = fy_loans["balance"].sum()
     
-        st.markdown("#### 🧾 Balance Sheet Position")
+            # Cash position
+            cash_pos = fy_payments["amount"].sum() - fy_expenses["amount"].sum()
     
-        st.markdown(f"""
-        <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
+            total_assets = loan_book + cash_pos
     
-            <small><b>ASSETS</b></small><br>
+            st.write(f"**Fiscal Year {fy}**")
+            st.dataframe(pd.DataFrame({
+                "Asset Type": ["Cash at Hand", "Loan Book (Outstanding Portfolio)"],
+                "Amount (UGX)": [cash_pos, loan_book],
+                "Total Assets": [total_assets, total_assets]
+            }))
     
-            Cash at Hand: <b>UGX {cash_position:,.0f}</b><br>
-            Loan Book (Outstanding Portfolio): <b>UGX {loan_book_value:,.0f}</b>
-    
-            <hr>
-    
-            <small><b>PORTFOLIO INSIGHT</b></small><br>
-            Performing Loans Included<br>
-            Overdue Loans Reflected in Balance Book
-    
-            <hr>
-    
-            <h4 style="color:#059669;">TOTAL ASSETS: UGX {total_assets:,.0f}</h4>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    # ==============================
-    # 📤 EXPORT (CLEAN AUDIT FORMAT)
-    # ==============================
+    # ------------------------------
+    # 📤 EXPORT
+    # ------------------------------
     with st.expander("📥 Export Financial Data for Auditors"):
     
-        report_data = {
-            "Metric": [
-                "Revenue (Interest Income)",
-                "Total Operating Expenses",
-                "Net Profit",
-                "Cash Position",
-                "Loan Book Value",
-                "Portfolio Yield %",
-                "PAR %"
-            ],
-            "Value": [
-                gross_revenue,
-                operating_expenses,
-                net_profit,
-                cash_position,
-                loan_book_value,
-                f"{yield_pct:.2f}%",
-                f"{par_ratio:.2f}%"
-            ]
-        }
+        export_rows = []
+        for fy in fiscal_years:
+            fy_loans = loans[loans["fiscal_year"] == fy]
+            fy_payments = payments[payments["fiscal_year"] == fy]
+            fy_expenses = expenses[expenses["fiscal_year"] == fy]
     
-        export_df = pd.DataFrame(report_data)
+            active_capital = fy_loans[
+                (fy_loans["cycle_no"] == 1) & (fy_loans["status"].str.upper() == "PENDING")
+            ]["principal"].sum()
+            int_revenue = fy_loans[
+                fy_loans["status"].str.upper() == "CLEARED"
+            ]["interest"].sum()
     
-        st.table(export_df)
+            salary_exp = col_sum(payroll, "net_pay")
+            tax_exp = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10") + col_sum(payroll, "paye")
+            direct_exp = col_sum(fy_expenses, "amount")
+            total_opex = salary_exp + tax_exp + direct_exp
+            net_profit = int_revenue - total_opex
     
-        csv = export_df.to_csv(index=False).encode('utf-8')
+            loan_book = fy_loans["balance"].sum()
+            cash_pos = fy_payments["amount"].sum() - fy_expenses["amount"].sum()
+            total_assets = loan_book + cash_pos
     
+            export_rows.append({
+                "Fiscal Year": fy,
+                "Active Capital": active_capital,
+                "Interest Revenue": int_revenue,
+                "Total OPEX": total_opex,
+                "Net Profit": net_profit,
+                "Cash Position": cash_pos,
+                "Loan Book Value": loan_book,
+                "Total Assets": total_assets
+            })
+    
+        export_df = pd.DataFrame(export_rows)
+        st.dataframe(export_df)
+    
+        csv = export_df.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="⬇️ Download Full Executive Report",
             data=csv,
