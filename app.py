@@ -4005,20 +4005,55 @@ def show_reports():
     # ==============================
     # 🔢 CORE FINANCIAL ACCOUNTING
     # ==============================
-    total_capital_out = col_sum(loans, "principal")
-    projected_interest = col_sum(loans, "interest")
+    
+    # Ensure numeric safety
+    for col in ["principal", "interest", "cycle_no"]:
+        if col in loans.columns:
+            loans[col] = pd.to_numeric(loans[col], errors="coerce").fillna(0)
+    
+    # Normalize status
+    loans["status"] = loans["status"].astype(str).str.upper()
+    
+    # ==============================
+    # 🧠 ACTIVE CAPITAL (Cycle 1 ONLY, Active/Pending Loans)
+    # ==============================
+    active_capital_loans = loans[
+        (loans["cycle_no"] == 1) &
+        (loans["status"].isin(["ACTIVE", "PENDING"]))
+    ]
+    
+    total_capital_out = active_capital_loans["principal"].sum()
+    
+    # ==============================
+    # 💰 INT. REVENUE (ONLY CLEARED LOANS, ALL CYCLES INCLUDED)
+    # ==============================
+    cleared_loans = loans[loans["status"] == "CLEARED"]
+    
+    projected_interest = cleared_loans["interest"].sum()
+    
+    # ==============================
+    # 💵 COLLECTIONS (UNCHANGED)
+    # ==============================
     actual_collected = col_sum(payments, "amount")
-
+    
+    # ==============================
+    # 💸 OPEX (UNCHANGED)
+    # ==============================
     direct_expenses = col_sum(expenses, "amount")
     nssf_tax = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10")
     paye_tax = col_sum(payroll, "paye")
     salary_net = col_sum(payroll, "net_pay")
-    petty_out = col_sum(petty[petty.get("type") == "Out"], "amount") if not petty.empty else 0
-
+    
+    petty_out = 0
+    if not petty.empty and "type" in petty.columns:
+        petty_out = col_sum(petty[petty["type"] == "Out"], "amount")
+    
     total_opex = direct_expenses + petty_out + nssf_tax + paye_tax + salary_net
-
+    
+    # ==============================
+    # 📊 NET CASHFLOW (UNCHANGED)
+    # ==============================
     cash_profit = actual_collected - total_opex
-
     # ==============================
     # 💎 KPI TILES
     # ==============================
