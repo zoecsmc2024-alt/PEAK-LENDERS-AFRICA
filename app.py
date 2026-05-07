@@ -2903,7 +2903,7 @@ def generate_receipt_no(supabase, tenant_id):
         return f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
 # ==============================
-# 💵 PAYMENTS MODULE
+# 💵 PAYMENTS MODULE (CYCLE-AWARE)
 # ==============================
 def show_payments():
     st.markdown("## 💵 Payments Management")
@@ -2942,15 +2942,38 @@ def show_payments():
         loans_df["borrower"] = "Unknown"
 
     # Numeric fields
-    loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", 0), errors="coerce").fillna(0)
+    for col in ["total_repayable", "amount_paid", "balance", "principal", "interest"]:
+        if col in loans_df.columns:
+            loans_df[col] = pd.to_numeric(loans_df[col].fillna(0), errors="coerce")
 
-    # ✅ ALWAYS derive from payments
-    if not payments_df.empty:
+    if not payments_df.empty and "amount" in payments_df.columns:
         payments_df["amount"] = pd.to_numeric(payments_df.get("amount", 0), errors="coerce").fillna(0)
+
+    # Map total payments to loans
+    if not payments_df.empty:
         payment_sums = payments_df.groupby("loan_id")["amount"].sum()
         loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(0)
     else:
         loans_df["amount_paid"] = 0
+
+    # ------------------------------
+    # CYCLE-AWARE CASCADE FUNCTION
+    # ------------------------------
+    def cascade_payment(loans_df, sn, changed_cycle_no):
+        # Get all cycles of this SN sorted by cycle_no
+        cycles = loans_df[loans_df["sn"] == sn].sort_values("cycle_no").reset_index()
+        for idx, row in cycles.iterrows():
+            # Skip cycles before the changed cycle
+            if row["cycle_no"] <= changed_cycle_no:
+                continue
+            prev_balance = cycles.loc[idx - 1, "balance"]
+            prev_interest = row["interest"]
+            # New principal = previous balance
+            loans_df.loc[row["index"], "principal"] = prev_balance
+            # Total repayable = principal + interest
+            loans_df.loc[row["index"], "total_repayable"] = prev_balance + prev_interest
+            # Recalculate balance = total repayable - amount_paid
+            loans_df.loc[row["index"], "balance"] = loans_df.loc[row["index"], "total_repayable"] - loans_df.loc[row["index"], "amount_paid"]
 
     # ==============================
     # 🔥 GET ACTIVE LOAN
@@ -2958,18 +2981,14 @@ def show_payments():
     def get_active_loan(loans_df, loan_row):
         current = loan_row
         visited = set()
-
         while True:
             if current["id"] in visited:
                 break
             visited.add(current["id"])
-
             child = loans_df[loans_df["parent_loan_id"] == current["id"]]
             if child.empty:
                 return current
-
             current = child.iloc[0]
-
         return current
 
     # ==============================
@@ -2998,14 +3017,12 @@ def show_payments():
 
         loan = active_loans.loc[selected_index]
 
-        # 🔥 CRITICAL FIX
+        # 🔥 CRITICAL: Get active cycle for this loan
         active_loan = get_active_loan(loans_df, loan)
         loan_id = active_loan["id"]
-
         balance = active_loan["total_repayable"] - active_loan["amount_paid"]
 
         st.info(f"Active Loan Used: {active_loan['borrower']} (ID: {loan_id[:6]})")
-
         st.metric("Balance", f"UGX {balance:,.0f}")
 
         with st.form("payment_form"):
@@ -3025,6 +3042,7 @@ def show_payments():
                 # ✅ SINGLE SOURCE OF TRUTH
                 receipt_no = generate_receipt_no(supabase, tenant_id)
 
+                # 1️⃣ Insert payment
                 supabase.table("payments").insert({
                     "receipt_no": receipt_no,
                     "loan_id": loan_id,
@@ -3035,11 +3053,19 @@ def show_payments():
                     "tenant_id": tenant_id
                 }).execute()
 
-                # Recalculate locally
-                new_paid = active_loan["amount_paid"] + amount
-                new_balance = active_loan["total_repayable"] - new_paid
+                # 2️⃣ Update this cycle locally
+                loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] += amount
+                loans_df.loc[loans_df["id"] == loan_id, "balance"] = loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
 
-                # Receipt
+                # 3️⃣ Cascade to subsequent cycles
+                sn = active_loan["sn"]
+                changed_cycle_no = int(active_loan["cycle_no"])
+                cascade_payment(loans_df, sn, changed_cycle_no)
+
+                # 4️⃣ Save updated loan table
+                save_data_saas("loans", loans_df)
+
+                # 5️⃣ Generate receipt PDF
                 file_path = f"/tmp/{receipt_no}.pdf"
                 generate_receipt_pdf({
                     "Receipt No": receipt_no,
@@ -3052,7 +3078,7 @@ def show_payments():
                 with open(file_path, "rb") as f:
                     st.download_button("📥 Download Receipt", f, file_name=f"{receipt_no}.pdf")
 
-                st.success(f"✅ Payment posted. New Balance: UGX {new_balance:,.0f}")
+                st.success(f"✅ Payment posted. New Balance: UGX {loans_df.loc[loans_df['id'] == loan_id, 'balance'].values[0]:,.0f}")
 
                 st.cache_data.clear()
                 st.rerun()
@@ -3067,29 +3093,22 @@ def show_payments():
         if payments_df.empty:
             st.info("No payment history")
         else:
-            # 1. Prepare Display Data
             payments_df["amount_display"] = payments_df["amount"].apply(lambda x: f"UGX {x:,.0f}")
-            # Ensure ID and Receipt exist for the logic below
             payments_df["id"] = payments_df["id"].astype(str)
             payments_df["receipt_no"] = payments_df["receipt_no"].fillna("No Receipt")
-            
             display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
             st.dataframe(payments_df[display_cols], use_container_width=True, hide_index=True)
 
-            # --- 🛠️ EDIT/DELETE MANAGEMENT ---
             st.markdown("---")
             st.markdown("### ⚙️ Payment Maintenance")
-            
-            # Create the selection map using payments_df
+
             pay_map = {
-                f"{row['receipt_no']} | {row['borrower']} | {row['amount_display']}": row['id'] 
+                f"{row['receipt_no']} | {row['borrower']} | {row['amount_display']}": row['id']
                 for _, row in payments_df.iterrows()
             }
-            
+
             selected_pay_label = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
-            
             target_pay_id = pay_map[selected_pay_label]
-            # Fetch the specific record from payments_df
             target_pay = payments_df[payments_df['id'] == target_pay_id].iloc[0]
 
             p_col1, p_col2 = st.columns(2)
@@ -3097,8 +3116,13 @@ def show_payments():
             if p_col1.button("🗑️ Delete Payment", use_container_width=True):
                 try:
                     supabase.table("payments").delete().eq("id", target_pay_id).execute()
-                    st.cache_data.clear() 
-                    st.warning(f"Payment {target_pay['receipt_no']} removed.")
+                    # Recompute cascade if needed
+                    loan_id = target_pay["loan_id"]
+                    affected_loan = loans_df[loans_df["id"] == loan_id].iloc[0]
+                    cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
+                    save_data_saas("loans", loans_df)
+                    st.cache_data.clear()
+                    st.warning(f"Payment {target_pay['receipt_no']} removed and cascade updated.")
                     st.rerun()
                 except Exception as e:
                     st.error(f"Delete failed: {e}")
@@ -3110,43 +3134,43 @@ def show_payments():
                 with st.form("edit_payment_form"):
                     st.info(f"Modifying: {target_pay['receipt_no']}")
                     new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
-                    
-                    # Safe index lookup for the method
                     current_method = target_pay['method']
                     method_options = ["Cash", "Mobile Money", "Bank"]
                     method_idx = method_options.index(current_method) if current_method in method_options else 0
-                    
                     new_method = st.selectbox("Revised Method", method_options, index=method_idx)
-                    
                     eb1, eb2 = st.columns(2)
+
                     if eb1.form_submit_button("💾 Save Changes"):
                         try:
                             supabase.table("payments").update({
                                 "amount": new_amt,
                                 "method": new_method
                             }).eq("id", target_pay_id).execute()
-                            
+                            # Recompute cascade after edit
+                            loan_id = target_pay["loan_id"]
+                            affected_loan = loans_df[loans_df["id"] == loan_id].iloc[0]
+                            cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
+                            save_data_saas("loans", loans_df)
                             st.session_state["edit_pay_mode"] = False
                             st.cache_data.clear()
-                            st.success("Payment updated successfully!")
+                            st.success("Payment updated successfully and cascade applied!")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Update failed: {e}")
-                    
+
                     if eb2.form_submit_button("❌ Cancel"):
                         st.session_state["edit_pay_mode"] = False
                         st.rerun()
+
+
 def format_with_commas(df):
     if df.empty:
         return df
 
     df = df.copy()
-
     numeric_cols = df.select_dtypes(include=["number"]).columns
-
     for col in numeric_cols:
         df[col] = df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "")
-
     return df
 # =================================
 # 🏢 Enterprise Payroll Engine (Clean + Excel Export)
