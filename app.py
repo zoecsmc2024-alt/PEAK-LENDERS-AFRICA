@@ -1136,120 +1136,116 @@ def show_dashboard_view():
             st.warning(f"⚠️ {overdue_count} overdue loans need urgent attention.")
 
             
-        # --- 3. TOP LEVEL METRIC CARDS ---
+        # ==============================
+        # METRIC CARD STYLES
+        # ==============================
+        st.markdown("""
+        <style>
+        
+        .metric-box {
+            padding: 22px;
+            border-radius: 18px;
+            color: white;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+            margin-bottom: 10px;
+        }
+        
+        .metric-title {
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            opacity: 0.92;
+        }
+        
+        .metric-value {
+            font-size: 30px;
+            font-weight: 800;
+            margin-top: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .metric-sub {
+            font-size: 12px;
+            font-weight: 600;
+            opacity: 0.92;
+        }
+        
+        .blue-card {
+            background: linear-gradient(135deg, #2563EB, #1E3A8A);
+        }
+        
+        .green-card {
+            background: linear-gradient(135deg, #10B981, #047857);
+        }
+        
+        .red-card {
+            background: linear-gradient(135deg, #EF4444, #991B1B);
+        }
+        
+        .orange-card {
+            background: linear-gradient(135deg, #F59E0B, #B45309);
+        }
+        
+        </style>
+        """, unsafe_allow_html=True)
+        
+        # ==============================
+        # CARD HELPER
+        # ==============================
+        def render_metric_card(container, title, value, subtitle, css_class):
+        
+            with container:
+        
+                st.markdown(
+                    f"""
+                    <div class="metric-box {css_class}">
+                        <div class="metric-title">{title}</div>
+                        <div class="metric-value">{value}</div>
+                        <div class="metric-sub">{subtitle}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
+        
+        # ==============================
+        # TOP METRICS
+        # ==============================
         m1, m2, m3, m4 = st.columns(4)
         
-        def metric_card(title, value, subtitle, gradient, is_money=True):
-        
-            # SAFE formatting
-            try:
-                if is_money:
-                    fmt = f"UGX {float(value):,.0f}"
-                else:
-                    fmt = f"{int(value)}"
-            except:
-                fmt = "0"
-        
-            return f"""
-            <div style="
-                background:{gradient};
-                padding:22px;
-                border-radius:18px;
-                color:white;
-                box-shadow:0 6px 18px rgba(0,0,0,0.12);
-                min-height:135px;
-                position:relative;
-                overflow:hidden;
-            ">
-        
-                <!-- Glow -->
-                <div style="
-                    position:absolute;
-                    right:-25px;
-                    top:-25px;
-                    width:90px;
-                    height:90px;
-                    background:rgba(255,255,255,0.12);
-                    border-radius:50%;
-                "></div>
-        
-                <div style="
-                    font-size:11px;
-                    text-transform:uppercase;
-                    letter-spacing:1px;
-                    font-weight:700;
-                    opacity:0.9;
-                    margin-bottom:10px;
-                ">
-                    {title}
-                </div>
-        
-                <div style="
-                    font-size:28px;
-                    font-weight:800;
-                    line-height:1.2;
-                    margin-bottom:10px;
-                    white-space:nowrap;
-                ">
-                    {fmt}
-                </div>
-        
-                <div style="
-                    font-size:12px;
-                    font-weight:600;
-                    opacity:0.92;
-                ">
-                    {subtitle}
-                </div>
-        
-            </div>
-            """
-        
-        # ==============================
-        # RENDER CARDS
-        # ==============================
-        m1.markdown(
-            metric_card(
-                "Active Principal",
-                total_principal,
-                "Portfolio Value",
-                "linear-gradient(135deg, #2563EB, #1E3A8A)"
-            ),
-            unsafe_allow_html=True
+        render_metric_card(
+            m1,
+            "Active Principal",
+            f"UGX {total_principal:,.0f}",
+            "Portfolio Value",
+            "blue-card"
         )
         
-        m2.markdown(
-            metric_card(
-                "Interest Income",
-                total_interest,
-                "Expected Earnings",
-                "linear-gradient(135deg, #10B981, #047857)"
-            ),
-            unsafe_allow_html=True
+        render_metric_card(
+            m2,
+            "Interest Income",
+            f"UGX {total_interest:,.0f}",
+            "Expected Earnings",
+            "green-card"
         )
         
-        m3.markdown(
-            metric_card(
-                "Operational Costs",
-                total_expenses,
-                "Total Expenses",
-                "linear-gradient(135deg, #EF4444, #991B1B)"
-            ),
-            unsafe_allow_html=True
+        render_metric_card(
+            m3,
+            "Operational Costs",
+            f"UGX {total_expenses:,.0f}",
+            "Total Expenses",
+            "red-card"
         )
         
-        m4.markdown(
-            metric_card(
-                "Critical Alerts",
-                overdue_count,
-                "Overdue Loans",
-                "linear-gradient(135deg, #F59E0B, #B45309)",
-                False
-            ),
-            unsafe_allow_html=True
+        render_metric_card(
+            m4,
+            "Critical Alerts",
+            str(overdue_count),
+            "Overdue Loans",
+            "orange-card"
         )
         
-        st.write("##")
+        st.write("")
         # --- 4. DATA VISUALIZATION SECTION ---
         col_l, col_r = st.columns([2, 1])
 
