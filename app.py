@@ -3718,7 +3718,36 @@ def show_petty_cash():
     if not current_tenant:
         st.error("Session expired.")
         return
+    # ==============================
+    # 🎨 BANKING UI SYSTEM (ENHANCED)
+    # ==============================
+    st.markdown(f"""
+    <style>
+    .block-container {{ padding-top: 1.2rem; }}
+    
+    /* Glassmorphism Cards */
+    .glass-card {{
+        backdrop-filter: blur(10px);
+        background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(240,244,255,0.7));
+        border-radius: 16px;
+        padding: 20px;
+        border: 1px solid rgba(43,63,135,0.1);
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        transition: transform 0.2s ease;
+    }}
+    .glass-card:hover {{ transform: translateY(-3px); box-shadow: 0 8px 25px rgba(0,0,0,0.08); }}
 
+    .metric-title {{ font-size: 11px; color: #6b7280; font-weight: 600; letter-spacing: 0.8px; text-transform: uppercase; }}
+    .metric-value {{ font-size: 24px; font-weight: 700; margin-top: 4px; }}
+    
+    /* Status Badges */
+    .status-badge {{ font-size: 10px; padding: 3px 10px; border-radius: 12px; font-weight: 700; float: right; }}
+    .badge-safe {{ background: #E1F9F0; color: #10B981; }}
+    .badge-low {{ background: #FFEBEB; color: #FF4B4B; }}
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"<h2 style='color:{brand_color};'>💵 Petty Cash Management</h2>", unsafe
     # ------------------------------
     # DATA LOAD
     # ------------------------------
