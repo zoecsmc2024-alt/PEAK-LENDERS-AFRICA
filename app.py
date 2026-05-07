@@ -4059,13 +4059,33 @@ def show_petty_cash():
                                 st.cache_data.clear()
                                 st.rerun()
 
+                    # --- DELETE SECTION ---
                     if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
-                        # Filter out the deleted ID
-                        df_filtered = df[df["id"] != entry_id]
-                    if save_data("petty_cash", df_filtered):
-                        st.warning("Entry removed from digital cashbook.")
-                        st.cache_data.clear()
-                        st.rerun()
+                        # 1. Grab the ID and force it to a string to prevent "shuffling"
+                        target_id = str(entry_id)
+                        
+                        # 2. Filter the master 'df' using string-based comparison
+                        # We use a unique name 'df_to_save' to avoid scope errors
+                        df_to_save = df[df["id"].astype(str) != target_id].copy()
+                        
+                        # 3. Validation Check: Did we actually remove a row?
+                        if len(df_to_save) < len(df):
+                            # 4. Clean the date column (Crucial to prevent the JSON error)
+                            if "date" in df_to_save.columns:
+                                df_to_save["date"] = pd.to_datetime(df_to_save["date"]).dt.strftime("%Y-%m-%d")
+                                df_to_save["date"] = df_to_save["date"].astype(object)
+                    
+                            # 5. Save the filtered DataFrame
+                            if save_data("petty_cash", df_to_save):
+                                st.cache_data.clear() 
+                                st.warning("Entry removed from digital cashbook.")
+                                st.rerun()
+                            else:
+                                st.error("Database save failed.")
+                        else:
+                            # If this triggers, your 'entry_id' didn't match anything in the 'id' column
+                            st.error(f"Could not find ID {target_id} in current data.")
+                            st.write("Available IDs:", df["id"].astype(str).tolist())
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
