@@ -3797,7 +3797,7 @@ def show_petty_cash():
         with st.form("petty_cash_form", clear_on_submit=True):
             st.write("### Log Cash Movement")
             col1, col2 = st.columns(2)
-            ttype = col1.selectbox("Transaction Type", ["Out","In"])
+            ttype = col1.selectbox("Transaction type", ["Out","In"])
             t_amount = col2.number_input("Amount (UGX)", min_value=0, step=500)
             t_date = st.date_input("Transaction Date", value=datetime.now())
             t_desc = st.text_input("Purpose / Description")
@@ -3832,7 +3832,7 @@ def show_petty_cash():
 
             fy_list = ["All"] + sorted(view_df["financial_year"].dropna().unique(), reverse=True)
             fy_filter = st.selectbox("Filter by Fiscal Year", fy_list)
-            type_filter = st.selectbox("Filter Type", ["All"] + sorted(view_df["type"].unique()))
+            type_filter = st.selectbox("Filter type", ["All"] + sorted(view_df["type"].unique()))
             search_txt = st.text_input("Search Description").lower()
 
             filtered = view_df.copy()
@@ -3858,7 +3858,7 @@ def show_petty_cash():
 
             st.dataframe(
                 filtered[["Date","type","description","amount","financial_year"]].rename(
-                    columns={"type":"Type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
+                    columns={"type":"type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
                 ).style.apply(style_row, axis=1).format({"Amount (UGX)":"{:,}"}),
                 use_container_width=True
             )
