@@ -4148,60 +4148,57 @@ def show_reports():
     
     fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
     
-    # ==============================
-    # 💰 INCOME STATEMENT & BALANCE SHEET
-    # ==============================
+    # ------------------------------
+    # 💰 INCOME STATEMENT (CLEAN OPEX MODEL)
+    # ------------------------------
     with s1:
         st.subheader("💰 Income Statement (Profit & Loss)")
     
         for fy in fiscal_years:
-            # Filter loans and expenses by fiscal year
             fy_loans = loans[loans["fiscal_year"] == fy]
             fy_expenses = expenses[expenses["fiscal_year"] == fy]
     
-            # --- Active Capital: Cycle 1, ACTIVE/PENDING (Balance Sheet) ---
+            # ------------------------------
+            # Active Capital (Cycle 1 only)
+            # ------------------------------
             active_capital = fy_loans[
                 (fy_loans["cycle_no"] == 1) &
-                (fy_loans["status"].str.upper().isin(["ACTIVE","PENDING"]))
+                (fy_loans["status"].str.upper().isin(["ACTIVE", "PENDING"]))
             ]["principal"].sum()
     
-            # --- Interest Revenue: All CLEARED cycles (Income Statement) ---
+            # ------------------------------
+            # Interest Revenue (only CLEARED loans)
+            # ------------------------------
             int_revenue = fy_loans[
                 fy_loans["status"].str.upper() == "CLEARED"
             ]["interest"].sum()
     
-            # --- Expenses ---
-            salary_exp = col_sum(payroll, "net_pay")
-            tax_exp = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10") + col_sum(payroll, "paye")
-            direct_exp = col_sum(fy_expenses, "amount")  # includes petty cash already
-            total_opex = salary_exp + tax_exp + direct_exp
+            # ------------------------------
+            # OPEX (SINGLE SOURCE OF TRUTH)
+            # ------------------------------
+            total_opex = col_sum(fy_expenses, "amount")
     
-            # --- Net Profit (P&L) ---
+            # ------------------------------
+            # Net Profit
+            # ------------------------------
             net_profit = int_revenue - total_opex
     
-            # --- Display Income Statement ---
             st.write(f"**Fiscal Year {fy}**")
+    
             st.dataframe(pd.DataFrame({
                 "Description": [
                     "Active Capital (Cycle 1 ACTIVE/PENDING)",
-                    "Interest Revenue (All CLEARED Loans)",
-                    "Salaries",
-                    "Taxes (NSSF + PAYE)",
-                    "Direct Expenses",
-                    "Total OPEX",
+                    "Interest Revenue (CLEARED Loans)",
+                    "Total Operating Expenses (OPEX)",
                     "Net Profit"
                 ],
                 "Amount (UGX)": [
                     f"{active_capital:,.0f}",
                     f"{int_revenue:,.0f}",
-                    f"{salary_exp:,.0f}",
-                    f"{tax_exp:,.0f}",
-                    f"{direct_exp:,.0f}",
                     f"{total_opex:,.0f}",
                     f"{net_profit:,.0f}"
                 ]
             }), use_container_width=True)
-    
     # ==============================
     # 🏦 BALANCE SHEET
     # ==============================
