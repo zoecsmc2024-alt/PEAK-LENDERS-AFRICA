@@ -4126,46 +4126,111 @@ def show_reports():
     m4.metric("OpEx Ratio", f"{(total_opex/actual_collected*100 if actual_collected > 0 else 0):.1f}%")
 
     # ==============================
-    # 🧾 STATEMENTS
+    # 🧾 STATEMENTS (REFINED FINANCIAL STRUCTURE)
     # ==============================
     s1, s2 = st.columns(2)
-
-    with s1:
-        st.markdown("#### 💰 Income Statement (OpEx)")
-        st.markdown(f"""
-        <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
-            <small>REVENUE (Projected interest)</small><br><b>UGX {projected_interest:,.0f}</b><hr>
-            <small>OPERATIONAL COSTS</small><br><b>UGX {total_opex:,.0f}</b><br>
-            <p style="font-size:12px; color:#666;">Includes Salaries, Taxes, </p>
-            <h4 style="color:#1E3A8A; margin-top:10px;">TRUE NET: UGX {(projected_interest - total_opex):,.0f}</h4>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with s2:
-        st.markdown("#### 🧾 Balance Sheet Position")
-        loan_book_value = col_sum(loans, "balance")
-        total_assets = cash_profit + loan_book_value
-        st.markdown(f"""
-        <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
-            <small>CASH AT HAND</small><br><b>UGX {cash_profit:,.0f}</b><hr>
-            <small>LOAN BOOK (Active Receivables)</small><br><b>UGX {loan_book_value:,.0f}</b><br>
-            <p style="font-size:12px; color:#666;">Current value of all outstanding principal + interest</p>
-            <h4 style="color:#059669; margin-top:10px;">TOTAL ASSETS: UGX {total_assets:,.0f}</h4>
-        </div>
-        """, unsafe_allow_html=True)
-
+    
     # ==============================
-    # 📤 DATA EXPORT
+    # 💰 INCOME STATEMENT
+    # ==============================
+    with s1:
+        gross_revenue = projected_interest
+    
+        operating_expenses = total_opex
+    
+        net_profit = gross_revenue - operating_expenses
+    
+        st.markdown("#### 💰 Income Statement (Profit & Loss)")
+    
+        st.markdown(f"""
+        <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
+    
+            <small><b>REVENUE</b></small><br>
+            Interest Income (Realized): <b>UGX {gross_revenue:,.0f}</b>
+    
+            <hr>
+    
+            <small><b>OPERATING EXPENSES BREAKDOWN</b></small><br>
+            Salaries: UGX {salary_net:,.0f}<br>
+            Taxes (NSSF + PAYE): UGX {(nssf_tax + paye_tax):,.0f}<br>
+            Direct Expenses: UGX {direct_expenses:,.0f}<br>
+            Petty Cash (Included in Expenses): UGX {petty_out:,.0f}<br>
+    
+            <hr>
+    
+            <small><b>TOTAL OPEX</b></small><br>
+            <b>UGX {operating_expenses:,.0f}</b>
+    
+            <hr>
+    
+            <h4 style="color:#1E3A8A;">NET PROFIT: UGX {net_profit:,.0f}</h4>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # ==============================
+    # 🧾 BALANCE SHEET
+    # ==============================
+    with s2:
+    
+        loan_book_value = col_sum(loans, "balance")
+        cash_position = cash_profit
+    
+        total_assets = cash_position + loan_book_value
+    
+        st.markdown("#### 🧾 Balance Sheet Position")
+    
+        st.markdown(f"""
+        <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
+    
+            <small><b>ASSETS</b></small><br>
+    
+            Cash at Hand: <b>UGX {cash_position:,.0f}</b><br>
+            Loan Book (Outstanding Portfolio): <b>UGX {loan_book_value:,.0f}</b>
+    
+            <hr>
+    
+            <small><b>PORTFOLIO INSIGHT</b></small><br>
+            Performing Loans Included<br>
+            Overdue Loans Reflected in Balance Book
+    
+            <hr>
+    
+            <h4 style="color:#059669;">TOTAL ASSETS: UGX {total_assets:,.0f}</h4>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    # ==============================
+    # 📤 EXPORT (CLEAN AUDIT FORMAT)
     # ==============================
     with st.expander("📥 Export Financial Data for Auditors"):
+    
         report_data = {
-            "Metric": ["Capital Out", "Interest Revenue", "Total OpEx", "Cash Profit", "Portfolio Yield %", "PAR %"],
-            "Value": [total_capital_out, projected_interest, total_opex, cash_profit, f"{yield_pct:.2f}%", f"{par_ratio:.2f}%"]
+            "Metric": [
+                "Revenue (Interest Income)",
+                "Total Operating Expenses",
+                "Net Profit",
+                "Cash Position",
+                "Loan Book Value",
+                "Portfolio Yield %",
+                "PAR %"
+            ],
+            "Value": [
+                gross_revenue,
+                operating_expenses,
+                net_profit,
+                cash_position,
+                loan_book_value,
+                f"{yield_pct:.2f}%",
+                f"{par_ratio:.2f}%"
+            ]
         }
+    
         export_df = pd.DataFrame(report_data)
+    
         st.table(export_df)
-
+    
         csv = export_df.to_csv(index=False).encode('utf-8')
+    
         st.download_button(
             label="⬇️ Download Full Executive Report",
             data=csv,
