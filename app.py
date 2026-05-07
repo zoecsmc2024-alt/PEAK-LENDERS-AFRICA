@@ -4008,65 +4008,71 @@ def show_petty_cash():
             # ------------------------------
             st.markdown("---")
             with st.expander("🛠️ Edit / Delete Records"):
-    
-                # FIX 2: ensure Date exists in display_df
-                display_df["Date"] = view_df["Date"]
-    
-                # FIX 3: REMOVE fake column usage safety patch
+
+                # Helper function to sanitize DataFrame for DB without converting to list
+                def prepare_df_for_db(input_df):
+                    cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
+                    # 1. Filter columns
+                    out_df = input_df[[c for c in cols_to_keep if c in input_df.columns]].copy()
+                    # 2. Force date to string YYYY-MM-DD
+                    out_df["date"] = pd.to_datetime(out_df["date"]).dt.strftime("%Y-%m-%d")
+                    # 3. Cast to object to prevent Pandas from re-converting to Timestamp
+                    out_df["date"] = out_df["date"].astype(object)
+                    return out_df
+
+                # Ensure Date exists for the selection label
+                display_df["Date"] = pd.to_datetime(display_df["date"]).dt.strftime("%Y-%m-%d")
+                
                 display_df["label"] = display_df.apply(
                     lambda r: f"{r['Date']} | {r['type']} | {r['description'][:20]}... | {r['amount']}",
                     axis=1
                 )
-    
-                selected_label = st.selectbox("Select Record", display_df["label"])
-    
+
+                selected_label = st.selectbox("Select Record to Modify", display_df["label"])
+
                 if selected_label:
                     selected_idx = display_df[display_df["label"] == selected_label].index[0]
                     record = display_df.loc[selected_idx]
                     rid = record["id"]
-    
+
                     c_edit, c_del = st.columns(2)
-    
-                    # Edit
+
+                    # --- EDIT SECTION ---
                     with c_edit:
                         new_desc = st.text_input("Update Description", record["description"])
                         new_amt = st.number_input("Update amount", value=float(record["amount"]))
                         new_date = st.date_input("Update Date", pd.to_datetime(record["date"]))
-    
+
                         if st.button("💾 Save Changes", key=f"edit_{rid}"):
-                            # 1. Update the local row (Keep your existing logic)
+                            # Update the main dataframe
                             df.loc[df["id"] == rid, ["description", "amount", "date"]] = [
                                 new_desc,
                                 float(new_amt),
                                 new_date.strftime("%Y-%m-%d")
                             ]
                             
-                            # 2. & 3. Prepare for Database
-                            # Filter columns first
-                            cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
-                            save_df = df[[c for c in cols_to_keep if c in df.columns]].copy()
+                            # Clean and Save as DataFrame
+                            clean_save_df = prepare_df_for_db(df)
                             
-                            # Force the date column to strings
-                            save_df["date"] = save_df["date"].astype(str)
-                            
-                            # Convert to a list of records with native Python types
-                            # This is usually what the 'save_data' function expects to avoid serialization issues
-                            data_to_save = save_df.to_dict(orient="records")
-                            
-                            if save_data("petty_cash", prepare_for_db(df)):
+                            if save_data("petty_cash", clean_save_df):
                                 st.success("Entry updated")
                                 st.cache_data.clear()
                                 st.rerun()
+
+                    # --- DELETE SECTION ---
+                    with c_del:
+                        st.write("Danger Zone")
+                        if st.button("🗑️ Delete Record", key=f"del_{rid}"):
+                            # Filter out the record
+                            df = df[df["id"] != rid].copy()
                             
-                    # Delete
-                    if c_del.button("🗑️ Delete Record", key=f"del_{rid}"):
-    
-                        # FIX 4: avoid stale reference issues
-                        df = df[df["id"] != rid].copy()
-                        if save_data("petty_cash", prepare_for_db(df)):
-                            st.success("Entry deleted")
-                            st.cache_data.clear()
-                            st.rerun()
+                            # Clean and Save as DataFrame
+                            clean_save_df = prepare_df_for_db(df)
+                            
+                            if save_data("petty_cash", clean_save_df):
+                                st.success("Entry deleted")
+                                st.cache_data.clear()
+                                st.rerun()
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
