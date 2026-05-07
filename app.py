@@ -2165,7 +2165,7 @@ def show_loans():
     payments_df = payments_df.copy()
 
     # ------------------------------
-    # TYPE CLEANUP
+    # type CLEANUP
     # ------------------------------
     loans_df["id"] = loans_df["id"].astype(str)
     loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
@@ -2632,7 +2632,7 @@ def show_loans():
                 )
 
                 loan_type = col2.selectbox(
-                    "Loan Type",
+                    "Loan type",
                     ["Business", "Personal", "Emergency", "Other"]
                 )
 
@@ -3769,7 +3769,7 @@ def show_petty_cash():
     with tab_record:
         with st.form("record_form", clear_on_submit=True):
             col1,col2 = st.columns(2)
-            ttype = col1.selectbox("Transaction Type", ["Out","In"])
+            ttype = col1.selectbox("Transaction type", ["Out","In"])
             t_amount = col2.number_input("Amount (UGX)", min_value=0, step=500)
             t_date = st.date_input("Transaction Date", datetime.now())
             t_desc = st.text_input("Purpose / Description")
@@ -3804,7 +3804,7 @@ def show_petty_cash():
 
             fy_list = ["All"] + sorted(view_df["financial_year"].dropna().unique(), reverse=True)
             fy_filter = st.selectbox("Filter by Fiscal Year", fy_list)
-            type_filter = st.selectbox("Filter Type", ["All"] + sorted(view_df["type"].unique()))
+            type_filter = st.selectbox("Filter type", ["All"] + sorted(view_df["type"].unique()))
             search_txt = st.text_input("Search Description").lower()
 
             filtered = view_df.copy()
@@ -3829,7 +3829,7 @@ def show_petty_cash():
 
             st.dataframe(
                 filtered[["Date","type","description","amount","financial_year"]].rename(
-                    columns={"type":"Type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
+                    columns={"type":"type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
                 ).style.apply(style_row, axis=1).format({"Amount (UGX)":"{:,}"}),
                 use_container_width=True
             )
@@ -4604,7 +4604,7 @@ def show_collateral():
                 # ----------------------------
 
                 asset_type = c2.selectbox(
-                    "Asset Type",
+                    "Asset type",
                     ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
                 )
 
@@ -4702,7 +4702,7 @@ def show_collateral():
             display_df = display_df.rename(columns={
                 "date_added": "Date Registered",
                 "borrower": "Borrower",
-                "type": "Type",
+                "type": "type",
                 "description": "Description",
                 "status": "Status"
             })
@@ -4710,7 +4710,7 @@ def show_collateral():
             table_df = display_df[[
                 "Date Registered",
                 "Borrower",
-                "Type",
+                "type",
                 "Description",
                 "Value (UGX)",
                 "Status"
