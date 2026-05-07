@@ -4060,8 +4060,8 @@ def show_petty_cash():
                                 st.rerun()
 
                     if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
-                    # Filter out the deleted ID
-                    df_filtered = df[df["id"] != entry_id]
+                        # Filter out the deleted ID
+                        df_filtered = df[df["id"] != entry_id]
                     if save_data("petty_cash", df_filtered):
                         st.warning("Entry removed from digital cashbook.")
                         st.cache_data.clear()
