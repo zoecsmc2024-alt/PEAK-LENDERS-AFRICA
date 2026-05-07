@@ -4136,7 +4136,7 @@ def show_reports():
         <div style="background:#F9FAFB; padding:20px; border-radius:12px; border:1px solid #E5E7EB">
             <small>REVENUE (Projected interest)</small><br><b>UGX {projected_interest:,.0f}</b><hr>
             <small>OPERATIONAL COSTS</small><br><b>UGX {total_opex:,.0f}</b><br>
-            <p style="font-size:12px; color:#666;">Includes Salaries, Taxes, Petty Cash & Admin Expenses</p>
+            <p style="font-size:12px; color:#666;">Includes Salaries, Taxes, </p>
             <h4 style="color:#1E3A8A; margin-top:10px;">TRUE NET: UGX {(projected_interest - total_opex):,.0f}</h4>
         </div>
         """, unsafe_allow_html=True)
