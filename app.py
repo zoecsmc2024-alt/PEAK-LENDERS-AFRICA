@@ -2512,46 +2512,30 @@ def show_loans():
             # ------------------------------
             # 🎯 Fiscal Year Engine (July–June FIXED)
             # ------------------------------
-            
             if "fiscal_year" not in filtered_loans.columns:
-            
-                # Force clean datetime conversion FIRST
-                base_date = pd.to_datetime(
-                    filtered_loans["start_date"],
-                    errors="coerce"
-                )
-            
-                # fallback if start_date is broken or missing
-                if base_date.isna().all():
-                    base_date = pd.to_datetime(
-                        filtered_loans.get("created_at", pd.Timestamp.today()),
-                        errors="coerce"
-                    )
-            
-                # Ensure no NaT survives mapping logic
-                base_date = base_date.fillna(pd.Timestamp.today())
-            
-                # Fiscal Year: July–June logic
-                fy_years = []
-                for dt in base_date:
+                # Convert start_date to datetime
+                start_dt = pd.to_datetime(filtered_loans.get("start_date"), errors="coerce")
+                
+                # Fill missing with created_at or today
+                start_dt = start_dt.fillna(pd.to_datetime(filtered_loans.get("created_at", pd.Timestamp.today())))
+                
+                # Compute fiscal year (July–June)
+                fiscal_years_list = []
+                for dt in start_dt:
                     if dt.month >= 7:
-                        fy_years.append(f"{dt.year}/{dt.year + 1}")
+                        fiscal_years_list.append(f"{dt.year}/{dt.year + 1}")
                     else:
-                        fy_years.append(f"{dt.year - 1}/{dt.year}")
+                        fiscal_years_list.append(f"{dt.year - 1}/{dt.year}")
+                
+                filtered_loans["fiscal_year"] = fiscal_years_list
             
-                filtered_loans["fiscal_year"] = fy_years
-                    
-            fiscal_years = sorted(filtered_loans["fiscal_year"].dropna().unique().tolist())
+            # Build dropdown
+            fy_unique = sorted(filtered_loans["fiscal_year"].dropna().unique().tolist())
+            fy_selected = st.selectbox("Filter by Fiscal Year", ["All"] + fy_unique)
             
-            fy_selected = st.selectbox(
-                "Filter by Fiscal Year",
-                ["All"] + fiscal_years
-            )
-            
+            # Filter loans if a specific FY is selected
             if fy_selected != "All":
-                filtered_loans = filtered_loans[
-                    filtered_loans["fiscal_year"] == fy_selected
-                ]
+                filtered_loans = filtered_loans[filtered_loans["fiscal_year"] == fy_selected]
         
             # Calculation update (Ensuring amount_paid reduces total_repayable)
             filtered_loans["balance"] = filtered_loans["total_repayable"] - filtered_loans["amount_paid"]
