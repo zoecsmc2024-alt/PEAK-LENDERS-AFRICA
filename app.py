@@ -3798,7 +3798,7 @@ def show_petty_cash():
             st.write("### Log Cash Movement")
             col1, col2 = st.columns(2)
             ttype = col1.selectbox("Transaction type", ["Out","In"])
-            t_amount = col2.number_input("Amount (UGX)", min_value=0, step=500)
+            t_amount = col2.number_input("amount (UGX)", min_value=0, step=500)
             t_date = st.date_input("Transaction Date", value=datetime.now())
             t_desc = st.text_input("Purpose / Description")
 
