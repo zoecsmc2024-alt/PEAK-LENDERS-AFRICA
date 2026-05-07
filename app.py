@@ -1078,48 +1078,143 @@ def show_dashboard_view():
         with col_l:
 
             st.markdown("#### 📈 Revenue Trend vs Expenses")
-
+        
             try:
-
+        
                 if not payments_df.empty:
-
-                    date_col = first_existing(payments_df, ["date", "payment_date", "created_at"])
-                    amt_col = first_existing(payments_df, ["amount", "paid", "payment"])
-
-                    if date_col and amt_col:
-
-                        payments_df["date_dt"] = pd.to_datetime(payments_df[date_col], errors="coerce")
-                        payments_df["amount_n"] = pd.to_numeric(payments_df[amt_col], errors="coerce").fillna(0)
-
-                        temp = payments_df.dropna(subset=["date_dt"]).copy()
-
-                        temp["month"] = temp["date_dt"].dt.to_period("M").astype(str)
-
-                        monthly_rev = temp.groupby("month", as_index=False)["amount_n"].sum()
-
-                        fig = px.area(
-                            monthly_rev,
-                            x="month",
-                            y="amount_n",
-                            template="plotly_white",
-                            color_discrete_sequence=[brand_color]
+        
+                    # ==============================
+                    # REVENUE
+                    # ==============================
+                    pay_date_col = first_existing(
+                        payments_df,
+                        ["date", "payment_date", "created_at"]
+                    )
+        
+                    pay_amt_col = first_existing(
+                        payments_df,
+                        ["amount", "paid", "payment"]
+                    )
+        
+                    if pay_date_col and pay_amt_col:
+        
+                        rev_df = payments_df.copy()
+        
+                        rev_df["date_dt"] = pd.to_datetime(
+                            rev_df[pay_date_col],
+                            errors="coerce"
                         )
-
+        
+                        rev_df["amount_n"] = pd.to_numeric(
+                            rev_df[pay_amt_col],
+                            errors="coerce"
+                        ).fillna(0)
+        
+                        rev_df = rev_df.dropna(subset=["date_dt"])
+        
+                        # REAL monthly datetime
+                        rev_df["month"] = rev_df["date_dt"].dt.to_period("M").dt.to_timestamp()
+        
+                        monthly_rev = rev_df.groupby(
+                            "month",
+                            as_index=False
+                        )["amount_n"].sum()
+        
+                        monthly_rev.rename(
+                            columns={"amount_n": "Revenue"},
+                            inplace=True
+                        )
+        
+                        # ==============================
+                        # EXPENSES
+                        # ==============================
+                        if not expenses_df.empty:
+        
+                            exp_df = expenses_df.copy()
+        
+                            exp_date_col = first_existing(
+                                exp_df,
+                                ["payment_date", "date", "created_at"]
+                            )
+        
+                            exp_df["date_dt"] = pd.to_datetime(
+                                exp_df[exp_date_col],
+                                errors="coerce"
+                            )
+        
+                            exp_df["amount_n"] = pd.to_numeric(
+                                exp_df["amount"],
+                                errors="coerce"
+                            ).fillna(0)
+        
+                            exp_df = exp_df.dropna(subset=["date_dt"])
+        
+                            exp_df["month"] = exp_df["date_dt"]\
+                                .dt.to_period("M")\
+                                .dt.to_timestamp()
+        
+                            monthly_exp = exp_df.groupby(
+                                "month",
+                                as_index=False
+                            )["amount_n"].sum()
+        
+                            monthly_exp.rename(
+                                columns={"amount_n": "Expenses"},
+                                inplace=True
+                            )
+        
+                        else:
+                            monthly_exp = pd.DataFrame(
+                                columns=["month", "Expenses"]
+                            )
+        
+                        # ==============================
+                        # MERGE
+                        # ==============================
+                        trend_df = pd.merge(
+                            monthly_rev,
+                            monthly_exp,
+                            on="month",
+                            how="outer"
+                        ).fillna(0)
+        
+                        trend_df = trend_df.sort_values("month")
+        
+                        # ==============================
+                        # PLOT
+                        # ==============================
+                        fig = px.line(
+                            trend_df,
+                            x="month",
+                            y=["Revenue", "Expenses"],
+                            template="plotly_white",
+                            color_discrete_map={
+                                "Revenue": "#10B981",
+                                "Expenses": "#EF4444"
+                            }
+                        )
+        
+                        fig.update_traces(mode="lines+markers")
+        
                         fig.update_layout(
                             height=320,
-                            margin=dict(l=0, r=0, t=20, b=0)
+                            margin=dict(l=0, r=0, t=20, b=0),
+                            legend_title="",
+                            xaxis_title="",
+                            yaxis_title="Amount (UGX)",
+                            hovermode="x unified"
                         )
-
+        
                         st.plotly_chart(fig, use_container_width=True)
-
+        
                     else:
                         st.info("Payment columns missing.")
-
+        
                 else:
                     st.info("Insufficient payment history for trend analysis.")
-
-            except:
-                st.warning("Revenue chart temporarily unavailable.")
+        
+            except Exception as e:
+                st.warning(f"Revenue chart temporarily unavailable: {e}")
 
         with col_r:
 
