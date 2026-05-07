@@ -4061,30 +4061,30 @@ def show_petty_cash():
 
                     # --- DELETE SECTION ---
                     with c_del:
-                        st.warning("Action cannot be undone.")
-                        if st.button("🗑️ Delete Record", key=f"del_{rid}"):
-                            # 1. FORCE ID COMPARISON (Convert both to strings to avoid UUID vs String mismatch)
-                            # This is the most likely reason the table isn't updating
-                            updated_df = df[df["id"].astype(str) != str(rid)].copy()
+                        st.markdown("### ⚠️ Danger Zone")
+                        # We use the 'rid' from the record we explicitly grabbed via the index
+                        # Ensure rid is a string to prevent comparison mismatches
+                        target_id = str(rid)
+                        
+                        if st.button(f"🗑️ Confirm Delete", key=f"del_btn_{target_id}"):
+                            # 1. Filter the master dataframe using string comparison
+                            # This prevents the "shuttling" by ensuring we only drop the specific ID
+                            updated_df = df[df["id"].astype(str) != target_id].copy()
                             
-                            # 2. DEBUG CHECK: Did the row actually disappear?
-                            old_count = len(df)
-                            new_count = len(updated_df)
-                            
-                            if new_count < old_count:
-                                # 3. Use the sanitize helper we made earlier
+                            # 2. Check if a row was actually removed
+                            if len(updated_df) < len(df):
+                                # 3. Sanitize for the Database (using the helper we built)
                                 clean_save_df = prepare_df_for_db(updated_df)
                                 
+                                # 4. Save and Nuke Cache
                                 if save_data("petty_cash", clean_save_df):
-                                    st.cache_data.clear()  # Kill the cache
-                                    st.success(f"Successfully deleted. (Rows: {old_count} -> {new_count})")
+                                    st.cache_data.clear() 
+                                    st.success("Record deleted successfully!")
                                     st.rerun()
                                 else:
-                                    st.error("Database rejected the save.")
+                                    st.error("Database failed to save the deletion.")
                             else:
-                                # If this triggers, the ID 'rid' was not found in df['id']
-                                st.error(f"Logic Error: Could not find ID {rid} in the current table.")
-                                st.write("Table IDs:", df["id"].astype(str).tolist()) # Show IDs for debugging
+                                st.error("Could not find that record in the data. It may have already been deleted.")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
