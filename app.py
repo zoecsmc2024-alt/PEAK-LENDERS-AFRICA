@@ -3886,25 +3886,67 @@ def show_petty_cash():
     
             # FIX 1: ensure date is datetime BEFORE .dt usage
             view_df["date"] = pd.to_datetime(view_df["date"], errors="coerce")
+    
+            # ------------------------------
+            # FINANCIAL YEAR (JULY → JUNE)
+            # Example:
+            # July 2025 → June 2026 = FY2025-2026
+            # ------------------------------
+            view_df["financial_year"] = view_df["date"].apply(
+                lambda d: (
+                    f"FY{d.year}-{d.year + 1}"
+                    if d.month >= 7
+                    else f"FY{d.year - 1}-{d.year}"
+                ) if pd.notnull(d) else "Unknown"
+            )
+    
+            # Display date
             view_df["Date"] = view_df["date"].dt.strftime("%Y-%m-%d")
     
-            fy_list = ["All"] + sorted(view_df["financial_year"].dropna().unique(), reverse=True)
-            fy_filter = st.selectbox("Filter by Fiscal Year", fy_list)
+            # ------------------------------
+            # FINANCIAL YEAR DROPDOWN
+            # ------------------------------
+            fy_list = ["All"] + sorted(
+                view_df["financial_year"].dropna().unique(),
+                reverse=True
+            )
     
-            type_filter = st.selectbox("Filter type", ["All"] + sorted(view_df["type"].unique()))
+            fy_filter = st.selectbox(
+                "Select Financial Year",
+                fy_list,
+                index=0
+            )
+    
+            # ------------------------------
+            # OTHER FILTERS
+            # ------------------------------
+            type_filter = st.selectbox(
+                "Filter type",
+                ["All"] + sorted(view_df["type"].unique())
+            )
+    
             search_txt = st.text_input("Search Description").lower()
     
+            # ------------------------------
+            # FILTERING LOGIC
+            # ------------------------------
             filtered = view_df.copy()
     
             if fy_filter != "All":
-                filtered = filtered[filtered["financial_year"] == fy_filter]
+                filtered = filtered[
+                    filtered["financial_year"] == fy_filter
+                ]
     
             if type_filter != "All":
-                filtered = filtered[filtered["type"] == type_filter]
+                filtered = filtered[
+                    filtered["type"] == type_filter
+                ]
     
             if search_txt:
                 filtered = filtered[
-                    filtered["description"].str.lower().str.contains(search_txt, na=False)
+                    filtered["description"]
+                    .str.lower()
+                    .str.contains(search_txt, na=False)
                 ]
     
             display_df = filtered.copy()
@@ -3914,22 +3956,38 @@ def show_petty_cash():
             # ==============================
             def style_row(row):
                 val = row["type"]
+    
                 if val == "In":
                     return ["background-color:#d1fae5"] * len(row)
+    
                 elif val == "Out":
                     return ["background-color:#fee2e2"] * len(row)
+    
                 else:
                     return [""] * len(row)
     
+            # ------------------------------
+            # DISPLAY TABLE
+            # ------------------------------
             st.dataframe(
-                filtered[["Date","type","description","amount","financial_year"]].rename(
+                filtered[
+                    [
+                        "Date",
+                        "type",
+                        "description",
+                        "amount",
+                        "financial_year"
+                    ]
+                ].rename(
                     columns={
-                        "type":"type",
-                        "description":"Details",
-                        "amount":"amount (UGX)",
-                        "financial_year":"Fiscal Year"
+                        "type": "type",
+                        "description": "Details",
+                        "amount": "amount (UGX)",
+                        "financial_year": "Fiscal Year"
                     }
-                ).style.apply(style_row, axis=1).format({"amount (UGX)":"{:,}"}),
+                ).style.apply(style_row, axis=1).format(
+                    {"amount (UGX)": "{:,}"}
+                ),
                 use_container_width=True
             )
     
