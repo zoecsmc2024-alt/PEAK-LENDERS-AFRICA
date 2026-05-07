@@ -1009,69 +1009,230 @@ def show_dashboard_view():
         payments_df = normalize(load_cached("payments"))
         expenses_df = normalize(load_cached("expenses"))
         borrowers_df = normalize(load_cached("borrowers"))
-
+        
         if loans_df.empty:
             st.info("👋 Welcome! No active data found. Add your first borrower or loan to populate this dashboard.")
             return
-
+        
+        # ==============================
+        # ENSURE REQUIRED COLUMNS EXIST
+        # ==============================
+        required_loan_cols = [
+            "status",
+            "principal",
+            "amount",
+            "interest",
+            "interest_amount",
+            "balance",
+            "total_repayable",
+            "amount_paid",
+            "paid",
+            "end_date",
+            "due_date"
+        ]
+        
+        for col in required_loan_cols:
+            if col not in loans_df.columns:
+                loans_df[col] = 0
+        
         if "status" not in loans_df.columns:
             loans_df["status"] = "ACTIVE"
-
-        # --- 2. ENGINE: UNIFIED CALCULATIONS ---
-        loans_df["principal_n"] = safe_numeric(loans_df, ["principal", "amount"])
-        loans_df["interest_n"] = safe_numeric(loans_df, ["interest", "interest_amount"])
-
-        loans_df["balance_n"] = (
-            safe_numeric(loans_df, ["balance", "total_repayable"])
-            - safe_numeric(loans_df, ["amount_paid", "paid"])
+        
+        # ==============================
+        # SAFE NUMERIC ENGINE
+        # ==============================
+        def get_numeric(df, cols):
+            for c in cols:
+                if c in df.columns:
+                    return pd.to_numeric(df[c], errors="coerce").fillna(0)
+            return pd.Series([0] * len(df), index=df.index)
+        
+        # ==============================
+        # SAFE DATE ENGINE
+        # ==============================
+        def get_dates(df, cols):
+            for c in cols:
+                if c in df.columns:
+                    return pd.to_datetime(df[c], errors="coerce")
+            return pd.Series([pd.NaT] * len(df), index=df.index)
+        
+        # ==============================
+        # ENGINE: UNIFIED CALCULATIONS
+        # ==============================
+        loans_df["principal_n"] = get_numeric(loans_df, ["principal", "amount"])
+        
+        loans_df["interest_n"] = get_numeric(
+            loans_df,
+            ["interest", "interest_amount"]
         )
-
-        total_expenses = safe_numeric(expenses_df, ["amount"]).sum()
-
+        
+        total_repayable = get_numeric(
+            loans_df,
+            ["balance", "total_repayable"]
+        )
+        
+        amount_paid = get_numeric(
+            loans_df,
+            ["amount_paid", "paid"]
+        )
+        
+        # safer balance calc
+        loans_df["balance_n"] = (
+            total_repayable - amount_paid
+        ).clip(lower=0)
+        
+        # ==============================
+        # EXPENSES
+        # ==============================
+        if expenses_df is None or expenses_df.empty:
+            total_expenses = 0
+        else:
+            if "amount" not in expenses_df.columns:
+                expenses_df["amount"] = 0
+        
+            expenses_df["amount"] = pd.to_numeric(
+                expenses_df["amount"],
+                errors="coerce"
+            ).fillna(0)
+        
+            total_expenses = float(expenses_df["amount"].sum())
+        
+        # ==============================
+        # OVERDUE ENGINE
+        # ==============================
         today = pd.Timestamp.now().normalize()
-
-        loans_df["due_date_dt"] = safe_date(loans_df, ["end_date", "due_date"])
-
+        
+        loans_df["due_date_dt"] = get_dates(
+            loans_df,
+            ["end_date", "due_date"]
+        )
+        
+        loans_df["status"] = (
+            loans_df["status"]
+            .astype(str)
+            .str.upper()
+        )
+        
         overdue_mask = (
+            loans_df["due_date_dt"].notna()
+            &
             (loans_df["due_date_dt"] < today)
             &
-            (loans_df["status"].astype(str).str.upper() != "CLEARED")
+            (loans_df["status"] != "CLEARED")
         )
-
+        
         overdue_count = int(overdue_mask.sum())
-
-        total_principal = loans_df["principal_n"].sum()
-        total_interest = loans_df["interest_n"].sum()
-
-        # --- SMART ALERTS ---
+        
+        # ==============================
+        # TOTALS
+        # ==============================
+        total_principal = float(loans_df["principal_n"].sum())
+        total_interest = float(loans_df["interest_n"].sum())
+        
+        # ==============================
+        # SMART ALERTS
+        # ==============================
         if overdue_count >= 5:
             st.warning(f"⚠️ {overdue_count} overdue loans need urgent attention.")
-
-        # --- 3. TOP LEVEL METRIC CARDS ---
+        
+        # ==============================
+        # METRIC CARD UI
+        # ==============================
         m1, m2, m3, m4 = st.columns(4)
-
+        
         def metric_card(title, value, subtitle, color, is_money=True):
-
+        
             try:
-                fmt = f"{float(value):,.0f} UGX" if is_money else f"{int(value)}"
+                if is_money:
+                    fmt = f"{float(value):,.0f} UGX"
+                else:
+                    fmt = f"{int(value)}"
             except:
                 fmt = "0"
-
+        
             return f"""
-            <div class='metric-card' style='border-bottom:5px solid {color};'>
-                <p style="color:#64748B; font-size:12px; font-weight:bold; text-transform:uppercase; margin-bottom:5px;">{title}</p>
-                <h2 style="color:#1E293B; margin:0; font-size:22px;">{fmt}</h2>
-                <p style="color:{color}; font-size:11px; margin-top:5px; font-weight:bold;">{subtitle}</p>
+            <div class='metric-card'
+                 style='
+                    border-bottom:5px solid {color};
+                    background:white;
+                    padding:20px;
+                    border-radius:14px;
+                    box-shadow:0 2px 12px rgba(0,0,0,0.05);
+                 '>
+        
+                <p style="
+                    color:#64748B;
+                    font-size:12px;
+                    font-weight:bold;
+                    text-transform:uppercase;
+                    margin-bottom:5px;
+                ">
+                    {title}
+                </p>
+        
+                <h2 style="
+                    color:#1E293B;
+                    margin:0;
+                    font-size:24px;
+                    font-weight:700;
+                ">
+                    {fmt}
+                </h2>
+        
+                <p style="
+                    color:{color};
+                    font-size:11px;
+                    margin-top:6px;
+                    font-weight:bold;
+                ">
+                    {subtitle}
+                </p>
+        
             </div>
             """
-
-        m1.markdown(metric_card("Active principal", total_principal, "Portfolio Value", brand_color), unsafe_allow_html=True)
-        m2.markdown(metric_card("interest Income", total_interest, "Expected Earnings", "#10B981"), unsafe_allow_html=True)
-        m3.markdown(metric_card("Operational Costs", total_expenses, "Total Expenses", "#EF4444"), unsafe_allow_html=True)
-        m4.markdown(metric_card("Critical Alerts", overdue_count, "Overdue loans", "#F59E0B", False), unsafe_allow_html=True)
-
+        
+        m1.markdown(
+            metric_card(
+                "Active Principal",
+                total_principal,
+                "Portfolio Value",
+                brand_color
+            ),
+            unsafe_allow_html=True
+        )
+        
+        m2.markdown(
+            metric_card(
+                "Interest Income",
+                total_interest,
+                "Expected Earnings",
+                "#10B981"
+            ),
+            unsafe_allow_html=True
+        )
+        
+        m3.markdown(
+            metric_card(
+                "Operational Costs",
+                total_expenses,
+                "Total Expenses",
+                "#EF4444"
+            ),
+            unsafe_allow_html=True
+        )
+        
+        m4.markdown(
+            metric_card(
+                "Critical Alerts",
+                overdue_count,
+                "Overdue Loans",
+                "#F59E0B",
+                False
+            ),
+            unsafe_allow_html=True
+        )
+        
         st.write("##")
-
         # --- 4. DATA VISUALIZATION SECTION ---
         col_l, col_r = st.columns([2, 1])
 
