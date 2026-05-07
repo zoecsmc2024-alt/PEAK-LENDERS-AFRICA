@@ -3934,26 +3934,34 @@ def show_petty_cash():
                         if st.button("💾 Save Changes"):
                             df.loc[df["id"].astype(str) == rid, ["description","amount"]] = [new_desc, new_amt]
                             clean_df = df[DB_COLUMNS].copy()  
-                            clean_df["date"] = pd.to_datetime(
-                                clean_df["date"], errors="coerce"
-                            ).dt.strftime("%Y-%m-%d") 
+                            clean_df["date"] = pd.to_datetime(clean_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+                            
                             if save_data("petty_cash", clean_df):
                                 st.success("Updated")
                                 st.cache_data.clear()
+                                # 🔹 Reload df from database
+                                df = get_cached_data("petty_cash")
+                                df = df[df["tenant_id"].astype(str) == str(current_tenant)].copy()
+                                df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+                                df["date"] = pd.to_datetime(df["date"], errors="coerce")
+                                df["financial_year"] = df["date"].apply(get_fy_label)
                                 st.rerun()
 
                     with col_del:
                         if st.button("🗑️ Delete Record"):
                             final_df = df[df["id"].astype(str) != rid][DB_COLUMNS].copy()  
-                            # 🔥 CRITICAL FIX 
-                            final_df["date"] = pd.to_datetime(
-                                final_df["date"], errors="coerce"
-                            ).dt.strftime("%Y-%m-%d")
+                            final_df["date"] = pd.to_datetime(final_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
+                            
                             if save_data("petty_cash", final_df):
                                 st.warning("Deleted")
                                 st.cache_data.clear()
+                                # 🔹 Reload df from database to reflect changes
+                                df = get_cached_data("petty_cash")
+                                df = df[df["tenant_id"].astype(str) == str(current_tenant)].copy()
+                                df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
+                                df["date"] = pd.to_datetime(df["date"], errors="coerce")
+                                df["financial_year"] = df["date"].apply(get_fy_label)
                                 st.rerun()
-                            
 
 
 # ==========================================
