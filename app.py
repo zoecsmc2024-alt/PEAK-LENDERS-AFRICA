@@ -3842,6 +3842,7 @@ def show_petty_cash():
                 filtered = filtered[filtered["type"]==type_filter]
             if search_txt:
                 filtered = filtered[filtered["description"].str.lower().str.contains(search_txt, na=False)]
+            display_df = filtered.copy()
 
             # ==============================
             # COLOR STYLING
@@ -3897,12 +3898,12 @@ def show_petty_cash():
 
                     # Delete
                     if c_del.button("🗑️ Delete Record", key=f"del_{rid}"):
-                        df_filtered = df[df["id"] != rid]
-                        if save_data("petty_cash", df_filtered):
-                            st.warning("Entry deleted")
+                        df = df[df["id"] != rid]  # overwrite df directly
+                    
+                        if save_data("petty_cash", df):
+                            st.success("Entry deleted")
                             st.cache_data.clear()
                             st.rerun()
-
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
