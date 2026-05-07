@@ -4061,30 +4061,30 @@ def show_petty_cash():
 
                     # --- DELETE SECTION ---
                     with c_del:
-                        st.write("### Danger Zone")
+                        st.warning("Action cannot be undone.")
                         if st.button("🗑️ Delete Record", key=f"del_{rid}"):
-                            # 1. Create the new dataframe without the deleted ID
-                            # Use the master 'df' to ensure tenant_id and other hidden cols are kept
-                            updated_df = df[df["id"] != rid].copy()
+                            # 1. FORCE ID COMPARISON (Convert both to strings to avoid UUID vs String mismatch)
+                            # This is the most likely reason the table isn't updating
+                            updated_df = df[df["id"].astype(str) != str(rid)].copy()
                             
-                            # 2. Sanitize for JSON/DB
-                            clean_save_df = prepare_df_for_db(updated_df)
+                            # 2. DEBUG CHECK: Did the row actually disappear?
+                            old_count = len(df)
+                            new_count = len(updated_df)
                             
-                            # 3. Save to Database
-                            if save_data("petty_cash", clean_save_df):
-                                # --- THE FIX SEQUENCE ---
-                                # 1. Clear the specific cache for this function
-                                st.cache_data.clear() 
+                            if new_count < old_count:
+                                # 3. Use the sanitize helper we made earlier
+                                clean_save_df = prepare_df_for_db(updated_df)
                                 
-                                # 2. Update session state directly so the UI has the new data immediately
-                                # (If you are storing df in session_state, update it here)
-                                
-                                st.success("Entry permanently deleted.")
-                                
-                                # 3. Give Streamlit a tiny moment and then force a reload
-                                st.rerun()
+                                if save_data("petty_cash", clean_save_df):
+                                    st.cache_data.clear()  # Kill the cache
+                                    st.success(f"Successfully deleted. (Rows: {old_count} -> {new_count})")
+                                    st.rerun()
+                                else:
+                                    st.error("Database rejected the save.")
                             else:
-                                st.error("Failed to update the database.")
+                                # If this triggers, the ID 'rid' was not found in df['id']
+                                st.error(f"Logic Error: Could not find ID {rid} in the current table.")
+                                st.write("Table IDs:", df["id"].astype(str).tolist()) # Show IDs for debugging
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
