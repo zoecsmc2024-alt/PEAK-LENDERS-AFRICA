@@ -1059,7 +1059,10 @@ def show_dashboard_view():
         # ==============================
         # ENGINE: UNIFIED CALCULATIONS
         # ==============================
-        loans_df["principal_n"] = get_numeric(loans_df, ["principal", "amount"])
+        loans_df["principal_n"] = pd.to_numeric(
+            loans_df.get("principal", 0),
+            errors="coerce" )
+        .fillna(0)
         
         loans_df["interest_n"] = get_numeric(
             loans_df,
@@ -1126,7 +1129,7 @@ def show_dashboard_view():
         # ==============================
         # TOTALS
         # ==============================
-        total_principal = float(loans_df["principal_n"].sum())
+        total_principal = loans_df["principal_n"].sum()
         total_interest = float(loans_df["interest_n"].sum())
         
         # ==============================
