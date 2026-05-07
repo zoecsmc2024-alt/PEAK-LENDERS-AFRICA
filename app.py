@@ -4148,73 +4148,95 @@ def show_reports():
     
     fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
     
-    # ------------------------------
-    # 💰 INCOME STATEMENT (Cycle-Aware & Formatted)
-    # ------------------------------
+    # ==============================
+    # 💰 INCOME STATEMENT & BALANCE SHEET
+    # ==============================
     with s1:
         st.subheader("💰 Income Statement (Profit & Loss)")
     
         for fy in fiscal_years:
+            # Filter loans and expenses by fiscal year
             fy_loans = loans[loans["fiscal_year"] == fy]
+            fy_expenses = expenses[expenses["fiscal_year"] == fy]
     
-            # Active Capital → Cycle 1, status ACTIVE or PENDING
+            # --- Active Capital: Cycle 1, ACTIVE/PENDING (Balance Sheet) ---
             active_capital = fy_loans[
-                (fy_loans["cycle_no"] == 1) & 
-                (fy_loans["status"].str.upper().isin(["ACTIVE", "PENDING"]))
+                (fy_loans["cycle_no"] == 1) &
+                (fy_loans["status"].str.upper().isin(["ACTIVE","PENDING"]))
             ]["principal"].sum()
     
-            # Interest Revenue → all CLEARED cycles
+            # --- Interest Revenue: All CLEARED cycles (Income Statement) ---
             int_revenue = fy_loans[
                 fy_loans["status"].str.upper() == "CLEARED"
             ]["interest"].sum()
     
-            # Total OPEX → all expenses already include salaries & taxes
-            fy_expenses = expenses[expenses["fiscal_year"] == fy]
-            total_opex = col_sum(fy_expenses, "amount")  # includes salaries, taxes, petty cash
+            # --- Expenses ---
+            salary_exp = col_sum(payroll, "net_pay")
+            tax_exp = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10") + col_sum(payroll, "paye")
+            direct_exp = col_sum(fy_expenses, "amount")  # includes petty cash already
+            total_opex = salary_exp + tax_exp + direct_exp
     
+            # --- Net Profit (P&L) ---
             net_profit = int_revenue - total_opex
     
+            # --- Display Income Statement ---
             st.write(f"**Fiscal Year {fy}**")
             st.dataframe(pd.DataFrame({
                 "Description": [
-                    "Active Capital (Cycle 1 Pending/Active)",
-                    "Interest Revenue (All Cleared Loans)",
-                    "Total Operational Expenses",
+                    "Active Capital (Cycle 1 ACTIVE/PENDING)",
+                    "Interest Revenue (All CLEARED Loans)",
+                    "Salaries",
+                    "Taxes (NSSF + PAYE)",
+                    "Direct Expenses",
+                    "Total OPEX",
                     "Net Profit"
                 ],
                 "Amount (UGX)": [
                     f"{active_capital:,.0f}",
                     f"{int_revenue:,.0f}",
+                    f"{salary_exp:,.0f}",
+                    f"{tax_exp:,.0f}",
+                    f"{direct_exp:,.0f}",
                     f"{total_opex:,.0f}",
                     f"{net_profit:,.0f}"
                 ]
-            }))
+            }), use_container_width=True)
     
-    # ------------------------------
-    # 🧾 BALANCE SHEET
-    # ------------------------------
+    # ==============================
+    # 🏦 BALANCE SHEET
+    # ==============================
     with s2:
-        st.subheader("🧾 Balance Sheet")
+        st.subheader("🏦 Balance Sheet Snapshot")
     
         for fy in fiscal_years:
             fy_loans = loans[loans["fiscal_year"] == fy]
+    
+            # --- Loan Book: All cycles, outstanding balances ---
+            loan_book_value = fy_loans["balance"].sum()
+    
+            # --- Cash Profit: actual collected minus opex ---
             fy_payments = payments[payments["fiscal_year"] == fy]
-            fy_expenses = expenses[expenses["fiscal_year"] == fy]
+            actual_collected = col_sum(fy_payments, "amount")
     
-            # Loan Book → all cycles
-            loan_book = fy_loans["balance"].sum()
+            cash_profit = actual_collected - total_opex  # same as P&L net profit
     
-            # Cash position
-            cash_pos = fy_payments["amount"].sum() - fy_expenses["amount"].sum()
-    
-            total_assets = loan_book + cash_pos
+            total_assets = active_capital + loan_book_value + cash_profit
     
             st.write(f"**Fiscal Year {fy}**")
             st.dataframe(pd.DataFrame({
-                "Asset Type": ["Cash at Hand", "Loan Book (Outstanding Portfolio)"],
-                "Amount (UGX)": [cash_pos, loan_book],
-                "Total Assets": [total_assets, total_assets]
-            }))
+                "Description": [
+                    "Active Capital (Cycle 1 ACTIVE/PENDING)",
+                    "Loan Book (All Outstanding Cycles)",
+                    "Cash Profit",
+                    "Total Assets"
+                ],
+                "Amount (UGX)": [
+                    f"{active_capital:,.0f}",
+                    f"{loan_book_value:,.0f}",
+                    f"{cash_profit:,.0f}",
+                    f"{total_assets:,.0f}"
+                ]
+            }), use_container_width=True)
     
     # ------------------------------
     # 📤 EXPORT
