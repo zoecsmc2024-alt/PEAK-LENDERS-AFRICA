@@ -3752,10 +3752,36 @@ def show_petty_cash():
     LOW_CASH_THRESHOLD = 50000
     bal_color = "#10B981" if balance >= LOW_CASH_THRESHOLD else "#FF4B4B"
 
+    # ==============================
+    # 💎 KPI DASHBOARD WITH COLORS
+    # ==============================
     c1, c2, c3 = st.columns(3)
-    c1.metric("Cash In", f"UGX {inflow:,.0f}", delta_color="normal")
-    c2.metric("Cash Out", f"UGX {outflow:,.0f}", delta_color="inverse")
-    c3.metric("Balance", f"UGX {balance:,.0f}", delta_color="normal", help=f"Safe Threshold: {LOW_CASH_THRESHOLD:,}")
+    
+    # Cash In → Green
+    c1.markdown(f"""
+    <div style="padding:12px; border-radius:12px; background:#d1fae5; text-align:center;">
+        <div style="font-size:12px; color:#065f46; font-weight:600;">Cash In</div>
+        <div style="font-size:20px; color:#065f46; font-weight:700;">{inflow:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Cash Out → Red
+    c2.markdown(f"""
+    <div style="padding:12px; border-radius:12px; background:#fee2e2; text-align:center;">
+        <div style="font-size:12px; color:#9a1f1f; font-weight:600;">Cash Out</div>
+        <div style="font-size:20px; color:#9a1f1f; font-weight:700;">{outflow:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Balance → Green if safe, Red if low
+    bal_color = "#065f46" if balance >= 50000 else "#9a1f1f"
+    bal_bg = "#d1fae5" if balance >= 50000 else "#fee2e2"
+    c3.markdown(f"""
+    <div style="padding:12px; border-radius:12px; background:{bal_bg}; text-align:center;">
+        <div style="font-size:12px; color:{bal_color}; font-weight:600;">Balance</div>
+        <div style="font-size:20px; color:{bal_color}; font-weight:700;">{balance:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -3817,7 +3843,17 @@ def show_petty_cash():
                 view_df = view_df[view_df["type"] == type_filter]
             if search_filter:
                 view_df = view_df[view_df["description"].str.lower().str.contains(search_filter, na=False)]
-
+            # ==============================
+            # COLOR STYLING
+            # ==============================
+            def style_row(row):
+                val = row["type"]
+                if val=="In":
+                    return ["background-color:#d1fae5"]*len(row)
+                elif val=="Out":
+                    return ["background-color:#fee2e2"]*len(row)
+                else:
+                    return [""]*len(row)
             display_df = view_df.copy()
             display_df["Amount (UGX)"] = display_df["amount"].apply(lambda x: f"{x:,.0f}")
             display_df["Date"] = pd.to_datetime(display_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
