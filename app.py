@@ -3753,10 +3753,36 @@ def show_petty_cash():
     balance = inflow - outflow
     bal_color = "#10B981" if balance >= 50000 else "#FF4B4B"
 
-    c1,c2,c3 = st.columns(3)
-    c1.metric("Cash In", f"{inflow:,.0f}")
-    c2.metric("Cash Out", f"{outflow:,.0f}")
-    c3.metric("Balance", f"{balance:,.0f}")
+    # ==============================
+    # 💎 KPI DASHBOARD WITH COLORS
+    # ==============================
+    c1, c2, c3 = st.columns(3)
+    
+    # Cash In → Green
+    c1.markdown(f"""
+    <div style="padding:12px; border-radius:12px; background:#d1fae5; text-align:center;">
+        <div style="font-size:12px; color:#065f46; font-weight:600;">Cash In</div>
+        <div style="font-size:20px; color:#065f46; font-weight:700;">{inflow:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Cash Out → Red
+    c2.markdown(f"""
+    <div style="padding:12px; border-radius:12px; background:#fee2e2; text-align:center;">
+        <div style="font-size:12px; color:#9a1f1f; font-weight:600;">Cash Out</div>
+        <div style="font-size:20px; color:#9a1f1f; font-weight:700;">{outflow:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Balance → Green if safe, Red if low
+    bal_color = "#065f46" if balance >= 50000 else "#9a1f1f"
+    bal_bg = "#d1fae5" if balance >= 50000 else "#fee2e2"
+    c3.markdown(f"""
+    <div style="padding:12px; border-radius:12px; background:{bal_bg}; text-align:center;">
+        <div style="font-size:12px; color:{bal_color}; font-weight:600;">Balance</div>
+        <div style="font-size:20px; color:{bal_color}; font-weight:700;">{balance:,.0f} UGX</div>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ==============================
     # TABS
