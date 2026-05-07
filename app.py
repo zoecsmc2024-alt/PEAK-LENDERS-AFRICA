@@ -3747,7 +3747,7 @@ def show_petty_cash():
     </style>
     """, unsafe_allow_html=True)
 
-    st.markdown(f"<h2 style='color:{brand_color};'>💵 Petty Cash Management</h2>", unsafe
+    st.markdown(f"<h2 style='color:{brand_color};'>💵 Petty Cash Management</h2>", unsafe)
     # ------------------------------
     # DATA LOAD
     # ------------------------------
