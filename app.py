@@ -3706,6 +3706,18 @@ import pandas as pd
 import streamlit as st
 from datetime import datetime
 import uuid
+def prepare_for_db(dataframe):
+    """Cleans DataFrame for JSON serialization."""
+    # 1. Select only columns that exist in the DB schema
+    cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
+    clean_df = dataframe[[c for c in cols_to_keep if c in dataframe.columns]].copy()
+    
+    # 2. Force 'date' to string (YYYY-MM-DD)
+    if "date" in clean_df.columns:
+        clean_df["date"] = pd.to_datetime(clean_df["date"]).dt.strftime("%Y-%m-%d")
+    
+    # 3. Convert to list of dicts (strips pandas/numpy specific types)
+    return clean_df.to_dict(orient="records")
 
 def show_petty_cash():
     """
@@ -3868,8 +3880,8 @@ def show_petty_cash():
                         "tenant_id": str(current_tenant)
                     }])
                     save_df = pd.concat([df, new_row], ignore_index=True)
-                    if save_data("petty_cash", save_df):
-                        st.success(f"✅ {ttype}flow of UGX {t_amount:,.0f} recorded")
+                    if save_data("petty_cash", prepare_for_db(save_df)):
+                        st.success(f"✅ {ttype}flow recorded")
                         st.cache_data.clear()
                         st.rerun()
                 else:
@@ -4041,7 +4053,7 @@ def show_petty_cash():
                             # This is usually what the 'save_data' function expects to avoid serialization issues
                             data_to_save = save_df.to_dict(orient="records")
                             
-                            if save_data("petty_cash", data_to_save):
+                            if save_data("petty_cash", prepare_for_db(df)):
                                 st.success("Entry updated")
                                 st.cache_data.clear()
                                 st.rerun()
@@ -4051,8 +4063,7 @@ def show_petty_cash():
     
                         # FIX 4: avoid stale reference issues
                         df = df[df["id"] != rid].copy()
-    
-                        if save_data("petty_cash", df):
+                        if save_data("petty_cash", prepare_for_db(df)):
                             st.success("Entry deleted")
                             st.cache_data.clear()
                             st.rerun()
