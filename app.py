@@ -4022,27 +4022,28 @@ def show_petty_cash():
                         new_date = st.date_input("Update Date", pd.to_datetime(record["date"]))
     
                         if st.button("💾 Save Changes", key=f"edit_{rid}"):
-
-                            # Update row
+                            # 1. Update the local row
                             df.loc[df["id"] == rid, ["description", "amount", "date"]] = [
                                 new_desc,
                                 float(new_amt),
                                 new_date.strftime("%Y-%m-%d")
                             ]
                         
-                            # 🔥 IMPORTANT: convert ALL dates to string before saving
+                            # 2. CRITICAL FIX: Explicitly convert the entire column to string
                             save_df = df.copy()
-                        
-                            save_df["date"] = pd.to_datetime(
-                                save_df["date"],
-                                errors="coerce"
-                            ).dt.strftime("%Y-%m-%d")
+                            # We force the 'date' column to be a simple YYYY-MM-DD string
+                            save_df["date"] = pd.to_datetime(save_df["date"]).dt.strftime("%Y-%m-%d")
+                            
+                            # 3. Clean up helper columns before sending to DB
+                            # If you added 'label' or 'Date' (capital D) for the UI, drop them here
+                            cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
+                            save_df = save_df[[c for c in cols_to_keep if c in save_df.columns]]
                         
                             if save_data("petty_cash", save_df):
                                 st.success("Entry updated")
                                 st.cache_data.clear()
                                 st.rerun()
-    
+                            
                     # Delete
                     if c_del.button("🗑️ Delete Record", key=f"del_{rid}"):
     
