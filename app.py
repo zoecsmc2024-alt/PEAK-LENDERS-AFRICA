@@ -4059,34 +4059,13 @@ def show_petty_cash():
                                 st.cache_data.clear()
                                 st.rerun()
 
-                    # --- DELETE SECTION ---
-                    with c_del:
-                        st.markdown("### ⚠️ Danger Zone")
-                        # Cast target to string immediately
-                        target_id = str(rid)
-                        
-                        if st.button(f"🗑️ Confirm Delete", key=f"del_btn_{target_id}"):
-                            # 1. FORCE THE FILTER
-                            # We ensure the column is strings and the target is a string
-                            initial_count = len(df)
-                            updated_df = df[df["id"].astype(str) != target_id].copy()
-                            new_count = len(updated_df)
-                    
-                            # 2. ONLY SAVE IF SOMETHING ACTUALLY GOT REMOVED
-                            if new_count < initial_count:
-                                # Use the dataframe-safe preparation we discussed
-                                clean_save_df = prepare_df_for_db(updated_df)
-                                
-                                if save_data("petty_cash", clean_save_df):
-                                    st.cache_data.clear() 
-                                    st.success(f"Deleted! (Rows: {initial_count} -> {new_count})")
-                                    st.rerun()
-                                else:
-                                    st.error("Database save failed.")
-                            else:
-                                # THIS IS THE CULPRIT: If this message appears, your IDs don't match
-                                st.error(f"Logic Mismatch: Target ID '{target_id}' not found in the ID column.")
-                                st.write("Available IDs in Table:", df["id"].astype(str).tolist())
+                    if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
+                    # Filter out the deleted ID
+                    df_filtered = df[df["id"] != entry_id]
+                    if save_data("petty_cash", df_filtered):
+                        st.warning("Entry removed from digital cashbook.")
+                        st.cache_data.clear()
+                        st.rerun()
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
