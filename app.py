@@ -3821,28 +3821,28 @@ def show_petty_cash():
                     st.error("⚠️ Enter a valid amount and description.")
 
     # ------------------------------
-    # TRANSACTION HISTORY WITH FY FILTER
+    # HISTORY TAB
     # ------------------------------
     with tab_history:
         if df.empty:
-            st.info("ℹ️ No transactions recorded.")
+            st.info("No transactions yet.")
         else:
             view_df = df.copy()
-            view_df = view_df.sort_values("date", ascending=False)
+            view_df["Date"] = view_df["date"].dt.strftime("%Y-%m-%d")
 
-            # Fiscal year & type filter
             fy_list = ["All"] + sorted(view_df["financial_year"].dropna().unique(), reverse=True)
-            col_fy, col_type, col_search = st.columns([2,2,3])
-            fy_filter = col_fy.selectbox("Fiscal Year", fy_list)
-            type_filter = col_type.selectbox("Type", ["All"] + sorted(view_df["type"].unique()))
-            search_filter = col_search.text_input("Search Description").lower()
+            fy_filter = st.selectbox("Filter by Fiscal Year", fy_list)
+            type_filter = st.selectbox("Filter Type", ["All"] + sorted(view_df["type"].unique()))
+            search_txt = st.text_input("Search Description").lower()
 
+            filtered = view_df.copy()
             if fy_filter != "All":
-                view_df = view_df[view_df["financial_year"] == fy_filter]
+                filtered = filtered[filtered["financial_year"]==fy_filter]
             if type_filter != "All":
-                view_df = view_df[view_df["type"] == type_filter]
-            if search_filter:
-                view_df = view_df[view_df["description"].str.lower().str.contains(search_filter, na=False)]
+                filtered = filtered[filtered["type"]==type_filter]
+            if search_txt:
+                filtered = filtered[filtered["description"].str.lower().str.contains(search_txt, na=False)]
+
             # ==============================
             # COLOR STYLING
             # ==============================
@@ -3854,15 +3854,14 @@ def show_petty_cash():
                     return ["background-color:#fee2e2"]*len(row)
                 else:
                     return [""]*len(row)
-            display_df = view_df.copy()
-            display_df["Amount (UGX)"] = display_df["amount"].apply(lambda x: f"{x:,.0f}")
-            display_df["Date"] = pd.to_datetime(display_df["date"], errors="coerce").dt.strftime("%Y-%m-%d")
 
             st.dataframe(
-                display_df[["Date","type","description","Amount (UGX)","financial_year"]],
-                use_container_width=True,
-                hide_index=True
+                filtered[["Date","type","description","amount","financial_year"]].rename(
+                    columns={"type":"Type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
+                ).style.apply(style_row, axis=1).format({"Amount (UGX)":"{:,}"}),
+                use_container_width=True
             )
+
 
             # ------------------------------
             # CRUD: EDIT & DELETE
