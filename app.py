@@ -3892,7 +3892,7 @@ def show_petty_cash():
     </style>
     """, unsafe_allow_html=True)
     
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, = st.columns(4)
     
     # ==============================
     # TOTAL IN
@@ -3956,23 +3956,7 @@ def show_petty_cash():
     
         st.markdown("</div>", unsafe_allow_html=True)
     
-    # ==============================
-    # TOTAL TRANSACTIONS
-    # ==============================
-    with c4:
-        st.markdown(
-            """
-            <div class="purple-metric">
-            """,
-            unsafe_allow_html=True
-        )
     
-        st.metric(
-            label="📊 TRANSACTIONS",
-            value=f"{total_transactions}"
-        )
-    
-        st.markdown("</div>", unsafe_allow_html=True)
     # ==============================
     # TABS
     # ==============================
