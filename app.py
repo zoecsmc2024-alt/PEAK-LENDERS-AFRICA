@@ -1401,7 +1401,7 @@ def show_dashboard_view():
                             margin=dict(l=0, r=0, t=20, b=0),
                             legend_title="",
                             xaxis_title="",
-                            yaxis_title="Amount (UGX)",
+                            yaxis_title="amount (UGX)",
                             hovermode="x unified"
                         )
         
@@ -1580,7 +1580,7 @@ def show_dashboard_view():
                         height=350,
                         hovermode="x unified",
                         xaxis_title="",
-                        yaxis_title="Amount (UGX)",
+                        yaxis_title="amount (UGX)",
                         legend_title=""
                     )
         
@@ -1653,17 +1653,17 @@ def show_dashboard_view():
                     display_df["Date"] = display_df["date"].dt.strftime("%Y-%m-%d")
         
                     # Keep numeric for styling
-                    display_df["Amount"] = display_df["amount"]
+                    display_df["amount"] = display_df["amount"]
         
-                    final_df = display_df[["Category", "Amount", "Date"]]
+                    final_df = display_df[["Category", "amount", "Date"]]
         
                     # --- Styling (no HTML) ---
                     def style_amount(val):
                         return "color: #EF4444; font-weight: 600;"
         
                     styled_df = final_df.style\
-                        .format({"Amount": "UGX {:,.0f}"})\
-                        .map(style_amount, subset=["Amount"])
+                        .format({"amount": "UGX {:,.0f}"})\
+                        .map(style_amount, subset=["amount"])
         
                     st.dataframe(
                         styled_df,
@@ -2621,7 +2621,7 @@ def show_loans():
                 ).strip()
 
                 amount = col1.number_input(
-                    "Principal Amount (UGX)",
+                    "Principal amount (UGX)",
                     min_value=0,
                     step=50000
                 )
@@ -2774,7 +2774,7 @@ def show_loans():
                 save_data_saas("loans", loans_df)
                 # ----------------------------------------------
     
-                # This 'unpaid' value is (Old Total Repayable - Old Amount Paid)
+                # This 'unpaid' value is (Old Total Repayable - Old amount Paid)
                 unpaid = float(
                     loan_to_roll["balance"]
                 )
@@ -3059,7 +3059,7 @@ def show_payments():
         st.metric("Balance", f"UGX {balance:,.0f}")
 
         with st.form("payment_form"):
-            amount = st.number_input("Amount", min_value=0.0, step=1000.0)
+            amount = st.number_input("amount", min_value=0.0, step=1000.0)
             method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
             date = st.date_input("Date", datetime.now())
             submit = st.form_submit_button("Post Payment")
@@ -3103,7 +3103,7 @@ def show_payments():
                 generate_receipt_pdf({
                     "Receipt No": receipt_no,
                     "borrower": active_loan["borrower"],
-                    "Amount": f"UGX {amount:,.0f}",
+                    "amount": f"UGX {amount:,.0f}",
                     "Method": method,
                     "Date": date.strftime("%Y-%m-%d"),
                 }, file_path)
@@ -3166,7 +3166,7 @@ def show_payments():
             if st.session_state.get("edit_pay_mode"):
                 with st.form("edit_payment_form"):
                     st.info(f"Modifying: {target_pay['receipt_no']}")
-                    new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
+                    new_amt = st.number_input("Revised amount", value=float(target_pay['amount']))
                     current_method = target_pay['method']
                     method_options = ["Cash", "Mobile Money", "Bank"]
                     method_idx = method_options.index(current_method) if current_method in method_options else 0
@@ -3858,8 +3858,8 @@ def show_petty_cash():
 
             st.dataframe(
                 filtered[["Date","type","description","amount","financial_year"]].rename(
-                    columns={"type":"type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
-                ).style.apply(style_row, axis=1).format({"Amount (UGX)":"{:,}"}),
+                    columns={"type":"type","description":"Details","amount":"amount (UGX)","financial_year":"Fiscal Year"}
+                ).style.apply(style_row, axis=1).format({"amount (UGX)":"{:,}"}),
                 use_container_width=True
             )
 
@@ -3870,7 +3870,7 @@ def show_petty_cash():
             st.markdown("---")
             with st.expander("🛠️ Edit / Delete Records"):
                 display_df["label"] = display_df.apply(
-                    lambda r: f"{r['Date']} | {r['type']} | {r['description'][:20]}... | {r['Amount (UGX)']}",
+                    lambda r: f"{r['Date']} | {r['type']} | {r['description'][:20]}... | {r['amount (UGX)']}",
                     axis=1
                 )
                 selected_label = st.selectbox("Select Record", display_df["label"])
@@ -3884,7 +3884,7 @@ def show_petty_cash():
                     # Edit
                     with c_edit:
                         new_desc = st.text_input("Update Description", record["description"])
-                        new_amt = st.number_input("Update Amount", value=float(record["amount"]))
+                        new_amt = st.number_input("Update amount", value=float(record["amount"]))
                         new_date = st.date_input("Update Date", pd.to_datetime(record["date"]))
 
                         if st.button("💾 Save Changes", key=f"edit_{rid}"):
@@ -4167,7 +4167,7 @@ def show_reports():
                 "Total Operating Expenses (OPEX)",
                 "Net Profit"
             ],
-            "Amount (UGX)": [
+            "amount (UGX)": [
                 f"{active_capital:,.0f}",
                 f"{int_revenue:,.0f}",
                 f"{total_opex:,.0f}",
@@ -4197,7 +4197,7 @@ def show_reports():
                 "Cash Position",
                 "Total Assets"
             ],
-            "Amount (UGX)": [
+            "amount (UGX)": [
                 f"{active_capital:,.0f}",
                 f"{loan_book_value:,.0f}",
                 f"{cash_position:,.0f}",
@@ -4512,7 +4512,7 @@ def show_calendar():
                     <span style="background:#2B3F87;color:white;padding:2px 8px;border-radius:10px;font-size:10px;">💰 COLLECT NOW</span>
                 </td>
             </tr>""" for _, r in due_today_df.iterrows()])
-        st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">Amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
     # 5. 🔴 OVERDUE FOLLOW-UP (Now safely inside the function)
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
@@ -4888,7 +4888,7 @@ def show_expenses():
             c1, c2 = st.columns(2)
 
             category = c1.selectbox("Category", EXPENSE_CATS)
-            amount = c2.number_input("Amount (UGX)", min_value=0, step=1000)
+            amount = c2.number_input("amount (UGX)", min_value=0, step=1000)
             desc = st.text_input("Description")
 
             c3, c4 = st.columns(2)
@@ -4993,7 +4993,7 @@ def show_expenses():
                     "Date",
                     "Category",
                     "Description",
-                    "Amount (UGX)",
+                    "amount (UGX)",
                     "Ref #"
                 ]
             
@@ -5001,7 +5001,7 @@ def show_expenses():
                 display_ledger["Date"] = display_ledger["Date"].dt.strftime("%Y-%m-%d")
             
                 # --- FORMAT commas (IMPORTANT) ---
-                display_ledger["Amount (UGX)"] = display_ledger["Amount (UGX)"].apply(
+                display_ledger["amount (UGX)"] = display_ledger["amount (UGX)"].apply(
                     lambda x: f"{x:,.0f}"
                 )
             
@@ -5015,7 +5015,7 @@ def show_expenses():
                 ledger_df["amount_num"] = pd.to_numeric(ledger_df["amount"], errors="coerce").fillna(0)
             
                 min_amt, max_amt = col2.slider(
-                    "Amount Range",
+                    "amount Range",
                     float(ledger_df["amount_num"].min()),
                     float(ledger_df["amount_num"].max()),
                     (float(ledger_df["amount_num"].min()), float(ledger_df["amount_num"].max()))
@@ -5027,7 +5027,7 @@ def show_expenses():
                 else:
                     filtered = ledger_df.copy()
                 
-                # --- Amount filter ---
+                # --- amount filter ---
                 filtered = filtered[
                     (filtered["amount_num"] >= min_amt) &
                     (filtered["amount_num"] <= max_amt)
@@ -5046,7 +5046,7 @@ def show_expenses():
                     "Date",
                     "Category",
                     "Description",
-                    "Amount (UGX)",
+                    "amount (UGX)",
                     "Ref #"
                 ]
                 
@@ -5055,7 +5055,7 @@ def show_expenses():
                     errors="coerce"
                 ).dt.strftime("%Y-%m-%d")
                 
-                final_display_df["Amount (UGX)"] = final_display_df["Amount (UGX)"].apply(
+                final_display_df["amount (UGX)"] = final_display_df["amount (UGX)"].apply(
                     lambda x: f"{float(x):,.0f}"
                 )
                 
@@ -5064,7 +5064,7 @@ def show_expenses():
                 
                 styled = final_display_df.style.map(
                     color_amount,
-                    subset=["Amount (UGX)"]
+                    subset=["amount (UGX)"]
                 )
                 
                 st.dataframe(
@@ -5095,7 +5095,7 @@ def show_expenses():
                 target_record = record_map[selected_label]
                 
                 with st.form("edit_expense_form"):
-                    new_amt = st.number_input("Update Amount (UGX)", value=float(target_record['amount']))
+                    new_amt = st.number_input("Update amount (UGX)", value=float(target_record['amount']))
                     new_desc = st.text_input("Update Description", value=target_record['description'])
                     
                     c1, c2 = st.columns(2)
