@@ -4104,101 +4104,101 @@ def show_petty_cash():
                     )
 
     # ==============================
-# TAB 2: HISTORY
-# ==============================
-with tab_history:
-    if not filtered_df.empty:
-        # Define row colors based on transaction type
-        def highlight_rows(row):
-            if row["Type"] == "In":
-                return ['background-color: #ECFDF5; color:#065F46;'] * len(row)
-            else:
-                return ['background-color: #FEF2F2; color:#991B1B;'] * len(row)
-
-        # Prepare DataFrame for display
-        display_df = filtered_df.copy()
-        
-        # Format date for readability
-        display_df["Date"] = pd.to_datetime(display_df["Date"]).dt.strftime("%d %b %Y")
-
-        # Render styled dataframe
-        st.dataframe(
-            display_df.sort_values("Transaction_ID", ascending=False)
-            .style
-            .apply(highlight_rows, axis=1)
-            .format({"Amount": "{:,.0f}"}),
-            use_container_width=True,
-            hide_index=True
-        )
-
-        # Space separator (Replacing HTML <br>)
-        st.divider()
-
-        # ==============================
-        # EDIT / DELETE SECTION
-        # ==============================
-        with st.expander("⚙️ Advanced: Edit or Delete Transaction"):
-            # Create selection labels
-            options = [
-                f"ID: {int(row['Transaction_ID'])} | {row['Type']} - {row['Description']}"
-                for _, row in filtered_df.iterrows()
-            ]
-
-            selected_task = st.selectbox("Select Entry to Modify", options)
-
-            # Parse ID from selection
-            sel_id = int(selected_task.split(" | ")[0].replace("ID: ", ""))
-
-            # Get current record values
-            item = df[df["Transaction_ID"] == sel_id].iloc[0]
-
-            # Edit inputs
-            up_type = st.selectbox(
-                "Update Type",
-                ["In", "Out"],
-                index=0 if item["Type"] == "In" else 1
+    # TAB 2: HISTORY
+    # ==============================
+    with tab_history:
+        if not filtered_df.empty:
+            # Define row colors based on transaction type
+            def highlight_rows(row):
+                if row["Type"] == "In":
+                    return ['background-color: #ECFDF5; color:#065F46;'] * len(row)
+                else:
+                    return ['background-color: #FEF2F2; color:#991B1B;'] * len(row)
+    
+            # Prepare DataFrame for display
+            display_df = filtered_df.copy()
+            
+            # Format date for readability
+            display_df["Date"] = pd.to_datetime(display_df["Date"]).dt.strftime("%d %b %Y")
+    
+            # Render styled dataframe
+            st.dataframe(
+                display_df.sort_values("Transaction_ID", ascending=False)
+                .style
+                .apply(highlight_rows, axis=1)
+                .format({"Amount": "{:,.0f}"}),
+                use_container_width=True,
+                hide_index=True
             )
-
-            up_amt = st.number_input(
-                "Update Amount",
-                value=float(item["Amount"]),
-                step=1000.0
-            )
-
-            up_desc = st.text_input(
-                "Update Description",
-                value=str(item["Description"])
-            )
-
-            c_up, c_del = st.columns(2)
-
-            # --- SAVE LOGIC ---
-            if c_up.button("💾 Save Changes", use_container_width=True):
-                df.loc[
-                    df["Transaction_ID"] == sel_id,
-                    ["Type", "Amount", "Description"]
-                ] = [up_type, up_amt, up_desc]
-
-                # Standardize column names for DB (Replace _ with space)
-                save_ready = df.copy()
-                save_ready.columns = [c.replace("_", " ") for c in save_ready.columns]
-
-                if save_data("petty_cash", save_ready):
-                    st.success("Updated Successfully!")
-                    st.rerun()
-
-            # --- DELETE LOGIC ---
-            if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
-                df_new = df[df["Transaction_ID"] != sel_id]
-
-                save_ready = df_new.copy()
-                save_ready.columns = [c.replace("_", " ") for c in save_ready.columns]
-
-                if save_data("petty_cash", save_ready):
-                    st.warning("Entry Deleted.")
-                    st.rerun()
-    else:
-        st.info("No transaction history available.")
+    
+            # Space separator (Replacing HTML <br>)
+            st.divider()
+    
+            # ==============================
+            # EDIT / DELETE SECTION
+            # ==============================
+            with st.expander("⚙️ Advanced: Edit or Delete Transaction"):
+                # Create selection labels
+                options = [
+                    f"ID: {int(row['Transaction_ID'])} | {row['Type']} - {row['Description']}"
+                    for _, row in filtered_df.iterrows()
+                ]
+    
+                selected_task = st.selectbox("Select Entry to Modify", options)
+    
+                # Parse ID from selection
+                sel_id = int(selected_task.split(" | ")[0].replace("ID: ", ""))
+    
+                # Get current record values
+                item = df[df["Transaction_ID"] == sel_id].iloc[0]
+    
+                # Edit inputs
+                up_type = st.selectbox(
+                    "Update Type",
+                    ["In", "Out"],
+                    index=0 if item["Type"] == "In" else 1
+                )
+    
+                up_amt = st.number_input(
+                    "Update Amount",
+                    value=float(item["Amount"]),
+                    step=1000.0
+                )
+    
+                up_desc = st.text_input(
+                    "Update Description",
+                    value=str(item["Description"])
+                )
+    
+                c_up, c_del = st.columns(2)
+    
+                # --- SAVE LOGIC ---
+                if c_up.button("💾 Save Changes", use_container_width=True):
+                    df.loc[
+                        df["Transaction_ID"] == sel_id,
+                        ["Type", "Amount", "Description"]
+                    ] = [up_type, up_amt, up_desc]
+    
+                    # Standardize column names for DB (Replace _ with space)
+                    save_ready = df.copy()
+                    save_ready.columns = [c.replace("_", " ") for c in save_ready.columns]
+    
+                    if save_data("petty_cash", save_ready):
+                        st.success("Updated Successfully!")
+                        st.rerun()
+    
+                # --- DELETE LOGIC ---
+                if c_del.button("🗑️ Delete Permanently", use_container_width=True, type="secondary"):
+                    df_new = df[df["Transaction_ID"] != sel_id]
+    
+                    save_ready = df_new.copy()
+                    save_ready.columns = [c.replace("_", " ") for c in save_ready.columns]
+    
+                    if save_data("petty_cash", save_ready):
+                        st.warning("Entry Deleted.")
+                        st.rerun()
+        else:
+            st.info("No transaction history available.")
 
     # ==============================
     # TAB 3: ANALYTICS
