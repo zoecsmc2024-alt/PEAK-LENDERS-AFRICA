@@ -1061,8 +1061,8 @@ def show_dashboard_view():
         # ==============================
         loans_df["principal_n"] = pd.to_numeric(
             loans_df.get("principal", 0),
-            errors="coerce" )
-        .fillna(0)
+            errors="coerce" 
+        ).fillna(0)
         
         loans_df["interest_n"] = get_numeric(
             loans_df,
