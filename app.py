@@ -2509,9 +2509,18 @@ def show_loans():
         if filtered_loans.empty:
             st.warning("No matching loans found.")
         else:
+            # ------------------------------
+            # 🎯 Fiscal Year Filter
+            # ------------------------------
+            fiscal_years = sorted(filtered_loans["fiscal_year"].dropna().unique())
+            fy_selected = st.selectbox("Filter by Fiscal Year", ["All"] + fiscal_years)
+        
+            if fy_selected != "All":
+                filtered_loans = filtered_loans[filtered_loans["fiscal_year"] == fy_selected]
+        
             # Calculation update (Ensuring amount_paid reduces total_repayable)
             filtered_loans["balance"] = filtered_loans["total_repayable"] - filtered_loans["amount_paid"]
-            
+        
             show_cols = [
                 "sn",
                 "loan_id_label",
@@ -2543,13 +2552,12 @@ def show_loans():
                 .apply(style_entire_row, axis=1)
                 .format({
                     "principal": "{:,.0f}",
-                    "amount_paid": "{:,.0f}",  # 1. Added commas to amount paid
+                    "amount_paid": "{:,.0f}",
                     "total_repayable": "{:,.0f}",
                     "balance": "{:,.0f}"
                 })
             )
-            
-            
+        
             st.dataframe(
                 styled_df,
                 column_order=show_cols,
