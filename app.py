@@ -3727,7 +3727,7 @@ def show_petty_cash():
     # ==============================
     # 1. FETCH DATA
     # ==============================
-    df = get_cached_data("PettyCash")
+    df = get_cached_data("petty_cash")
 
     if df.empty:
         df = pd.DataFrame(columns=[
@@ -4040,7 +4040,7 @@ def show_petty_cash():
                         for c in final_df.columns
                     ]
 
-                    if save_data("PettyCash", final_df):
+                    if save_data("petty_cash", final_df):
 
                         st.success(
                             f"{ttype} transaction of "
@@ -4165,7 +4165,7 @@ def show_petty_cash():
                         for c in save_ready.columns
                     ]
 
-                    if save_data("PettyCash", save_ready):
+                    if save_data("petty_cash", save_ready):
 
                         st.success("Updated Successfully!")
                         st.rerun()
@@ -4186,7 +4186,7 @@ def show_petty_cash():
                         for c in save_ready.columns
                     ]
 
-                    if save_data("PettyCash", save_ready):
+                    if save_data("petty_cash", save_ready):
 
                         st.warning("Entry Deleted.")
                         st.rerun()
