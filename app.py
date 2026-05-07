@@ -4061,18 +4061,27 @@ def show_petty_cash():
 
                     # --- DELETE SECTION ---
                     with c_del:
-                        st.write("Danger Zone")
+                        st.write("### Danger Zone")
                         if st.button("🗑️ Delete Record", key=f"del_{rid}"):
-                            # Filter out the record
-                            df = df[df["id"] != rid].copy()
+                            # 1. Reach out and filter the original source dataframe
+                            # We use a temporary variable to be safe
+                            updated_df = df[df["id"] != rid].copy()
                             
-                            # Clean and Save as DataFrame
-                            clean_save_df = prepare_df_for_db(df)
+                            # 2. Sanitize using our helper
+                            clean_save_df = prepare_df_for_db(updated_df)
                             
+                            # 3. Attempt the save
                             if save_data("petty_cash", clean_save_df):
-                                st.success("Entry deleted")
-                                st.cache_data.clear()
+                                # 4. CRITICAL: Clear cache BEFORE success message
+                                st.cache_data.clear() 
+                                
+                                # 5. Success feedback
+                                st.success("Entry permanently deleted.")
+                                
+                                # 6. Force a full rerun to reload data from DB
                                 st.rerun()
+                            else:
+                                st.error("Database failed to delete the record.")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
