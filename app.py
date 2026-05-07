@@ -3700,7 +3700,7 @@ def show_payroll():
                 use_container_width=True
             )
 # ==============================
-# 💵 19. PETTY CASH MANAGEMENT PAGE (BULLETPROOF)
+# 💵 PETTY CASH MANAGEMENT PAGE (BULLETPROOF, COLOR + DATE + FY)
 # ==============================
 import pandas as pd
 import streamlit as st
@@ -3708,19 +3708,16 @@ from datetime import datetime
 import uuid
 
 def show_petty_cash():
-
     brand_color = st.session_state.get("theme_color", "#2B3F87")
-    current_tenant = st.session_state.get('tenant_id')
+    tenant_id = str(st.session_state.get("tenant_id"))
 
     # ==============================
-    # FY FUNCTION (JULY - JUNE)
+    # FY FUNCTION (July–June)
     # ==============================
     def get_fy(date_val):
         try:
             dt = pd.to_datetime(date_val)
-            if dt.month >= 7:
-                return f"FY{dt.year}-{dt.year+1}"
-            return f"FY{dt.year-1}-{dt.year}"
+            return f"FY{dt.year}-{dt.year+1}" if dt.month >= 7 else f"FY{dt.year-1}-{dt.year}"
         except:
             return "Unknown FY"
 
@@ -3730,34 +3727,33 @@ def show_petty_cash():
     # DATA LOAD
     # ==============================
     df = get_cached_data("petty_cash")
-
     if df is None or df.empty:
-        df = pd.DataFrame(columns=["id", "type", "amount", "date", "description", "tenant_id"])
+        df = pd.DataFrame(columns=["id","type","amount","date","description","tenant_id"])
     else:
         df = df.copy()
-        df = df[df["tenant_id"].astype(str) == str(current_tenant)]
+        df = df[df["tenant_id"].astype(str) == tenant_id]
 
     # SAFE COLUMNS
-    for col in ["id", "type", "amount", "date", "description"]:
+    for col in ["id","type","amount","date","description"]:
         if col not in df.columns:
             df[col] = ""
 
+    # Numeric + datetime safety
     df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
     df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
-    # ==============================
-    # ADD FY (CRITICAL FIX)
-    # ==============================
+    # FY label
     df["financial_year"] = df["date"].apply(get_fy)
 
     # ==============================
     # KPIs
     # ==============================
-    inflow = df[df["type"] == "In"]["amount"].sum()
-    outflow = df[df["type"] == "Out"]["amount"].sum()
+    inflow = df[df["type"]=="In"]["amount"].sum()
+    outflow = df[df["type"]=="Out"]["amount"].sum()
     balance = inflow - outflow
+    bal_color = "#10B981" if balance >= 50000 else "#FF4B4B"
 
-    c1, c2, c3 = st.columns(3)
+    c1,c2,c3 = st.columns(3)
     c1.metric("Cash In", f"{inflow:,.0f}")
     c2.metric("Cash Out", f"{outflow:,.0f}")
     c3.metric("Balance", f"{balance:,.0f}")
@@ -3765,102 +3761,109 @@ def show_petty_cash():
     # ==============================
     # TABS
     # ==============================
-    tab1, tab2 = st.tabs(["➕ Record", "📜 History"])
+    tab_record, tab_history = st.tabs(["➕ Record Transaction","📜 Transaction History"])
 
-    # ==============================
-    # RECORD
-    # ==============================
-    with tab1:
-        with st.form("petty_form", clear_on_submit=True):
+    # ------------------------------
+    # RECORD TAB
+    # ------------------------------
+    with tab_record:
+        with st.form("record_form", clear_on_submit=True):
+            col1,col2 = st.columns(2)
+            ttype = col1.selectbox("Transaction Type", ["Out","In"])
+            t_amount = col2.number_input("Amount (UGX)", min_value=0, step=500)
+            t_date = st.date_input("Transaction Date", datetime.now())
+            t_desc = st.text_input("Purpose / Description")
 
-            col1, col2 = st.columns(2)
-            ttype = col1.selectbox("Type", ["In", "Out"])
-            amount = col2.number_input("Amount", min_value=0)
-
-            desc = st.text_input("Description")
-
-            if st.form_submit_button("Save"):
-                if amount <= 0 or not desc:
+            if st.form_submit_button("💾 Save Transaction"):
+                if t_amount <= 0 or not t_desc:
                     st.error("Fill all fields")
-                    st.stop()
+                else:
+                    new_row = pd.DataFrame([{
+                        "id": str(uuid.uuid4()),
+                        "type": ttype,
+                        "amount": float(t_amount),
+                        "date": t_date.strftime("%Y-%m-%d"),  # string for JSON
+                        "description": t_desc,
+                        "tenant_id": tenant_id
+                    }])
+                    save_df = pd.concat([df, new_row], ignore_index=True)
+                    if save_data("petty_cash", save_df):
+                        st.success("Saved ✅")
+                        st.cache_data.clear()
+                        st.rerun()
 
-                new_row = pd.DataFrame([{
-                    "id": str(uuid.uuid4()),
-                    "type": ttype,
-                    "amount": float(amount),
-                    "date": datetime.now(),
-                    "description": desc,
-                    "tenant_id": str(current_tenant)
-                }])
-
-                updated = pd.concat([df, new_row], ignore_index=True)
-
-                if save_data("petty_cash", updated):
-                    st.cache_data.clear()
-                    st.success("Saved")
-                    st.rerun()
-
-    # ==============================
-    # HISTORY
-    # ==============================
-    with tab2:
-
+    # ------------------------------
+    # HISTORY TAB
+    # ------------------------------
+    with tab_history:
         if df.empty:
-            st.info("No data")
-            return
+            st.info("No transactions yet.")
+        else:
+            view_df = df.copy()
+            view_df["Date"] = view_df["date"].dt.strftime("%Y-%m-%d")
 
-        view = df.sort_values("date", ascending=False).copy()
+            fy_list = ["All"] + sorted(view_df["financial_year"].dropna().unique(), reverse=True)
+            fy_filter = st.selectbox("Filter by Fiscal Year", fy_list)
+            type_filter = st.selectbox("Filter Type", ["All"] + sorted(view_df["type"].unique()))
+            search_txt = st.text_input("Search Description").lower()
 
-        fy_options = ["All"] + sorted(view["financial_year"].dropna().unique())
-        fy = st.selectbox("Fiscal Year", fy_options)
+            filtered = view_df.copy()
+            if fy_filter != "All":
+                filtered = filtered[filtered["financial_year"]==fy_filter]
+            if type_filter != "All":
+                filtered = filtered[filtered["type"]==type_filter]
+            if search_txt:
+                filtered = filtered[filtered["description"].str.lower().str.contains(search_txt, na=False)]
 
-        if fy != "All":
-            view = view[view["financial_year"] == fy]
+            # ==============================
+            # COLOR STYLING
+            # ==============================
+            def style_row(row):
+                val = row["type"]
+                if val=="In":
+                    return ["background-color:#d1fae5"]*len(row)
+                elif val=="Out":
+                    return ["background-color:#fee2e2"]*len(row)
+                else:
+                    return [""]*len(row)
 
-        st.dataframe(
-            view[["date", "type", "description", "amount", "financial_year"]].assign(
-                date=view["date"].dt.strftime("%Y-%m-%d"),
-                amount=view["amount"].map(lambda x: f"{x:,.0f}")
-            ),
-            use_container_width=True
-        )
+            st.dataframe(
+                filtered[["Date","type","description","amount","financial_year"]].rename(
+                    columns={"type":"Type","description":"Details","amount":"Amount (UGX)","financial_year":"Fiscal Year"}
+                ).style.apply(style_row, axis=1).format({"Amount (UGX)":"{:,}"}),
+                use_container_width=True
+            )
 
-        # ==============================
-        # DELETE (FIXED - NO INDEX BUG)
-        # ==============================
-        st.markdown("---")
-        st.subheader("Edit / Delete")
+            # ------------------------------
+            # CRUD
+            # ------------------------------
+            st.markdown("---")
+            st.subheader("Edit / Delete Records")
 
-        view["label"] = view["date"].dt.strftime("%Y-%m-%d") + " | " + view["type"] + " | " + view["description"]
+            filtered["label"] = filtered["Date"] + " | " + filtered["type"] + " | " + filtered["description"]
+            selected_label = st.selectbox("Select Record", filtered["label"].tolist())
+            selected_row = filtered[filtered["label"]==selected_label].iloc[0]
+            rid = selected_row["id"]
 
-        selected = st.selectbox("Select record", view["label"].tolist())
+            c1,c2 = st.columns(2)
+            with c1:
+                if st.button("🗑️ Delete Record", key=f"del_{rid}"):
+                    new_df = df[df["id"]!=rid].copy()
+                    if save_data("petty_cash", new_df):
+                        st.success("Deleted ✅")
+                        st.cache_data.clear()
+                        st.rerun()
 
-        selected_row = view[view["label"] == selected].iloc[0]
-        rid = selected_row["id"]
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            if st.button("Delete"):
-                df = df[df["id"] != rid].copy()
-
-                if save_data("petty_cash", df):
-                    st.cache_data.clear()
-                    st.success("Deleted")
-                    st.rerun()
-
-        with col2:
-            new_desc = st.text_input("Edit desc", selected_row["description"])
-            new_amt = st.number_input("Edit amount", value=float(selected_row["amount"]))
-
-            if st.button("Update"):
-                df.loc[df["id"] == rid, "description"] = new_desc
-                df.loc[df["id"] == rid, "amount"] = new_amt
-
-                if save_data("petty_cash", df):
-                    st.cache_data.clear()
-                    st.success("Updated")
-                    st.rerun()
+            with c2:
+                new_desc = st.text_input("Edit Description", value=selected_row["description"], key=f"desc_{rid}")
+                new_amt = st.number_input("Edit Amount", value=float(selected_row["amount"]), key=f"amt_{rid}")
+                if st.button("💾 Update Record", key=f"upd_{rid}"):
+                    df.loc[df["id"]==rid,"description"] = new_desc
+                    df.loc[df["id"]==rid,"amount"] = new_amt
+                    if save_data("petty_cash", df):
+                        st.success("Updated ✅")
+                        st.cache_data.clear()
+                        st.rerun()
 
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
