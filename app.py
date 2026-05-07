@@ -2882,6 +2882,12 @@ def show_loans():
 # ==============================
 # 🧾 RECEIPT GENERATION
 # ==============================
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import A4
+from io import BytesIO
+from datetime import datetime
 def generate_receipt_pdf(data, filename):
     doc = SimpleDocTemplate(filename)
     styles = getSampleStyleSheet()
