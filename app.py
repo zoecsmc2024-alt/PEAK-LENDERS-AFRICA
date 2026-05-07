@@ -2512,6 +2512,10 @@ def show_loans():
             # ------------------------------
             # 🎯 Fiscal Year Filter
             # ------------------------------
+            # Ensure fiscal_year column exists
+            if "fiscal_year" not in filtered_loans.columns:
+                filtered_loans["fiscal_year"] = "Unknown FY"
+        
             fiscal_years = sorted(filtered_loans["fiscal_year"].dropna().unique())
             fy_selected = st.selectbox("Filter by Fiscal Year", ["All"] + fiscal_years)
         
