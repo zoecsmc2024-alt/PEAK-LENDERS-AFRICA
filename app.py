@@ -3727,8 +3727,9 @@ def show_petty_cash():
     # ==============================
     # 1. FETCH DATA
     # ==============================
-    df = get_cached_data("petty_cash")
-
+    
+    df = get_cached_data("PettyCash")
+    
     if df.empty:
         df = pd.DataFrame(columns=[
             "Transaction_ID",
@@ -3737,22 +3738,69 @@ def show_petty_cash():
             "Date",
             "Description"
         ])
+    
     else:
-        # Standardize
-        df.columns = df.columns.str.strip().str.replace(" ", "_")
-
+    
+        # ==============================
+        # CLEAN COLUMN NAMES
+        # ==============================
+        df.columns = (
+            df.columns
+            .str.strip()
+            .str.replace(" ", "_")
+        )
+    
+        # ==============================
+        # ENSURE REQUIRED COLUMNS EXIST
+        # ==============================
+        required_columns = [
+            "Transaction_ID",
+            "Type",
+            "Amount",
+            "Date",
+            "Description"
+        ]
+    
+        for col in required_columns:
+            if col not in df.columns:
+                df[col] = None
+    
+        # ==============================
+        # SAFE DATA TYPES
+        # ==============================
         df["Transaction_ID"] = (
-            pd.to_numeric(df["Transaction_ID"], errors="coerce")
+            pd.to_numeric(
+                df["Transaction_ID"],
+                errors="coerce"
+            )
             .fillna(0)
             .astype(int)
         )
-
+    
         df["Amount"] = (
-            pd.to_numeric(df["Amount"], errors="coerce")
+            pd.to_numeric(
+                df["Amount"],
+                errors="coerce"
+            )
             .fillna(0)
         )
-
-        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+    
+        df["Date"] = pd.to_datetime(
+            df["Date"],
+            errors="coerce"
+        )
+    
+        df["Description"] = (
+            df["Description"]
+            .astype(str)
+            .fillna("")
+        )
+    
+        df["Type"] = (
+            df["Type"]
+            .astype(str)
+            .fillna("")
+        )
 
     # ==============================
     # 2. FINANCIAL YEAR LOGIC
