@@ -1134,69 +1134,86 @@ def show_dashboard_view():
         # ==============================
         if overdue_count >= 5:
             st.warning(f"⚠️ {overdue_count} overdue loans need urgent attention.")
-        
-        # ==============================
-        # METRIC CARD UI
-        # ==============================
+
+            
+        # --- 3. TOP LEVEL METRIC CARDS ---
         m1, m2, m3, m4 = st.columns(4)
         
-        def metric_card(title, value, subtitle, color, is_money=True):
+        def metric_card(title, value, subtitle, gradient, is_money=True):
         
+            # SAFE formatting
             try:
                 if is_money:
-                    fmt = f"{float(value):,.0f} UGX"
+                    fmt = f"UGX {float(value):,.0f}"
                 else:
                     fmt = f"{int(value)}"
             except:
                 fmt = "0"
         
             return f"""
-            <div class='metric-card'
-                 style='
-                    border-bottom:5px solid {color};
-                    background:white;
-                    padding:20px;
-                    border-radius:14px;
-                    box-shadow:0 2px 12px rgba(0,0,0,0.05);
-                 '>
+            <div style="
+                background:{gradient};
+                padding:22px;
+                border-radius:18px;
+                color:white;
+                box-shadow:0 6px 18px rgba(0,0,0,0.12);
+                min-height:135px;
+                position:relative;
+                overflow:hidden;
+            ">
         
-                <p style="
-                    color:#64748B;
-                    font-size:12px;
-                    font-weight:bold;
+                <!-- Glow -->
+                <div style="
+                    position:absolute;
+                    right:-25px;
+                    top:-25px;
+                    width:90px;
+                    height:90px;
+                    background:rgba(255,255,255,0.12);
+                    border-radius:50%;
+                "></div>
+        
+                <div style="
+                    font-size:11px;
                     text-transform:uppercase;
-                    margin-bottom:5px;
+                    letter-spacing:1px;
+                    font-weight:700;
+                    opacity:0.9;
+                    margin-bottom:10px;
                 ">
                     {title}
-                </p>
+                </div>
         
-                <h2 style="
-                    color:#1E293B;
-                    margin:0;
-                    font-size:24px;
-                    font-weight:700;
+                <div style="
+                    font-size:28px;
+                    font-weight:800;
+                    line-height:1.2;
+                    margin-bottom:10px;
+                    white-space:nowrap;
                 ">
                     {fmt}
-                </h2>
+                </div>
         
-                <p style="
-                    color:{color};
-                    font-size:11px;
-                    margin-top:6px;
-                    font-weight:bold;
+                <div style="
+                    font-size:12px;
+                    font-weight:600;
+                    opacity:0.92;
                 ">
                     {subtitle}
-                </p>
+                </div>
         
             </div>
             """
         
+        # ==============================
+        # RENDER CARDS
+        # ==============================
         m1.markdown(
             metric_card(
                 "Active Principal",
                 total_principal,
                 "Portfolio Value",
-                brand_color
+                "linear-gradient(135deg, #2563EB, #1E3A8A)"
             ),
             unsafe_allow_html=True
         )
@@ -1206,7 +1223,7 @@ def show_dashboard_view():
                 "Interest Income",
                 total_interest,
                 "Expected Earnings",
-                "#10B981"
+                "linear-gradient(135deg, #10B981, #047857)"
             ),
             unsafe_allow_html=True
         )
@@ -1216,7 +1233,7 @@ def show_dashboard_view():
                 "Operational Costs",
                 total_expenses,
                 "Total Expenses",
-                "#EF4444"
+                "linear-gradient(135deg, #EF4444, #991B1B)"
             ),
             unsafe_allow_html=True
         )
@@ -1226,7 +1243,7 @@ def show_dashboard_view():
                 "Critical Alerts",
                 overdue_count,
                 "Overdue Loans",
-                "#F59E0B",
+                "linear-gradient(135deg, #F59E0B, #B45309)",
                 False
             ),
             unsafe_allow_html=True
