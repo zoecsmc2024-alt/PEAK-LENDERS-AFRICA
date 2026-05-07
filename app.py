@@ -3838,139 +3838,39 @@ def show_petty_cash():
     total_transactions = len(filtered_df)
 
     # ==============================
-    # 5. SAAS KPI CARDS
+    # 5. SAAS KPI CARDS (NO HTML)
     # ==============================
+    
     c1, c2, c3, c4 = st.columns(4)
-
+    
     # TOTAL IN
-    c1.markdown(f"""
-        <div style="
-            background:linear-gradient(135deg,#ECFDF5,#D1FAE5);
-            padding:22px;
-            border-radius:18px;
-            border:1px solid #A7F3D0;
-            box-shadow:0 2px 10px rgba(0,0,0,0.05);
-        ">
-            <p style="
-                margin:0;
-                color:#065F46;
-                font-size:13px;
-                font-weight:600;
-            ">
-                TOTAL CASH IN
-            </p>
-
-            <h2 style="
-                margin:8px 0 0 0;
-                color:#10B981;
-            ">
-                {inflow:,.0f}
-            </h2>
-
-            <small style="color:#047857;">
-                UGX
-            </small>
-        </div>
-    """, unsafe_allow_html=True)
-
+    with c1:
+        st.metric(
+            label="🟢 TOTAL CASH IN",
+            value=f"{inflow:,.0f} UGX"
+        )
+    
     # TOTAL OUT
-    c2.markdown(f"""
-        <div style="
-            background:linear-gradient(135deg,#FEF2F2,#FEE2E2);
-            padding:22px;
-            border-radius:18px;
-            border:1px solid #FECACA;
-            box-shadow:0 2px 10px rgba(0,0,0,0.05);
-        ">
-            <p style="
-                margin:0;
-                color:#991B1B;
-                font-size:13px;
-                font-weight:600;
-            ">
-                TOTAL CASH OUT
-            </p>
-
-            <h2 style="
-                margin:8px 0 0 0;
-                color:#EF4444;
-            ">
-                {outflow:,.0f}
-            </h2>
-
-            <small style="color:#B91C1C;">
-                UGX
-            </small>
-        </div>
-    """, unsafe_allow_html=True)
-
+    with c2:
+        st.metric(
+            label="🔴 TOTAL CASH OUT",
+            value=f"{outflow:,.0f} UGX"
+        )
+    
     # BALANCE
-    bal_bg = "#ECFDF5" if balance >= 0 else "#FEF2F2"
-    bal_border = "#10B981" if balance >= 0 else "#EF4444"
-    bal_text = "#10B981" if balance >= 0 else "#EF4444"
-
-    c3.markdown(f"""
-        <div style="
-            background:{bal_bg};
-            padding:22px;
-            border-radius:18px;
-            border:1px solid {bal_border};
-            box-shadow:0 2px 10px rgba(0,0,0,0.05);
-        ">
-            <p style="
-                margin:0;
-                color:#374151;
-                font-size:13px;
-                font-weight:600;
-            ">
-                CURRENT BALANCE
-            </p>
-
-            <h2 style="
-                margin:8px 0 0 0;
-                color:{bal_text};
-            ">
-                {balance:,.0f}
-            </h2>
-
-            <small style="color:#6B7280;">
-                UGX
-            </small>
-        </div>
-    """, unsafe_allow_html=True)
-
-    # TOTAL TRANSACTIONS
-    c4.markdown(f"""
-        <div style="
-            background:linear-gradient(135deg,#EEF2FF,#E0E7FF);
-            padding:22px;
-            border-radius:18px;
-            border:1px solid #C7D2FE;
-            box-shadow:0 2px 10px rgba(0,0,0,0.05);
-        ">
-            <p style="
-                margin:0;
-                color:#3730A3;
-                font-size:13px;
-                font-weight:600;
-            ">
-                TRANSACTIONS
-            </p>
-
-            <h2 style="
-                margin:8px 0 0 0;
-                color:#4F46E5;
-            ">
-                {total_transactions}
-            </h2>
-
-            <small style="color:#4338CA;">
-                Entries
-            </small>
-        </div>
-    """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    with c3:
+        st.metric(
+            label="💰 CURRENT BALANCE",
+            value=f"{balance:,.0f} UGX",
+            delta=f"{balance:,.0f}"
+        )
+    
+    # TRANSACTIONS
+    with c4:
+        st.metric(
+            label="📊 TRANSACTIONS",
+            value=f"{total_transactions}"
+        )
 
     # ==============================
     # TABS
