@@ -4065,51 +4065,41 @@ def show_petty_cash():
                     # DELETE
                     # =================================================
                     with c_del:
-        
                         st.write("### 🗑️ Danger Zone")
-        
+                    
                         confirm_delete = st.checkbox(
                             "Confirm permanent deletion",
                             key=f"confirm_{rid}"
                         )
-        
+                    
                         if st.button(
                             "🗑️ Delete Permanently",
                             key=f"delete_{rid}",
                             use_container_width=True,
                             type="secondary"
                         ):
-        
                             if not confirm_delete:
-        
-                                st.warning(
-                                    "Please confirm deletion."
-                                )
-        
+                                st.warning("Please check the confirmation box first.")
                             else:
-        
-                                df_to_save = df[
-                                    df["id"].astype(str)
-                                    != rid
-                                ].copy()
-        
-                                if save_data(
-                                    "petty_cash",
-                                    prepare_for_db(df_to_save)
-                                ):
-        
-                                    st.warning(
-                                        "Entry removed from digital cashbook."
-                                    )
-        
-                                    st.cache_data.clear()
-                                    st.rerun()
-        
+                                # 1. Force ID to string and filter
+                                target_id = str(rid)
+                                df_to_save = df[df["id"].astype(str) != target_id].copy()
+                    
+                                # 2. Check if a row was actually removed to prevent "shuffling"
+                                if len(df_to_save) < len(df):
+                                    
+                                    # 3. USE THE DATAFRAME CLEANER (NOT THE LIST CLEANER)
+                                    # Ensure you use 'prepare_df_for_db' so it remains a DataFrame
+                                    clean_df = prepare_df_for_db(df_to_save)
+                                    
+                                    if save_data("petty_cash", clean_df):
+                                        st.cache_data.clear()
+                                        st.warning("Entry removed from digital cashbook.")
+                                        st.rerun()
+                                    else:
+                                        st.error("Database save failed.")
                                 else:
-        
-                                    st.error(
-                                        "Database save failed."
-                                    )
+                                    st.error("Deletion failed: ID match not found.")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
