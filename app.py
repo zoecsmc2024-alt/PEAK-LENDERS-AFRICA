@@ -3728,7 +3728,7 @@ def show_petty_cash():
     # 1. FETCH DATA
     # ==============================
     
-    df = get_cached_data("PettyCash")
+    df = get_cached_data("petty_cash")
     
     if df.empty:
         df = pd.DataFrame(columns=[
