@@ -4022,24 +4022,26 @@ def show_petty_cash():
                         new_date = st.date_input("Update Date", pd.to_datetime(record["date"]))
     
                         if st.button("💾 Save Changes", key=f"edit_{rid}"):
-                            # 1. Update the local row
+                            # 1. Update the local row (Keep your existing logic)
                             df.loc[df["id"] == rid, ["description", "amount", "date"]] = [
                                 new_desc,
                                 float(new_amt),
                                 new_date.strftime("%Y-%m-%d")
                             ]
-                        
-                            # 2. CRITICAL FIX: Explicitly convert the entire column to string
-                            save_df = df.copy()
-                            # We force the 'date' column to be a simple YYYY-MM-DD string
-                            save_df["date"] = pd.to_datetime(save_df["date"]).dt.strftime("%Y-%m-%d")
                             
-                            # 3. Clean up helper columns before sending to DB
-                            # If you added 'label' or 'Date' (capital D) for the UI, drop them here
+                            # 2. & 3. Prepare for Database
+                            # Filter columns first
                             cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
-                            save_df = save_df[[c for c in cols_to_keep if c in save_df.columns]]
-                        
-                            if save_data("petty_cash", save_df):
+                            save_df = df[[c for c in cols_to_keep if c in df.columns]].copy()
+                            
+                            # Force the date column to strings
+                            save_df["date"] = save_df["date"].astype(str)
+                            
+                            # Convert to a list of records with native Python types
+                            # This is usually what the 'save_data' function expects to avoid serialization issues
+                            data_to_save = save_df.to_dict(orient="records")
+                            
+                            if save_data("petty_cash", data_to_save):
                                 st.success("Entry updated")
                                 st.cache_data.clear()
                                 st.rerun()
