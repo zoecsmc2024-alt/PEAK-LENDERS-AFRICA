@@ -4148,140 +4148,112 @@ def show_reports():
     
     fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
     
+    # ==============================
+    # 💰 INCOME STATEMENT & BALANCE SHEET (FY-AWARE)
+    # ==============================
+    
     # ------------------------------
-    # 💰 INCOME STATEMENT (CLEAN OPEX MODEL)
+    # Fiscal Year Selector
+    # ------------------------------
+    fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
+    selected_fy = st.selectbox("Select Financial Year", fiscal_years)
+    
+    fy_loans = loans[loans["fiscal_year"] == selected_fy]
+    fy_expenses = expenses[expenses["fiscal_year"] == selected_fy]
+    fy_payments = payments[payments["fiscal_year"] == selected_fy]
+    
+    # ------------------------------
+    # 💰 INCOME STATEMENT
     # ------------------------------
     with s1:
-        st.subheader("💰 Income Statement (Profit & Loss)")
+        st.subheader(f"💰 Income Statement (Profit & Loss) — FY {selected_fy}")
     
-        for fy in fiscal_years:
-            fy_loans = loans[loans["fiscal_year"] == fy]
-            fy_expenses = expenses[expenses["fiscal_year"] == fy]
+        # Active Capital → Cycle 1 PENDING/ACTIVE only
+        active_capital = fy_loans[
+            (fy_loans["cycle_no"] == 1) &
+            (fy_loans["status"].str.upper().isin(["ACTIVE", "PENDING"]))
+        ]["principal"].sum()
     
-            # ------------------------------
-            # Active Capital (Cycle 1 only)
-            # ------------------------------
-            active_capital = fy_loans[
-                (fy_loans["cycle_no"] == 1) &
-                (fy_loans["status"].str.upper().isin(["ACTIVE", "PENDING"]))
-            ]["principal"].sum()
+        # Interest Revenue → CLEARED loans (all cycles)
+        int_revenue = fy_loans[
+            fy_loans["status"].str.upper() == "CLEARED"
+        ]["interest"].sum()
     
-            # ------------------------------
-            # Interest Revenue (only CLEARED loans)
-            # ------------------------------
-            int_revenue = fy_loans[
-                fy_loans["status"].str.upper() == "CLEARED"
-            ]["interest"].sum()
+        # OPEX → Direct expenses only (salaries/taxes already included)
+        total_opex = col_sum(fy_expenses, "amount")
     
-            # ------------------------------
-            # OPEX (SINGLE SOURCE OF TRUTH)
-            # ------------------------------
-            total_opex = col_sum(fy_expenses, "amount")
+        # Net Profit
+        net_profit = int_revenue - total_opex
     
-            # ------------------------------
-            # Net Profit
-            # ------------------------------
-            net_profit = int_revenue - total_opex
+        st.dataframe(pd.DataFrame({
+            "Description": [
+                "Active Capital (Cycle 1 ACTIVE/PENDING)",
+                "Interest Revenue (CLEARED Loans)",
+                "Total Operating Expenses (OPEX)",
+                "Net Profit"
+            ],
+            "Amount (UGX)": [
+                f"{active_capital:,.0f}",
+                f"{int_revenue:,.0f}",
+                f"{total_opex:,.0f}",
+                f"{net_profit:,.0f}"
+            ]
+        }), use_container_width=True)
     
-            st.write(f"**Fiscal Year {fy}**")
-    
-            st.dataframe(pd.DataFrame({
-                "Description": [
-                    "Active Capital (Cycle 1 ACTIVE/PENDING)",
-                    "Interest Revenue (CLEARED Loans)",
-                    "Total Operating Expenses (OPEX)",
-                    "Net Profit"
-                ],
-                "Amount (UGX)": [
-                    f"{active_capital:,.0f}",
-                    f"{int_revenue:,.0f}",
-                    f"{total_opex:,.0f}",
-                    f"{net_profit:,.0f}"
-                ]
-            }), use_container_width=True)
-    # ==============================
-    # 🏦 BALANCE SHEET
-    # ==============================
+    # ------------------------------
+    # 🏦 BALANCE SHEET SNAPSHOT
+    # ------------------------------
     with s2:
-        st.subheader("🏦 Balance Sheet Snapshot")
+        st.subheader(f"🏦 Balance Sheet — FY {selected_fy}")
     
-        for fy in fiscal_years:
-            fy_loans = loans[loans["fiscal_year"] == fy]
+        # Loan Book → all cycles outstanding balances
+        loan_book_value = fy_loans["balance"].sum()
     
-            # --- Loan Book: All cycles, outstanding balances ---
-            loan_book_value = fy_loans["balance"].sum()
+        # Cash Position → payments minus expenses
+        cash_position = col_sum(fy_payments, "amount") - col_sum(fy_expenses, "amount")
     
-            # --- Cash Profit: actual collected minus opex ---
-            fy_payments = payments[payments["fiscal_year"] == fy]
-            actual_collected = col_sum(fy_payments, "amount")
+        # Total Assets = Active Capital + Loan Book + Cash Position
+        total_assets = active_capital + loan_book_value + cash_position
     
-            cash_profit = actual_collected - total_opex  # same as P&L net profit
-    
-            total_assets = active_capital + loan_book_value + cash_profit
-    
-            st.write(f"**Fiscal Year {fy}**")
-            st.dataframe(pd.DataFrame({
-                "Description": [
-                    "Active Capital (Cycle 1 ACTIVE/PENDING)",
-                    "Loan Book (All Outstanding Cycles)",
-                    "Cash Profit",
-                    "Total Assets"
-                ],
-                "Amount (UGX)": [
-                    f"{active_capital:,.0f}",
-                    f"{loan_book_value:,.0f}",
-                    f"{cash_profit:,.0f}",
-                    f"{total_assets:,.0f}"
-                ]
-            }), use_container_width=True)
+        st.dataframe(pd.DataFrame({
+            "Description": [
+                "Active Capital (Cycle 1 ACTIVE/PENDING)",
+                "Loan Book (All Outstanding Cycles)",
+                "Cash Position",
+                "Total Assets"
+            ],
+            "Amount (UGX)": [
+                f"{active_capital:,.0f}",
+                f"{loan_book_value:,.0f}",
+                f"{cash_position:,.0f}",
+                f"{total_assets:,.0f}"
+            ]
+        }), use_container_width=True)
     
     # ------------------------------
     # 📤 EXPORT
     # ------------------------------
-    with st.expander("📥 Export Financial Data for Auditors"):
+    with st.expander(f"📥 Export Executive Report — FY {selected_fy}"):
     
-        export_rows = []
-        for fy in fiscal_years:
-            fy_loans = loans[loans["fiscal_year"] == fy]
-            fy_payments = payments[payments["fiscal_year"] == fy]
-            fy_expenses = expenses[expenses["fiscal_year"] == fy]
-    
-            active_capital = fy_loans[
-                (fy_loans["cycle_no"] == 1) & (fy_loans["status"].str.upper() == "PENDING")
-            ]["principal"].sum()
-            int_revenue = fy_loans[
-                fy_loans["status"].str.upper() == "CLEARED"
-            ]["interest"].sum()
-    
-            salary_exp = col_sum(payroll, "net_pay")
-            tax_exp = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10") + col_sum(payroll, "paye")
-            direct_exp = col_sum(fy_expenses, "amount")
-            total_opex = salary_exp + tax_exp + direct_exp
-            net_profit = int_revenue - total_opex
-    
-            loan_book = fy_loans["balance"].sum()
-            cash_pos = fy_payments["amount"].sum() - fy_expenses["amount"].sum()
-            total_assets = loan_book + cash_pos
-    
-            export_rows.append({
-                "Fiscal Year": fy,
-                "Active Capital": active_capital,
-                "Interest Revenue": int_revenue,
-                "Total OPEX": total_opex,
-                "Net Profit": net_profit,
-                "Cash Position": cash_pos,
-                "Loan Book Value": loan_book,
-                "Total Assets": total_assets
-            })
+        export_rows = [{
+            "Fiscal Year": selected_fy,
+            "Active Capital": active_capital,
+            "Interest Revenue": int_revenue,
+            "Total OPEX": total_opex,
+            "Net Profit": net_profit,
+            "Cash Position": cash_position,
+            "Loan Book Value": loan_book_value,
+            "Total Assets": total_assets
+        }]
     
         export_df = pd.DataFrame(export_rows)
         st.dataframe(export_df)
     
         csv = export_df.to_csv(index=False).encode("utf-8")
         st.download_button(
-            label="⬇️ Download Full Executive Report",
+            label="⬇️ Download Full Executive Report (CSV)",
             data=csv,
-            file_name=f"FinReport_{datetime.now().strftime('%Y%m%d')}.csv",
+            file_name=f"FinReport_{selected_fy}_{datetime.now().strftime('%Y%m%d')}.csv",
             mime="text/csv",
             use_container_width=True
         )
