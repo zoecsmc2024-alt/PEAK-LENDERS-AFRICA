@@ -3700,241 +3700,310 @@ def show_payroll():
                 use_container_width=True
             )
 # ==============================
-# 💵 PETTY CASH MANAGEMENT PAGE (BULLETPROOF)
+# 19. PETTY CASH MANAGEMENT PAGE (SAAS UPGRADE)
 # ==============================
-import pandas as pd
-import streamlit as st
-from datetime import datetime
-import uuid
-
-def prepare_for_db(dataframe):
-    """Cleans DataFrame for JSON serialization."""
-    cols_to_keep = ["id", "type", "amount", "date", "description", "tenant_id"]
-
-    clean_df = dataframe[[c for c in cols_to_keep if c in dataframe.columns]].copy()
-
-    if "date" in clean_df.columns:
-        clean_df["date"] = pd.to_datetime(
-            clean_df["date"],
-            errors="coerce"
-        ).dt.strftime("%Y-%m-%d")
-
-    return clean_df.to_dict(orient="records")
-
 
 def show_petty_cash():
     """
-    Modern Petty Cash Management with FY filter,
-    colored metrics, and full CRUD handling.
+    SaaS-style Petty Cash Management System.
+    Features:
+    - Financial Year Support (July → June)
+    - KPI metric cards
+    - Styled transaction tables
+    - Light green rows for Cash In
+    - Light red rows for Cash Out
+    - Monthly + FY analytics
     """
 
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    current_tenant = st.session_state.get("tenant_id")
-
-    if not current_tenant:
-        st.error("Session expired.")
-        return
-
-    # ==============================
-    # 🎨 STYLING
-    # ==============================
-    st.markdown(f"""
-    <style>
-    .block-container {{
-        padding-top: 1.2rem;
-    }}
-
-    .glass-card {{
-        backdrop-filter: blur(10px);
-        background: linear-gradient(
-            145deg,
-            rgba(255,255,255,0.9),
-            rgba(240,244,255,0.7)
-        );
-        border-radius: 16px;
-        padding: 20px;
-        border: 1px solid rgba(43,63,135,0.1);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        transition: transform 0.2s ease;
-    }}
-
-    .glass-card:hover {{
-        transform: translateY(-3px);
-        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
-    }}
-    </style>
+    st.markdown("""
+        <h2 style='color:#2B3F87; margin-bottom:0;'>
+            💵 Petty Cash Management
+        </h2>
+        <p style='color:gray; margin-top:0;'>
+            Smart cash tracking, analytics & financial year reporting
+        </p>
     """, unsafe_allow_html=True)
 
-    st.markdown(
-        f"<h2 style='color:{brand_color};'>💵 Petty Cash Management</h2>",
-        unsafe_allow_html=True
+    # ==============================
+    # 1. FETCH DATA
+    # ==============================
+    df = get_cached_data("PettyCash")
+
+    if df.empty:
+        df = pd.DataFrame(columns=[
+            "Transaction_ID",
+            "Type",
+            "Amount",
+            "Date",
+            "Description"
+        ])
+    else:
+        # Standardize
+        df.columns = df.columns.str.strip().str.replace(" ", "_")
+
+        df["Transaction_ID"] = (
+            pd.to_numeric(df["Transaction_ID"], errors="coerce")
+            .fillna(0)
+            .astype(int)
+        )
+
+        df["Amount"] = (
+            pd.to_numeric(df["Amount"], errors="coerce")
+            .fillna(0)
+        )
+
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+
+    # ==============================
+    # 2. FINANCIAL YEAR LOGIC
+    # ==============================
+    def get_financial_year(date):
+        """
+        FY runs July → June
+        Example:
+        July 2025 → June 2026 = FY 2025/2026
+        """
+        if pd.isnull(date):
+            return "Unknown"
+
+        year = date.year
+
+        if date.month >= 7:
+            return f"FY {year}/{year+1}"
+        else:
+            return f"FY {year-1}/{year}"
+
+    if not df.empty:
+        df["Financial_Year"] = df["Date"].apply(get_financial_year)
+        df["Month"] = df["Date"].dt.strftime("%b %Y")
+
+    # ==============================
+    # 3. FILTERS
+    # ==============================
+    top1, top2, top3 = st.columns([2,2,2])
+
+    if not df.empty:
+        fy_options = ["All"] + sorted(df["Financial_Year"].unique(), reverse=True)
+    else:
+        fy_options = ["All"]
+
+    selected_fy = top1.selectbox(
+        "📅 Financial Year",
+        fy_options
     )
 
-    # ==============================
-    # LOAD DATA
-    # ==============================
-    df = get_cached_data("petty_cash")
+    type_filter = top2.selectbox(
+        "💳 Transaction Type",
+        ["All", "In", "Out"]
+    )
 
-    if df is None or df.empty:
-        df = pd.DataFrame(
-            columns=[
-                "id",
-                "type",
-                "amount",
-                "date",
-                "description",
-                "tenant_id"
-            ]
-        )
-    else:
-        df = df[
-            df["tenant_id"].astype(str) == str(current_tenant)
-        ].copy()
+    search = top3.text_input(
+        "🔍 Search Description",
+        placeholder="Search..."
+    )
 
-        df["amount"] = pd.to_numeric(
-            df["amount"],
-            errors="coerce"
-        ).fillna(0)
+    # Apply filters
+    filtered_df = df.copy()
 
-        df["date"] = pd.to_datetime(
-            df["date"],
-            errors="coerce"
-        )
+    if selected_fy != "All":
+        filtered_df = filtered_df[
+            filtered_df["Financial_Year"] == selected_fy
+        ]
 
-    # ==============================
-    # FINANCIAL YEAR
-    # ==============================
-    def get_fy_label(date_val):
-        try:
-            dt = pd.to_datetime(date_val)
+    if type_filter != "All":
+        filtered_df = filtered_df[
+            filtered_df["Type"] == type_filter
+        ]
 
-            if dt.month >= 7:
-                return f"FY{dt.year}-{dt.year+1}"
-            else:
-                return f"FY{dt.year-1}-{dt.year}"
-
-        except:
-            return "Unknown FY"
-
-    df["financial_year"] = df["date"].apply(get_fy_label)
+    if search:
+        filtered_df = filtered_df[
+            filtered_df["Description"]
+            .astype(str)
+            .str.contains(search, case=False, na=False)
+        ]
 
     # ==============================
-    # KPI METRICS
+    # 4. METRICS
     # ==============================
-    inflow = df[df["type"] == "In"]["amount"].sum()
-    outflow = df[df["type"] == "Out"]["amount"].sum()
+    inflow = filtered_df[
+        filtered_df["Type"] == "In"
+    ]["Amount"].sum()
+
+    outflow = filtered_df[
+        filtered_df["Type"] == "Out"
+    ]["Amount"].sum()
+
     balance = inflow - outflow
 
-    c1, c2, c3 = st.columns(3)
+    total_transactions = len(filtered_df)
 
+    # ==============================
+    # 5. SAAS KPI CARDS
+    # ==============================
+    c1, c2, c3, c4 = st.columns(4)
+
+    # TOTAL IN
     c1.markdown(f"""
-    <div style="
-        padding:12px;
-        border-radius:12px;
-        background:#d1fae5;
-        text-align:center;
-    ">
         <div style="
-            font-size:12px;
-            color:#065f46;
-            font-weight:600;
+            background:linear-gradient(135deg,#ECFDF5,#D1FAE5);
+            padding:22px;
+            border-radius:18px;
+            border:1px solid #A7F3D0;
+            box-shadow:0 2px 10px rgba(0,0,0,0.05);
         ">
-            Cash In
-        </div>
+            <p style="
+                margin:0;
+                color:#065F46;
+                font-size:13px;
+                font-weight:600;
+            ">
+                TOTAL CASH IN
+            </p>
 
-        <div style="
-            font-size:20px;
-            color:#065f46;
-            font-weight:700;
-        ">
-            {inflow:,.0f} UGX
+            <h2 style="
+                margin:8px 0 0 0;
+                color:#10B981;
+            ">
+                {inflow:,.0f}
+            </h2>
+
+            <small style="color:#047857;">
+                UGX
+            </small>
         </div>
-    </div>
     """, unsafe_allow_html=True)
 
+    # TOTAL OUT
     c2.markdown(f"""
-    <div style="
-        padding:12px;
-        border-radius:12px;
-        background:#fee2e2;
-        text-align:center;
-    ">
         <div style="
-            font-size:12px;
-            color:#9a1f1f;
-            font-weight:600;
+            background:linear-gradient(135deg,#FEF2F2,#FEE2E2);
+            padding:22px;
+            border-radius:18px;
+            border:1px solid #FECACA;
+            box-shadow:0 2px 10px rgba(0,0,0,0.05);
         ">
-            Cash Out
-        </div>
+            <p style="
+                margin:0;
+                color:#991B1B;
+                font-size:13px;
+                font-weight:600;
+            ">
+                TOTAL CASH OUT
+            </p>
 
-        <div style="
-            font-size:20px;
-            color:#9a1f1f;
-            font-weight:700;
-        ">
-            {outflow:,.0f} UGX
+            <h2 style="
+                margin:8px 0 0 0;
+                color:#EF4444;
+            ">
+                {outflow:,.0f}
+            </h2>
+
+            <small style="color:#B91C1C;">
+                UGX
+            </small>
         </div>
-    </div>
     """, unsafe_allow_html=True)
 
-    bal_color = "#065f46" if balance >= 50000 else "#9a1f1f"
-    bal_bg = "#d1fae5" if balance >= 50000 else "#fee2e2"
+    # BALANCE
+    bal_bg = "#ECFDF5" if balance >= 0 else "#FEF2F2"
+    bal_border = "#10B981" if balance >= 0 else "#EF4444"
+    bal_text = "#10B981" if balance >= 0 else "#EF4444"
 
     c3.markdown(f"""
-    <div style="
-        padding:12px;
-        border-radius:12px;
-        background:{bal_bg};
-        text-align:center;
-    ">
         <div style="
-            font-size:12px;
-            color:{bal_color};
-            font-weight:600;
+            background:{bal_bg};
+            padding:22px;
+            border-radius:18px;
+            border:1px solid {bal_border};
+            box-shadow:0 2px 10px rgba(0,0,0,0.05);
         ">
-            Balance
-        </div>
+            <p style="
+                margin:0;
+                color:#374151;
+                font-size:13px;
+                font-weight:600;
+            ">
+                CURRENT BALANCE
+            </p>
 
-        <div style="
-            font-size:20px;
-            color:{bal_color};
-            font-weight:700;
-        ">
-            {balance:,.0f} UGX
+            <h2 style="
+                margin:8px 0 0 0;
+                color:{bal_text};
+            ">
+                {balance:,.0f}
+            </h2>
+
+            <small style="color:#6B7280;">
+                UGX
+            </small>
         </div>
-    </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("---")
+    # TOTAL TRANSACTIONS
+    c4.markdown(f"""
+        <div style="
+            background:linear-gradient(135deg,#EEF2FF,#E0E7FF);
+            padding:22px;
+            border-radius:18px;
+            border:1px solid #C7D2FE;
+            box-shadow:0 2px 10px rgba(0,0,0,0.05);
+        ">
+            <p style="
+                margin:0;
+                color:#3730A3;
+                font-size:13px;
+                font-weight:600;
+            ">
+                TRANSACTIONS
+            </p>
+
+            <h2 style="
+                margin:8px 0 0 0;
+                color:#4F46E5;
+            ">
+                {total_transactions}
+            </h2>
+
+            <small style="color:#4338CA;">
+                Entries
+            </small>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ==============================
     # TABS
     # ==============================
-    tab_record, tab_history = st.tabs([
-        "➕ Record Transaction",
-        "📜 Digital Cashbook"
+    tab_record, tab_history, tab_analytics = st.tabs([
+        "➕ Record Entry",
+        "📜 Transaction History",
+        "📊 Analytics"
     ])
 
     # ==============================
-    # RECORD TRANSACTION
+    # TAB 1: RECORD
     # ==============================
     with tab_record:
 
         with st.form("petty_cash_form", clear_on_submit=True):
 
-            st.write("### Log Cash Movement")
+            col_a, col_b = st.columns(2)
 
-            col1, col2 = st.columns(2)
-
-            ttype = col1.selectbox(
-                "Transaction type",
+            ttype = col_a.selectbox(
+                "Transaction Type",
                 ["Out", "In"]
             )
 
-            t_amount = col2.number_input(
-                "amount(UGX)",
+            t_amount = col_b.number_input(
+                "Amount (UGX)",
                 min_value=0,
-                step=500
+                step=1000
+            )
+
+            desc = st.text_input(
+                "Purpose / Description",
+                placeholder="e.g., Office Water Refill"
             )
 
             t_date = st.date_input(
@@ -3942,303 +4011,231 @@ def show_petty_cash():
                 value=datetime.now()
             )
 
-            t_desc = st.text_input(
-                "Purpose / Description"
-            )
+            if st.form_submit_button("💾 Save Transaction"):
 
-            if st.form_submit_button("💾 Commit to Cashbook"):
+                if t_amount > 0 and desc:
 
-                if t_amount > 0 and t_desc:
+                    new_id = (
+                        int(df["Transaction_ID"].max() + 1)
+                        if not df.empty
+                        else 1
+                    )
 
                     new_row = pd.DataFrame([{
-                        "id": str(uuid.uuid4()),
-                        "type": ttype,
-                        "amount": float(t_amount),
-                        "date": t_date.strftime("%Y-%m-%d"),
-                        "description": t_desc,
-                        "tenant_id": str(current_tenant)
+                        "Transaction_ID": new_id,
+                        "Type": ttype,
+                        "Amount": float(t_amount),
+                        "Date": t_date.strftime("%Y-%m-%d"),
+                        "Description": desc
                     }])
 
-                    save_df = pd.concat(
+                    final_df = pd.concat(
                         [df, new_row],
                         ignore_index=True
                     )
 
-                    if save_data(
-                        "petty_cash",
-                        prepare_for_db(save_df)
-                    ):
-                        st.success(f"✅ {ttype}flow recorded")
-                        st.cache_data.clear()
+                    final_df.columns = [
+                        c.replace("_", " ")
+                        for c in final_df.columns
+                    ]
+
+                    if save_data("PettyCash", final_df):
+
+                        st.success(
+                            f"{ttype} transaction of "
+                            f"{t_amount:,.0f} UGX saved!"
+                        )
+
                         st.rerun()
 
                 else:
                     st.error(
-                        "⚠️ Enter a valid amount and description."
+                        "Please provide amount and description."
                     )
 
     # ==============================
-    # HISTORY TAB
+    # TAB 2: HISTORY
     # ==============================
     with tab_history:
 
-        if df.empty:
-            st.info("No transactions yet.")
-            return
+        if not filtered_df.empty:
 
-        view_df = df.copy()
+            # ROW COLORS
+            def highlight_rows(row):
 
-        view_df["date"] = pd.to_datetime(
-            view_df["date"],
-            errors="coerce"
-        )
-
-        view_df["financial_year"] = view_df["date"].apply(
-            lambda d: (
-                f"FY{d.year}-{d.year+1}"
-                if d.month >= 7
-                else f"FY{d.year-1}-{d.year}"
-            ) if pd.notnull(d) else "Unknown"
-        )
-
-        view_df["Date"] = view_df["date"].dt.strftime("%Y-%m-%d")
-
-        # ==============================
-        # FILTERS
-        # ==============================
-        fy_list = ["All"] + sorted(
-            view_df["financial_year"]
-            .dropna()
-            .unique(),
-            reverse=True
-        )
-
-        fy_filter = st.selectbox(
-            "Select Financial Year",
-            fy_list
-        )
-
-        type_filter = st.selectbox(
-            "Filter type",
-            ["All"] + sorted(view_df["type"].unique())
-        )
-
-        search_txt = st.text_input(
-            "Search Description"
-        ).lower()
-
-        filtered = view_df.copy()
-
-        if fy_filter != "All":
-            filtered = filtered[
-                filtered["financial_year"] == fy_filter
-            ]
-
-        if type_filter != "All":
-            filtered = filtered[
-                filtered["type"] == type_filter
-            ]
-
-        if search_txt:
-            filtered = filtered[
-                filtered["description"]
-                .str.lower()
-                .str.contains(search_txt, na=False)
-            ]
-
-        # ==============================
-        # DISPLAY TABLE
-        # ==============================
-        def style_row(row):
-
-            if row["type"] == "In":
-                return ["background-color:#d1fae5"] * len(row)
-
-            elif row["type"] == "Out":
-                return ["background-color:#fee2e2"] * len(row)
-
-            return [""] * len(row)
-
-        st.dataframe(
-            filtered[
-                [
-                    "Date",
-                    "type",
-                    "description",
-                    "amount",
-                    "financial_year"
-                ]
-            ].rename(
-                columns={
-                    "description": "Details",
-                    "amount": "amount (UGX)",
-                    "financial_year": "Fiscal Year"
-                }
-            ).style.apply(
-                style_row,
-                axis=1
-            ).format({
-                "amount (UGX)": "{:,}"
-            }),
-            use_container_width=True
-        )
-
-        # ==============================
-        # 🗑️ DELETE BUTTONS INSIDE TABLE
-        # ==============================
-        st.markdown("### 🗑️ Delete Entries")
-
-        delete_df = filtered.copy()
-
-        delete_df["Delete"] = False
-
-        edited_df = st.data_editor(
-            delete_df[
-                [
-                    "Date",
-                    "type",
-                    "description",
-                    "amount",
-                    "financial_year",
-                    "Delete",
-                    "id"
-                ]
-            ],
-            hide_index=True,
-            use_container_width=True,
-            disabled=[
-                "Date",
-                "type",
-                "description",
-                "amount",
-                "financial_year",
-                "id"
-            ],
-            column_config={
-                "id": None,
-                "description": "Details",
-                "amount": st.column_config.NumberColumn(
-                    "amount (UGX)",
-                    format="%,.0f"
-                ),
-                "financial_year": "Fiscal Year",
-                "Delete": st.column_config.CheckboxColumn(
-                    "Delete"
-                )
-            },
-            key="delete_editor"
-        )
-
-        # ==============================
-        # DELETE SELECTED
-        # ==============================
-        if st.button(
-            "🗑️ Delete Selected Entries",
-            type="secondary",
-            use_container_width=True
-        ):
-
-            rows_to_delete = edited_df[
-                edited_df["Delete"] == True
-            ]
-
-            if rows_to_delete.empty:
-                st.warning("No entries selected.")
-            else:
-
-                ids_to_delete = (
-                    rows_to_delete["id"]
-                    .astype(str)
-                    .tolist()
-                )
-
-                updated_df = df[
-                    ~df["id"].astype(str).isin(ids_to_delete)
-                ].copy()
-
-                if save_data(
-                    "petty_cash",
-                    prepare_for_db(updated_df)
-                ):
-                    st.success(
-                        f"✅ Deleted {len(ids_to_delete)} entr{'y' if len(ids_to_delete)==1 else 'ies'}."
-                    )
-
-                    st.cache_data.clear()
-                    st.rerun()
+                if row["Type"] == "In":
+                    return [
+                        'background-color: #ECFDF5; color:#065F46;'
+                    ] * len(row)
 
                 else:
-                    st.error("Failed to delete entries.")
+                    return [
+                        'background-color: #FEF2F2; color:#991B1B;'
+                    ] * len(row)
 
-        # ==============================
-        # EDIT RECORDS
-        # ==============================
-        st.markdown("---")
+            display_df = filtered_df.copy()
 
-        with st.expander("🛠️ Edit Records"):
+            display_df["Date"] = pd.to_datetime(
+                display_df["Date"]
+            ).dt.strftime("%d %b %Y")
 
-            display_df = filtered.copy()
-
-            display_df["label"] = display_df.apply(
-                lambda r:
-                f"{r['Date']} | "
-                f"{r['type']} | "
-                f"{r['description'][:20]}... | "
-                f"{r['amount']}",
-                axis=1
+            st.dataframe(
+                display_df.sort_values(
+                    "Transaction_ID",
+                    ascending=False
+                )
+                .style
+                .apply(highlight_rows, axis=1)
+                .format({
+                    "Amount": "{:,.0f}"
+                }),
+                use_container_width=True,
+                hide_index=True
             )
 
-            selected_label = st.selectbox(
-                "Select Record to Edit",
-                display_df["label"]
-            )
+            # ==============================
+            # EDIT / DELETE
+            # ==============================
+            st.markdown("<br>", unsafe_allow_html=True)
 
-            if selected_label:
+            with st.expander(
+                "⚙️ Advanced: Edit or Delete Transaction"
+            ):
 
-                selected_idx = display_df[
-                    display_df["label"] == selected_label
-                ].index[0]
+                options = [
+                    f"ID: {int(row['Transaction_ID'])} | "
+                    f"{row['Type']} - "
+                    f"{row['Description']}"
+                    for _, row in filtered_df.iterrows()
+                ]
 
-                record = display_df.loc[selected_idx]
+                selected_task = st.selectbox(
+                    "Select Entry",
+                    options
+                )
 
-                rid = record["id"]
+                sel_id = int(
+                    selected_task
+                    .split(" | ")[0]
+                    .replace("ID: ", "")
+                )
 
-                new_desc = st.text_input(
+                item = df[
+                    df["Transaction_ID"] == sel_id
+                ].iloc[0]
+
+                up_type = st.selectbox(
+                    "Update Type",
+                    ["In", "Out"],
+                    index=0 if item["Type"] == "In" else 1
+                )
+
+                up_amt = st.number_input(
+                    "Update Amount",
+                    value=float(item["Amount"]),
+                    step=1000.0
+                )
+
+                up_desc = st.text_input(
                     "Update Description",
-                    record["description"]
+                    value=str(item["Description"])
                 )
 
-                new_amt = st.number_input(
-                    "Update amount",
-                    value=float(record["amount"])
-                )
+                c_up, c_del = st.columns(2)
 
-                new_date = st.date_input(
-                    "Update Date",
-                    pd.to_datetime(record["date"])
-                )
-
-                if st.button(
+                if c_up.button(
                     "💾 Save Changes",
-                    key=f"edit_{rid}"
+                    use_container_width=True
                 ):
 
                     df.loc[
-                        df["id"] == rid,
-                        ["description", "amount", "date"]
+                        df["Transaction_ID"] == sel_id,
+                        ["Type", "Amount", "Description"]
                     ] = [
-                        new_desc,
-                        float(new_amt),
-                        new_date.strftime("%Y-%m-%d")
+                        up_type,
+                        up_amt,
+                        up_desc
                     ]
 
-                    if save_data(
-                        "petty_cash",
-                        prepare_for_db(df)
-                    ):
-                        st.success("Entry updated")
-                        st.cache_data.clear()
+                    save_ready = df.copy()
+
+                    save_ready.columns = [
+                        c.replace("_", " ")
+                        for c in save_ready.columns
+                    ]
+
+                    if save_data("PettyCash", save_ready):
+
+                        st.success("Updated Successfully!")
                         st.rerun()
+
+                if c_del.button(
+                    "🗑️ Delete Permanently",
+                    use_container_width=True
+                ):
+
+                    df_new = df[
+                        df["Transaction_ID"] != sel_id
+                    ]
+
+                    save_ready = df_new.copy()
+
+                    save_ready.columns = [
+                        c.replace("_", " ")
+                        for c in save_ready.columns
+                    ]
+
+                    if save_data("PettyCash", save_ready):
+
+                        st.warning("Entry Deleted.")
+                        st.rerun()
+
+        else:
+            st.info("No transaction history available.")
+
+    # ==============================
+    # TAB 3: ANALYTICS
+    # ==============================
+    with tab_analytics:
+
+        if not filtered_df.empty:
+
+            st.markdown("### 📈 Financial Overview")
+
+            summary = (
+                filtered_df
+                .groupby(["Financial_Year", "Type"])["Amount"]
+                .sum()
+                .reset_index()
+            )
+
+            st.dataframe(
+                summary.style.format({
+                    "Amount": "{:,.0f}"
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+
+            st.markdown("### 📅 Monthly Summary")
+
+            monthly = (
+                filtered_df
+                .groupby(["Month", "Type"])["Amount"]
+                .sum()
+                .reset_index()
+            )
+
+            st.dataframe(
+                monthly.style.format({
+                    "Amount": "{:,.0f}"
+                }),
+                use_container_width=True,
+                hide_index=True
+            )
+
+        else:
+            st.info("No analytics available.")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
