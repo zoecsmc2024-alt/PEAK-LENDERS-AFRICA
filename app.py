@@ -4061,32 +4061,55 @@ def show_petty_cash():
                                 st.cache_data.clear()
                                 st.rerun()
             
-                    # --- DELETE SECTION ---
-                    with c_del:
-                        # Add a small buffer/header for the danger zone
-                        st.write(" ") 
-                        if st.button("🗑️ Delete Permanently", key=f"del_{rid}", use_container_width=True, type="secondary"):
-                            # Use the 'rid' defined above (the fix for your NameError)
-                            target_id = str(rid)
-                            
-                            # Filter the master 'df' using string-based comparison
-                            df_to_save = df[df["id"].astype(str) != target_id].copy()
-                            
-                            # Check if we actually dropped a row
-                            if len(df_to_save) < len(df):
-                                # Use the helper function to clean the data (Fixes the JSON issue)
-                                final_clean_df = prepare_df_for_db(df_to_save)
-                                
-                                if save_data("petty_cash", final_clean_df):
-                                    st.cache_data.clear() 
-                                    st.warning("Entry removed from digital cashbook.")
-                                    st.rerun()
-                                else:
-                                    st.error("Database save failed.")
+                    # =================================================
+                    # DELETE
+                    # =================================================
+                    with c_delete:
+        
+                        st.write("### 🗑️ Danger Zone")
+        
+                        confirm_delete = st.checkbox(
+                            "Confirm permanent deletion",
+                            key=f"confirm_{rid}"
+                        )
+        
+                        if st.button(
+                            "🗑️ Delete Permanently",
+                            key=f"delete_{rid}",
+                            use_container_width=True,
+                            type="secondary"
+                        ):
+        
+                            if not confirm_delete:
+        
+                                st.warning(
+                                    "Please confirm deletion."
+                                )
+        
                             else:
-                                st.error(f"Could not find ID {target_id} in current data.")
-                                # Helpful debug if it fails to find the ID
-                                st.write("Row IDs:", df["id"].astype(str).tolist())
+        
+                                df_to_save = df[
+                                    df["id"].astype(str)
+                                    != rid
+                                ].copy()
+        
+                                if save_data(
+                                    "petty_cash",
+                                    prepare_for_db(df_to_save)
+                                ):
+        
+                                    st.warning(
+                                        "Entry removed from digital cashbook."
+                                    )
+        
+                                    st.cache_data.clear()
+                                    st.rerun()
+        
+                                else:
+        
+                                    st.error(
+                                        "Database save failed."
+                                    )
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
