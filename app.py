@@ -4063,25 +4063,28 @@ def show_petty_cash():
                     with c_del:
                         st.write("### Danger Zone")
                         if st.button("🗑️ Delete Record", key=f"del_{rid}"):
-                            # 1. Reach out and filter the original source dataframe
-                            # We use a temporary variable to be safe
+                            # 1. Create the new dataframe without the deleted ID
+                            # Use the master 'df' to ensure tenant_id and other hidden cols are kept
                             updated_df = df[df["id"] != rid].copy()
                             
-                            # 2. Sanitize using our helper
+                            # 2. Sanitize for JSON/DB
                             clean_save_df = prepare_df_for_db(updated_df)
                             
-                            # 3. Attempt the save
+                            # 3. Save to Database
                             if save_data("petty_cash", clean_save_df):
-                                # 4. CRITICAL: Clear cache BEFORE success message
+                                # --- THE FIX SEQUENCE ---
+                                # 1. Clear the specific cache for this function
                                 st.cache_data.clear() 
                                 
-                                # 5. Success feedback
+                                # 2. Update session state directly so the UI has the new data immediately
+                                # (If you are storing df in session_state, update it here)
+                                
                                 st.success("Entry permanently deleted.")
                                 
-                                # 6. Force a full rerun to reload data from DB
+                                # 3. Give Streamlit a tiny moment and then force a reload
                                 st.rerun()
                             else:
-                                st.error("Database failed to delete the record.")
+                                st.error("Failed to update the database.")
 # ==========================================
 # 🚀 BALLISTIC FINTECH REPORTS ENGINE (PRODUCTION READY)
 # ==========================================
