@@ -3838,40 +3838,141 @@ def show_petty_cash():
     total_transactions = len(filtered_df)
 
     # ==============================
-    # 5. SAAS KPI CARDS (NO HTML)
+    # 5. SAAS KPI CARDS (NO HTML + COLORS)
     # ==============================
+    
+    st.markdown("""
+    <style>
+    
+    /* KPI CARD BASE */
+    div[data-testid="stMetric"] {
+        background: #ffffff;
+        border-radius: 18px;
+        padding: 18px 16px;
+        border: 1px solid #E5E7EB;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.04);
+    }
+    
+    /* LABEL */
+    div[data-testid="stMetric"] label {
+        font-weight: 700;
+        font-size: 13px !important;
+    }
+    
+    /* VALUE */
+    div[data-testid="stMetricValue"] {
+        font-size: 30px !important;
+        font-weight: 800;
+    }
+    
+    /* GREEN CARD */
+    .green-metric {
+        background: linear-gradient(135deg,#ECFDF5,#D1FAE5) !important;
+        border-left: 6px solid #10B981 !important;
+    }
+    
+    /* RED CARD */
+    .red-metric {
+        background: linear-gradient(135deg,#FEF2F2,#FEE2E2) !important;
+        border-left: 6px solid #EF4444 !important;
+    }
+    
+    /* BLUE CARD */
+    .blue-metric {
+        background: linear-gradient(135deg,#EEF2FF,#E0E7FF) !important;
+        border-left: 6px solid #4F46E5 !important;
+    }
+    
+    /* PURPLE CARD */
+    .purple-metric {
+        background: linear-gradient(135deg,#F5F3FF,#EDE9FE) !important;
+        border-left: 6px solid #7C3AED !important;
+    }
+    
+    </style>
+    """, unsafe_allow_html=True)
     
     c1, c2, c3, c4 = st.columns(4)
     
+    # ==============================
     # TOTAL IN
+    # ==============================
     with c1:
+        st.markdown(
+            """
+            <div class="green-metric">
+            """,
+            unsafe_allow_html=True
+        )
+    
         st.metric(
             label="🟢 TOTAL CASH IN",
             value=f"{inflow:,.0f} UGX"
         )
     
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # ==============================
     # TOTAL OUT
+    # ==============================
     with c2:
+        st.markdown(
+            """
+            <div class="red-metric">
+            """,
+            unsafe_allow_html=True
+        )
+    
         st.metric(
             label="🔴 TOTAL CASH OUT",
             value=f"{outflow:,.0f} UGX"
         )
     
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # ==============================
     # BALANCE
+    # ==============================
     with c3:
+    
+        balance_class = (
+            "green-metric"
+            if balance >= 0
+            else "red-metric"
+        )
+    
+        st.markdown(
+            f"""
+            <div class="{balance_class}">
+            """,
+            unsafe_allow_html=True
+        )
+    
         st.metric(
             label="💰 CURRENT BALANCE",
             value=f"{balance:,.0f} UGX",
             delta=f"{balance:,.0f}"
         )
     
-    # TRANSACTIONS
+        st.markdown("</div>", unsafe_allow_html=True)
+    
+    # ==============================
+    # TOTAL TRANSACTIONS
+    # ==============================
     with c4:
+        st.markdown(
+            """
+            <div class="purple-metric">
+            """,
+            unsafe_allow_html=True
+        )
+    
         st.metric(
             label="📊 TRANSACTIONS",
             value=f"{total_transactions}"
         )
-
+    
+        st.markdown("</div>", unsafe_allow_html=True)
     # ==============================
     # TABS
     # ==============================
