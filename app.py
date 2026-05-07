@@ -3727,7 +3727,7 @@ def show_petty_cash():
     # ==============================
     # 1. FETCH DATA
     # ==============================
-    df = get_cached_data("petty_cash")
+    df = get_cached_data("PettyCash")
 
     if df.empty:
         df = pd.DataFrame(columns=[
@@ -3892,7 +3892,7 @@ def show_petty_cash():
     </style>
     """, unsafe_allow_html=True)
     
-    c1, c2, c3, = st.columns(4)
+    c1, c2, c3, c4 = st.columns(4)
     
     # ==============================
     # TOTAL IN
@@ -3956,7 +3956,24 @@ def show_petty_cash():
     
         st.markdown("</div>", unsafe_allow_html=True)
     
+    # ==============================
+    # TOTAL TRANSACTIONS
+    # ==============================
+    with c4:
+        st.markdown(
+            """
+            <div class="purple-metric">
+            """,
+            unsafe_allow_html=True
+        )
     
+        st.metric(
+            label="📊 TRANSACTIONS",
+            value=f"{total_transactions}"
+        )
+    
+        st.markdown("</div>", unsafe_allow_html=True)
+
     # ==============================
     # TABS
     # ==============================
@@ -4024,7 +4041,7 @@ def show_petty_cash():
                         for c in final_df.columns
                     ]
 
-                    if save_data("petty_cash", final_df):
+                    if save_data("PettyCash", final_df):
 
                         st.success(
                             f"{ttype} transaction of "
@@ -4149,7 +4166,7 @@ def show_petty_cash():
                         for c in save_ready.columns
                     ]
 
-                    if save_data("petty_cash", save_ready):
+                    if save_data("PettyCash", save_ready):
 
                         st.success("Updated Successfully!")
                         st.rerun()
@@ -4170,7 +4187,7 @@ def show_petty_cash():
                         for c in save_ready.columns
                     ]
 
-                    if save_data("petty_cash", save_ready):
+                    if save_data("PettyCash", save_ready):
 
                         st.warning("Entry Deleted.")
                         st.rerun()
