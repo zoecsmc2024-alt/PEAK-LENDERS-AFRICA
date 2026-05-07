@@ -3489,7 +3489,7 @@ def show_petty_cash():
                             clean_df["date"] = pd.to_datetime(
                                 clean_df["date"], errors="coerce"
                             ).dt.strftime("%Y-%m-%d") 
-                                if save_data("petty_cash", clean_df):
+                            if save_data("petty_cash", clean_df):
                                 st.success("Updated")
                                 st.cache_data.clear()
                                 st.rerun()
