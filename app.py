@@ -1219,41 +1219,97 @@ def show_dashboard_view():
         with col_r:
 
             st.markdown("#### 🎯 Portfolio Health")
-
+        
             try:
-
-                status_data = (
-                    loans_df["status"]
-                    .astype(str)
-                    .str.upper()
-                    .value_counts()
-                    .reset_index()
-                )
-
-                status_data.columns = ["status", "count"]
-
-                fig_pie = px.pie(
-                    status_data,
-                    names="status",
-                    values="count",
-                    hole=0.72,
-                    color_discrete_sequence=[
-                        "#10B981",
-                        "#F59E0B",
-                        "#EF4444",
-                        brand_color
-                    ]
-                )
-
-                fig_pie.update_layout(
-                    height=320,
-                    showlegend=False
-                )
-
-                st.plotly_chart(fig_pie, use_container_width=True)
-
-            except:
-                st.info("Portfolio chart unavailable.")
+        
+                if not loans_df.empty and "status" in loans_df.columns:
+        
+                    # ==============================
+                    # CLEAN STATUS LABELS
+                    # ==============================
+                    clean_status = (
+                        loans_df["status"]
+                        .astype(str)
+                        .str.strip()
+                        .str.upper()
+                    )
+        
+                    # normalize common labels
+                    clean_status = clean_status.replace({
+                        "CURRENT": "ACTIVE",
+                        "ONGOING": "ACTIVE",
+                        "COMPLETE": "PAID",
+                        "CLOSED": "PAID",
+                        "LATE PAYMENT": "LATE",
+                        "DEFAULTED": "DEFAULT"
+                    })
+        
+                    status_data = (
+                        clean_status
+                        .value_counts()
+                        .reset_index()
+                    )
+        
+                    status_data.columns = ["status", "count"]
+        
+                    total_loans = status_data["count"].sum()
+        
+                    # ==============================
+                    # COLORS
+                    # ==============================
+                    color_map = {
+                        "ACTIVE": "#10B981",
+                        "PAID": "#3B82F6",
+                        "LATE": "#F59E0B",
+                        "DEFAULT": "#EF4444"
+                    }
+        
+                    fig_pie = px.pie(
+                        status_data,
+                        names="status",
+                        values="count",
+                        hole=0.65,
+                        color="status",
+                        color_discrete_map=color_map
+                    )
+        
+                    # ==============================
+                    # BETTER LABELS
+                    # ==============================
+                    fig_pie.update_traces(
+                        textposition="inside",
+                        textinfo="percent+label",
+                        hovertemplate=
+                        "<b>%{label}</b><br>" +
+                        "Loans: %{value}<br>" +
+                        "Share: %{percent}<extra></extra>"
+                    )
+        
+                    # ==============================
+                    # LAYOUT
+                    # ==============================
+                    fig_pie.update_layout(
+                        height=320,
+                        margin=dict(l=10, r=10, t=20, b=10),
+        
+                        annotations=[
+                            dict(
+                                text=f"{total_loans}<br>Total",
+                                x=0.5,
+                                y=0.5,
+                                font_size=18,
+                                showarrow=False
+                            )
+                        ]
+                    )
+        
+                    st.plotly_chart(fig_pie, use_container_width=True)
+        
+                else:
+                    st.info("No portfolio data available.")
+        
+            except Exception as e:
+                st.info(f"Portfolio chart unavailable: {e}")
 
         # --- 5. ACTIVITY FEEDS ---
         st.write("---")
@@ -1261,43 +1317,83 @@ def show_dashboard_view():
         t1, t2 = st.columns(2)
 
         with t1:
-            st.markdown("#### 📊 Portfolio Growth vs. interest")
+
+            st.markdown("#### 📊 Monthly Lending vs Interest")
+        
             try:
+        
                 graph_df = loans_df.copy()
-                graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
+        
+                graph_df["date_dt"] = safe_date(
+                    graph_df,
+                    ["start_date", "created_at"]
+                )
+        
                 graph_df = graph_df.dropna(subset=["date_dt"])
         
                 if not graph_df.empty:
-                    timeline_df = (
-                        graph_df
-                        .groupby("date_dt")[["principal_n", "interest_n"]]
-                        .sum()
-                        .sort_index()
-                        .cumsum()
-                        .reset_index()
+        
+                    # ==============================
+                    # MONTH GROUPING
+                    # ==============================
+                    graph_df["month"] = (
+                        graph_df["date_dt"]
+                        .dt.to_period("M")
+                        .dt.to_timestamp()
                     )
         
+                    # ==============================
+                    # MONTHLY TOTALS
+                    # ==============================
+                    timeline_df = (
+                        graph_df
+                        .groupby("month")[["principal_n", "interest_n"]]
+                        .sum()
+                        .reset_index()
+                        .sort_values("month")
+                    )
+        
+                    # ==============================
+                    # RENAME FOR CLEAN LEGEND
+                    # ==============================
+                    timeline_df.rename(columns={
+                        "principal_n": "Loans Issued",
+                        "interest_n": "Interest Expected"
+                    }, inplace=True)
+        
+                    # ==============================
+                    # CHART
+                    # ==============================
                     fig_portfolio = px.line(
                         timeline_df,
-                        x="date_dt",
-                        y=["principal_n", "interest_n"],
+                        x="month",
+                        y=["Loans Issued", "Interest Expected"],
                         template="plotly_white",
+                        markers=True,
                         color_discrete_map={
-                            "principal_n": brand_color,
-                            "interest_n": "#10B981"
+                            "Loans Issued": brand_color,
+                            "Interest Expected": "#10B981"
                         }
                     )
         
                     fig_portfolio.update_layout(
                         height=350,
-                        hovermode="x unified"
+                        hovermode="x unified",
+                        xaxis_title="",
+                        yaxis_title="Amount (UGX)",
+                        legend_title=""
                     )
         
-                    st.plotly_chart(fig_portfolio, use_container_width=True)
+                    st.plotly_chart(
+                        fig_portfolio,
+                        use_container_width=True
+                    )
+        
                 else:
                     st.info("Not enough dated records to generate a trend.")
-            except:
-                st.info("Growth chart unavailable.")
+        
+            except Exception as e:
+                st.info(f"Growth chart unavailable: {e}")
 
         with t2:
             st.markdown("### 💸 Latest Expenses")
