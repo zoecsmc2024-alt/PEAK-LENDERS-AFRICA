@@ -2510,15 +2510,39 @@ def show_loans():
             st.warning("No matching loans found.")
         else:
             # ------------------------------
-            # 🎯 Fiscal Year Filter
+            # 🎯 Fiscal Year Engine (July–June)
             # ------------------------------
-            # Ensure fiscal_year column exists
             if "fiscal_year" not in filtered_loans.columns:
-                filtered_loans["fiscal_year"] = "Unknown FY"
+                base_date = pd.to_datetime(
+                    filtered_loans.get("start_date", pd.NaT),
+                    errors="coerce"
+                )
+            
+                # fallback if start_date is missing
+                if base_date.isna().all():
+                    base_date = pd.to_datetime(
+                        filtered_loans.get("created_at", pd.Timestamp.today()),
+                        errors="coerce"
+                    )
+            
+                # Fiscal Year: Jul–Jun
+                def jul_jun_fy(dt):
+                    if pd.isna(dt):
+                        return "Unknown FY"
+                    year = dt.year
+                    if dt.month >= 7:  # Jul–Dec
+                        return f"{year}/{year+1}"
+                    else:  # Jan–Jun
+                        return f"{year-1}/{year}"
+            
+                filtered_loans["fiscal_year"] = base_date.apply(jul_jun_fy)
         
             fiscal_years = sorted(filtered_loans["fiscal_year"].dropna().unique())
-            fy_selected = st.selectbox("Filter by Fiscal Year", ["All"] + fiscal_years)
-        
+            fy_selected = st.selectbox(
+                "Filter by Fiscal Year",
+                ["All"] + fiscal_years
+            )
+            
             if fy_selected != "All":
                 filtered_loans = filtered_loans[filtered_loans["fiscal_year"] == fy_selected]
         
