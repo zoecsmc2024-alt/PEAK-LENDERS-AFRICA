@@ -4022,12 +4022,23 @@ def show_petty_cash():
                         new_date = st.date_input("Update Date", pd.to_datetime(record["date"]))
     
                         if st.button("💾 Save Changes", key=f"edit_{rid}"):
-                            df.loc[df["id"] == rid, ["description","amount","date"]] = [
+
+                            # Update row
+                            df.loc[df["id"] == rid, ["description", "amount", "date"]] = [
                                 new_desc,
                                 float(new_amt),
                                 new_date.strftime("%Y-%m-%d")
                             ]
-                            if save_data("petty_cash", df):
+                        
+                            # 🔥 IMPORTANT: convert ALL dates to string before saving
+                            save_df = df.copy()
+                        
+                            save_df["date"] = pd.to_datetime(
+                                save_df["date"],
+                                errors="coerce"
+                            ).dt.strftime("%Y-%m-%d")
+                        
+                            if save_data("petty_cash", save_df):
                                 st.success("Entry updated")
                                 st.cache_data.clear()
                                 st.rerun()
