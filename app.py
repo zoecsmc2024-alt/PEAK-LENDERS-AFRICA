@@ -4149,7 +4149,7 @@ def show_reports():
     fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
     
     # ------------------------------
-    # 💰 INCOME STATEMENT
+    # 💰 INCOME STATEMENT (Cycle-Aware & Formatted)
     # ------------------------------
     with s1:
         st.subheader("💰 Income Statement (Profit & Loss)")
@@ -4157,30 +4157,37 @@ def show_reports():
         for fy in fiscal_years:
             fy_loans = loans[loans["fiscal_year"] == fy]
     
-            # Active Capital → Cycle 1 PENDING
+            # Active Capital → Cycle 1, status ACTIVE or PENDING
             active_capital = fy_loans[
-                (fy_loans["cycle_no"] == 1) & (fy_loans["status"].str.upper() == "PENDING")
+                (fy_loans["cycle_no"] == 1) & 
+                (fy_loans["status"].str.upper().isin(["ACTIVE", "PENDING"]))
             ]["principal"].sum()
     
-            # Interest Revenue → All CLEARED cycles
+            # Interest Revenue → all CLEARED cycles
             int_revenue = fy_loans[
                 fy_loans["status"].str.upper() == "CLEARED"
             ]["interest"].sum()
     
-            # Expenses
+            # Total OPEX → all expenses already include salaries & taxes
             fy_expenses = expenses[expenses["fiscal_year"] == fy]
-            direct_exp = col_sum(fy_expenses, "amount")  # petty cash included in expenses
-            salary_exp = col_sum(payroll, "net_pay")
-            tax_exp = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10") + col_sum(payroll, "paye")
-            total_opex = direct_exp + salary_exp + tax_exp
+            total_opex = col_sum(fy_expenses, "amount")  # includes salaries, taxes, petty cash
     
             net_profit = int_revenue - total_opex
     
             st.write(f"**Fiscal Year {fy}**")
             st.dataframe(pd.DataFrame({
-                "Description": ["Active Capital (Cycle 1 Pending)", "Interest Revenue (All Cleared Loans)", 
-                                "Salaries", "Taxes (NSSF+PAYE)", "Direct Expenses", "Total OPEX", "Net Profit"],
-                "Amount (UGX)": [active_capital, int_revenue, salary_exp, tax_exp, direct_exp, total_opex, net_profit]
+                "Description": [
+                    "Active Capital (Cycle 1 Pending/Active)",
+                    "Interest Revenue (All Cleared Loans)",
+                    "Total Operational Expenses",
+                    "Net Profit"
+                ],
+                "Amount (UGX)": [
+                    f"{active_capital:,.0f}",
+                    f"{int_revenue:,.0f}",
+                    f"{total_opex:,.0f}",
+                    f"{net_profit:,.0f}"
+                ]
             }))
     
     # ------------------------------
