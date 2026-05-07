@@ -1127,10 +1127,33 @@ def show_dashboard_view():
         overdue_count = int(overdue_mask.sum())
         
         # ==============================
-        # TOTALS
+        # TOTALS (FIXED)
         # ==============================
-        total_principal = loans_df["principal_n"].sum()
-        total_interest = float(loans_df["interest_n"].sum())
+        
+        # ensure cycle column exists
+        if "cycle_no" not in loans_df.columns:
+            loans_df["cycle_no"] = 1
+        
+        # clean cycle numbers
+        loans_df["cycle_no"] = pd.to_numeric(
+            loans_df["cycle_no"],
+            errors="coerce"
+        ).fillna(1)
+        
+        # ONLY original loans
+        original_loans = loans_df[
+            loans_df["cycle_no"] == 1
+        ].copy()
+        
+        # principal exposure
+        total_principal = float(
+            original_loans["principal_n"].sum()
+        )
+        
+        # expected earnings
+        total_interest = float(
+            loans_df["interest_n"].sum()
+        )
         
         # ==============================
         # SMART ALERTS
