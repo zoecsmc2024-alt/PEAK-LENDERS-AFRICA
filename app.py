@@ -2541,7 +2541,7 @@ def show_loans():
             
                 filtered_loans["fiscal_year"] = fy_years
                     
-                        fiscal_years = sorted(filtered_loans["fiscal_year"].dropna().unique().tolist())
+            fiscal_years = sorted(filtered_loans["fiscal_year"].dropna().unique().tolist())
             
             fy_selected = st.selectbox(
                 "Filter by Fiscal Year",
