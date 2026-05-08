@@ -5391,14 +5391,13 @@ def show_settings():
 
 
 import streamlit as st
-
 import pandas as pd
-
 import plotly.express as px
-
 import plotly.graph_objects as go
+
 def normalize_df(df):
     df = df.copy()
+    # Convert all column names to string first to avoid the .str accessor error
     df.columns = [str(c) for c in df.columns] 
     
     df.columns = (
@@ -5408,19 +5407,27 @@ def normalize_df(df):
         .str.replace(" ", "_")
     )
     return df
+
+# 1. Change the first line to make arguments optional (=None)
 def show_budget(df_transactions=None, df_budgets=None):
+    
+    # 2. Add these 'Emergency Fetch' lines
     if df_transactions is None:
+        # Get your main data (make sure 'get_data' is what you named your fetch function)
         df_transactions = get_data("petty_cash") 
         
     if df_budgets is None:
+        # Get your budget data
         df_budgets = get_data("budgets")
 
+    # --- Everything below stays exactly as you had it ---
     st.header("📊 Budget Tracker")
     df_transactions = normalize_df(df_transactions)
     df_budgets = normalize_df(df_budgets)
 
     df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
     df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
+    # Clean column names again just in case (as per your original logic)
     df_transactions.columns = [c.replace(" ", "_") for c in df_transactions.columns]
     
     df_transactions = df_transactions.dropna(subset=["date", "amount"])
@@ -5466,10 +5473,12 @@ def show_budget(df_transactions=None, df_budgets=None):
     # =========================================================
     st.subheader("📂 category Budgets")
     chart_data = []
+    
+    # FIXED: Ensured index is 'category' (lowercase from normalize_df)
     budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict()
     
     # Ensure grouping works regardless of column naming (category vs category)
-    cat_col = "category" if "category" in expenses.columns else "Description"
+    cat_col = "category" if "category" in expenses.columns else "description"
     expenses["category"] = expenses["category"].astype(str)
     grouped = expenses.groupby("category")["amount"].sum().to_dict()
     all_categories = set(budget_map.keys()) | set(grouped.keys())
@@ -5490,7 +5499,7 @@ def show_budget(df_transactions=None, df_budgets=None):
         # Progress Logic
         st.write(f"**{cat}**")
         col_left, col_right = st.columns([8, 2])
-        col_left.progress(min(percent, 1.0))
+        col_left.progress(min(float(percent), 1.0))
         col_right.write(f"{percent*100:.0f}%")
         st.caption(f"UGX {spent:,.0f} of UGX {limit:,.0f}")
 
@@ -5511,7 +5520,7 @@ def show_budget(df_transactions=None, df_budgets=None):
         st.plotly_chart(
             px.bar(
                 chart_df,
-                x="category",
+                x="category", # Lowercase
                 y=["Spent", "Budget"],
                 barmode="group",
                 title="Spent vs Budget",
@@ -5523,7 +5532,7 @@ def show_budget(df_transactions=None, df_budgets=None):
         st.plotly_chart(
             go.Figure(
                 data=[go.Pie(
-                    labels=chart_df["category"],
+                    labels=chart_df["category"], # Lowercase
                     values=chart_df["Spent"],
                     hole=0.65
                 )]
@@ -5573,11 +5582,7 @@ def show_budget(df_transactions=None, df_budgets=None):
                     df_budgets = pd.concat([df_budgets, new_row], ignore_index=True)
 
                 # --- DATABASE SAVE ---
-                # Ensure the dataframe being saved matches your DB column names
                 save_ready = df_budgets.copy()
-                
-                # If your DB uses "category" instead of "category", uncomment below:
-                # save_ready.columns = ["category", "Monthly Limit"] 
 
                 if save_data("budgets", save_ready):
                     st.success(f"✅ Budget for {new_cat} saved to database!")
@@ -5613,6 +5618,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     df_transactions = normalize_df(df_transactions)
 
     # --- THE CRITICAL FIX: Force column names to lowercase ---
+    # We use str(c) to ensure the .lower() doesn't fail on integer headers
     df_transactions.columns = [str(c).lower() for c in df_transactions.columns]
 
     # Now we can safely use lowercase names because we forced them above
@@ -5680,7 +5686,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
             with col2:
                 category = st.selectbox(
-                    "category",
+                    "category", # Reference lowercase "category"
                     [
                         "Transport", "Meals", "Office Supplies",
                         "Utilities", "Communication",
@@ -5743,7 +5749,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     if not monthly_df.empty:
 
         cat_summary = monthly_df.groupby(
-            "category"
+            "category" # Changed from "Category" to lowercase "category"
         )["amount"].sum().reset_index()
 
         st.bar_chart(
