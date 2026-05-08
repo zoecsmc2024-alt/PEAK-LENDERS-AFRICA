@@ -5474,7 +5474,8 @@ def show_budget(df_transactions=None, df_budgets=None):
     
     # Ensure grouping works regardless of column naming (Category vs category)
     cat_col = "Category" if "Category" in expenses.columns else "Description"
-    grouped = expenses.groupby(cat_col)["amount"].sum().to_dict()
+    expenses["category"] = expenses["category"].astype(str)
+    grouped = expenses.groupby("category")["amount"].sum().to_dict()
     all_categories = set(budget_map.keys()) | set(grouped.keys())
 
     for cat in all_categories:
@@ -5566,7 +5567,8 @@ def show_budget(df_transactions=None, df_budgets=None):
                 new_cat = new_cat.strip()
                 
                 # Check if category already exists (case-insensitive)
-                match = df_budgets["category"].astype(str).str.lower() == new_cat.lower()
+                df_budgets["category"] = df_budgets["category"].astype(str)
+                match = df_budgets["category"].str.lower() == new_cat.lower()
                 
                 if match.any():
                     df_budgets.loc[match, "monthly_limit"] = new_lim
