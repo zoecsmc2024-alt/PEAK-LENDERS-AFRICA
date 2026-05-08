@@ -1187,7 +1187,7 @@ def show_dashboard_view():
 
             
         # ==============================
-        # SLEEK METRIC CARD STYLES
+        # SLEEK + MUTED METRIC CARD STYLES
         # ==============================
         st.markdown("""
         <style>
@@ -1195,11 +1195,10 @@ def show_dashboard_view():
         .metric-box {
             padding: 16px;
             border-radius: 16px;
-            color: white;
-            background: rgba(255,255,255,0.06);
+            color: #F9FAFB;
             backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.10);
-            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+            border: 1px solid rgba(255,255,255,0.08);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.06);
             margin-bottom: 10px;
             transition: all 0.22s ease;
             overflow: hidden;
@@ -1208,32 +1207,21 @@ def show_dashboard_view():
         
         .metric-box:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
-        }
-        
-        .metric-box::before {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(255,255,255,0.04);
-            pointer-events: none;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.10);
         }
         
         .metric-title {
             font-size: 11px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1.2px;
-            opacity: 0.82;
+            letter-spacing: 1.1px;
+            opacity: 0.78;
             margin-bottom: 6px;
         }
         
         .metric-value {
             font-size: 26px;
-            font-weight: 750;
+            font-weight: 700;
             line-height: 1.1;
             margin-bottom: 4px;
         }
@@ -1241,28 +1229,28 @@ def show_dashboard_view():
         .metric-sub {
             font-size: 11px;
             font-weight: 500;
-            opacity: 0.78;
+            opacity: 0.72;
         }
         
-        /* Modern gradients */
+        /* Muted gradients */
         
         .blue-card {
-            background: linear-gradient(135deg, #3B82F6, #1E40AF);
+            background: linear-gradient(135deg, #5B6B8C, #3E4C68);
         }
         
         .green-card {
-            background: linear-gradient(135deg, #34D399, #065F46);
+            background: linear-gradient(135deg, #5E7C6B, #3E5A4C);
         }
         
         .red-card {
-            background: linear-gradient(135deg, #F87171, #991B1B);
+            background: linear-gradient(135deg, #8B5E5E, #5E3E3E);
         }
         
         .orange-card {
-            background: linear-gradient(135deg, #FBBF24, #B45309);
+            background: linear-gradient(135deg, #9A7B5F, #6B523E);
         }
         
-        /* Mobile responsiveness */
+        /* Mobile */
         
         @media (max-width:768px) {
         
