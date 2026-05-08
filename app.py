@@ -806,7 +806,8 @@ def render_sidebar():
         menu = {
             "Overview": "📈", "loans": "💵", "borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
-            "Overdue Tracker": "🚨", "Payments": "💰", "Reports": "📊", "Settings": "⚙️","Budget": "📂"
+            "Overdue Tracker": "🚨", "Payments": "💰", "Reports": "📊", "Settings":
+            "⚙️","Budget": "📂":,"Petty Cash": "💵"
         }
 
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
@@ -5552,10 +5553,11 @@ def show_budget(df_transactions=None, df_budgets=None):
 
         if st.button("Save Budget Settings"):
             if not new_cat.strip():
-                st.error("Enter category")
+                st.error("Please enter a category name")
             else:
                 new_cat = new_cat.strip()
-                # Use a copy to avoid SettingWithCopy warnings
+                
+                # Check if category already exists (case-insensitive)
                 match = df_budgets["category"].astype(str).str.lower() == new_cat.lower()
                 
                 if match.any():
@@ -5564,10 +5566,181 @@ def show_budget(df_transactions=None, df_budgets=None):
                     new_row = pd.DataFrame([{"category": new_cat, "monthly_limit": new_lim}])
                     df_budgets = pd.concat([df_budgets, new_row], ignore_index=True)
 
-                # IMPORTANT: You need to call your save_data function here
-                # Example: save_data("budgets", df_budgets)
-                st.success(f"Budget for {new_cat} updated!")
-                st.rerun()
+                # --- DATABASE SAVE ---
+                # Ensure the dataframe being saved matches your DB column names
+                save_ready = df_budgets.copy()
+                
+                # If your DB uses "Category" instead of "category", uncomment below:
+                # save_ready.columns = ["Category", "Monthly Limit"] 
+
+                if save_data("budgets", save_ready):
+                    st.success(f"✅ Budget for {new_cat} saved to database!")
+                    st.rerun()
+                else:
+                    st.error("Failed to save to database. Check if the 'budgets' table exists.")
+
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
+
+def show_petty_cash(df_transactions, supabase, user_id):
+
+    st.header("💵 Petty Cash Management")
+
+    # =========================================================
+    # CLEAN DATA
+    # =========================================================
+
+    df_transactions = df_transactions.copy()
+
+    df_transactions["Date"] = pd.to_datetime(
+        df_transactions["Date"],
+        errors="coerce"
+    )
+
+    df_transactions["Amount"] = pd.to_numeric(
+        df_transactions["Amount"],
+        errors="coerce"
+    )
+
+    df_transactions = df_transactions.dropna(
+        subset=["Date", "Amount"]
+    )
+
+    # Filter ONLY current user
+    df_transactions = df_transactions[
+        df_transactions["user_id"] == user_id
+    ]
+
+    # =========================================================
+    # CURRENT BALANCE CALCULATION
+    # =========================================================
+
+    inflow = df_transactions[
+        df_transactions["Type"] == "In"
+    ]["Amount"].sum()
+
+    outflow = df_transactions[
+        df_transactions["Type"] == "Out"
+    ]["Amount"].sum()
+
+    balance = inflow - outflow
+
+    # =========================================================
+    # KPI DISPLAY
+    # =========================================================
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric("Total Inflow", f"UGX {inflow:,.0f}")
+    col2.metric("Total Outflow", f"UGX {outflow:,.0f}")
+    col3.metric("Current Balance", f"UGX {balance:,.0f}")
+
+    # =========================================================
+    # TRANSACTION FORM (SAAS SAFE INSERT)
+    # =========================================================
+
+    with st.expander("➕ Log New Transaction", expanded=True):
+
+        with st.form("cash_form", clear_on_submit=True):
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                date = st.date_input("Date", value=datetime.today())
+                trans_type = st.selectbox("Type", ["Out", "In"])
+
+            with col2:
+                category = st.selectbox(
+                    "Category",
+                    [
+                        "Transport", "Meals", "Office Supplies",
+                        "Utilities", "Communication",
+                        "Marketing", "Other"
+                    ]
+                )
+
+                amount = st.number_input(
+                    "Amount (UGX)",
+                    min_value=0,
+                    step=1000
+                )
+
+            description = st.text_input("Description")
+
+            submitted = st.form_submit_button("Save Transaction")
+
+            if submitted:
+
+                if amount <= 0:
+                    st.error("Amount must be greater than 0")
+
+                else:
+
+                    # =================================================
+                    # INSERT INTO SUPABASE (NO FULL DF OVERWRITE)
+                    # =================================================
+
+                    data = {
+                        "user_id": user_id,
+                        "Date": str(date),
+                        "Type": trans_type,
+                        "Category": category,
+                        "Amount": amount,
+                        "Description": description
+                    }
+
+                    response = supabase.table(
+                        "petty_cash"
+                    ).insert(data).execute()
+
+                    if response:
+                        st.success("Transaction saved successfully!")
+                        st.rerun()
+
+    # =========================================================
+    # FILTER + ANALYTICS (CURRENT MONTH ONLY)
+    # =========================================================
+
+    st.subheader("📊 This Month Overview")
+
+    now = pd.Timestamp.now()
+
+    monthly_df = df_transactions[
+        (df_transactions["Date"].dt.month == now.month) &
+        (df_transactions["Date"].dt.year == now.year)
+    ]
+
+    if not monthly_df.empty:
+
+        cat_summary = monthly_df.groupby(
+            "Category"
+        )["Amount"].sum().reset_index()
+
+        st.bar_chart(
+            cat_summary.set_index("Category")
+        )
+
+    # =========================================================
+    # RECENT TRANSACTIONS
+    # =========================================================
+
+    st.subheader("📜 Recent Transactions")
+
+    if not df_transactions.empty:
+
+        st.dataframe(
+            df_transactions.sort_values(
+                "Date",
+                ascending=False
+            ).head(15),
+            use_container_width=True,
+            hide_index=True
+        )
+
+    else:
+        st.info("No transactions yet.")
 # ==========================================
 # FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
@@ -5642,6 +5815,8 @@ if __name__ == "__main__":
                 show_settings()
             elif page == "Budget":
                 show_budget()
+                elif page == "Petty_Cash":
+                show_petty_cash()
             else:
                 # If it falls through here, we show what exactly was received
                 st.info(f"Module '{page}' is coming online soon.")
