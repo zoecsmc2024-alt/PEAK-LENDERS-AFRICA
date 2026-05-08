@@ -5393,35 +5393,31 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
-
-def show_budget(df_transactions, df_budgets):
-
+def show_budget_page(df_transactions, df_budgets):
     st.header("📊 Budget Tracker")
 
     # =========================================================
     # SAFE COPY + CLEAN
     # =========================================================
-
     df_transactions = df_transactions.copy()
     df_budgets = df_budgets.copy()
 
     df_transactions["Date"] = pd.to_datetime(df_transactions["Date"], errors="coerce")
     df_transactions["Amount"] = pd.to_numeric(df_transactions["Amount"], errors="coerce")
-
+    # Ensure column names match for grouping (handling potential space/underscore issues)
+    df_transactions.columns = [c.replace(" ", "_") for c in df_transactions.columns]
+    
     df_transactions = df_transactions.dropna(subset=["Date", "Amount"])
 
     # =========================================================
     # CURRENT MONTH FILTER
     # =========================================================
-
     now = pd.Timestamp.now()
-
     expenses = df_transactions[
         (df_transactions["Type"] == "Out") &
         (df_transactions["Date"].dt.month == now.month) &
         (df_transactions["Date"].dt.year == now.year)
     ]
-
     income = df_transactions[
         (df_transactions["Type"] == "In") &
         (df_transactions["Date"].dt.month == now.month) &
@@ -5431,64 +5427,41 @@ def show_budget(df_transactions, df_budgets):
     # =========================================================
     # KPIs
     # =========================================================
-
     total_spent = expenses["Amount"].sum()
     total_income = income["Amount"].sum()
-
     total_budget = df_budgets["monthly_limit"].sum()
     remaining = total_budget - total_spent
-
     utilization = (total_spent / total_budget * 100) if total_budget > 0 else 0
     savings_rate = ((total_income - total_spent) / total_income * 100) if total_income > 0 else 0
 
     # =========================================================
-    # KPI UI
+    # KPI UI (Native Streamlit - No HTML required)
     # =========================================================
-
     col1, col2, col3, col4 = st.columns(4)
-
-    kpis = [
-        ("Budget", total_budget),
-        ("Spent", total_spent),
-        ("Remaining", remaining),
-        ("Utilization", f"{utilization:.0f}%")
-    ]
-
-    for col, (label, value) in zip([col1, col2, col3, col4], kpis):
-
-        display = value if isinstance(value, str) else f"UGX {value:,.0f}"
-
-        with col:
-            st.markdown(f"""
-            <div class="metric-card">
-                <div class="metric-label">{label}</div>
-                <div class="metric-number">{display}</div>
-            </div>
-            """, unsafe_allow_html=True)
-
+    col1.metric("Budget", f"UGX {total_budget:,.0f}")
+    col2.metric("Spent", f"UGX {total_spent:,.0f}")
+    col3.metric("Remaining", f"UGX {remaining:,.0f}", delta_color="inverse")
+    col4.metric("Utilization", f"{utilization:.1f}%", delta=f"{(utilization-100):.1f}%" if utilization > 100 else None, delta_color="inverse")
+    
     st.metric("💰 Savings Rate", f"{savings_rate:.1f}%")
 
     # =========================================================
     # CATEGORY ANALYSIS (FAST VERSION)
     # =========================================================
-
     st.subheader("📂 Category Budgets")
-
     chart_data = []
-
     budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict()
-
-    grouped = expenses.groupby("Category")["Amount"].sum().to_dict()
-
+    
+    # Ensure grouping works regardless of column naming (Category vs category)
+    cat_col = "Category" if "Category" in expenses.columns else "Description"
+    grouped = expenses.groupby(cat_col)["Amount"].sum().to_dict()
     all_categories = set(budget_map.keys()) | set(grouped.keys())
 
     for cat in all_categories:
-
         limit = budget_map.get(cat, 0)
         spent = grouped.get(cat, 0)
-
-        percent = (spent / limit) if limit > 0 else 0
-
+        percent = (spent / limit) if limit > 0 else (1.0 if spent > 0 else 0)
+        
         chart_data.append({
             "Category": cat,
             "Budget": limit,
@@ -5497,31 +5470,17 @@ def show_budget(df_transactions, df_budgets):
             "Percent": percent * 100
         })
 
-        color = "#10B981" if percent < 0.7 else "#F59E0B" if percent < 1 else "#EF4444"
-
-        st.markdown(f"""
-        <div class="budget-card">
-            <div style="display:flex;justify-content:space-between;">
-                <div>
-                    <h4 style="margin:0;">{cat}</h4>
-                    <div class="small-text">
-                        UGX {spent:,.0f} / UGX {limit:,.0f}
-                    </div>
-                </div>
-                <div style="color:{color};font-weight:700;">
-                    {percent*100:.0f}%
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.progress(min(percent, 1.0))
+        # Progress Logic
+        st.write(f"**{cat}**")
+        col_left, col_right = st.columns([8, 2])
+        col_left.progress(min(percent, 1.0))
+        col_right.write(f"{percent*100:.0f}%")
+        st.caption(f"UGX {spent:,.0f} of UGX {limit:,.0f}")
 
         if spent > limit and limit > 0:
             st.warning(f"⚠️ {cat} over by UGX {spent - limit:,.0f}")
 
     chart_df = pd.DataFrame(chart_data)
-
     if chart_df.empty:
         st.info("No budget data yet.")
         return
@@ -5529,11 +5488,8 @@ def show_budget(df_transactions, df_budgets):
     # =========================================================
     # ANALYTICS
     # =========================================================
-
     st.subheader("📈 Analytics")
-
     colA, colB = st.columns(2)
-
     with colA:
         st.plotly_chart(
             px.bar(
@@ -5541,11 +5497,11 @@ def show_budget(df_transactions, df_budgets):
                 x="Category",
                 y=["Spent", "Budget"],
                 barmode="group",
+                title="Spent vs Budget",
                 color_discrete_sequence=["#EF4444", "#6366F1"]
             ),
             use_container_width=True
         )
-
     with colB:
         st.plotly_chart(
             go.Figure(
@@ -5554,71 +5510,53 @@ def show_budget(df_transactions, df_budgets):
                     values=chart_df["Spent"],
                     hole=0.65
                 )]
-            ).update_traces(textinfo="percent+label"),
+            ).update_traces(textinfo="percent+label").update_layout(title="Spending Split"),
             use_container_width=True
         )
 
     # =========================================================
-    # INSIGHTS ENGINE (SMARTER)
+    # INSIGHTS ENGINE
     # =========================================================
-
     st.subheader("🧠 Insights")
-
     if not chart_df.empty:
-
         top_spender = chart_df.sort_values("Spent", ascending=False).iloc[0]
-
         st.info(f"💡 Highest spending: **{top_spender['Category']}**")
-
         over = chart_df[chart_df["Spent"] > chart_df["Budget"]]
-
         if not over.empty:
-            st.error("⚠️ Overspending detected")
-
             for _, r in over.iterrows():
-                st.write(f"- {r['Category']} (UGX {r['Spent'] - r['Budget']:,.0f})")
+                if r['Budget'] > 0:
+                    st.error(f"⚠️ Overspending in {r['Category']} (UGX {r['Spent'] - r['Budget']:,.0f})")
         else:
             st.success("All budgets healthy ✅")
 
     # =========================================================
     # BUDGET EDITOR (SAFE UPSERT LOGIC)
     # =========================================================
-
     with st.expander("➕ Manage Budget"):
-
         col1, col2 = st.columns(2)
-
         with col1:
-            new_cat = st.text_input("Category")
-
+            new_cat = st.text_input("Category Name")
         with col2:
-            new_lim = st.number_input("Limit", min_value=0, step=50000)
+            new_lim = st.number_input("Monthly Limit", min_value=0, step=50000)
 
-        if st.button("Save"):
-
+        if st.button("Save Budget Settings"):
             if not new_cat.strip():
                 st.error("Enter category")
-                return
-
-            new_cat = new_cat.strip()
-
-            match = df_budgets["category"].astype(str).str.lower() == new_cat.lower()
-
-            if match.any():
-                df_budgets.loc[match, "monthly_limit"] = new_lim
-                st.success("Updated")
             else:
-                df_budgets = pd.concat([
-                    df_budgets,
-                    pd.DataFrame([{
-                        "category": new_cat,
-                        "monthly_limit": new_lim
-                    }])
-                ], ignore_index=True)
+                new_cat = new_cat.strip()
+                # Use a copy to avoid SettingWithCopy warnings
+                match = df_budgets["category"].astype(str).str.lower() == new_cat.lower()
+                
+                if match.any():
+                    df_budgets.loc[match, "monthly_limit"] = new_lim
+                else:
+                    new_row = pd.DataFrame([{"category": new_cat, "monthly_limit": new_lim}])
+                    df_budgets = pd.concat([df_budgets, new_row], ignore_index=True)
 
-                st.success("Added")
-
-            st.dataframe(df_budgets, use_container_width=True)
+                # IMPORTANT: You need to call your save_data function here
+                # Example: save_data("budgets", df_budgets)
+                st.success(f"Budget for {new_cat} updated!")
+                st.rerun()
 # ==========================================
 # FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
