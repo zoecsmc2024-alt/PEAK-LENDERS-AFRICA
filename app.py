@@ -1073,7 +1073,7 @@ def show_dashboard_view():
             return pd.Series([0] * len(df), index=df.index)
         
         # ==============================
-        # SAFE DATE ENGINE
+        # SAFE date ENGINE
         # ==============================
         def get_dates(df, cols):
             for c in cols:
@@ -1707,12 +1707,12 @@ def show_dashboard_view():
                     # --- Format table ---
                     display_df = latest.copy()
                     display_df["Category"] = display_df["category"].fillna("General")
-                    display_df["Date"] = display_df["date"].dt.strftime("%Y-%m-%d")
+                    display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
         
                     # Keep numeric for styling
                     display_df["amount"] = display_df["amount"]
         
-                    final_df = display_df[["Category", "amount", "Date"]]
+                    final_df = display_df[["Category", "amount", "date"]]
         
                     # --- Styling (no HTML) ---
                     def style_amount(val):
@@ -2052,8 +2052,8 @@ def show_borrowers():
                             "interest": st.column_config.NumberColumn("interest", format="%d UGX"),
                             "balance": st.column_config.NumberColumn("balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
-                            "start_date": st.column_config.DateColumn("Date Issued"),
-                            "end_date": st.column_config.DateColumn("Due Date"),
+                            "start_date": st.column_config.dateColumn("date Issued"),
+                            "end_date": st.column_config.dateColumn("Due date"),
                         }
                     )
                     
@@ -2249,7 +2249,7 @@ def show_loans():
         ).fillna(0)
 
     # ------------------------------
-    # DATE CLEANUP
+    # date CLEANUP
     # ------------------------------
     for col in ["start_date", "end_date"]:
         loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
@@ -2684,7 +2684,7 @@ def show_loans():
                 )
 
                 date_issued = col1.date_input(
-                    "Start Date",
+                    "Start date",
                     value=datetime.now()
                 )
 
@@ -2700,7 +2700,7 @@ def show_loans():
                 )
 
                 date_due = col2.date_input(
-                    "Due Date",
+                    "Due date",
                     value=date_issued + timedelta(days=30)
                 )
 
@@ -3118,7 +3118,7 @@ def show_payments():
         with st.form("payment_form"):
             amount = st.number_input("amount", min_value=0.0, step=1000.0)
             method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
-            date = st.date_input("Date", datetime.now())
+            date = st.date_input("date", datetime.now())
             submit = st.form_submit_button("Post Payment")
 
         if submit:
@@ -3162,7 +3162,7 @@ def show_payments():
                     "borrower": active_loan["borrower"],
                     "amount": f"UGX {amount:,.0f}",
                     "Method": method,
-                    "Date": date.strftime("%Y-%m-%d"),
+                    "date": date.strftime("%Y-%m-%d"),
                 }, file_path)
 
                 with open(file_path, "rb") as f:
@@ -3709,7 +3709,7 @@ def show_payroll():
         st.markdown("---")
         st.subheader("🛠️ Manage Records")
         
-        # Select record by Employee and Date for clarity
+        # Select record by Employee and date for clarity
         record_options = payroll_df.apply(lambda x: f"{x['employee']} ({x['month']}) | ID: {x['payroll_id'][:8]}", axis=1).tolist()
         selected_record_str = st.selectbox("Select a record to Edit or Delete", options=record_options)
 
@@ -4592,7 +4592,7 @@ def show_collateral():
     
             display_df["Value (UGX)"] = display_df["value"].apply(lambda x: f"{x:,.0f}")
             display_df = display_df.rename(columns={
-                "date_added": "Date Registered",
+                "date_added": "date Registered",
                 "borrower": "Borrower",
                 "type": "type",
                 "description": "Description",
@@ -4600,7 +4600,7 @@ def show_collateral():
             })
     
             table_df = display_df[[
-                "Date Registered",
+                "date Registered",
                 "Borrower",
                 "type",
                 "Description",
@@ -4655,7 +4655,7 @@ def show_collateral():
                 st.divider()
     
                 # ==============================
-                # 🔄 STATUS UPDATE (INTERACTIVE IMPROVED)
+                # 🔄 STATUS UPdate (INTERACTIVE IMPROVED)
                 # ==============================
                 st.markdown("#### 🔄 Update Status")
     
@@ -4745,7 +4745,7 @@ def show_expenses():
             desc = st.text_input("Description")
 
             c3, c4 = st.columns(2)
-            p_date = c3.date_input("Payment Date", value=datetime.now())
+            p_date = c3.date_input("Payment date", value=datetime.now())
             receipt_no = c4.text_input("Receipt #")
 
             if st.form_submit_button("🚀 Save Expense", use_container_width=True):
@@ -4843,7 +4843,7 @@ def show_expenses():
                 ]].copy()
             
                 display_ledger.columns = [
-                    "Date",
+                    "date",
                     "Category",
                     "Description",
                     "amount (UGX)",
@@ -4851,7 +4851,7 @@ def show_expenses():
                 ]
             
                 # --- Format date ---
-                display_ledger["Date"] = display_ledger["Date"].dt.strftime("%Y-%m-%d")
+                display_ledger["date"] = display_ledger["date"].dt.strftime("%Y-%m-%d")
             
                 # --- FORMAT commas (IMPORTANT) ---
                 display_ledger["amount (UGX)"] = display_ledger["amount (UGX)"].apply(
@@ -4896,15 +4896,15 @@ def show_expenses():
                 ]].copy()
                 
                 final_display_df.columns = [
-                    "Date",
+                    "date",
                     "Category",
                     "Description",
                     "amount (UGX)",
                     "Ref #"
                 ]
                 
-                final_display_df["Date"] = pd.to_datetime(
-                    final_display_df["Date"],
+                final_display_df["date"] = pd.to_datetime(
+                    final_display_df["date"],
                     errors="coerce"
                 ).dt.strftime("%Y-%m-%d")
                 
@@ -4983,7 +4983,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     elements = []
     elements.append(Paragraph(f"<b>{st.session_state.get('company_name', 'ZOE CONSULTS').upper()}</b>", styles["Title"]))
     elements.append(Paragraph(f"Client: {client_name}", styles["Normal"]))
-    elements.append(Paragraph(f"Statement Date: {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
+    elements.append(Paragraph(f"Statement date: {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
     elements.append(Spacer(1, 20))
     grand_total = 0
     for _, loan in loans_df.iterrows():
@@ -5004,7 +5004,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
                 loan_payments = loan_payments.sort_values(by=date_col)
         balance = initial_amount
         elements.append(Paragraph(f"<b>Loan Ref:</b> {display_id}", styles["Heading3"]))
-        data = [["Date", "Description", "Debit", "Credit", "balance"]]
+        data = [["date", "Description", "Debit", "Credit", "balance"]]
         # Truncate dates to YYYY-MM-DD to prevent overwriting
         start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
         clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
@@ -5165,7 +5165,7 @@ def show_ledger():
 
     # Entry 1: Disbursement
     ledger_data.append({
-        "Date": str(loan_info.get("start_date", "-"))[:10],
+        "date": str(loan_info.get("start_date", "-"))[:10],
         "Description": "🏦 Loan Disbursement",
         "Debit (Due)": p,
         "Credit (Paid)": 0,
@@ -5175,7 +5175,7 @@ def show_ledger():
     # Entry 2: interest Charge
     if i > 0:
         ledger_data.append({
-            "Date": str(loan_info.get("start_date", "-"))[:10],
+            "date": str(loan_info.get("start_date", "-"))[:10],
             "Description": "📈 Monthly interest Applied",
             "Debit (Due)": i,
             "Credit (Paid)": 0,
@@ -5190,7 +5190,7 @@ def show_ledger():
                 amt = float(p_row.get("amount", 0))
                 running_bal -= amt
                 ledger_data.append({
-                    "Date": str(p_row.get("date", p_row.get("payment_date", "-")))[:10],
+                    "date": str(p_row.get("date", p_row.get("payment_date", "-")))[:10],
                     "Description": "💰 Repayment Received",
                     "Debit (Due)": 0,
                     "Credit (Paid)": amt,
@@ -5204,7 +5204,7 @@ def show_ledger():
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Date": st.column_config.TextColumn("Date"),
+            "date": st.column_config.TextColumn("date"),
             "Description": st.column_config.TextColumn("Transaction Details"),
             "Debit (Due)": st.column_config.NumberColumn("Debit (UGX)", format="%,d"),
             "Credit (Paid)": st.column_config.NumberColumn("Credit (UGX)", format="%,d"),
@@ -5372,7 +5372,7 @@ def show_settings():
                 st.stop()
 
         # ==============================
-        # DATABASE UPDATE (PERSISTENCE)
+        # DATABASE UPdate (PERSISTENCE)
         # ==============================
         try:
             supabase.table("tenants").update(updated_data).eq("id", active_company.get("id")).execute()
@@ -5415,11 +5415,11 @@ def show_budget(df_transactions=None, df_budgets=None):
     df_transactions = df_transactions.copy()
     df_budgets = df_budgets.copy()
 
-    df_transactions["Date"] = pd.to_datetime(df_transactions["Date"], errors="coerce")
+    df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
     df_transactions["Amount"] = pd.to_numeric(df_transactions["Amount"], errors="coerce")
     df_transactions.columns = [c.replace(" ", "_") for c in df_transactions.columns]
     
-    df_transactions = df_transactions.dropna(subset=["Date", "Amount"])
+    df_transactions = df_transactions.dropna(subset=["date", "Amount"])
 
     # =========================================================
     # CURRENT MONTH FILTER
@@ -5427,13 +5427,13 @@ def show_budget(df_transactions=None, df_budgets=None):
     now = pd.Timestamp.now()
     expenses = df_transactions[
         (df_transactions["Type"] == "Out") &
-        (df_transactions["Date"].dt.month == now.month) &
-        (df_transactions["Date"].dt.year == now.year)
+        (df_transactions["date"].dt.month == now.month) &
+        (df_transactions["date"].dt.year == now.year)
     ]
     income = df_transactions[
         (df_transactions["Type"] == "In") &
-        (df_transactions["Date"].dt.month == now.month) &
-        (df_transactions["Date"].dt.year == now.year)
+        (df_transactions["date"].dt.month == now.month) &
+        (df_transactions["date"].dt.year == now.year)
     ]
 
     # =========================================================
@@ -5603,8 +5603,8 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
     df_transactions = df_transactions.copy()
 
-    df_transactions["Date"] = pd.to_datetime(
-        df_transactions["Date"],
+    df_transactions["date"] = pd.to_datetime(
+        df_transactions["date"],
         errors="coerce"
     )
 
@@ -5614,7 +5614,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     )
 
     df_transactions = df_transactions.dropna(
-        subset=["Date", "Amount"]
+        subset=["date", "Amount"]
     )
 
     # Filter ONLY current user
@@ -5657,7 +5657,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
             col1, col2 = st.columns(2)
 
             with col1:
-                date = st.date_input("Date", value=datetime.today())
+                date = st.date_input("date", value=datetime.today())
                 trans_type = st.selectbox("Type", ["Out", "In"])
 
             with col2:
@@ -5693,7 +5693,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
                     data = {
                         "user_id": user_id,
-                        "Date": str(date),
+                        "date": str(date),
                         "Type": trans_type,
                         "Category": category,
                         "Amount": amount,
@@ -5717,8 +5717,8 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     now = pd.Timestamp.now()
 
     monthly_df = df_transactions[
-        (df_transactions["Date"].dt.month == now.month) &
-        (df_transactions["Date"].dt.year == now.year)
+        (df_transactions["date"].dt.month == now.month) &
+        (df_transactions["date"].dt.year == now.year)
     ]
 
     if not monthly_df.empty:
@@ -5741,7 +5741,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
         st.dataframe(
             df_transactions.sort_values(
-                "Date",
+                "date",
                 ascending=False
             ).head(15),
             use_container_width=True,
