@@ -5642,9 +5642,8 @@ def show_budget(df_transactions=None, df_budgets=None):
         
 import streamlit as st
 import pandas as pd
-from datetime import datetime
 import plotly.express as px
-
+from datetime import datetime
 
 def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
@@ -5690,33 +5689,13 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
         if "amount" in df_transactions.columns:
             df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
 
-    # =====================================================
-    # PREP COPY (USED ACROSS TABS)
-    # =====================================================
-    df = df_transactions.copy()
+    # CREATE TABS
+    tab_form, tab_analytics, tab_history = st.tabs(["➕ Log Transaction", "📊 Analytics & Trends", "📜 Transaction History"])
 
-    if not df.empty:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
-        df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-
-        df = df.dropna(subset=["date", "amount"])
-        df = df.sort_values("date", ascending=False)
-
-    # =====================================================
-    # TABS STRUCTURE
-    # =====================================================
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "➕ Entry",
-        "📊 Overview",
-        "📋 Transactions",
-        "📆 Analytics"
-    ])
-
-    # =====================================================
-    # TAB 1 - ENTRY (YOUR FORM - UNCHANGED LOGIC)
-    # =====================================================
-    with tab1:
-
+    with tab_form:
+        # =====================================================
+        # ALWAYS SHOW FORM (IMPORTANT FIX)
+        # =====================================================
         st.subheader("➕ Add Transaction")
 
         with st.form("cash_form"):
@@ -5759,11 +5738,52 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
                     except Exception as e:
                         st.error(f"Insert failed: {e}")
 
-    # =====================================================
-    # TAB 2 - OVERVIEW (FILTERS + METRICS + CHART)
-    # =====================================================
-    with tab2:
+        # =====================================================
+        # SAFE DISPLAY (NO CRASHES)
+        # =====================================================
+        if df_transactions.empty:
+            st.info("No transactions yet — add one above 👆")
+            return
 
+        st.dataframe(df_transactions)
+
+    with tab_analytics:
+        # =====================================================
+        # SAFETY
+        # =====================================================
+        st.subheader("📋 Transactions Overview")
+
+        if df_transactions.empty:
+            st.info("No transactions yet. Add one above 👆")
+            st.stop()
+
+
+        # =====================================================
+        # CLEAN + SORT
+        # =====================================================
+        df = df_transactions.copy()
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
+
+        df = df.dropna(subset=["date", "amount"])
+        df = df.sort_values("date", ascending=False)
+
+
+        # =====================================================
+        # FINANCIAL YEAR (UG STANDARD: Jul - Jun)
+        # =====================================================
+        now = pd.Timestamp.now()
+
+        fy_start_year = now.year if now.month >= 7 else now.year - 1
+        fy_start = pd.Timestamp(f"{fy_start_year}-07-01")
+        fy_end = pd.Timestamp(f"{fy_start_year + 1}-06-30")
+
+        fy_df = df[(df["date"] >= fy_start) & (df["date"] <= fy_end)]
+
+
+        # =====================================================
+        # FILTERS (INTERACTIVE)
+        # =====================================================
         st.subheader("🔎 Filters")
 
         col1, col2, col3 = st.columns(3)
@@ -5783,15 +5803,6 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
         with col3:
             view = st.selectbox("View", ["All Time", "Financial Year"])
 
-        filtered = df.copy()
-
-        # Financial Year (UG: Jul - Jun)
-        now = pd.Timestamp.now()
-        fy_start_year = now.year if now.month >= 7 else now.year - 1
-        fy_start = pd.Timestamp(f"{fy_start_year}-07-01")
-        fy_end = pd.Timestamp(f"{fy_start_year + 1}-06-30")
-
-        fy_df = df[(df["date"] >= fy_start) & (df["date"] <= fy_end)]
 
         filtered = fy_df if view == "Financial Year" else df
 
@@ -5801,7 +5812,10 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
         if category_filter != "All":
             filtered = filtered[filtered["category"] == category_filter]
 
-        # METRICS
+
+        # =====================================================
+        # METRIC CARDS
+        # =====================================================
         income = filtered.loc[filtered["type"] == "In", "amount"].sum()
         expense = filtered.loc[filtered["type"] == "Out", "amount"].sum()
         balance = income - expense
@@ -5809,14 +5823,35 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
         st.subheader("💰 Key Metrics")
 
-        c1, c2, c3, c4 = st.columns(4)
+        col1, col2, col3, col4 = st.columns(4)
 
-        c1.metric("Total Inflow", f"UGX {income:,.0f}")
-        c2.metric("Total Outflow", f"UGX {expense:,.0f}")
-        c3.metric("Balance", f"UGX {balance:,.0f}")
-        c4.metric("Avg Tx", f"UGX {avg_tx:,.0f}" if not pd.isna(avg_tx) else "0")
+        col1.metric(
+            "Total Inflow",
+            f"UGX {income:,.0f}",
+            delta_color="normal"
+        )
 
-        # CHART
+        col2.metric(
+            "Total Outflow",
+            f"UGX {expense:,.0f}",
+            delta_color="inverse"
+        )
+
+        col3.metric(
+            "Balance",
+            f"UGX {balance:,.0f}",
+            delta_color="normal"
+        )
+
+        col4.metric(
+            "Avg Transaction",
+            f"UGX {avg_tx:,.0f}" if not pd.isna(avg_tx) else "0",
+        )
+
+
+        # =====================================================
+        # CHART (INTERACTIVE)
+        # =====================================================
         st.subheader("📊 Spending Trend")
 
         chart_df = filtered.copy()
@@ -5830,68 +5865,67 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
             y="amount",
             color="type",
             barmode="group",
-            color_discrete_map={"In": "#22c55e", "Out": "#ef4444"}
+            color_discrete_map={
+                "In": "#22c55e",
+                "Out": "#ef4444"
+            }
         )
 
         st.plotly_chart(fig, use_container_width=True)
 
-    # =====================================================
-    # TAB 3 - TRANSACTIONS (YOUR TABLE - SAME LOGIC)
-    # =====================================================
-    with tab3:
-
-        st.subheader("📋 Transaction Table")
-
-        if df.empty:
-            st.info("No transactions yet. Add one above 👆")
-        else:
-
-            def highlight(row):
-                return ["background-color: #dcfce7"] * len(row) if row["type"] == "In" \
-                       else ["background-color: #fee2e2"] * len(row)
-
-            styled = df.style.apply(highlight, axis=1)
-
-            st.dataframe(
-                styled,
-                use_container_width=True,
-                hide_index=True
-            )
-
-            st.subheader("📜 Recent Transactions")
-
-            st.dataframe(
-                df.head(15),
-                use_container_width=True,
-                hide_index=True
-            )
-
-    # =====================================================
-    # TAB 4 - ANALYTICS (MONTHLY)
-    # =====================================================
-    with tab4:
-
+        # =========================================================
+        # MONTHLY ANALYTICS
+        # =========================================================
         st.subheader("📊 This Month")
 
-        if df.empty:
-            st.info("No transactions yet.")
+        now_m = pd.Timestamp.now()
+
+        monthly = df[
+            (df["date"].dt.month == now_m.month) &
+            (df["date"].dt.year == now_m.year)
+        ]
+
+        if not monthly.empty:
+
+            summary = monthly.groupby("category")["amount"].sum()
+
+            st.bar_chart(summary)
+
         else:
+            st.info("No transactions yet.")
 
-            now = pd.Timestamp.now()
+    with tab_history:
+        # =====================================================
+        # COLORFUL TABLE (CUSTOM STYLING)
+        # =====================================================
+        st.subheader("📋 Transaction Table")
 
-            monthly = df[
-                (df["date"].dt.month == now.month) &
-                (df["date"].dt.year == now.year)
-            ]
-
-            if not monthly.empty:
-
-                summary = monthly.groupby("category")["amount"].sum()
-
-                st.bar_chart(summary)
-
+        def highlight(row):
+            if row["type"] == "In":
+                return ["background-color: #dcfce7"] * len(row)
             else:
-                st.info("No transactions this month.")
+                return ["background-color: #fee2e2"] * len(row)
+
+
+        styled = filtered.style.apply(highlight, axis=1)
+
+        st.dataframe(
+            styled,
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # =========================================================
+        # RECENT TRANSACTIONS
+        # =========================================================
+        st.subheader("📜 Recent Transactions")
+
+        if not df.empty:
+            st.dataframe(
+                df.sort_values("date", ascending=False).head(15),
+                use_container_width=True,
+                hide_index=True
+            )
 # ==========================================
 # FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
