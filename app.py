@@ -972,28 +972,49 @@ def show_dashboard_view():
 
     try:
 
-        # --- GLOBAL CSS UPGRADE ---
+        # --- SLEEK METRIC CARD STYLE ---
         st.markdown(f"""
         <style>
         .metric-card {{
-            background: white;
-            padding: 12px;              /* reduced from 20px */
-            border-radius: 10px;        /* slightly smaller corners */
-            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
-            transition: 0.25s ease;
-            max-width: 180px;           /* controls card width */
+            background: rgba(255,255,255,0.92);
+            padding: 10px 14px;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.05);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+            backdrop-filter: blur(6px);
+            transition: all 0.2s ease;
+            max-width: 170px;
             margin: auto;
         }}
         
         .metric-card:hover {{
             transform: translateY(-2px);
-            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
+            box-shadow: 0 6px 14px rgba(0,0,0,0.08);
+            border-color: rgba(0,0,0,0.08);
+        }}
+        
+        .metric-card h3 {{
+            font-size: 0.9rem;
+            margin-bottom: 4px;
+            color: #666;
+            font-weight: 500;
+        }}
+        
+        .metric-card h1 {{
+            font-size: 1.4rem;
+            margin: 0;
+            font-weight: 700;
+            color: #111;
         }}
         
         @media (max-width:768px) {{
             .metric-card {{
-                padding: 10px;
-                max-width: 150px;
+                padding: 8px 12px;
+                max-width: 145px;
+            }}
+        
+            .metric-card h1 {{
+                font-size: 1.2rem;
             }}
         }}
         </style>
