@@ -5394,7 +5394,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-def show_budget_page(df_transactions, df_budgets):
+def show_budget(df_transactions, df_budgets):
 
     st.header("📊 Budget Tracker")
 
