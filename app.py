@@ -807,7 +807,7 @@ def render_sidebar():
             "Overview": "📈", "loans": "💵", "borrowers": "👥", "Collateral": "🛡️",
             "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
             "Overdue Tracker": "🚨", "Payments": "💰", "Reports": "📊", "Settings":
-            "⚙️","Budget": "📂":,"Petty Cash": "💵"
+            "⚙️","Budget": "📂","Petty Cash": "💵"
         }
 
         menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
