@@ -5392,195 +5392,252 @@ def show_settings():
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+import plotly.express as px
+import plotly.graph_objects as go
 
 
-def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
+# =========================================================
+# NORMALIZE FUNCTION (SAFE)
+# =========================================================
+def normalize_df(df):
+    if df is None or len(df) == 0:
+        return pd.DataFrame()
 
-    # =========================================================
-    # SESSION FALLBACKS
-    # =========================================================
-    supabase = supabase or st.session_state.get("supabase")
-    user_id = user_id or st.session_state.get("user_id")
+    df = df.copy()
 
-    if user_id is None:
-        st.error("Authentication Error: Please log in again.")
-        st.stop()
-
-    if df_transactions is None:
-        df_transactions = get_data("petty_cash")  # must exist in your app
-
-    st.header("💵 Petty Cash Management")
-
-    # =========================================================
-    # CLEAN DATA
-    # =========================================================
-
-    if df_transactions is None or len(df_transactions) == 0:
-        st.info("No transactions found.")
-        return
-
-    df = df_transactions.copy()
-
-    # Normalize columns
     df.columns = (
         df.columns.astype(str)
         .str.strip()
         .str.lower()
+        .str.replace(" ", "_")
     )
 
-    # Debug (remove later if needed)
-    # st.write("DEBUG COLUMNS:", df.columns.tolist())
+    return df
 
-    # Map possible Supabase variations → standard names
-    rename_map = {
-        "transaction_date": "date",
-        "created_at": "date",
-        "transactiondate": "date",
-        "amount (ugx)": "amount",
-        "value": "amount",
-    }
 
-    df = df.rename(columns=rename_map)
-
-    # Ensure required columns exist
-    required_cols = ["date", "amount", "type"]
-    missing = [c for c in required_cols if c not in df.columns]
-
-    if missing:
-        st.error(f"Missing required columns: {missing}")
-        st.stop()
-
-    # Convert safely
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-
-    # Drop invalid rows
-    df = df.dropna(subset=["date", "amount"])
-
-    # Filter user
-    if "user_id" in df.columns:
-        df = df[df["user_id"] == user_id]
+# =========================================================
+# MAIN PAGE
+# =========================================================
+def show_budget(df_transactions=None, df_budgets=None):
 
     # =========================================================
-    # DATA DISPLAY
+    # SAFE DATA LOADING
     # =========================================================
+    if df_transactions is None:
+        df_transactions = get_data("petty_cash")
 
-    st.subheader("📋 All Transactions")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+    if df_budgets is None:
+        df_budgets = get_data("budgets")
 
-    # =========================================================
-    # BALANCE CALCULATION
-    # =========================================================
-
-    inflow = df[df["type"] == "In"]["amount"].sum()
-    outflow = df[df["type"] == "Out"]["amount"].sum()
-    balance = inflow - outflow
+    st.header("📊 Budget Tracker")
 
     # =========================================================
-    # KPI SECTION
+    # CLEAN DATA
     # =========================================================
+    df_transactions = normalize_df(df_transactions)
+    df_budgets = normalize_df(df_budgets)
 
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Total Inflow", f"UGX {inflow:,.0f}")
-    col2.metric("Total Outflow", f"UGX {outflow:,.0f}")
-    col3.metric("Current Balance", f"UGX {balance:,.0f}")
+    if df_transactions.empty or df_budgets.empty:
+        st.warning("Missing transactions or budget data.")
+        return
 
     # =========================================================
-    # NEW TRANSACTION FORM
+    # VALIDATE REQUIRED COLUMNS
     # =========================================================
+    required_tx_cols = {"date", "amount", "type", "category"}
+    required_budget_cols = {"category", "monthly_limit"}
 
-    st.subheader("➕ Add Transaction")
+    if not required_tx_cols.issubset(df_transactions.columns):
+        st.error(f"Transactions missing columns: {required_tx_cols - set(df_transactions.columns)}")
+        return
 
-    with st.form("cash_form", clear_on_submit=True):
+    if not required_budget_cols.issubset(df_budgets.columns):
+        st.error(f"Budgets missing columns: {required_budget_cols - set(df_budgets.columns)}")
+        return
+
+    # =========================================================
+    # TYPE CLEANING
+    # =========================================================
+    df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
+    df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
+
+    df_transactions = df_transactions.dropna(subset=["date", "amount"])
+
+    # =========================================================
+    # CURRENT MONTH FILTER
+    # =========================================================
+    now = pd.Timestamp.now()
+
+    current = df_transactions[
+        (df_transactions["date"].dt.month == now.month) &
+        (df_transactions["date"].dt.year == now.year)
+    ]
+
+    expenses = current[current["type"] == "Out"]
+    income = current[current["type"] == "In"]
+
+    # =========================================================
+    # KPIs
+    # =========================================================
+    total_spent = expenses["amount"].sum()
+    total_income = income["amount"].sum()
+    total_budget = df_budgets["monthly_limit"].sum()
+
+    remaining = total_budget - total_spent
+    utilization = (total_spent / total_budget * 100) if total_budget > 0 else 0
+    savings_rate = (
+        ((total_income - total_spent) / total_income * 100)
+        if total_income > 0 else 0
+    )
+
+    # =========================================================
+    # KPI UI
+    # =========================================================
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("Budget", f"UGX {total_budget:,.0f}")
+    col2.metric("Spent", f"UGX {total_spent:,.0f}")
+    col3.metric("Remaining", f"UGX {remaining:,.0f}", delta_color="inverse")
+    col4.metric("Utilization", f"{utilization:.1f}%")
+
+    st.metric("💰 Savings Rate", f"{savings_rate:.1f}%")
+
+    # =========================================================
+    # CATEGORY ANALYSIS
+    # =========================================================
+    st.subheader("📂 Category Budgets")
+
+    budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict()
+
+    grouped = expenses.groupby("category")["amount"].sum().to_dict()
+
+    all_categories = set(budget_map.keys()) | set(grouped.keys())
+
+    chart_data = []
+
+    for cat in all_categories:
+
+        limit = budget_map.get(cat, 0)
+        spent = grouped.get(cat, 0)
+
+        percent = (spent / limit) if limit > 0 else (1 if spent > 0 else 0)
+
+        chart_data.append({
+            "category": cat,
+            "budget": limit,
+            "spent": spent,
+            "remaining": limit - spent,
+            "percent": percent * 100
+        })
+
+        # Progress UI
+        st.write(f"**{cat}**")
+        col_l, col_r = st.columns([8, 2])
+
+        col_l.progress(min(percent, 1.0))
+        col_r.write(f"{percent*100:.0f}%")
+
+        st.caption(f"UGX {spent:,.0f} / {limit:,.0f}")
+
+        if limit > 0 and spent > limit:
+            st.warning(f"⚠️ Overspent by UGX {spent - limit:,.0f}")
+
+    chart_df = pd.DataFrame(chart_data)
+
+    if chart_df.empty:
+        st.info("No budget data available.")
+        return
+
+    # =========================================================
+    # ANALYTICS
+    # =========================================================
+    st.subheader("📈 Analytics")
+
+    colA, colB = st.columns(2)
+
+    with colA:
+        st.plotly_chart(
+            px.bar(
+                chart_df,
+                x="category",
+                y=["spent", "budget"],
+                barmode="group",
+                title="Spent vs Budget",
+                color_discrete_sequence=["#EF4444", "#6366F1"]
+            ),
+            use_container_width=True
+        )
+
+    with colB:
+        st.plotly_chart(
+            go.Figure(
+                data=[go.Pie(
+                    labels=chart_df["category"],
+                    values=chart_df["spent"],
+                    hole=0.6
+                )]
+            ).update_traces(textinfo="percent+label"),
+            use_container_width=True
+        )
+
+    # =========================================================
+    # INSIGHTS
+    # =========================================================
+    st.subheader("🧠 Insights")
+
+    top = chart_df.sort_values("spent", ascending=False).iloc[0]
+    st.info(f"💡 Highest spending: **{top['category']}**")
+
+    over = chart_df[chart_df["spent"] > chart_df["budget"]]
+
+    if not over.empty:
+        for _, r in over.iterrows():
+            if r["budget"] > 0:
+                st.error(f"⚠️ {r['category']} over by UGX {r['spent'] - r['budget']:,.0f}")
+    else:
+        st.success("All budgets are under control ✅")
+
+    # =========================================================
+    # BUDGET EDITOR
+    # =========================================================
+    with st.expander("➕ Manage Budget"):
 
         col1, col2 = st.columns(2)
 
         with col1:
-            date = st.date_input("Date", value=datetime.today())
-            trans_type = st.selectbox("Type", ["Out", "In"])
+            new_cat = st.text_input("Category")
 
         with col2:
-            category = st.selectbox(
-                "Category",
-                [
-                    "Transport", "Meals", "Office Supplies",
-                    "Utilities", "Communication",
-                    "Marketing", "Other"
-                ]
-            )
+            new_limit = st.number_input("Monthly Limit", min_value=0, step=50000)
 
-            amount = st.number_input(
-                "Amount (UGX)",
-                min_value=0,
-                step=1000
-            )
+        if st.button("Save Budget"):
 
-        description = st.text_input("Description")
+            if not new_cat.strip():
+                st.error("Enter a category name")
+                return
 
-        submitted = st.form_submit_button("Save Transaction")
+            new_cat = new_cat.strip()
 
-        if submitted:
+            df_budgets["category"] = df_budgets["category"].astype(str)
 
-            if amount <= 0:
-                st.error("Amount must be greater than 0")
-                st.stop()
+            match = df_budgets["category"].str.lower() == new_cat.lower()
 
-            data = {
-                "user_id": user_id,
-                "date": str(date),
-                "type": trans_type,
-                "category": category,
-                "amount": amount,
-                "description": description
-            }
+            if match.any():
+                df_budgets.loc[match, "monthly_limit"] = new_limit
+            else:
+                df_budgets = pd.concat(
+                    [df_budgets, pd.DataFrame([{
+                        "category": new_cat,
+                        "monthly_limit": new_limit
+                    }])],
+                    ignore_index=True
+                )
 
-            try:
-                supabase.table("petty_cash").insert(data).execute()
-                st.success("Transaction saved successfully!")
+            if save_data("budgets", df_budgets):
+                st.success("Budget saved successfully!")
                 st.rerun()
-
-            except Exception as e:
-                st.error(f"Failed to save transaction: {e}")
-
-    # =========================================================
-    # MONTHLY ANALYTICS
-    # =========================================================
-
-    st.subheader("📊 This Month Overview")
-
-    now = pd.Timestamp.now()
-
-    monthly = df[
-        (df["date"].dt.month == now.month) &
-        (df["date"].dt.year == now.year)
-    ]
-
-    if not monthly.empty:
-
-        summary = monthly.groupby("category")["amount"].sum()
-
-        st.bar_chart(summary)
-
-    else:
-        st.info("No data for this month.")
-
-    # =========================================================
-    # RECENT TRANSACTIONS
-    # =========================================================
-
-    st.subheader("📜 Recent Transactions")
-
-    if not df.empty:
-        st.dataframe(
-            df.sort_values("date", ascending=False).head(15),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("No transactions yet.")
-
+            else:
+                st.error("Failed to save budget.")
 
         
 import streamlit as st
