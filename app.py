@@ -976,21 +976,24 @@ def show_dashboard_view():
         st.markdown(f"""
         <style>
         .metric-card {{
-            background:white;
-            padding:20px;
-            border-radius:15px;
-            box-shadow:0 4px 10px rgba(0,0,0,0.05);
-            transition:0.25s ease;
+            background: white;
+            padding: 12px;              /* reduced from 20px */
+            border-radius: 10px;        /* slightly smaller corners */
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+            transition: 0.25s ease;
+            max-width: 180px;           /* controls card width */
+            margin: auto;
         }}
-
+        
         .metric-card:hover {{
-            transform:translateY(-3px);
-            box-shadow:0 8px 16px rgba(0,0,0,0.08);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.08);
         }}
-
+        
         @media (max-width:768px) {{
             .metric-card {{
-                padding:14px;
+                padding: 10px;
+                max-width: 150px;
             }}
         }}
         </style>
