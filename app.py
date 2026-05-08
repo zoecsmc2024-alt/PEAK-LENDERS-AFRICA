@@ -5388,23 +5388,34 @@ def show_settings():
         except Exception as e:
             st.error(f"❌ Database Error: {str(e)}")
 
-import streamlit as st
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
 
-def show_budget(df_transactions, df_budgets):
+import streamlit as st
+
+import pandas as pd
+
+import plotly.express as px
+
+import plotly.graph_objects as go
+# 1. Change the first line to make arguments optional (=None)
+def show_budget(df_transactions=None, df_budgets=None):
+    
+    # 2. Add these 'Emergency Fetch' lines
+    if df_transactions is None:
+        # Get your main data (make sure 'get_data' is what you named your fetch function)
+        df_transactions = get_data("petty_cash") 
+        
+    if df_budgets is None:
+        # Get your budget data
+        df_budgets = get_data("budgets")
+
+    # --- Everything below stays exactly as you had it ---
     st.header("📊 Budget Tracker")
 
-    # =========================================================
-    # SAFE COPY + CLEAN
-    # =========================================================
     df_transactions = df_transactions.copy()
     df_budgets = df_budgets.copy()
 
     df_transactions["Date"] = pd.to_datetime(df_transactions["Date"], errors="coerce")
     df_transactions["Amount"] = pd.to_numeric(df_transactions["Amount"], errors="coerce")
-    # Ensure column names match for grouping (handling potential space/underscore issues)
     df_transactions.columns = [c.replace(" ", "_") for c in df_transactions.columns]
     
     df_transactions = df_transactions.dropna(subset=["Date", "Amount"])
