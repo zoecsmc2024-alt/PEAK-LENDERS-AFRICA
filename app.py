@@ -5394,163 +5394,69 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-def show_budget(df_transactions, df_budgets):
-
-    # =========================================================
-    # PAGE TITLE
-    # =========================================================
+def show_budget_page(df_transactions, df_budgets):
 
     st.header("📊 Budget Tracker")
 
     # =========================================================
-    # VALIDATION
-    # =========================================================
-
-    required_tx_cols = [
-        "Date",
-        "Category",
-        "Type",
-        "Amount"
-    ]
-
-    required_budget_cols = [
-        "category",
-        "monthly_limit"
-    ]
-
-    for col in required_tx_cols:
-        if col not in df_transactions.columns:
-            st.error(f"Missing transaction column: {col}")
-            return
-
-    for col in required_budget_cols:
-        if col not in df_budgets.columns:
-            st.error(f"Missing budget column: {col}")
-            return
-
-    # =========================================================
-    # CLEAN DATA
+    # SAFE COPY + CLEAN
     # =========================================================
 
     df_transactions = df_transactions.copy()
     df_budgets = df_budgets.copy()
 
-    df_transactions["Date"] = pd.to_datetime(
-        df_transactions["Date"],
-        errors="coerce"
-    )
+    df_transactions["Date"] = pd.to_datetime(df_transactions["Date"], errors="coerce")
+    df_transactions["Amount"] = pd.to_numeric(df_transactions["Amount"], errors="coerce")
 
-    df_transactions["Amount"] = pd.to_numeric(
-        df_transactions["Amount"],
-        errors="coerce"
-    )
-
-    # Remove invalid rows
-    df_transactions = df_transactions.dropna(
-        subset=["Date", "Amount"]
-    )
+    df_transactions = df_transactions.dropna(subset=["Date", "Amount"])
 
     # =========================================================
-    # FILTER CURRENT MONTH
+    # CURRENT MONTH FILTER
     # =========================================================
 
     now = pd.Timestamp.now()
 
-    current_month = now.month
-    current_year = now.year
-
     expenses = df_transactions[
         (df_transactions["Type"] == "Out") &
-        (df_transactions["Date"].dt.month == current_month) &
-        (df_transactions["Date"].dt.year == current_year)
+        (df_transactions["Date"].dt.month == now.month) &
+        (df_transactions["Date"].dt.year == now.year)
+    ]
+
+    income = df_transactions[
+        (df_transactions["Type"] == "In") &
+        (df_transactions["Date"].dt.month == now.month) &
+        (df_transactions["Date"].dt.year == now.year)
     ]
 
     # =========================================================
-    # KPI CALCULATIONS
+    # KPIs
     # =========================================================
 
     total_spent = expenses["Amount"].sum()
+    total_income = income["Amount"].sum()
 
     total_budget = df_budgets["monthly_limit"].sum()
-
     remaining = total_budget - total_spent
 
-    utilization = (
-        (total_spent / total_budget) * 100
-        if total_budget > 0
-        else 0
-    )
+    utilization = (total_spent / total_budget * 100) if total_budget > 0 else 0
+    savings_rate = ((total_income - total_spent) / total_income * 100) if total_income > 0 else 0
 
     # =========================================================
-    # MODERN CSS
-    # =========================================================
-
-    st.markdown("""
-    <style>
-
-    .metric-card {
-        padding: 18px;
-        border-radius: 18px;
-        background: linear-gradient(135deg, #4B5563, #1F2937);
-        color: white;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
-        border: 1px solid rgba(255,255,255,0.05);
-    }
-
-    .metric-label {
-        font-size: 11px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-        opacity: 0.75;
-        font-weight: 600;
-    }
-
-    .metric-number {
-        font-size: 26px;
-        font-weight: 800;
-        margin-top: 8px;
-    }
-
-    .budget-card {
-        background: white;
-        border-radius: 16px;
-        padding: 16px;
-        margin-bottom: 12px;
-        border: 1px solid #F3F4F6;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    }
-
-    .small-text {
-        color: #6B7280;
-        font-size: 12px;
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
-
-    # =========================================================
-    # KPI ROW
+    # KPI UI
     # =========================================================
 
     col1, col2, col3, col4 = st.columns(4)
 
-    metrics = [
-        ("Total Budget", total_budget),
+    kpis = [
+        ("Budget", total_budget),
         ("Spent", total_spent),
         ("Remaining", remaining),
         ("Utilization", f"{utilization:.0f}%")
     ]
 
-    for col, (label, value) in zip(
-        [col1, col2, col3, col4],
-        metrics
-    ):
+    for col, (label, value) in zip([col1, col2, col3, col4], kpis):
 
-        display = (
-            value
-            if isinstance(value, str)
-            else f"UGX {value:,.0f}"
-        )
+        display = value if isinstance(value, str) else f"UGX {value:,.0f}"
 
         with col:
             st.markdown(f"""
@@ -5560,313 +5466,159 @@ def show_budget(df_transactions, df_budgets):
             </div>
             """, unsafe_allow_html=True)
 
-    st.markdown("<br>", unsafe_allow_html=True)
+    st.metric("💰 Savings Rate", f"{savings_rate:.1f}%")
 
     # =========================================================
-    # CATEGORY ANALYSIS
+    # CATEGORY ANALYSIS (FAST VERSION)
     # =========================================================
 
     st.subheader("📂 Category Budgets")
 
-    category_data = []
+    chart_data = []
 
-    for _, row in df_budgets.iterrows():
+    budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict()
 
-        category = row["category"]
-        limit = row["monthly_limit"]
+    grouped = expenses.groupby("Category")["Amount"].sum().to_dict()
 
-        actual = expenses[
-            expenses["Category"].str.lower() ==
-            str(category).lower()
-        ]["Amount"].sum()
+    all_categories = set(budget_map.keys()) | set(grouped.keys())
 
-        remaining_cat = limit - actual
+    for cat in all_categories:
 
-        percent = (
-            actual / limit
-            if limit > 0
-            else 0
-        )
+        limit = budget_map.get(cat, 0)
+        spent = grouped.get(cat, 0)
 
-        category_data.append({
-            "Category": category,
+        percent = (spent / limit) if limit > 0 else 0
+
+        chart_data.append({
+            "Category": cat,
             "Budget": limit,
-            "Spent": actual,
-            "Remaining": remaining_cat,
+            "Spent": spent,
+            "Remaining": limit - spent,
             "Percent": percent * 100
         })
 
-        # =====================================================
-        # COLOR LOGIC
-        # =====================================================
-
-        if percent < 0.70:
-            color = "#10B981"
-
-        elif percent < 1:
-            color = "#F59E0B"
-
-        else:
-            color = "#EF4444"
-
-        # =====================================================
-        # CATEGORY CARD
-        # =====================================================
+        color = "#10B981" if percent < 0.7 else "#F59E0B" if percent < 1 else "#EF4444"
 
         st.markdown(f"""
         <div class="budget-card">
-
-            <div style="
-                display:flex;
-                justify-content:space-between;
-                align-items:center;
-            ">
-
+            <div style="display:flex;justify-content:space-between;">
                 <div>
-                    <h4 style="margin-bottom:4px;">
-                        {category}
-                    </h4>
-
+                    <h4 style="margin:0;">{cat}</h4>
                     <div class="small-text">
-                        UGX {actual:,.0f}
-                        spent of
-                        UGX {limit:,.0f}
+                        UGX {spent:,.0f} / UGX {limit:,.0f}
                     </div>
                 </div>
-
-                <div style="
-                    color:{color};
-                    font-weight:700;
-                    font-size:18px;
-                ">
+                <div style="color:{color};font-weight:700;">
                     {percent*100:.0f}%
                 </div>
-
             </div>
-
         </div>
         """, unsafe_allow_html=True)
 
         st.progress(min(percent, 1.0))
 
-        if actual > limit:
+        if spent > limit and limit > 0:
+            st.warning(f"⚠️ {cat} over by UGX {spent - limit:,.0f}")
 
-            over = actual - limit
-
-            st.warning(
-                f"⚠️ {category} is over budget "
-                f"by UGX {over:,.0f}"
-            )
-
-    # =========================================================
-    # NO DATA HANDLING
-    # =========================================================
-
-    chart_df = pd.DataFrame(category_data)
+    chart_df = pd.DataFrame(chart_data)
 
     if chart_df.empty:
-
-        st.info("No budget data available.")
+        st.info("No budget data yet.")
         return
 
     # =========================================================
     # ANALYTICS
     # =========================================================
 
-    st.subheader("📈 Budget Analytics")
+    st.subheader("📈 Analytics")
 
     colA, colB = st.columns(2)
 
-    # =========================================================
-    # BAR CHART
-    # =========================================================
-
     with colA:
-
-        fig_bar = px.bar(
-            chart_df,
-            x="Category",
-            y=["Spent", "Budget"],
-            barmode="group",
-            color_discrete_sequence=[
-                "#EF4444",
-                "#6366F1"
-            ],
-            height=400
-        )
-
-        fig_bar.update_layout(
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            margin=dict(
-                l=10,
-                r=10,
-                t=30,
-                b=10
-            ),
-            legend_title=""
-        )
-
         st.plotly_chart(
-            fig_bar,
+            px.bar(
+                chart_df,
+                x="Category",
+                y=["Spent", "Budget"],
+                barmode="group",
+                color_discrete_sequence=["#EF4444", "#6366F1"]
+            ),
             use_container_width=True
         )
 
-    # =========================================================
-    # DONUT CHART
-    # =========================================================
-
     with colB:
-
-        fig_donut = go.Figure(
-            data=[
-                go.Pie(
+        st.plotly_chart(
+            go.Figure(
+                data=[go.Pie(
                     labels=chart_df["Category"],
                     values=chart_df["Spent"],
                     hole=0.65
-                )
-            ]
-        )
-
-        fig_donut.update_layout(
-            height=400,
-            showlegend=False,
-            margin=dict(
-                t=20,
-                b=20,
-                l=20,
-                r=20
-            )
-        )
-
-        fig_donut.update_traces(
-            textinfo="percent+label"
-        )
-
-        st.plotly_chart(
-            fig_donut,
+                )]
+            ).update_traces(textinfo="percent+label"),
             use_container_width=True
         )
 
     # =========================================================
-    # INSIGHTS
+    # INSIGHTS ENGINE (SMARTER)
     # =========================================================
 
-    st.subheader("🧠 Budget Insights")
+    st.subheader("🧠 Insights")
 
-    highest = chart_df.sort_values(
-        "Spent",
-        ascending=False
-    ).iloc[0]
+    if not chart_df.empty:
 
-    st.info(
-        f"💡 Highest spending category: "
-        f"**{highest['Category']}** "
-        f"(UGX {highest['Spent']:,.0f})"
-    )
+        top_spender = chart_df.sort_values("Spent", ascending=False).iloc[0]
 
-    over_budget = chart_df[
-        chart_df["Spent"] > chart_df["Budget"]
-    ]
+        st.info(f"💡 Highest spending: **{top_spender['Category']}**")
 
-    if len(over_budget) > 0:
+        over = chart_df[chart_df["Spent"] > chart_df["Budget"]]
 
-        st.error("⚠️ Over Budget Categories")
+        if not over.empty:
+            st.error("⚠️ Overspending detected")
 
-        for _, row in over_budget.iterrows():
-
-            extra = row["Spent"] - row["Budget"]
-
-            st.write(
-                f"- {row['Category']} "
-                f"(UGX {extra:,.0f} over)"
-            )
-
-    else:
-
-        st.success(
-            "✅ All categories are within budget."
-        )
+            for _, r in over.iterrows():
+                st.write(f"- {r['Category']} (UGX {r['Spent'] - r['Budget']:,.0f})")
+        else:
+            st.success("All budgets healthy ✅")
 
     # =========================================================
-    # ADD / UPDATE BUDGET
+    # BUDGET EDITOR (SAFE UPSERT LOGIC)
     # =========================================================
 
-    with st.expander("➕ Set Monthly Budget"):
+    with st.expander("➕ Manage Budget"):
 
         col1, col2 = st.columns(2)
 
         with col1:
-
-            new_cat = st.text_input(
-                "Category Name"
-            )
+            new_cat = st.text_input("Category")
 
         with col2:
+            new_lim = st.number_input("Limit", min_value=0, step=50000)
 
-            new_lim = st.number_input(
-                "Monthly Limit",
-                min_value=0,
-                step=50000
-            )
-
-        if st.button("Save Budget"):
+        if st.button("Save"):
 
             if not new_cat.strip():
+                st.error("Enter category")
+                return
 
-                st.error(
-                    "Please enter a category."
-                )
+            new_cat = new_cat.strip()
 
+            match = df_budgets["category"].astype(str).str.lower() == new_cat.lower()
+
+            if match.any():
+                df_budgets.loc[match, "monthly_limit"] = new_lim
+                st.success("Updated")
             else:
-
-                # =================================================
-                # UPDATE EXISTING CATEGORY
-                # =================================================
-
-                existing = (
-                    df_budgets["category"]
-                    .str.lower()
-                    .eq(new_cat.lower())
-                )
-
-                if existing.any():
-
-                    df_budgets.loc[
-                        existing,
-                        "monthly_limit"
-                    ] = new_lim
-
-                    st.success(
-                        f"Updated budget for "
-                        f"{new_cat}"
-                    )
-
-                else:
-
-                    new_row = pd.DataFrame([{
+                df_budgets = pd.concat([
+                    df_budgets,
+                    pd.DataFrame([{
                         "category": new_cat,
                         "monthly_limit": new_lim
                     }])
+                ], ignore_index=True)
 
-                    df_budgets = pd.concat(
-                        [df_budgets, new_row],
-                        ignore_index=True
-                    )
+                st.success("Added")
 
-                    st.success(
-                        f"Added budget for "
-                        f"{new_cat}"
-                    )
-
-                # =================================================
-                # DATABASE SAVE LOGIC GOES HERE
-                # =================================================
-
-                st.dataframe(
-                    df_budgets,
-                    use_container_width=True
-                )
+            st.dataframe(df_budgets, use_container_width=True)
 # ==========================================
 # FINAL APP ROUTER (REACTIVE & STABLE)
 # ==========================================
