@@ -5647,126 +5647,67 @@ from datetime import datetime
 
 def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
-    # =========================================================
-    # SESSION SAFETY
-    # =========================================================
+    st.header("💵 Petty Cash Management")
+
+    # =====================================================
+    # SAFE INIT
+    # =====================================================
     supabase = supabase or st.session_state.get("supabase")
     user_id = user_id or st.session_state.get("user_id")
 
     if user_id is None:
-        st.error("Authentication Error: Please log in again.")
+        st.error("Please log in again.")
         return
+
+    # =====================================================
+    # SAFE DATA FETCH
+    # =====================================================
+    try:
+        if df_transactions is None:
+            df_transactions = get_data("petty_cash")
+    except Exception as e:
+        st.error(f"Failed to load data: {e}")
+        df_transactions = pd.DataFrame()
 
     if df_transactions is None:
-        df_transactions = get_data("petty_cash")  # must exist
+        df_transactions = pd.DataFrame()
 
-    st.header("💵 Petty Cash Management")
+    # =====================================================
+    # CLEAN DATA SAFELY
+    # =====================================================
+    if not df_transactions.empty:
 
-    # =========================================================
-    # HANDLE EMPTY DATA
-    # =========================================================
-    if df_transactions is None or len(df_transactions) == 0:
-        st.info("No transactions yet.")
-        return
+        df_transactions.columns = (
+            df_transactions.columns.astype(str)
+            .str.lower()
+            .str.strip()
+        )
 
-    df = df_transactions.copy()
+        if "date" in df_transactions.columns:
+            df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
 
-    # =========================================================
-    # CLEAN COLUMN NAMES SAFELY
-    # =========================================================
-    df.columns = (
-        df.columns.astype(str)
-        .str.strip()
-        .str.lower()
-    )
+        if "amount" in df_transactions.columns:
+            df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
 
-    # Normalize schema differences (Supabase drift-safe)
-    rename_map = {
-        "transaction_date": "date",
-        "created_at": "date",
-        "transactiondate": "date",
-        "amount (ugx)": "amount",
-        "value": "amount",
-    }
+    # =====================================================
+    # ALWAYS SHOW FORM (IMPORTANT FIX)
+    # =====================================================
+    st.subheader("➕ Add Transaction")
 
-    df = df.rename(columns=rename_map)
-
-    # =========================================================
-    # VALIDATE REQUIRED COLUMNS
-    # =========================================================
-    required = ["date", "amount", "type"]
-
-    missing = [c for c in required if c not in df.columns]
-
-    if missing:
-        st.error(f"Missing required columns: {missing}")
-        st.write("Available columns:", df.columns.tolist())
-        return
-
-    # =========================================================
-    # TYPE CONVERSION (SAFE)
-    # =========================================================
-    df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    df["amount"] = pd.to_numeric(df["amount"], errors="coerce")
-
-    df = df.dropna(subset=["date", "amount"])
-
-    # =========================================================
-    # USER FILTER
-    # =========================================================
-    if "user_id" in df.columns:
-        df = df[df["user_id"] == user_id]
-
-    # =========================================================
-    # DEBUG VIEW
-    # =========================================================
-    st.subheader("📋 Transactions")
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-    # =========================================================
-    # CALCULATIONS
-    # =========================================================
-    inflow = df.loc[df["type"] == "In", "amount"].sum()
-    outflow = df.loc[df["type"] == "Out", "amount"].sum()
-    balance = inflow - outflow
-
-    # =========================================================
-    # KPI SECTION
-    # =========================================================
-    col1, col2, col3 = st.columns(3)
-
-    col1.metric("Total Inflow", f"UGX {inflow:,.0f}")
-    col2.metric("Total Outflow", f"UGX {outflow:,.0f}")
-    col3.metric("Balance", f"UGX {balance:,.0f}")
-
-    # =========================================================
-    # ADD TRANSACTION
-    # =========================================================
-    st.subheader("➕ New Transaction")
-
-    with st.form("cash_form", clear_on_submit=True):
+    with st.form("cash_form"):
 
         col1, col2 = st.columns(2)
 
         with col1:
             date = st.date_input("Date", value=datetime.today())
-            trans_type = st.selectbox("Type", ["Out", "In"])
+            trans_type = st.selectbox("Type", ["In", "Out"])
 
         with col2:
             category = st.selectbox(
                 "Category",
-                [
-                    "Transport", "Meals", "Office Supplies",
-                    "Utilities", "Communication",
-                    "Marketing", "Other"
-                ]
+                ["Transport", "Meals", "Office", "Utilities", "Other"]
             )
-
-            amount = st.number_input(
-                "Amount (UGX)",
-                min_value=0,
-                step=1000
-            )
+            amount = st.number_input("Amount", min_value=0, step=1000)
 
         description = st.text_input("Description")
 
@@ -5776,24 +5717,31 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
             if amount <= 0:
                 st.error("Amount must be greater than 0")
-                return
+            else:
+                try:
+                    supabase.table("petty_cash").insert({
+                        "user_id": user_id,
+                        "date": date.isoformat(),
+                        "type": trans_type,
+                        "category": category,
+                        "amount": amount,
+                        "description": description
+                    }).execute()
 
-            payload = {
-                "user_id": user_id,
-                "date": str(date),
-                "type": trans_type,
-                "category": category,
-                "amount": amount,
-                "description": description
-            }
+                    st.success("Saved!")
+                    st.rerun()
 
-            try:
-                supabase.table("petty_cash").insert(payload).execute()
-                st.success("Transaction saved!")
-                st.rerun()
+                except Exception as e:
+                    st.error(f"Insert failed: {e}")
 
-            except Exception as e:
-                st.error(f"Insert failed: {e}")
+    # =====================================================
+    # SAFE DISPLAY (NO CRASHES)
+    # =====================================================
+    if df_transactions.empty:
+        st.info("No transactions yet — add one above 👆")
+        return
+
+    st.dataframe(df_transactions)
 
     # =========================================================
     # MONTHLY ANALYTICS
@@ -5814,8 +5762,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
         st.bar_chart(summary)
 
     else:
-        st.info("No transactions this month.")
-
+        st.info("No transactions yet.")
     # =========================================================
     # RECENT TRANSACTIONS
     # =========================================================
