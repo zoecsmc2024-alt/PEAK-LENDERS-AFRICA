@@ -1706,13 +1706,13 @@ def show_dashboard_view():
         
                     # --- Format table ---
                     display_df = latest.copy()
-                    display_df["Category"] = display_df["category"].fillna("General")
+                    display_df["category"] = display_df["category"].fillna("General")
                     display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
         
                     # Keep numeric for styling
                     display_df["amount"] = display_df["amount"]
         
-                    final_df = display_df[["Category", "amount", "date"]]
+                    final_df = display_df[["category", "amount", "date"]]
         
                     # --- Styling (no HTML) ---
                     def style_amount(val):
@@ -4740,7 +4740,7 @@ def show_expenses():
             st.write("### Log Operational Cost")
             c1, c2 = st.columns(2)
 
-            category = c1.selectbox("Category", EXPENSE_CATS)
+            category = c1.selectbox("category", EXPENSE_CATS)
             amount = c2.number_input("amount (UGX)", min_value=0, step=1000)
             desc = st.text_input("Description")
 
@@ -4844,7 +4844,7 @@ def show_expenses():
             
                 display_ledger.columns = [
                     "date",
-                    "Category",
+                    "category",
                     "Description",
                     "amount (UGX)",
                     "Ref #"
@@ -4861,8 +4861,8 @@ def show_expenses():
                 # --- Filters ---
                 col1, col2 = st.columns(2)
             
-                categories = ["All"] + sorted(display_ledger["Category"].dropna().unique().tolist())
-                selected_cat = col1.selectbox("Filter Category", categories)
+                categories = ["All"] + sorted(display_ledger["category"].dropna().unique().tolist())
+                selected_cat = col1.selectbox("Filter category", categories)
             
                 # convert back to numeric for filtering (because we formatted strings)
                 ledger_df["amount_num"] = pd.to_numeric(ledger_df["amount"], errors="coerce").fillna(0)
@@ -4897,7 +4897,7 @@ def show_expenses():
                 
                 final_display_df.columns = [
                     "date",
-                    "Category",
+                    "category",
                     "Description",
                     "amount (UGX)",
                     "Ref #"
@@ -5399,6 +5399,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 def normalize_df(df):
     df = df.copy()
+    df.columns = [str(c) for c in df.columns] 
+    
     df.columns = (
         df.columns
         .str.strip()
@@ -5406,19 +5408,13 @@ def normalize_df(df):
         .str.replace(" ", "_")
     )
     return df
-# 1. Change the first line to make arguments optional (=None)
 def show_budget(df_transactions=None, df_budgets=None):
-    
-    # 2. Add these 'Emergency Fetch' lines
     if df_transactions is None:
-        # Get your main data (make sure 'get_data' is what you named your fetch function)
         df_transactions = get_data("petty_cash") 
         
     if df_budgets is None:
-        # Get your budget data
         df_budgets = get_data("budgets")
 
-    # --- Everything below stays exactly as you had it ---
     st.header("📊 Budget Tracker")
     df_transactions = normalize_df(df_transactions)
     df_budgets = normalize_df(df_budgets)
@@ -5466,14 +5462,14 @@ def show_budget(df_transactions=None, df_budgets=None):
     st.metric("💰 Savings Rate", f"{savings_rate:.1f}%")
 
     # =========================================================
-    # CATEGORY ANALYSIS (FAST VERSION)
+    # category ANALYSIS (FAST VERSION)
     # =========================================================
-    st.subheader("📂 Category Budgets")
+    st.subheader("📂 category Budgets")
     chart_data = []
     budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict()
     
-    # Ensure grouping works regardless of column naming (Category vs category)
-    cat_col = "Category" if "Category" in expenses.columns else "Description"
+    # Ensure grouping works regardless of column naming (category vs category)
+    cat_col = "category" if "category" in expenses.columns else "Description"
     expenses["category"] = expenses["category"].astype(str)
     grouped = expenses.groupby("category")["amount"].sum().to_dict()
     all_categories = set(budget_map.keys()) | set(grouped.keys())
@@ -5484,7 +5480,7 @@ def show_budget(df_transactions=None, df_budgets=None):
         percent = (spent / limit) if limit > 0 else (1.0 if spent > 0 else 0)
         
         chart_data.append({
-            "Category": cat,
+            "category": cat,
             "Budget": limit,
             "Spent": spent,
             "Remaining": limit - spent,
@@ -5515,7 +5511,7 @@ def show_budget(df_transactions=None, df_budgets=None):
         st.plotly_chart(
             px.bar(
                 chart_df,
-                x="Category",
+                x="category",
                 y=["Spent", "Budget"],
                 barmode="group",
                 title="Spent vs Budget",
@@ -5527,7 +5523,7 @@ def show_budget(df_transactions=None, df_budgets=None):
         st.plotly_chart(
             go.Figure(
                 data=[go.Pie(
-                    labels=chart_df["Category"],
+                    labels=chart_df["category"],
                     values=chart_df["Spent"],
                     hole=0.65
                 )]
@@ -5541,12 +5537,12 @@ def show_budget(df_transactions=None, df_budgets=None):
     st.subheader("🧠 Insights")
     if not chart_df.empty:
         top_spender = chart_df.sort_values("Spent", ascending=False).iloc[0]
-        st.info(f"💡 Highest spending: **{top_spender['Category']}**")
+        st.info(f"💡 Highest spending: **{top_spender['category']}**")
         over = chart_df[chart_df["Spent"] > chart_df["Budget"]]
         if not over.empty:
             for _, r in over.iterrows():
                 if r['Budget'] > 0:
-                    st.error(f"⚠️ Overspending in {r['Category']} (UGX {r['Spent'] - r['Budget']:,.0f})")
+                    st.error(f"⚠️ Overspending in {r['category']} (UGX {r['Spent'] - r['Budget']:,.0f})")
         else:
             st.success("All budgets healthy ✅")
 
@@ -5556,7 +5552,7 @@ def show_budget(df_transactions=None, df_budgets=None):
     with st.expander("➕ Manage Budget"):
         col1, col2 = st.columns(2)
         with col1:
-            new_cat = st.text_input("Category Name")
+            new_cat = st.text_input("category Name")
         with col2:
             new_lim = st.number_input("Monthly Limit", min_value=0, step=50000)
 
@@ -5580,8 +5576,8 @@ def show_budget(df_transactions=None, df_budgets=None):
                 # Ensure the dataframe being saved matches your DB column names
                 save_ready = df_budgets.copy()
                 
-                # If your DB uses "Category" instead of "category", uncomment below:
-                # save_ready.columns = ["Category", "Monthly Limit"] 
+                # If your DB uses "category" instead of "category", uncomment below:
+                # save_ready.columns = ["category", "Monthly Limit"] 
 
                 if save_data("budgets", save_ready):
                     st.success(f"✅ Budget for {new_cat} saved to database!")
@@ -5684,7 +5680,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
             with col2:
                 category = st.selectbox(
-                    "Category",
+                    "category",
                     [
                         "Transport", "Meals", "Office Supplies",
                         "Utilities", "Communication",
@@ -5747,11 +5743,11 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     if not monthly_df.empty:
 
         cat_summary = monthly_df.groupby(
-            "Category"
+            "category"
         )["amount"].sum().reset_index()
 
         st.bar_chart(
-            cat_summary.set_index("Category")
+            cat_summary.set_index("category")
         )
 
     # =========================================================
