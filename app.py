@@ -5397,6 +5397,15 @@ import pandas as pd
 import plotly.express as px
 
 import plotly.graph_objects as go
+def normalize_df(df):
+    df = df.copy()
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_")
+    )
+    return df
 # 1. Change the first line to make arguments optional (=None)
 def show_budget(df_transactions=None, df_budgets=None):
     
@@ -5411,9 +5420,8 @@ def show_budget(df_transactions=None, df_budgets=None):
 
     # --- Everything below stays exactly as you had it ---
     st.header("📊 Budget Tracker")
-
-    df_transactions = df_transactions.copy()
-    df_budgets = df_budgets.copy()
+    df_transactions = normalize_df(df_transactions)
+    df_budgets = normalize_df(df_budgets)
 
     df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
     df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
@@ -5604,7 +5612,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     # CLEAN DATA
     # =========================================================
 
-    df_transactions = df_transactions.copy()
+    df_transactions = normalize_df(df_transactions)
 
     # --- THE CRITICAL FIX: Force column names to lowercase ---
     df_transactions.columns = [str(c).lower() for c in df_transactions.columns]
@@ -5707,10 +5715,11 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
                         "user_id": user_id,
                         "date": str(date),
                         "type": trans_type,
-                        "Category": category,
+                        "category": category,
                         "amount": amount,
-                        "Description": description
+                        "description": description
                     }
+                    
 
                     response = supabase.table(
                         "petty_cash"
