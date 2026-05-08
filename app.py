@@ -1187,59 +1187,103 @@ def show_dashboard_view():
 
             
         # ==============================
-        # METRIC CARD STYLES
+        # SLEEK METRIC CARD STYLES
         # ==============================
         st.markdown("""
         <style>
         
         .metric-box {
-            padding: 22px;
-            border-radius: 18px;
+            padding: 16px;
+            border-radius: 16px;
             color: white;
-            box-shadow: 0 6px 18px rgba(0,0,0,0.10);
+            background: rgba(255,255,255,0.06);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.10);
+            box-shadow: 0 4px 14px rgba(0,0,0,0.08);
             margin-bottom: 10px;
+            transition: all 0.22s ease;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .metric-box:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.12);
+        }
+        
+        .metric-box::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255,255,255,0.04);
+            pointer-events: none;
         }
         
         .metric-title {
-            font-size: 12px;
-            font-weight: 700;
+            font-size: 11px;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1px;
-            opacity: 0.92;
+            letter-spacing: 1.2px;
+            opacity: 0.82;
+            margin-bottom: 6px;
         }
         
         .metric-value {
-            font-size: 30px;
-            font-weight: 800;
-            margin-top: 10px;
-            margin-bottom: 8px;
+            font-size: 26px;
+            font-weight: 750;
+            line-height: 1.1;
+            margin-bottom: 4px;
         }
         
         .metric-sub {
-            font-size: 12px;
-            font-weight: 600;
-            opacity: 0.92;
+            font-size: 11px;
+            font-weight: 500;
+            opacity: 0.78;
         }
         
+        /* Modern gradients */
+        
         .blue-card {
-            background: linear-gradient(135deg, #2563EB, #1E3A8A);
+            background: linear-gradient(135deg, #3B82F6, #1E40AF);
         }
         
         .green-card {
-            background: linear-gradient(135deg, #10B981, #047857);
+            background: linear-gradient(135deg, #34D399, #065F46);
         }
         
         .red-card {
-            background: linear-gradient(135deg, #EF4444, #991B1B);
+            background: linear-gradient(135deg, #F87171, #991B1B);
         }
         
         .orange-card {
-            background: linear-gradient(135deg, #F59E0B, #B45309);
+            background: linear-gradient(135deg, #FBBF24, #B45309);
+        }
+        
+        /* Mobile responsiveness */
+        
+        @media (max-width:768px) {
+        
+            .metric-box {
+                padding: 14px;
+                border-radius: 14px;
+            }
+        
+            .metric-value {
+                font-size: 22px;
+            }
+        
+            .metric-title,
+            .metric-sub {
+                font-size: 10px;
+            }
         }
         
         </style>
         """, unsafe_allow_html=True)
-        
+                
         # ==============================
         # CARD HELPER
         # ==============================
