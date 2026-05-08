@@ -5650,10 +5650,19 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     st.header("💵 Petty Cash Management")
 
     # =====================================================
-    # SAFE INIT
+    # SAFE INIT (Connection Guard)
     # =====================================================
-    supabase = supabase or st.session_state.get("supabase")
-    user_id = user_id or st.session_state.get("user_id")
+    if supabase is None:
+        supabase = st.session_state.get("supabase")
+    
+    if user_id is None:
+        user_id = st.session_state.get("user_id")
+
+    # If Supabase is still None here, the app cannot proceed
+    if supabase is None:
+        st.error("🚨 Database Connection Error: Supabase client not found in session state.")
+        st.info("Ensure you are initializing 'st.session_state.supabase' in your main app file.")
+        return
 
     if user_id is None:
         st.error("Please log in again.")
