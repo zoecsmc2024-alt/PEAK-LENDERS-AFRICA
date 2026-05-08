@@ -5582,6 +5582,7 @@ def show_budget(df_transactions=None, df_budgets=None):
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+
 def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     if supabase is None:
         supabase = st.session_state.get("supabase")
@@ -5590,7 +5591,9 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
         user_id = st.session_state.get("user_id")
 
     if df_transactions is None:
+        # Note: Make sure get_data is defined in your main script!
         df_transactions = get_data("petty_cash") 
+
     if user_id is None:
         st.error("Authentication Error: Please log in again.")
         return
@@ -5603,24 +5606,33 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
     df_transactions = df_transactions.copy()
 
+    # --- THE CRITICAL FIX: Force column names to lowercase ---
+    df_transactions.columns = [str(c).lower() for c in df_transactions.columns]
+
+    # Now we can safely use lowercase names because we forced them above
     df_transactions["date"] = pd.to_datetime(
         df_transactions["date"],
         errors="coerce"
     )
 
-    df_transactions["Amount"] = pd.to_numeric(
-        df_transactions["Amount"],
+    # Note: I changed "Amount" to "amount" to match the lowercase fix
+    df_transactions["amount"] = pd.to_numeric(
+        df_transactions["amount"],
         errors="coerce"
     )
 
     df_transactions = df_transactions.dropna(
-        subset=["date", "Amount"]
+        subset=["date", "amount"]
     )
 
-    # Filter ONLY current user
-    df_transactions = df_transactions[
-        df_transactions["user_id"] == user_id
-    ]
+    # Filter ONLY current user (ensuring user_id is lowercase too)
+    if "user_id" in df_transactions.columns:
+        df_transactions = df_transactions[
+            df_transactions["user_id"] == user_id
+        ]
+    
+    # Let's show the data to confirm it's working
+    st.dataframe(df_transactions, use_container_width=True)
 
     # =========================================================
     # CURRENT BALANCE CALCULATION
