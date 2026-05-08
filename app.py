@@ -5426,12 +5426,12 @@ def show_budget(df_transactions=None, df_budgets=None):
     # =========================================================
     now = pd.Timestamp.now()
     expenses = df_transactions[
-        (df_transactions["Type"] == "Out") &
+        (df_transactions["type"] == "Out") &
         (df_transactions["date"].dt.month == now.month) &
         (df_transactions["date"].dt.year == now.year)
     ]
     income = df_transactions[
-        (df_transactions["Type"] == "In") &
+        (df_transactions["type"] == "In") &
         (df_transactions["date"].dt.month == now.month) &
         (df_transactions["date"].dt.year == now.year)
     ]
@@ -5639,11 +5639,11 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
     # =========================================================
 
     inflow = df_transactions[
-        df_transactions["Type"] == "In"
+        df_transactions["type"] == "In"
     ]["amount"].sum()
 
     outflow = df_transactions[
-        df_transactions["Type"] == "Out"
+        df_transactions["type"] == "Out"
     ]["amount"].sum()
 
     balance = inflow - outflow
@@ -5670,7 +5670,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
             with col1:
                 date = st.date_input("date", value=datetime.today())
-                trans_type = st.selectbox("Type", ["Out", "In"])
+                trans_type = st.selectbox("type", ["Out", "In"])
 
             with col2:
                 category = st.selectbox(
@@ -5706,7 +5706,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
                     data = {
                         "user_id": user_id,
                         "date": str(date),
-                        "Type": trans_type,
+                        "type": trans_type,
                         "Category": category,
                         "amount": amount,
                         "Description": description
