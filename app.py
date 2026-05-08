@@ -5416,10 +5416,10 @@ def show_budget(df_transactions=None, df_budgets=None):
     df_budgets = df_budgets.copy()
 
     df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
-    df_transactions["Amount"] = pd.to_numeric(df_transactions["Amount"], errors="coerce")
+    df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
     df_transactions.columns = [c.replace(" ", "_") for c in df_transactions.columns]
     
-    df_transactions = df_transactions.dropna(subset=["date", "Amount"])
+    df_transactions = df_transactions.dropna(subset=["date", "amount"])
 
     # =========================================================
     # CURRENT MONTH FILTER
@@ -5439,8 +5439,8 @@ def show_budget(df_transactions=None, df_budgets=None):
     # =========================================================
     # KPIs
     # =========================================================
-    total_spent = expenses["Amount"].sum()
-    total_income = income["Amount"].sum()
+    total_spent = expenses["amount"].sum()
+    total_income = income["amount"].sum()
     total_budget = df_budgets["monthly_limit"].sum()
     remaining = total_budget - total_spent
     utilization = (total_spent / total_budget * 100) if total_budget > 0 else 0
@@ -5466,7 +5466,7 @@ def show_budget(df_transactions=None, df_budgets=None):
     
     # Ensure grouping works regardless of column naming (Category vs category)
     cat_col = "Category" if "Category" in expenses.columns else "Description"
-    grouped = expenses.groupby(cat_col)["Amount"].sum().to_dict()
+    grouped = expenses.groupby(cat_col)["amount"].sum().to_dict()
     all_categories = set(budget_map.keys()) | set(grouped.keys())
 
     for cat in all_categories:
@@ -5615,7 +5615,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
         errors="coerce"
     )
 
-    # Note: I changed "Amount" to "amount" to match the lowercase fix
+    # Note: I changed "amount" to "amount" to match the lowercase fix
     df_transactions["amount"] = pd.to_numeric(
         df_transactions["amount"],
         errors="coerce"
@@ -5640,11 +5640,11 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
     inflow = df_transactions[
         df_transactions["Type"] == "In"
-    ]["Amount"].sum()
+    ]["amount"].sum()
 
     outflow = df_transactions[
         df_transactions["Type"] == "Out"
-    ]["Amount"].sum()
+    ]["amount"].sum()
 
     balance = inflow - outflow
 
@@ -5683,7 +5683,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
                 )
 
                 amount = st.number_input(
-                    "Amount (UGX)",
+                    "amount (UGX)",
                     min_value=0,
                     step=1000
                 )
@@ -5695,7 +5695,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
             if submitted:
 
                 if amount <= 0:
-                    st.error("Amount must be greater than 0")
+                    st.error("amount must be greater than 0")
 
                 else:
 
@@ -5708,7 +5708,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
                         "date": str(date),
                         "Type": trans_type,
                         "Category": category,
-                        "Amount": amount,
+                        "amount": amount,
                         "Description": description
                     }
 
@@ -5737,7 +5737,7 @@ def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
 
         cat_summary = monthly_df.groupby(
             "Category"
-        )["Amount"].sum().reset_index()
+        )["amount"].sum().reset_index()
 
         st.bar_chart(
             cat_summary.set_index("Category")
