@@ -5410,30 +5410,30 @@ def normalize_df(df):
 
 # 1. Change the first line to make arguments optional (=None)
 def show_budget(df_transactions=None, df_budgets=None):
-    
-    # 2. Add these 'Emergency Fetch' lines
     if df_transactions is None:
-        # Get your main data (make sure 'get_data' is what you named your fetch function)
         df_transactions = get_data("petty_cash") 
         
     if df_budgets is None:
-        # Get your budget data
         df_budgets = get_data("budgets")
 
-    # --- Everything below stays exactly as you had it ---
     st.header("📊 Budget Tracker")
+    
+    # Normalize both
     df_transactions = normalize_df(df_transactions)
     df_budgets = normalize_df(df_budgets)
 
-    df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
-    df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
-    # Clean column names again just in case (as per your original logic)
-    df_transactions.columns = [c.replace(" ", "_") for c in df_transactions.columns]
+    # --- ONLY process date on Transactions ---
+    if "date" in df_transactions.columns:
+        df_transactions["date"] = pd.to_datetime(df_transactions["date"], errors="coerce")
     
+    if "amount" in df_transactions.columns:
+        df_transactions["amount"] = pd.to_numeric(df_transactions["amount"], errors="coerce")
+    
+    # Drop rows only if they are missing critical transaction data
     df_transactions = df_transactions.dropna(subset=["date", "amount"])
 
     # =========================================================
-    # CURRENT MONTH FILTER
+    # CURRENT MONTH FILTER (Only uses Transactions)
     # =========================================================
     now = pd.Timestamp.now()
     expenses = df_transactions[
@@ -5452,14 +5452,15 @@ def show_budget(df_transactions=None, df_budgets=None):
     # =========================================================
     total_spent = expenses["amount"].sum()
     total_income = income["amount"].sum()
-    total_budget = df_budgets["monthly_limit"].sum()
+    
+    # FIXED: Monthly limit doesn't need a date
+    total_budget = df_budgets["monthly_limit"].sum() if "monthly_limit" in df_budgets.columns else 0
+    
     remaining = total_budget - total_spent
     utilization = (total_spent / total_budget * 100) if total_budget > 0 else 0
     savings_rate = ((total_income - total_spent) / total_income * 100) if total_income > 0 else 0
 
-    # =========================================================
-    # KPI UI (Native Streamlit - No HTML required)
-    # =========================================================
+    # KPI UI
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Budget", f"UGX {total_budget:,.0f}")
     col2.metric("Spent", f"UGX {total_spent:,.0f}")
@@ -5469,16 +5470,14 @@ def show_budget(df_transactions=None, df_budgets=None):
     st.metric("💰 Savings Rate", f"{savings_rate:.1f}%")
 
     # =========================================================
-    # category ANALYSIS (FAST VERSION)
+    # category ANALYSIS
     # =========================================================
     st.subheader("📂 category Budgets")
     chart_data = []
     
-    # FIXED: Ensured index is 'category' (lowercase from normalize_df)
-    budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict()
+    # Create the map from budgets (no date needed)
+    budget_map = df_budgets.set_index("category")["monthly_limit"].to_dict() if "category" in df_budgets.columns else {}
     
-    # Ensure grouping works regardless of column naming (category vs category)
-    cat_col = "category" if "category" in expenses.columns else "description"
     expenses["category"] = expenses["category"].astype(str)
     grouped = expenses.groupby("category")["amount"].sum().to_dict()
     all_categories = set(budget_map.keys()) | set(grouped.keys())
@@ -5496,49 +5495,24 @@ def show_budget(df_transactions=None, df_budgets=None):
             "Percent": percent * 100
         })
 
-        # Progress Logic
         st.write(f"**{cat}**")
         col_left, col_right = st.columns([8, 2])
         col_left.progress(min(float(percent), 1.0))
         col_right.write(f"{percent*100:.0f}%")
         st.caption(f"UGX {spent:,.0f} of UGX {limit:,.0f}")
 
-        if spent > limit and limit > 0:
-            st.warning(f"⚠️ {cat} over by UGX {spent - limit:,.0f}")
-
     chart_df = pd.DataFrame(chart_data)
     if chart_df.empty:
         st.info("No budget data yet.")
         return
 
-    # =========================================================
-    # ANALYTICS
-    # =========================================================
+    # Analytics Section (using chart_df which we just built)
     st.subheader("📈 Analytics")
     colA, colB = st.columns(2)
     with colA:
-        st.plotly_chart(
-            px.bar(
-                chart_df,
-                x="category", # Lowercase
-                y=["Spent", "Budget"],
-                barmode="group",
-                title="Spent vs Budget",
-                color_discrete_sequence=["#EF4444", "#6366F1"]
-            ),
-            use_container_width=True
-        )
+        st.plotly_chart(px.bar(chart_df, x="category", y=["Spent", "Budget"], barmode="group", title="Spent vs Budget"), use_container_width=True)
     with colB:
-        st.plotly_chart(
-            go.Figure(
-                data=[go.Pie(
-                    labels=chart_df["category"], # Lowercase
-                    values=chart_df["Spent"],
-                    hole=0.65
-                )]
-            ).update_traces(textinfo="percent+label").update_layout(title="Spending Split"),
-            use_container_width=True
-        )
+        st.plotly_chart(go.Figure(data=[go.Pie(labels=chart_df["category"], values=chart_df["Spent"], hole=0.65)]).update_layout(title="Spending Split"), use_container_width=True)
 
     # =========================================================
     # INSIGHTS ENGINE
