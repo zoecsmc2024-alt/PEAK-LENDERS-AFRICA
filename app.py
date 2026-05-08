@@ -5815,7 +5815,7 @@ if __name__ == "__main__":
                 show_settings()
             elif page == "Budget":
                 show_budget()
-                elif page == "Petty_Cash":
+            elif page == "Petty_Cash":
                 show_petty_cash()
             else:
                 # If it falls through here, we show what exactly was received
