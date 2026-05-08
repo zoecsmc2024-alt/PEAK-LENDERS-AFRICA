@@ -5582,9 +5582,18 @@ def show_budget(df_transactions=None, df_budgets=None):
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+def show_petty_cash(df_transactions=None, supabase=None, user_id=None):
+    if supabase is None:
+        supabase = st.session_state.get("supabase")
+    
+    if user_id is None:
+        user_id = st.session_state.get("user_id")
 
-
-def show_petty_cash(df_transactions, supabase, user_id):
+    if df_transactions is None:
+        df_transactions = get_data("petty_cash") 
+    if user_id is None:
+        st.error("Authentication Error: Please log in again.")
+        return
 
     st.header("💵 Petty Cash Management")
 
