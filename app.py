@@ -955,12 +955,22 @@ def login_page(supabase):
                 return
 
             # CREATE SESSION
-            st.session_state["authenticated"] = True
+            st.session_state["logged_in"] = True
+            
             st.session_state["user_id"] = user["id"]
+            
             st.session_state["tenant_id"] = user["tenant_id"]
-            st.session_state["role"] = user.get("role", "Staff")
-            st.session_state["company"] = db_company
-
+            
+            st.session_state["role"] = user.get(
+                "role",
+                "Staff"
+            )
+            
+            st.session_state["company"] = user.get(
+                "tenants",
+                {}
+            ).get("name", "")
+            
             # SAFE AUDIT
             safe_audit_log(supabase, {
                 "user_id": user["id"],
@@ -968,9 +978,7 @@ def login_page(supabase):
                 "tenant_id": user["tenant_id"],
                 "timestamp": datetime.now().isoformat()
             })
-
-            st.session_state["authenticated"] = True
-
+            
             st.success("✅ Login successful")
             
             st.rerun()
