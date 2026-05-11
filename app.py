@@ -537,50 +537,127 @@ def tenant_filter(df):
     return df[df["tenant_id"] == st.session_state.get("tenant_id")].copy()
 
 # =========================================
-# 🔐 MODERN AUTHENTICATION UI
+# 🌟 BEAUTIFUL MODERN AUTH UI
 # =========================================
+# REQUIREMENTS:
+# pip install streamlit streamlit-extras
+#
+# STREAMLIT >= 1.32 recommended
+# =========================================
+
 import streamlit as st
 import uuid
 from datetime import datetime
 
 
 # =========================================
-# 🏢 COMPANY REGISTRATION
+# 🎨 GLOBAL STYLING
 # =========================================
+def auth_styles():
+
+    st.markdown("""
+    <style>
+
+    /* Page background */
+    .stApp {
+        background: linear-gradient(135deg,#EEF4FF,#F8FAFC);
+    }
+
+    /* Main login card */
+    .auth-card {
+        padding: 2rem;
+        border-radius: 24px;
+        background: white;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        border: 1px solid #E5E7EB;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        border-radius: 12px;
+        height: 42px;
+        border: none;
+        font-weight: 600;
+        transition: 0.3s;
+        background: linear-gradient(90deg,#1D4ED8,#2563EB);
+        color: white;
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-2px);
+        background: linear-gradient(90deg,#2563EB,#3B82F6);
+        color: white;
+    }
+
+    /* Inputs */
+    .stTextInput > div > div > input {
+        border-radius: 12px;
+        border: 1px solid #CBD5E1;
+        padding: 12px;
+    }
+
+    /* Small utility buttons */
+    div[data-testid="column"] .stButton > button {
+        background: white;
+        color: #1E3A8A;
+        border: 1px solid #CBD5E1;
+        height: 38px;
+    }
+
+    div[data-testid="column"] .stButton > button:hover {
+        border: 1px solid #2563EB;
+        color: #2563EB;
+        background: #EFF6FF;
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# =========================================
+# 🏢 COMPANY REGISTRATION DIALOG
+# =========================================
+@st.dialog("🏢 Register Company")
 def admin_company_registration(supabase):
 
-    st.markdown("## 🏢 Register Your Company")
+    st.caption("Create your organization account")
 
     with st.form("company_reg_form"):
 
-        st.text_input("Organization Name", key="company_name")
-        st.text_input("Admin Full Name", key="admin_name")
-        st.text_input("Business Email", key="admin_email")
-        st.text_input("Password", type="password", key="admin_pwd")
+        company_name = st.text_input(
+            "Organization Name",
+            placeholder="Peak-Lenders Africa"
+        )
+
+        admin_name = st.text_input(
+            "Admin Full Name",
+            placeholder="John Doe"
+        )
+
+        email = st.text_input(
+            "Business Email",
+            placeholder="admin@company.com"
+        )
+
+        pwd = st.text_input(
+            "Password",
+            type="password",
+            placeholder="Enter secure password"
+        )
 
         submit = st.form_submit_button(
-            "Create Organization",
+            "✨ Create Organization",
             use_container_width=True
         )
 
-    # 🔙 Back button
-    if st.button("⬅️ Back to Login"):
-        st.session_state["view"] = "login"
-        st.rerun()
-
     if submit:
-
-        company_name = st.session_state.get("company_name", "").strip()
-        admin_name = st.session_state.get("admin_name", "").strip()
-        email = st.session_state.get("admin_email", "").strip().lower()
-        pwd = st.session_state.get("admin_pwd", "").strip()
 
         if not all([company_name, admin_name, email, pwd]):
             st.error("All fields are required")
             return
 
         try:
-            # Create auth user
+
             res = supabase.auth.sign_up({
                 "email": email,
                 "password": pwd
@@ -589,7 +666,11 @@ def admin_company_registration(supabase):
             if res.user:
 
                 tenant_id = str(uuid.uuid4())
-                company_code = f"{company_name[:3].upper()}{uuid.uuid4().int % 999}"
+
+                company_code = (
+                    f"{company_name[:3].upper()}"
+                    f"{uuid.uuid4().int % 999}"
+                )
 
                 # Create tenant
                 supabase.table("tenants").insert({
@@ -598,7 +679,7 @@ def admin_company_registration(supabase):
                     "company_code": company_code
                 }).execute()
 
-                # Create admin user
+                # Create admin
                 supabase.table("users").insert({
                     "id": res.user.id,
                     "name": admin_name,
@@ -607,7 +688,7 @@ def admin_company_registration(supabase):
                     "role": "Admin"
                 }).execute()
 
-                # Audit log
+                # Audit
                 supabase.table("audit_logs").insert({
                     "user_id": res.user.id,
                     "action": "CREATE_COMPANY",
@@ -616,47 +697,50 @@ def admin_company_registration(supabase):
                 }).execute()
 
                 st.success(
-                    f"✅ {company_name} registered successfully!\n\n"
+                    f"✅ Organization created!\n\n"
                     f"Company Code: {company_code}"
                 )
-
-                st.session_state["view"] = "login"
-                st.rerun()
 
         except Exception as e:
             st.error(f"Registration failed: {e}")
 
 
 # =========================================
-# 👥 STAFF SIGNUP
+# 👥 STAFF SIGNUP DIALOG
 # =========================================
+@st.dialog("👥 Staff Registration")
 def view_staff_signup(supabase):
 
-    st.markdown("## 👥 Staff Sign-Up")
+    st.caption("Create a staff account")
 
     with st.form("staff_signup_form"):
 
-        st.text_input("Company Name", key="staff_company")
-        st.text_input("Full Name", key="staff_name")
-        st.text_input("Email", key="staff_email")
-        st.text_input("Password", type="password", key="staff_pwd")
+        company = st.text_input(
+            "Company Name",
+            placeholder="Peak-Lenders Africa"
+        )
+
+        name = st.text_input(
+            "Full Name",
+            placeholder="Jane Doe"
+        )
+
+        email = st.text_input(
+            "Email Address",
+            placeholder="staff@company.com"
+        )
+
+        pwd = st.text_input(
+            "Password",
+            type="password"
+        )
 
         submit = st.form_submit_button(
-            "Create Staff Account",
+            "🚀 Create Staff Account",
             use_container_width=True
         )
 
-    # 🔙 Back button
-    if st.button("⬅️ Back to Login"):
-        st.session_state["view"] = "login"
-        st.rerun()
-
     if submit:
-
-        company = st.session_state.get("staff_company", "").strip()
-        name = st.session_state.get("staff_name", "").strip()
-        email = st.session_state.get("staff_email", "").strip().lower()
-        pwd = st.session_state.get("staff_pwd", "").strip()
 
         if not all([company, name, email, pwd]):
             st.error("All fields are required")
@@ -664,7 +748,6 @@ def view_staff_signup(supabase):
 
         try:
 
-            # Find tenant
             tenant_query = supabase.table("tenants") \
                 .select("*") \
                 .ilike("name", company) \
@@ -676,7 +759,6 @@ def view_staff_signup(supabase):
 
             tenant = tenant_query.data[0]
 
-            # Create auth user
             res = supabase.auth.sign_up({
                 "email": email,
                 "password": pwd
@@ -684,7 +766,6 @@ def view_staff_signup(supabase):
 
             if res.user:
 
-                # Create profile
                 supabase.table("users").insert({
                     "id": res.user.id,
                     "name": name,
@@ -693,126 +774,133 @@ def view_staff_signup(supabase):
                     "role": "Staff"
                 }).execute()
 
-                st.success("✅ Staff account created successfully!")
-
-                st.session_state["view"] = "login"
-                st.rerun()
+                st.success("✅ Staff account created!")
 
         except Exception as e:
             st.error(f"Signup failed: {e}")
 
 
 # =========================================
-# 🔑 FORGOT PASSWORD
+# 🔑 RESET PASSWORD DIALOG
 # =========================================
+@st.dialog("🔑 Forgot Password")
 def forgot_password_page(supabase):
 
-    st.markdown("## 🔑 Forgot Password")
+    st.caption("Reset your account password")
 
-    email = st.text_input("Enter your registered email")
+    email = st.text_input(
+        "Registered Email",
+        placeholder="you@example.com"
+    )
 
-    if st.button("Send Reset Link", use_container_width=True):
+    if st.button(
+        "📩 Send Reset Link",
+        use_container_width=True
+    ):
 
         if not email:
-            st.error("Email is required")
+            st.error("Email required")
             return
 
         try:
+
             supabase.auth.reset_password_for_email(email)
 
-            st.success("✅ Password reset link sent to your email")
+            st.success(
+                "✅ Password reset email sent"
+            )
 
         except Exception as e:
             st.error(f"Reset failed: {e}")
 
-    if st.button("⬅️ Back to Login"):
-        st.session_state["view"] = "login"
-        st.rerun()
-
 
 # =========================================
-# 🔐 LOGIN PAGE
+# 🔐 BEAUTIFUL LOGIN PAGE
 # =========================================
 def login_page(supabase):
 
-    st.markdown("""
-        <style>
-        .auth-card {
-            background: white;
-            padding: 30px;
-            border-radius: 18px;
-            box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-        }
+    auth_styles()
 
-        .main-title {
-            color: white;
-            font-size: 34px;
-            font-weight: bold;
-        }
+    st.write("")
+    st.write("")
+    st.write("")
 
-        .subtitle {
-            color: #DBEAFE;
-            font-size: 16px;
-        }
-        </style>
-    """, unsafe_allow_html=True)
+    left, center, right = st.columns([1, 1.3, 1])
 
-    st.markdown("""
-        <div style="
-            background: linear-gradient(90deg,#1E3A8A,#2B3F87);
-            padding:30px;
-            border-radius:20px;
-            margin-bottom:25px;
-        ">
-            <div class="main-title">💰 PEAK-LENDERS AFRICA</div>
-            <div class="subtitle">Secure Business Login Portal</div>
-        </div>
-    """, unsafe_allow_html=True)
+    with center:
 
-    with st.form("login_form"):
+        st.markdown("""
+        <div class="auth-card">
+        """, unsafe_allow_html=True)
 
-        st.text_input("Business Name", key="login_company")
-        st.text_input("Email Address", key="login_email")
-        st.text_input("Password", type="password", key="login_pwd")
+        st.markdown("# 💰 PEAK-LENDERS")
+        st.caption("Secure Business Login Portal")
 
-        submit = st.form_submit_button(
-            "Access Dashboard",
-            use_container_width=True
-        )
+        st.divider()
 
-    # =====================================
-    # NAVIGATION BUTTONS
-    # =====================================
-    st.markdown("###")
+        # ==============================
+        # LOGIN FORM
+        # ==============================
+        with st.form("login_form"):
 
-    col1, col2, col3 = st.columns(3)
+            company_name = st.text_input(
+                "Business Name",
+                placeholder="Enter company name"
+            )
 
-    with col1:
-        if st.button("🏢 Register Company", use_container_width=True):
-            st.session_state["view"] = "create_company"
-            st.rerun()
+            email = st.text_input(
+                "Email Address",
+                placeholder="Enter email"
+            )
 
-    with col2:
-        if st.button("👥 Staff Sign-Up", use_container_width=True):
-            st.session_state["view"] = "signup"
-            st.rerun()
+            pwd = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Enter password"
+            )
 
-    with col3:
-        if st.button("🔑 Forgot Password", use_container_width=True):
-            st.session_state["view"] = "forgot_password"
-            st.rerun()
+            submit = st.form_submit_button(
+                "🔓 Access Dashboard",
+                use_container_width=True
+            )
+
+        st.write("")
+
+        # ==============================
+        # ACTION BUTTONS
+        # ==============================
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button(
+                "🏢 Register",
+                use_container_width=True
+            ):
+                admin_company_registration(supabase)
+
+        with col2:
+            if st.button(
+                "👥 Staff",
+                use_container_width=True
+            ):
+                view_staff_signup(supabase)
+
+        with col3:
+            if st.button(
+                "🔑 Reset",
+                use_container_width=True
+            ):
+                forgot_password_page(supabase)
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     # =====================================
     # LOGIN LOGIC
     # =====================================
     if submit:
 
-        email = st.session_state.get("login_email", "").strip().lower()
-        company_name = st.session_state.get(
-            "login_company", ""
-        ).strip().lower()
-
-        pwd = st.session_state.get("login_pwd", "")
+        email = email.strip().lower()
+        company_name = company_name.strip().lower()
 
         if not all([company_name, email, pwd]):
             st.error("All fields are required")
@@ -820,7 +908,7 @@ def login_page(supabase):
 
         try:
 
-            # Login auth
+            # LOGIN
             res = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": pwd
@@ -830,7 +918,7 @@ def login_page(supabase):
                 st.error("Invalid credentials")
                 return
 
-            # Fetch profile
+            # GET PROFILE
             user_query = supabase.table("users") \
                 .select("*, tenants(name)") \
                 .eq("id", res.user.id) \
@@ -847,20 +935,20 @@ def login_page(supabase):
             ).get("name", "").lower()
 
             if db_company != company_name:
+
                 st.error(
-                    f"Membership Error: "
                     f"Not linked to '{company_name}'"
                 )
                 return
 
-            # Session state
+            # SESSION
             st.session_state["authenticated"] = True
             st.session_state["user_id"] = user["id"]
             st.session_state["tenant_id"] = user["tenant_id"]
             st.session_state["role"] = user.get("role", "Staff")
             st.session_state["company"] = db_company
 
-            # Audit log
+            # AUDIT LOG
             supabase.table("audit_logs").insert({
                 "user_id": user["id"],
                 "action": "LOGIN",
@@ -876,27 +964,11 @@ def login_page(supabase):
 
 
 # =========================================
-# 🌐 AUTH ROUTER
+# 🚀 AUTH ROUTER
 # =========================================
 def run_auth_ui(supabase):
 
-    if "view" not in st.session_state:
-        st.session_state["view"] = "login"
-
-    view = st.session_state["view"]
-
-    if view == "login":
-        login_page(supabase)
-
-    elif view == "signup":
-        view_staff_signup(supabase)
-
-    elif view == "create_company":
-        admin_company_registration(supabase)
-
-    elif view == "forgot_password":
-        forgot_password_page(supabase)
-
+    login_page(supabase)
 
 
 
