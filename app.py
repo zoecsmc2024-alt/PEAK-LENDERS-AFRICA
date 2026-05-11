@@ -842,70 +842,50 @@ def login_page(supabase):
 
         try:
 
-            # AUTH LOGIN
+            # LOGIN
             res = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": pwd
             })
-
+        
             if not res.user:
                 st.error("Invalid credentials")
                 return
-
-            # FETCH USER PROFILE
-            profile = supabase.table("user_profiles")\
-                .select("*")\
-                .eq("id", res.user.id)\
+        
+            # SAFE PROFILE FETCH
+            user_query = supabase.table("users") \
+                .select("*, tenants(name)") \
+                .eq("id", res.user.id) \
                 .execute()
-
-            if not user_query.data:
+        
+            data = user_query.data if user_query else None
+        
+            if not data:
                 st.error("Profile not found")
                 return
-
-            user = user_query.data[0]
-
-            db_company = user.get(
-                "tenants", {}
+        
+            user = data[0]
+        
+            db_company = (
+                user.get("tenants", {}) or {}
             ).get("name", "").lower()
-
+        
             if db_company != company_name:
-
-                st.error(
-                    f"Not linked to '{company_name}'"
-                )
+                st.error(f"Not linked to '{company_name}'")
                 return
-
-            # CREATE SESSION
+        
+            # SESSION
             st.session_state["logged_in"] = True
-            
             st.session_state["user_id"] = user["id"]
-            
             st.session_state["tenant_id"] = user["tenant_id"]
-            
-            st.session_state["role"] = user.get(
-                "role",
-                "Staff"
-            )
-            
-            st.session_state["company"] = user.get(
-                "tenants",
-                {}
-            ).get("name", "")
-            
-            # SAFE AUDIT
-            safe_audit_log(supabase, {
-                "user_id": user["id"],
-                "action": "LOGIN",
-                "tenant_id": user["tenant_id"],
-                "timestamp": datetime.now().isoformat()
-            })
-            
-            st.success("✅ Login successful")
-            
+            st.session_state["role"] = user.get("role", "Staff")
+            st.session_state["company"] = db_company
+        
+            st.success("Login successful")
             st.rerun()
+        
         except Exception as e:
             st.error(f"Login failed: {e}")
-
 
 # =========================================
 # 🌐 AUTH ROUTER
