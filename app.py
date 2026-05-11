@@ -928,137 +928,156 @@ def run_auth_ui(supabase):
         admin_company_registration(supabase)
 
 
-def render_sidebar():
-    """Renders the business selector, branding, and main navigation."""
-    # 1️⃣ Fetch tenants
+# ============================================================
+# ⚡ ENTERPRISE SIDEBAR (FAST + CLEAN + SAFE)
+# ============================================================
+
+import streamlit as st
+import time
+import pandas as pd
+
+
+# ============================================================
+# 🧠 CACHE: TENANTS (CRITICAL SPEED FIX)
+# ============================================================
+@st.cache_data(ttl=600, show_spinner=False)
+def get_tenants():
     try:
-        tenants_res = supabase.table("tenants")\
+        res = supabase.table("tenants")\
             .select("id, name, brand_color, logo_url")\
             .execute()
-        tenant_map = {row['name']: row for row in tenants_res.data} if tenants_res.data else {}
-    except Exception as e:
-        st.sidebar.error(f"Error fetching tenants: {e}")
-        tenant_map = {}
+        return res.data or []
+    except:
+        return []
 
-    # 2️⃣ Sidebar UI
+
+# ============================================================
+# 🖼️ CACHE: LOGO BUILDER
+# ============================================================
+@st.cache_data(ttl=600)
+def build_logo_url(logo_val):
+    if not logo_val:
+        return None
+
+    if str(logo_val).startswith("http"):
+        return logo_val
+
+    base = st.secrets.get("SUPABASE_URL", "").strip("/")
+    if not base:
+        return None
+
+    return f"{base}/storage/v1/object/public/company-logos/{logo_val}"
+
+
+# ============================================================
+# 🚦 SIDEBAR (ENTERPRISE VERSION)
+# ============================================================
+def render_sidebar():
+
+    # --------------------------------------------------------
+    # 1. FETCH TENANTS (CACHED)
+    # --------------------------------------------------------
+    tenants = get_tenants()
+    tenant_map = {t["name"]: t for t in tenants}
+
+    selected_page = "Overview"
+
     with st.sidebar:
-        st.markdown('<div style="padding-top:10px;"></div>', unsafe_allow_html=True)
 
-        active_company = None  # ✅ Initialize to avoid undefined variable
+        st.markdown("")
 
-        if tenant_map:
-            options = list(tenant_map.keys())
-            current_tenant_id = st.session_state.get('tenant_id')
-
-            # Determine default index in dropdown
-            default_index = 0
-            if current_tenant_id:
-                for i, name in enumerate(options):
-                    if str(tenant_map[name]['id']) == str(current_tenant_id):
-                        default_index = i
-                        break
-
-            selected_name = st.selectbox(
-                "🏢 Business Portal",
-                options,
-                index=default_index,
-                key="sidebar_portal_select"
-            )
-
-            active_company = tenant_map.get(selected_name)
-            
-            # ✅ ADD THIS LINE to define the missing variable
-            active_company_name = selected_name
-            # 🔑 Login form with forced white text for visibility
-            if active_company and (st.session_state.get('tenant_id') != active_company['id']):
-                # Force the header to be white
-                st.markdown(f"<h3 style='color:white;'>🔑 Login to {selected_name}</h3>", unsafe_allow_html=True)
-                
-                # Use a container to target sub-labels if needed, 
-                # but standard markdown with styling is most reliable:
-                st.markdown("<p style='color:white; margin-bottom:-15px;'>Email</p>", unsafe_allow_html=True)
-                email = st.text_input("", key="login_email", placeholder="Enter your email")
-                
-                st.markdown("<p style='color:white; margin-bottom:-15px; margin-top:10px;'>Password</p>", unsafe_allow_html=True)
-                pwd = st.text_input("", type="password", key="login_pwd", placeholder="Enter password")
-                
-                if st.button("Access Dashboard", key="login_button", use_container_width=True):
-                    # ... (your existing login logic stays the same)
-                    try:
-                        # Attempt Supabase login
-                        res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
-                        if not res.user:
-                            st.error("Login failed. Check credentials.")
-                        else:
-                            # Successful login → update session state
-                            st.session_state.update({
-                                'tenant_id': active_company['id'],
-                                'company': selected_name,
-                                'theme_color': active_company.get('brand_color', '#1E3A8A'),
-                                'user_id': res.user.id,
-                                'logged_in': True
-                            })
-                            st.success(f"✅ Logged in to {selected_name}")
-                            st.cache_data.clear()
-                            st.rerun()
-                    except Exception as e:
-                        st.error(f"Login error: {e}")
-
-        else:
-            st.sidebar.warning("No business entities found.")
+        # ----------------------------------------------------
+        # 2. BUSINESS SELECTOR
+        # ----------------------------------------------------
+        if not tenant_map:
+            st.warning("No businesses found")
             st.stop()
-        # ==============================
-        # 💎 BRANDING (LOGO & name)
-        # ==============================
-        logo_val = active_company.get('logo_url') if active_company else None
-        final_logo_url = None
 
-        if logo_val and str(logo_val).lower() not in ["0", "none", "null", ""]:
-            if str(logo_val).startswith("http"):
-                final_logo_url = logo_val
-            else:
-                # Construct public Supabase storage URL
-                proj_url = st.secrets.get("SUPABASE_URL", "").strip("/")
-                if proj_url:
-                    final_logo_url = f"{proj_url}/storage/v1/object/public/company-logos/{logo_val}"
+        options = list(tenant_map.keys())
 
-        # Render Logo with CSS "Glow"
-        if final_logo_url:
-            st.markdown(f"""
-            <div style="display:flex; justify-content:center; align-items:center; margin-top:10px;">
-                <div style="padding:10px; border-radius:50%; background: radial-gradient(circle, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0) 70%);">
-                    <img src="{final_logo_url}?t={int(time.time())}" width="75" style="border-radius:50%; object-fit:cover; aspect-ratio: 1/1;" />
+        current_tenant_id = st.session_state.get("tenant_id")
+
+        default_index = 0
+        for i, name in enumerate(options):
+            if tenant_map[name]["id"] == current_tenant_id:
+                default_index = i
+                break
+
+        selected_name = st.selectbox(
+            "🏢 Business Portal",
+            options,
+            index=default_index,
+            key="sidebar_business_selector"
+        )
+
+        active_company = tenant_map[selected_name]
+
+        # ----------------------------------------------------
+        # 3. UPDATE THEME (FAST STATE ONLY)
+        # ----------------------------------------------------
+        st.session_state["theme_color"] = active_company.get(
+            "brand_color",
+            "#1E3A8A"
+        )
+
+        # ----------------------------------------------------
+        # 4. LOGO + BRANDING
+        # ----------------------------------------------------
+        logo_url = build_logo_url(active_company.get("logo_url"))
+
+        if logo_url:
+            st.markdown(
+                f"""
+                <div style="display:flex; justify-content:center;">
+                    <img src="{logo_url}?t={int(time.time())}"
+                        width="80"
+                        style="border-radius:50%; object-fit:cover;" />
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """,
+                unsafe_allow_html=True
+            )
         else:
-            st.markdown("<h1 style='text-align:center; margin-top:10px;'>🏢</h1>", unsafe_allow_html=True)
+            st.markdown("### 🏢")
 
-        st.markdown(f"""
-            <div style='text-align:center; font-weight:600; font-size:16px; color:#f1f5f9;'>
-                {active_company_name} <span style="color:#22c55e;">✔</span>
+        st.markdown(
+            f"""
+            <div style='text-align:center; font-weight:600; color:white;'>
+                {selected_name}
             </div>
-            <div style='text-align:center; font-size:10px; color:rgba(255,255,255,0.6); letter-spacing:2px; margin-bottom:10px;'>FINANCE CORE</div>
-        """, unsafe_allow_html=True)
+            <div style='text-align:center; font-size:10px; color:rgba(255,255,255,0.6);'>
+                FINANCE CORE
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
 
         st.divider()
 
-        # ==============================
-        # 📍 NAVIGATION MENU
-        # ==============================
+        # ----------------------------------------------------
+        # 5. NAVIGATION MENU (FAST STATE ONLY)
+        # ----------------------------------------------------
         menu = {
-            "Overview": "📈", "loans": "💵", "borrowers": "👥", "Collateral": "🛡️",
-            "Calendar": "📅", "Ledger": "📄", "Payroll": "💳", "Expenses": "📉",
-            "Overdue Tracker": "🚨", "Payments": "💰", "Reports": "📊", "Settings":
-            "⚙️"
+            "Overview": "📈",
+            "loans": "💵",
+            "borrowers": "👥",
+            "Collateral": "🛡️",
+            "Calendar": "📅",
+            "Ledger": "📄",
+            "Payroll": "💳",
+            "Expenses": "📉",
+            "Overdue Tracker": "🚨",
+            "Payments": "💰",
+            "Reports": "📊",
+            "Settings": "⚙️"
         }
 
-        menu_options = [f"{emoji} {name}" for name, emoji in menu.items()]
-        current_p = st.session_state.get('current_page', "Overview")
+        menu_options = [f"{v} {k}" for k, v in menu.items()]
+
+        current_page = st.session_state.get("current_page", "Overview")
 
         try:
-            default_ix = list(menu.keys()).index(current_p)
-        except ValueError:
+            default_ix = list(menu.keys()).index(current_page)
+        except:
             default_ix = 0
 
         selection = st.radio(
@@ -1066,24 +1085,28 @@ def render_sidebar():
             menu_options,
             index=default_ix,
             label_visibility="collapsed",
-            key="navigation_radio"
+            key="nav_radio"
         )
 
         selected_page = selection.split(" ", 1)[1]
-        st.session_state['current_page'] = selected_page
+        st.session_state["current_page"] = selected_page
 
-        # ==============================
-        # 🔐 LOGOUT BUTTON
-        # ==============================
-        if st.session_state.get("authenticated"):
-            st.markdown("<div style='margin-top:30px;'></div>", unsafe_allow_html=True)
-            if st.button("🚪 Logout", use_container_width=True, type="secondary"):
-                # Clear all session state keys
-                for key in list(st.session_state.keys()):
-                    del st.session_state[key]
-                
-                st.success("Logged out successfully.")
-                time.sleep(0.5)
+        st.divider()
+
+        # ----------------------------------------------------
+        # 6. LOGOUT (SAFE + CLEAN)
+        # ----------------------------------------------------
+        if st.session_state.get("logged_in"):
+
+            if st.button("🚪 Logout", use_container_width=True):
+
+                # clear session safely
+                for k in list(st.session_state.keys()):
+                    del st.session_state[k]
+
+                st.session_state["logged_in"] = False
+                st.session_state["view"] = "login"
+
                 st.rerun()
 
     return selected_page
