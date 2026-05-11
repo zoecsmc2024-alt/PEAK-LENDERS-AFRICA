@@ -10,3 +10,4 @@ streamlit-calendar
 reportlab
 extra-streamlit-components
 openpyxl
+streamlit-extras
