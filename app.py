@@ -2600,51 +2600,47 @@ def show_loans():
     )
     
     # ------------------------------
-    # REVISED SMART STATUS LOGIC
+    # REVISED SMART STATUS LOGIC (V2)
     # ------------------------------
     
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
     
-    # 1. Sort the entire dataframe first to ensure chronological order within groups
+    # 1. Sort to ensure chronological order
     loans_df = loans_df.sort_values(by=["sn", "cycle_no", "start_date"])
     
-    # 2. Default all to CLEARED
-    loans_df["status"] = "CLEARED"
-    
-    # 3. Process each loan family
+    # 2. Process each loan family
     for sn_val, grp in loans_df.groupby("sn"):
         
-        # Get indices of the group to update the main dataframe correctly
         indices = grp.index.tolist()
-        
-        # The absolute latest record for this person (last cycle)
         latest_idx = indices[-1]
         
-        # Mark all previous cycles as BCF (if they aren't the last one)
+        # 3. Mark all rows EXCEPT the last one as BCF
+        # (Because a newer cycle exists, these are inherently "Brought Forward")
         if len(indices) > 1:
-            previous_indices = indices[:-1]
-            loans_df.loc[previous_indices, "status"] = "BCF"
+            loans_df.loc[indices[:-1], "status"] = "BCF"
         
-        # 4. Handle the Latest Cycle Logic
+        # 4. Handle the Latest Cycle
         latest_row = loans_df.loc[latest_idx]
         
-        if latest_row["balance"] > 0:
+        # Check if balance is effectively zero (handling float rounding)
+        if abs(latest_row["balance"]) < 1.0: 
+            loans_df.at[latest_idx, "status"] = "CLEARED"
+        else:
+            # If there's a balance, determine if it's a fresh loan or a rollover
             if int(latest_row["cycle_no"]) == 1:
                 loans_df.at[latest_idx, "status"] = "ACTIVE"
             else:
                 loans_df.at[latest_idx, "status"] = "PENDING"
-        else:
-            # If the latest cycle is paid off, it's CLEARED
-            loans_df.at[latest_idx, "status"] = "CLEARED"
     
     # ------------------------------
-    # FINAL OVERRIDE
+    # FINAL SAFETY OVERRIDE
     # ------------------------------
-    # Safety net: If balance is 0, it MUST be CLEARED, 
-    # UNLESS it's an old cycle that was rolled over (BCF).
-    # In your case, usually BCF implies it was "cleared" by moving to a new loan.
-    # If you want 0 balance to ALWAYS show CLEARED regardless of BCF status:
-    # loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
+    # If ANY row (even a middle one) has 0 balance, it cannot be PENDING or ACTIVE.
+    # It's either BCF (if a newer cycle exists) or CLEARED.
+    # This rule forces any 0 balance "Pending" rows to "Cleared".
+    
+    mask_zero = (loans_df["balance"] <= 0) & (loans_df["status"] != "BCF")
+    loans_df.loc[mask_zero, "status"] = "CLEARED"
     
     # ------------------------------
     # FINAL RULE: FORCE CLEARED STATE
