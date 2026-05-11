@@ -2600,58 +2600,51 @@ def show_loans():
     )
     
     # ------------------------------
-    # SMART STATUS LOGIC (FIXED + STABLE)
+    # REVISED SMART STATUS LOGIC
     # ------------------------------
     
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
     
-    # Default all to CLEARED first (base state)
+    # 1. Sort the entire dataframe first to ensure chronological order within groups
+    loans_df = loans_df.sort_values(by=["sn", "cycle_no", "start_date"])
+    
+    # 2. Default all to CLEARED
     loans_df["status"] = "CLEARED"
     
-    # Ensure numeric safety
-    loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
-    
-    # Process each loan family (SN group)
+    # 3. Process each loan family
     for sn_val, grp in loans_df.groupby("sn"):
-    
-        grp = grp.copy()
-    
-        # Identify ALL active loans in this SN family
-        active_grp = grp[grp["balance"] > 0]
-    
-        if active_grp.empty:
-            # No active loans → everything remains CLEARED
-            continue
-    
-        # Sort chronologically to find latest cycle
-        active_grp = active_grp.sort_values(
-            by=["cycle_no", "start_date", "id"]
-        )
-    
-        latest_id = active_grp.iloc[-1]["id"]
-    
-        # 1️⃣ Mark ALL PREVIOUS ACTIVE LOANS as BCF
-        previous_ids = active_grp.iloc[:-1]["id"].tolist()
-    
-        if previous_ids:
-            loans_df.loc[
-                loans_df["id"].isin(previous_ids),
-                "status"
-            ] = "BCF"
-    
-        # 2️⃣ Handle latest active loan
-        latest_row = active_grp.iloc[-1]
-    
-        if int(latest_row["cycle_no"]) == 1:
-            loans_df.loc[
-                loans_df["id"] == latest_id,
-                "status"
-            ] = "ACTIVE"
+        
+        # Get indices of the group to update the main dataframe correctly
+        indices = grp.index.tolist()
+        
+        # The absolute latest record for this person (last cycle)
+        latest_idx = indices[-1]
+        
+        # Mark all previous cycles as BCF (if they aren't the last one)
+        if len(indices) > 1:
+            previous_indices = indices[:-1]
+            loans_df.loc[previous_indices, "status"] = "BCF"
+        
+        # 4. Handle the Latest Cycle Logic
+        latest_row = loans_df.loc[latest_idx]
+        
+        if latest_row["balance"] > 0:
+            if int(latest_row["cycle_no"]) == 1:
+                loans_df.at[latest_idx, "status"] = "ACTIVE"
+            else:
+                loans_df.at[latest_idx, "status"] = "PENDING"
         else:
-            loans_df.loc[
-                loans_df["id"] == latest_id,
-                "status"
-            ] = "PENDING"
+            # If the latest cycle is paid off, it's CLEARED
+            loans_df.at[latest_idx, "status"] = "CLEARED"
+    
+    # ------------------------------
+    # FINAL OVERRIDE
+    # ------------------------------
+    # Safety net: If balance is 0, it MUST be CLEARED, 
+    # UNLESS it's an old cycle that was rolled over (BCF).
+    # In your case, usually BCF implies it was "cleared" by moving to a new loan.
+    # If you want 0 balance to ALWAYS show CLEARED regardless of BCF status:
+    # loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
     
     # ------------------------------
     # FINAL RULE: FORCE CLEARED STATE
