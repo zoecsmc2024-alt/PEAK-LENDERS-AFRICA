@@ -833,7 +833,7 @@ def login_page(supabase):
         <div class="auth-card">
         """, unsafe_allow_html=True)
 
-        st.markdown("# 💰 PEAK-LENDERS")
+        st.markdown("# 💰 PEAK-LENDERS AFRICA")
         st.caption("Secure Business Login Portal")
 
         st.divider()
