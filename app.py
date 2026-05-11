@@ -30,28 +30,6 @@ st.set_page_config(
 # Constants
 SESSION_TIMEOUT = 30
 
-
-
-# ==============================
-# 🔒 INITIALIZE SUPABASE
-# ==============================
-def get_supabase():
-    supa = st.session_state.get("supabase")
-    if supa is None:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        supa = create_client(url, key)
-        st.session_state["supabase"] = supa
-
-    # Set current session if exists
-    if "auth_session" in st.session_state:
-        session = st.session_state["auth_session"]
-        supa.auth.set_session(
-            session.access_token,
-            session.refresh_token
-        )
-    return supa
-
 # ==============================
 # 🔄 SESSION & AUTH MANAGEMENT
 # ==============================
@@ -82,20 +60,27 @@ def restore_session():
 # ==============================
 # ⚡ CORE DATA ENGINE
 # ==============================
-@st.cache_data(show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def get_cached_data(table_name):
-    supa = get_supabase()
-    tenant_id = st.session_state.get("tenant_id")
-    if not tenant_id:
-        return pd.DataFrame()
-    
     try:
-        res = supa.table(table_name).select("*").eq("tenant_id", tenant_id).execute()
+        if supabase is None:
+            return pd.DataFrame()
+
+        require_tenant()
+        tenant_id = get_tenant_id()
+
+        res = supabase.table(table_name)\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
         if res.data:
             df = pd.DataFrame(res.data)
             df.columns = df.columns.str.strip().str.lower()
             return df
+
         return pd.DataFrame()
+
     except Exception as e:
         st.error(f"Database Fetch Error [{table_name}]: {e}")
         return pd.DataFrame()
@@ -105,7 +90,10 @@ def get_cached_data(table_name):
 # ==============================
 def apply_master_theme():
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-
+    if "theme_loaded" not in st.session_state:
+        apply_master_theme()
+        st.session_state["theme_loaded"] = True
+ 
     st.markdown(f"""
     <style>
     /* SELECTBOX FIX */
@@ -214,38 +202,33 @@ if supabase is None:
 # ==============================
 
 def save_data(table_name, dataframe):
-    """Upserts data to Supabase ensuring tenant isolation."""
     try:
         if supabase is None:
             st.error("❌ Database not connected")
             return False
-        # require_tenant() 
-        tenant_id = st.session_state.get("tenant_id")
+
+        require_tenant()
 
         if dataframe is None or dataframe.empty:
-            st.error(" No Data")
+            st.error("No Data")
             return False
 
-        # Prepare for Supabase (handle NaNs for JSON compatibility)
         df_to_save = dataframe.copy()
-        df_to_save["tenant_id"] = tenant_id
+        df_to_save["tenant_id"] = get_tenant_id()
+
         records = df_to_save.replace({np.nan: None}).to_dict("records")
 
         response = supabase.table(table_name).upsert(records).execute()
 
-        if hasattr(response, "data") and response.data:
-            st.success(f"✅ Saved {len(response.data)} record(s)")
-            # Optional: increment data version to refresh caches
-            st.session_state["data_version"] += 1
-            return True
-        else:
-            st.warning("⚠️ Save completed but returned no data confirmation")
+        if response.data:
+            st.success(f"Saved {len(response.data)} record(s)")
             return True
 
-    except Exception as e:
-        st.error(f"🔥 DATABASE SAVE ERROR [{table_name}]: {e}")
         return False
 
+    except Exception as e:
+        st.error(f"DB Error [{table_name}]: {e}")
+        return False
 # ============================================================
 # 🔑 3. MULTI-TENANT SESSION CORE
 # ============================================================
@@ -314,67 +297,6 @@ def safe_series(df, col, default=0):
     if df is None or df.empty or col not in df.columns:
         return pd.Series([default] * len(df) if df is not None else [], dtype=float)
     return pd.to_numeric(df[col], errors="coerce").fillna(default)
-
-@st.cache_data(ttl=600)
-def get_cached_data(table_name):
-    """Fetches tenant-specific data with a 10-minute cache."""
-    try:
-        if supabase is None:
-            return pd.DataFrame()
-
-        require_tenant()
-        tenant_id = get_tenant_id()
-        
-        res = supabase.table(table_name)\
-            .select("*")\
-            .eq("tenant_id", tenant_id)\
-            .execute()
-            
-        if res.data:
-            df = pd.DataFrame(res.data)
-            # Standardize column naming convention
-            df.columns = df.columns.str.strip().str.lower()
-            return df
-        return pd.DataFrame()
-        
-    except Exception as e:
-        st.error(f"Database Fetch Error [{table_name}]: {e}")
-        return pd.DataFrame()
-
-def save_data(table_name, dataframe):
-    """Upserts records and provides detailed status feedback."""
-    try:
-        if supabase is None:
-            st.error("❌ Database not connected")
-            return False
-
-        require_tenant()
-
-        if dataframe is None or dataframe.empty:
-            st.error(" No Data")
-            return False
-
-        # Ensure every row is tagged with the correct tenant
-        df_to_save = dataframe.copy()
-        df_to_save["tenant_id"] = get_tenant_id()
-
-        # Handle NaNs (SQL doesn't like Python's NaN, prefers None/null)
-        records = df_to_save.replace({np.nan: None}).to_dict("records")
-
-        # Execute upsert (Insert or Update based on Primary Key)
-        response = supabase.table(table_name).upsert(records).execute()
-
-        # Validation logic
-        if hasattr(response, "data") and response.data:
-            st.success(f"✅ Successfully saved {len(response.data)} record(s).")
-            return True
-        else:
-            st.warning("⚠️ Save submitted but no confirmation data returned.")
-            return False
-
-    except Exception as e:
-        st.error(f"🔥 Database Save Error [{table_name}]: {e}")
-        return False
 
 # ============================================================
 # 🚦 6. AUTHENTICATION ROUTER
@@ -932,9 +854,9 @@ def login_page(supabase):
                 return
 
             # FETCH USER PROFILE
-            user_query = supabase.table("users") \
-                .select("*, tenants(name)") \
-                .eq("id", res.user.id) \
+            profile = supabase.table("user_profiles")\
+                .select("*")\
+                .eq("id", res.user.id)\
                 .execute()
 
             if not user_query.data:
