@@ -969,20 +969,33 @@ def login_page(supabase):
                 "timestamp": datetime.now().isoformat()
             })
 
+            st.session_state["authenticated"] = True
+
             st.success("✅ Login successful")
-
+            
             st.rerun()
-
         except Exception as e:
             st.error(f"Login failed: {e}")
 
 
 # =========================================
-# 🚀 AUTH ROUTER
+# 🌐 AUTH ROUTER
 # =========================================
 def run_auth_ui(supabase):
 
-    login_page(supabase)
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
+
+    view = st.session_state["view"]
+
+    if view == "login":
+        login_page(supabase)
+
+    elif view == "signup":
+        view_staff_signup(supabase)
+
+    elif view == "create_company":
+        admin_company_registration(supabase)
 
 
 def render_sidebar():
