@@ -829,82 +829,100 @@ def login_page(supabase):
                     forgot_password_page(supabase)
 
     # =====================================
-    # LOGIN LOGIC
+    # 🔐 LOGIN LOGIC (FIXED + STABLE)
     # =====================================
     if submit:
-
+    
         email = email.strip().lower()
         company_name = company_name.strip().lower()
-
+    
         if not all([company_name, email, pwd]):
             st.error("All fields are required")
             return
-
+    
         try:
-
-            # LOGIN
+    
+            # =========================
+            # AUTH LOGIN
+            # =========================
             res = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": pwd
             })
-        
-            if not res.user:
+    
+            if not res or not res.user:
                 st.error("Invalid credentials")
                 return
-        
-            # SAFE PROFILE FETCH
+    
+            # =========================
+            # PROFILE FETCH
+            # =========================
             user_query = supabase.table("users") \
                 .select("*, tenants(name)") \
                 .eq("id", res.user.id) \
                 .execute()
-        
-            data = user_query.data if user_query else None
-        
+    
+            data = getattr(user_query, "data", None)
+    
             if not data:
                 st.error("Profile not found")
                 return
-        
+    
             user = data[0]
-        
+    
             db_company = (
-                user.get("tenants", {}) or {}
-            ).get("name", "").lower()
-        
+                (user.get("tenants") or {}).get("name", "")
+            ).lower()
+    
             if db_company != company_name:
                 st.error(f"Not linked to '{company_name}'")
                 return
-        
-            # SESSION
+    
+            # =========================
+            # SESSION STATE (SOURCE OF TRUTH)
+            # =========================
             st.session_state["logged_in"] = True
+            st.session_state["authenticated"] = True
             st.session_state["user_id"] = user["id"]
             st.session_state["tenant_id"] = user["tenant_id"]
             st.session_state["role"] = user.get("role", "Staff")
             st.session_state["company"] = db_company
-        
+    
+            # IMPORTANT: reset view so login page disappears
+            st.session_state["view"] = "main"
+    
             st.success("Login successful")
             st.rerun()
-        
+    
         except Exception as e:
             st.error(f"Login failed: {e}")
 
-# =========================================
-# 🌐 AUTH ROUTER
-# =========================================
-def run_auth_ui(supabase):
-
-    if "view" not in st.session_state:
-        st.session_state["view"] = "login"
-
-    view = st.session_state["view"]
-
-    if view == "login":
-        login_page(supabase)
-
-    elif view == "signup":
-        view_staff_signup(supabase)
-
-    elif view == "create_company":
-        admin_company_registration(supabase)
+    # =========================================
+    # 🌐 AUTH ROUTER
+    # =========================================
+    def run_auth_ui(supabase):
+    
+        if "view" not in st.session_state:
+            st.session_state["view"] = "login"
+    
+        view = st.session_state["view"]
+    
+        # 🔥 LOGIN FLOW
+        if view == "login":
+            login_page(supabase)
+    
+        # 👥 STAFF SIGNUP
+        elif view == "signup":
+            view_staff_signup(supabase)
+    
+        # 🏢 COMPANY REGISTRATION
+        elif view == "create_company":
+            admin_company_registration(supabase)
+    
+        # 🚀 AFTER LOGIN SAFE STATE (prevents stuck UI)
+        elif view == "main":
+            st.empty()
+            # Do nothing → main app will take over in router
 
 
 # ============================================================
