@@ -89,13 +89,12 @@ def get_cached_data(table_name):
 # 🎨 1. THEME ENGINE (ENTERPRISE SAFE)
 # ==============================
 def apply_master_theme():
+
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    if "theme_loaded" not in st.session_state:
-        apply_master_theme()
-        st.session_state["theme_loaded"] = True
- 
+
     st.markdown(f"""
     <style>
+
     /* SELECTBOX FIX */
     div[data-baseweb="select"] > div {{
         background: rgba(255,255,255,0.9) !important;
@@ -119,7 +118,7 @@ def apply_master_theme():
         color: rgba(255,255,255,0.95) !important;
     }}
 
-    /* 🔥 ACTIVE ITEM (FULL BRIGHT + GLOW) */
+    /* 🔥 ACTIVE ITEM */
     div[role="radiogroup"] input:checked + div {{
         opacity: 1 !important;
         color: #ffffff !important;
@@ -137,12 +136,12 @@ def apply_master_theme():
         background: rgba(255,255,255,0.08);
     }}
 
-    /* SIDEBAR BACKGROUND (GRADIENT) */
+    /* SIDEBAR BACKGROUND */
     [data-testid="stSidebar"] {{
         background: linear-gradient(180deg, {brand_color} 0%, #0F172A 100%) !important;
     }}
 
-    /* REMOVE DEFAULT PADDING */
+    /* REMOVE PADDING */
     [data-testid="stSidebar"] > div:first-child {{
         padding-top: 0rem;
     }}
@@ -162,14 +161,14 @@ def apply_master_theme():
         font-weight: 600 !important;
     }}
 
-    /* LOGO CIRCLE EFFECT */
+    /* LOGO */
     .logo-container img {{
         border-radius: 50%;
         box-shadow: 0 4px 20px rgba(0,0,0,0.3);
     }}
+
     </style>
     """, unsafe_allow_html=True)
-
 
 # ==============================
 # 🔌 2. SUPABASE INIT (SAFE GLOBAL)
