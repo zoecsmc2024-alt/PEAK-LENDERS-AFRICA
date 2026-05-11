@@ -2084,18 +2084,14 @@ def show_borrowers():
     # ==============================
     # 📥 LOAD & NORMALIZE DATA
     # ==============================
-    borrowers_df = safe_df(get_data("borrowers"))
-    loans_df = safe_df(get_data("loans"))
-
+    borrowers_df = safe_df(get_cached_data("borrowers"))
+    loans_df = safe_df(get_cached_data("loans"))
     # Force lowercase column names for consistency
     for df in [borrowers_df, loans_df]:
         if not df.empty:
             df.columns = df.columns.str.strip().str.lower()
 
     # Apply Tenant Filters
-    tenant_id = get_current_tenant() 
-    if not borrowers_df.empty and "tenant_id" in borrowers_df.columns:
-        borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(tenant_id)]
     if not loans_df.empty and "tenant_id" in loans_df.columns:
         loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
 
@@ -2171,9 +2167,11 @@ def show_borrowers():
                     new_entry = pd.DataFrame([{
                         "id": new_id, "name": name, "phone": phone, "email": email,
                         "national_id": nid, "address": addr, "next_of_kin": nok,
-                        "status": "Active", "tenant_id": str(tenant_id)
+                        "status": "Active", "tenant_id": str(st.session_state.get("tenant_id"))
                     }])
+                
                     if save_data_saas("borrowers", new_entry):
+                        st.write("Saving to tenant:", st.session_state.get("tenant_id"))
                         st.success(f"✅ {name} registered successfully!")
                         st.cache_data.clear()
                         st.rerun()
