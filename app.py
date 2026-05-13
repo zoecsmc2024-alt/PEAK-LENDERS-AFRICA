@@ -1230,12 +1230,12 @@ def first_existing(df, cols):
 # ------------------------------
 # MAIN DASHBOARD
 # ------------------------------
+
 def show_dashboard_view():
 
     brand_color = get_Active_color()
 
     try:
-
         # --- SLEEK METRIC CARD STYLE ---
         st.markdown(f"""
         <style>
@@ -1301,30 +1301,49 @@ def show_dashboard_view():
         if loans_df.empty:
             st.info("👋 Welcome! No active data found. Add your first borrower or loan to populate this dashboard.")
             return
+
+        # =========================================================
+        # 🛡️ SMART STATUS LOGIC (CRITICAL FIX FOR DASHBOARD SYNC)
+        # =========================================================
+        # Ensure SN and Balance are ready for processing
+        if "sn" in loans_df.columns:
+            loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
+            
+            # Use the most accurate balance column available
+            bal_col = first_existing(loans_df, ["balance", "total_repayable"])
+            loans_df["tmp_bal"] = pd.to_numeric(loans_df[bal_col], errors="coerce").fillna(0)
+            
+            # Sort for chronological sequence
+            loans_df = loans_df.sort_values(by=["sn", "cycle_no", "start_date"])
+
+            for _, grp in loans_df.groupby("sn"):
+                indices = grp.index.tolist()
+                
+                # Mark all previous cycles as BCF
+                if len(indices) > 1:
+                    loans_df.loc[indices[:-1], "status"] = "BCF"
+                
+                # Check the latest cycle for clearance
+                latest_idx = indices[-1]
+                if abs(loans_df.at[latest_idx, "tmp_bal"]) < 1.0:
+                    loans_df.at[latest_idx, "status"] = "CLEARED"
+            
+            # Global Override: If balance is zero and not BCF, it's CLEARED
+            loans_df.loc[(loans_df["tmp_bal"] <= 0) & (loans_df["status"] != "BCF"), "status"] = "CLEARED"
+            loans_df.drop(columns=["tmp_bal"], inplace=True)
         
         # ==============================
         # ENSURE REQUIRED COLUMNS EXIST
         # ==============================
         required_loan_cols = [
-            "status",
-            "principal",
-            "amount",
-            "interest",
-            "interest_amount",
-            "balance",
-            "total_repayable",
-            "amount_paid",
-            "paid",
-            "end_date",
-            "due_date"
+            "status", "principal", "amount", "interest", 
+            "interest_amount", "balance", "total_repayable", 
+            "amount_paid", "paid", "end_date", "due_date"
         ]
         
         for col in required_loan_cols:
             if col not in loans_df.columns:
                 loans_df[col] = 0
-        
-        if "status" not in loans_df.columns:
-            loans_df["status"] = "ACTIVE"
         
         # ==============================
         # SAFE NUMERIC ENGINE
@@ -1336,7 +1355,7 @@ def show_dashboard_view():
             return pd.Series([0] * len(df), index=df.index)
         
         # ==============================
-        # SAFE date ENGINE
+        # SAFE DATE ENGINE
         # ==============================
         def get_dates(df, cols):
             for c in cols:
@@ -1367,10 +1386,8 @@ def show_dashboard_view():
             ["amount_paid", "paid"]
         )
         
-        # safer balance calc
-        loans_df["balance_n"] = (
-            total_repayable - amount_paid
-        ).clip(lower=0)
+        # Safer balance calc
+        loans_df["balance_n"] = (total_repayable - amount_paid).clip(lower=0)
         
         # ==============================
         # EXPENSES
@@ -1404,12 +1421,11 @@ def show_dashboard_view():
             .str.upper()
         )
         
+        # Now overdue count correctly excludes CLEARED and BCF loans
         overdue_mask = (
             loans_df["due_date_dt"].notna()
-            &
-            (loans_df["due_date_dt"] < today)
-            &
-            (loans_df["status"] != "CLEARED")
+            & (loans_df["due_date_dt"] < today)
+            & (~loans_df["status"].isin(["CLEARED", "BCF", "CLOSED"]))
         )
         
         overdue_count = int(overdue_mask.sum())
@@ -1417,37 +1433,28 @@ def show_dashboard_view():
         # ==============================
         # TOTALS (FIXED)
         # ==============================
-        
-        # ensure cycle column exists
         if "cycle_no" not in loans_df.columns:
             loans_df["cycle_no"] = 1
         
-        # clean cycle numbers
         loans_df["cycle_no"] = pd.to_numeric(
             loans_df["cycle_no"],
             errors="coerce"
         ).fillna(1)
         
-        # ONLY original loans
-        original_loans = loans_df[
-            loans_df["cycle_no"] == 1
-        ].copy()
+        # ONLY original loans for exposure calculations
+        original_loans = loans_df[loans_df["cycle_no"] == 1].copy()
         
-        # principal exposure
-        total_principal = float(
-            original_loans["principal_n"].sum()
-        )
-        
-        # expected earnings
-        total_interest = float(
-            loans_df["interest_n"].sum()
-        )
+        total_principal = float(original_loans["principal_n"].sum())
+        total_interest = float(loans_df["interest_n"].sum())
         
         # ==============================
         # SMART ALERTS
         # ==============================
         if overdue_count >= 5:
             st.warning(f"⚠️ {overdue_count} overdue loans need urgent attention.")
+
+    except Exception as e:
+        st.error(f"Error loading dashboard: {e}")
 
             
         # ==============================
