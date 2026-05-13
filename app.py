@@ -4551,7 +4551,31 @@ def show_calendar():
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    # --- 👤 INJECT borrower nameS (MAPPING) ---
+    # --- 🛡️ SMART STATUS LOGIC (FIX FOR CLEARED LOANS) ---
+    # We process the statuses BEFORE filtering active_loans to ensure 0 balances are removed
+    loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
+    loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
+    
+    # Sort chronologically to identify previous cycles
+    loans_df = loans_df.sort_values(by=["sn", "cycle_no", "start_date"])
+
+    for sn_val, grp in loans_df.groupby("sn"):
+        indices = grp.index.tolist()
+        
+        # Mark all but the latest entry as BCF
+        if len(indices) > 1:
+            loans_df.loc[indices[:-1], "status"] = "BCF"
+        
+        # Check the terminal (latest) row
+        latest_idx = indices[-1]
+        if abs(loans_df.at[latest_idx, "balance"]) < 1.0:
+            loans_df.at[latest_idx, "status"] = "CLEARED"
+        # Otherwise, it maintains its existing PENDING or ACTIVE status
+
+    # Global safety: Any row with 0 balance that isn't BCF must be CLEARED
+    loans_df.loc[(loans_df["balance"] <= 0) & (loans_df["status"] != "BCF"), "status"] = "CLEARED"
+
+    # --- 👤 INJECT BORROWER NAMES (MAPPING) ---
     if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df['id'] = borrowers_df['id'].astype(str)
         loans_df['borrower_id'] = loans_df['borrower_id'].astype(str)
@@ -4567,8 +4591,8 @@ def show_calendar():
     
     today = pd.Timestamp.today().normalize()
     
-    # Filter for active loans
-    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["CLEARED", "CLOSED"])].copy()
+    # Filter for active loans (Excluding CLEARED and BCF)
+    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["CLEARED", "BCF", "CLOSED"])].copy()
 
     # --- 🎨 VISUAL CALENDAR WIDGET ---
     calendar_events = []
@@ -4634,15 +4658,12 @@ def show_calendar():
             </tr>""" for _, r in due_today_df.iterrows()])
         st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
-    # 5. 🔴 OVERDUE FOLLOW-UP (Now safely inside the function)
+    # 5. 🔴 OVERDUE FOLLOW-UP
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
     try:
-        # Re-using the active_loans we already filtered at the top of the function
-        # Only show as overdue if the date has passed AND it's actually still PENDING or ACTIVE
-        overdue_df = active_loans[
-            (active_loans["end_date"] < today) & 
-            (~active_loans["status"].isin(["CLEARED", "BCF"]))
-        ].copy()
+        # Filter for overdue: end_date passed AND status is not CLEARED/BCF
+        overdue_df = active_loans[active_loans["end_date"] < today].copy()
+
         if not overdue_df.empty:
             overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
             od_rows = ""
@@ -4662,8 +4683,7 @@ def show_calendar():
         else:
             st.info("No overdue loans currently. Everything is on track! ✨")
     except Exception as e:
-        st.error(f"Error generating overdue table: {e}") 
-
+        st.error(f"Error generating overdue table: {e}")
 
 # ==============================                           
 # 🛡️ 15. COLLATERAL MANAGEMENT
