@@ -1108,6 +1108,10 @@ def render_sidebar():
 
     return selected_page
 
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (BRANDING & WIDE LAYOUT)
 # ==========================================
