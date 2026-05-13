@@ -4638,8 +4638,11 @@ def show_calendar():
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
     try:
         # Re-using the active_loans we already filtered at the top of the function
-        overdue_df = active_loans[active_loans["end_date"] < today].copy()
-
+        # Only show as overdue if the date has passed AND it's actually still PENDING or ACTIVE
+        overdue_df = active_loans[
+            (active_loans["end_date"] < today) & 
+            (~active_loans["status"].isin(["CLEARED", "BCF"]))
+        ].copy()
         if not overdue_df.empty:
             overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
             od_rows = ""
