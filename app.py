@@ -3440,7 +3440,15 @@ def show_payments():
         loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(0)
     else:
         loans_df["amount_paid"] = 0
+    # ==========================================
+    # ✨ NEW: FILTER FOR LATEST CYCLE ONLY
+    # ==========================================
+    # 1. We sort by SN and Cycle Number so the newest is always last
+    loans_df = loans_df.sort_values(["sn", "cycle_no"], ascending=True)
 
+    # 2. We create a filtered version for the UI list
+    # keep="last" ensures we only see the highest cycle_no for each SN
+    display_df = loans_df.drop_duplicates(subset=["sn"], keep="last")
     # ------------------------------
     # CYCLE-AWARE CASCADE FUNCTION
     # ------------------------------
