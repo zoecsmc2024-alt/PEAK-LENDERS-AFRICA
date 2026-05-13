@@ -2036,9 +2036,9 @@ def show_dashboard_view():
             use_container_width=True
         )
 
-except Exception as e:
+        except Exception as e:
 
-    st.error(f"Dashboard recovered from an internal issue: {str(e)}")
+            st.error(f"Dashboard recovered from an internal issue: {str(e)}")
 
 
 
