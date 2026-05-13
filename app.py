@@ -2893,16 +2893,17 @@ def show_loans():
         # 📊 PORTFOLIO METRICS
         # ------------------------------
         if not filtered_loans.empty:
-
+        
             total_loans = filtered_loans["sn"].nunique()
             original_loans = filtered_loans[filtered_loans["cycle_no"] == 1]  
             total_principal = original_loans["principal"].sum()
-            total_repayable = filtered_loans["total_repayable"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
             
-            # --- NEW CALCULATION ---
-            total_pending = filtered_loans[filtered_loans["status"] == "PENDING"]["total_repayable"].sum()
-
+            # --- UPDATED CALCULATION: PENDING + ACTIVE ---
+            # We use .isin() to filter for multiple statuses at once
+            active_pending_df = filtered_loans[filtered_loans["status"].isin(["PENDING", "ACTIVE"])]
+            total_pending = active_pending_df["total_repayable"].sum()
+        
             col1, col2, col3, col4 = st.columns(4)
 
             col1.markdown(f"""
@@ -2941,7 +2942,7 @@ def show_loans():
             </div>
             """, unsafe_allow_html=True)
 
-            # --- NEW METRIC CARD ---
+            # --- UPDATED METRIC CARD ---
             col4.markdown(f"""
             <div style="
                 background: linear-gradient(135deg, #ef4444, #991b1b);
@@ -2949,7 +2950,7 @@ def show_loans():
                 border-radius:10px;
                 color:white;
                 text-align:center;">
-                <div style="font-size:14px;">⏳ Total Pending</div>
+                <div style="font-size:14px;">⏳ Active & Pending</div>
                 <div style="font-size:22px;font-weight:bold;">{total_pending:,.0f}</div>
             </div>
             """, unsafe_allow_html=True)
