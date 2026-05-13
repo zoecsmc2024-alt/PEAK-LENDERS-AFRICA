@@ -3788,12 +3788,18 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
             r["absent_deduction"],
             r["lst"],
             r["gross_salary"],
-            r["paye"],
+
+            # Total deductions column
+            r["paye"] + r["nssf_5"] + r["advance_drs"] + r["other_deductions"] + r["lst"],
+            
+            # Breakdown columns
             r["paye"],
             r["nssf_5"],
             r["advance_drs"],
             r["other_deductions"],
-            r["paye"] + r["nssf_5"] + r["advance_drs"] + r["other_deductions"],
+            
+            # Total deductions
+            r["paye"] + r["nssf_5"] + r["advance_drs"] + r["other_deductions"] + r["lst"],
             r["net_pay"],
             r["paye"],
             r["nssf_10"],
@@ -3968,7 +3974,7 @@ def format_payroll_display(df):
     df["Other"] = df["other_deductions"]
 
     df["Total Deductions"] = (
-        df["paye"] + df["nssf_5"] + df["advance_drs"] + df["other_deductions"]
+        df["paye"] + df["nssf_5"] + df["advance_drs"] + df["other_deductions"]+ df["lst"]
     )
 
     df["Nett Pay"] = df["net_pay"]
