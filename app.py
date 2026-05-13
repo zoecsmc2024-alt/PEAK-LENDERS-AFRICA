@@ -2008,38 +2008,32 @@ def show_dashboard_view():
         except Exception as e:
             st.error(f"Expenses feed error: {e}")
     # --- EXPORT SECTION ---
-    st.write("---")
+        st.write("---")
 
-    c1, c2 = st.columns(2)
+        c1, c2 = st.columns(2)
 
-    with c1:
+        with c1:
+            csv_data = loans_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="📥 Download Underlying Data (CSV)",
+                data=csv_data,
+                file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
-        csv_data = loans_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            label="📥 Download Underlying Data (CSV)",
-            data=csv_data,
-            file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
-
-    with c2:
-
-        csv2 = expenses_df.to_csv(index=False).encode("utf-8")
-
-        st.download_button(
-            "⬇️ Export Expenses CSV",
-            csv2,
-            file_name="expenses_report.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+        with c2:
+            csv2 = expenses_df.to_csv(index=False).encode("utf-8")
+            st.download_button(
+                label="⬇️ Export Expenses CSV",
+                data=csv2,
+                file_name="expenses_report.csv",
+                mime="text/csv",
+                use_container_width=True
+            )
 
     except Exception as e:
-
         st.error(f"Dashboard recovered from an internal issue: {str(e)}")
-
 
 
 # ==============================
