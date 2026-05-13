@@ -1116,7 +1116,6 @@ import plotly.express as px
 # 1. CORE PAGE FUNCTIONS (BRANDING & WIDE LAYOUT)
 # ==========================================
 
-
 st.set_page_config(layout="wide")
 
 # ------------------------------
@@ -1149,9 +1148,7 @@ def load_cached(name):
 # =========================================================
 
 def normalize(df):
-
     try:
-
         if df is None:
             return pd.DataFrame()
 
@@ -1172,62 +1169,47 @@ def normalize(df):
         )
 
         return df
-
     except:
         return pd.DataFrame()
 
 def safe_numeric(df, cols):
-
     try:
-
         if df is None or df.empty:
             return pd.Series(dtype="float64")
 
         for c in cols:
-
             if c in df.columns:
-
                 return pd.to_numeric(
                     df[c],
                     errors="coerce"
                 ).fillna(0)
 
         return pd.Series(0.0, index=df.index)
-
     except:
         return pd.Series(0.0)
 
 def safe_date(df, cols):
-
     try:
-
         if df is None or df.empty:
             return pd.Series(dtype="datetime64[ns]")
 
         for c in cols:
-
             if c in df.columns:
-
                 return pd.to_datetime(
                     df[c],
                     errors="coerce"
                 )
 
         return pd.Series(pd.NaT, index=df.index)
-
     except:
         return pd.Series(pd.NaT)
 
 def first_existing(df, cols):
-
     try:
-
         for c in cols:
             if c in df.columns:
                 return c
-
         return None
-
     except:
         return None
 
@@ -1236,7 +1218,6 @@ def first_existing(df, cols):
 # ------------------------------
 
 def show_dashboard_view():
-
     brand_color = get_Active_color()
 
     try:
@@ -1460,13 +1441,11 @@ def show_dashboard_view():
     except Exception as e:
         st.error(f"Error loading dashboard: {e}")
 
-            
     # ==============================
     # SLEEK + MUTED METRIC CARD STYLES
     # ==============================
     st.markdown("""
     <style>
-    
     .metric-box {
         padding: 16px;
         border-radius: 16px;
@@ -1507,8 +1486,6 @@ def show_dashboard_view():
         opacity: 0.72;
     }
     
-    /* Muted gradients */
-    
     .blue-card {
         background: linear-gradient(135deg, #5B6B8C, #3E4C68);
     }
@@ -1525,10 +1502,7 @@ def show_dashboard_view():
         background: linear-gradient(135deg, #9A7B5F, #6B523E);
     }
     
-    /* Mobile */
-    
     @media (max-width:768px) {
-    
         .metric-box {
             padding: 14px;
             border-radius: 14px;
@@ -1543,7 +1517,6 @@ def show_dashboard_view():
             font-size: 10px;
         }
     }
-    
     </style>
     """, unsafe_allow_html=True)
             
@@ -1551,9 +1524,7 @@ def show_dashboard_view():
     # CARD HELPER
     # ==============================
     def render_metric_card(container, title, value, subtitle, css_class):
-    
         with container:
-    
             st.markdown(
                 f"""
                 <div class="metric-box {css_class}">
@@ -1568,165 +1539,92 @@ def show_dashboard_view():
     # ==============================
     # TOP METRICS
     # ==============================
-    m1, m2, m3, m4 = st.columns(4)
-    
-    render_metric_card(
-        m1,
-        "Active Principal",
-        f"UGX {total_principal:,.0f}",
-        "Portfolio Value",
-        "blue-card"
-    )
-    
-    render_metric_card(
-        m2,
-        "Interest Income",
-        f"UGX {total_interest:,.0f}",
-        "Expected Earnings",
-        "green-card"
-    )
-    
-    render_metric_card(
-        m3,
-        "Operational Costs",
-        f"UGX {total_expenses:,.0f}",
-        "Total Expenses",
-        "red-card"
-    )
-    
-    render_metric_card(
-        m4,
-        "Critical Alerts",
-        str(overdue_count),
-        "Overdue Loans",
-        "orange-card"
-    )
-    
+    try:
+        m1, m2, m3, m4 = st.columns(4)
+        
+        render_metric_card(
+            m1,
+            "Active Principal",
+            f"UGX {total_principal:,.0f}",
+            "Portfolio Value",
+            "blue-card"
+        )
+        
+        render_metric_card(
+            m2,
+            "Interest Income",
+            f"UGX {total_interest:,.0f}",
+            "Expected Earnings",
+            "green-card"
+        )
+        
+        render_metric_card(
+            m3,
+            "Operational Costs",
+            f"UGX {total_expenses:,.0f}",
+            "Total Expenses",
+            "red-card"
+        )
+        
+        render_metric_card(
+            m4,
+            "Critical Alerts",
+            str(overdue_count),
+            "Overdue Loans",
+            "orange-card"
+        )
+    except NameError:
+        pass # Handle if calculation failed earlier
+        
     st.write("")
     # --- 4. DATA VISUALIZATION SECTION ---
     col_l, col_r = st.columns([2, 1])
 
     with col_l:
-
         st.markdown("#### 📈 Revenue Trend vs Expenses")
-    
         try:
-    
             if not payments_df.empty:
-    
-                # ==============================
                 # REVENUE
-                # ==============================
-                pay_date_col = first_existing(
-                    payments_df,
-                    ["date", "payment_date", "created_at"]
-                )
-    
-                pay_amt_col = first_existing(
-                    payments_df,
-                    ["amount", "paid", "payment"]
-                )
-    
+                pay_date_col = first_existing(payments_df, ["date", "payment_date", "created_at"])
+                pay_amt_col = first_existing(payments_df, ["amount", "paid", "payment"])
+
                 if pay_date_col and pay_amt_col:
-    
                     rev_df = payments_df.copy()
-    
-                    rev_df["date_dt"] = pd.to_datetime(
-                        rev_df[pay_date_col],
-                        errors="coerce"
-                    )
-    
-                    rev_df["amount_n"] = pd.to_numeric(
-                        rev_df[pay_amt_col],
-                        errors="coerce"
-                    ).fillna(0)
-    
+                    rev_df["date_dt"] = pd.to_datetime(rev_df[pay_date_col], errors="coerce")
+                    rev_df["amount_n"] = pd.to_numeric(rev_df[pay_amt_col], errors="coerce").fillna(0)
                     rev_df = rev_df.dropna(subset=["date_dt"])
-    
-                    # REAL monthly datetime
                     rev_df["month"] = rev_df["date_dt"].dt.to_period("M").dt.to_timestamp()
-    
-                    monthly_rev = rev_df.groupby(
-                        "month",
-                        as_index=False
-                    )["amount_n"].sum()
-    
-                    monthly_rev.rename(
-                        columns={"amount_n": "Revenue"},
-                        inplace=True
-                    )
-    
-                    # ==============================
+                    
+                    monthly_rev = rev_df.groupby("month", as_index=False)["amount_n"].sum()
+                    monthly_rev.rename(columns={"amount_n": "Revenue"}, inplace=True)
+            
                     # EXPENSES
-                    # ==============================
                     if not expenses_df.empty:
-    
                         exp_df = expenses_df.copy()
-    
-                        exp_date_col = first_existing(
-                            exp_df,
-                            ["payment_date", "date", "created_at"]
-                        )
-    
-                        exp_df["date_dt"] = pd.to_datetime(
-                            exp_df[exp_date_col],
-                            errors="coerce"
-                        )
-    
-                        exp_df["amount_n"] = pd.to_numeric(
-                            exp_df["amount"],
-                            errors="coerce"
-                        ).fillna(0)
-    
+                        exp_date_col = first_existing(exp_df, ["payment_date", "date", "created_at"])
+                        exp_df["date_dt"] = pd.to_datetime(exp_df[exp_date_col], errors="coerce")
+                        exp_df["amount_n"] = pd.to_numeric(exp_df["amount"], errors="coerce").fillna(0)
                         exp_df = exp_df.dropna(subset=["date_dt"])
-    
-                        exp_df["month"] = exp_df["date_dt"]\
-                            .dt.to_period("M")\
-                            .dt.to_timestamp()
-    
-                        monthly_exp = exp_df.groupby(
-                            "month",
-                            as_index=False
-                        )["amount_n"].sum()
-    
-                        monthly_exp.rename(
-                            columns={"amount_n": "Expenses"},
-                            inplace=True
-                        )
-    
+                        exp_df["month"] = exp_df["date_dt"].dt.to_period("M").dt.to_timestamp()
+                        
+                        monthly_exp = exp_df.groupby("month", as_index=False)["amount_n"].sum()
+                        monthly_exp.rename(columns={"amount_n": "Expenses"}, inplace=True)
                     else:
-                        monthly_exp = pd.DataFrame(
-                            columns=["month", "Expenses"]
-                        )
-    
-                    # ==============================
+                        monthly_exp = pd.DataFrame(columns=["month", "Expenses"])
+            
                     # MERGE
-                    # ==============================
-                    trend_df = pd.merge(
-                        monthly_rev,
-                        monthly_exp,
-                        on="month",
-                        how="outer"
-                    ).fillna(0)
-    
+                    trend_df = pd.merge(monthly_rev, monthly_exp, on="month", how="outer").fillna(0)
                     trend_df = trend_df.sort_values("month")
-    
-                    # ==============================
+            
                     # PLOT
-                    # ==============================
                     fig = px.line(
                         trend_df,
                         x="month",
                         y=["Revenue", "Expenses"],
                         template="plotly_white",
-                        color_discrete_map={
-                            "Revenue": "#10B981",
-                            "Expenses": "#EF4444"
-                        }
+                        color_discrete_map={"Revenue": "#10B981", "Expenses": "#EF4444"}
                     )
-    
                     fig.update_traces(mode="lines+markers")
-    
                     fig.update_layout(
                         height=320,
                         margin=dict(l=0, r=0, t=20, b=0),
@@ -1735,302 +1633,131 @@ def show_dashboard_view():
                         yaxis_title="amount (UGX)",
                         hovermode="x unified"
                     )
-    
                     st.plotly_chart(fig, use_container_width=True)
-    
                 else:
                     st.info("Payment columns missing.")
-    
             else:
                 st.info("Insufficient payment history for trend analysis.")
-    
         except Exception as e:
             st.warning(f"Revenue chart temporarily unavailable: {e}")
 
     with col_r:
-
         st.markdown("#### 🎯 Portfolio Health")
-    
         try:
-    
             if not loans_df.empty and "status" in loans_df.columns:
-    
-                # ==============================
-                # CLEAN STATUS LABELS
-                # ==============================
-                clean_status = (
-                    loans_df["status"]
-                    .astype(str)
-                    .str.strip()
-                    .str.upper()
-                )
-    
-                # normalize common labels
+                clean_status = loans_df["status"].astype(str).str.strip().str.upper()
                 clean_status = clean_status.replace({
-                    "CURRENT": "ACTIVE",
-                    "ONGOING": "ACTIVE",
-                    "COMPLETE": "PAID",
-                    "CLOSED": "PAID",
-                    "LATE PAYMENT": "LATE",
-                    "DEFAULTED": "DEFAULT"
+                    "CURRENT": "ACTIVE", "ONGOING": "ACTIVE",
+                    "COMPLETE": "PAID", "CLOSED": "PAID",
+                    "LATE PAYMENT": "LATE", "DEFAULTED": "DEFAULT"
                 })
-    
-                status_data = (
-                    clean_status
-                    .value_counts()
-                    .reset_index()
-                )
-    
+                status_data = clean_status.value_counts().reset_index()
                 status_data.columns = ["status", "count"]
-    
                 total_loans = status_data["count"].sum()
-    
-                # ==============================
-                # COLORS
-                # ==============================
-                color_map = {
-                    "ACTIVE": "#10B981",
-                    "PAID": "#3B82F6",
-                    "LATE": "#F59E0B",
-                    "DEFAULT": "#EF4444"
-                }
-    
+        
+                color_map = {"ACTIVE": "#10B981", "PAID": "#3B82F6", "LATE": "#F59E0B", "DEFAULT": "#EF4444"}
+        
                 fig_pie = px.pie(
-                    status_data,
-                    names="status",
-                    values="count",
-                    hole=0.65,
-                    color="status",
-                    color_discrete_map=color_map
+                    status_data, names="status", values="count",
+                    hole=0.65, color="status", color_discrete_map=color_map
                 )
-    
-                # ==============================
-                # BETTER LABELS
-                # ==============================
                 fig_pie.update_traces(
-                    textposition="inside",
-                    textinfo="percent+label",
-                    hovertemplate=
-                    "<b>%{label}</b><br>" +
-                    "Loans: %{value}<br>" +
-                    "Share: %{percent}<extra></extra>"
+                    textposition="inside", textinfo="percent+label",
+                    hovertemplate="<b>%{label}</b><br>Loans: %{value}<br>Share: %{percent}<extra></extra>"
                 )
-    
-                # ==============================
-                # LAYOUT
-                # ==============================
                 fig_pie.update_layout(
-                    height=320,
-                    margin=dict(l=10, r=10, t=20, b=10),
-    
-                    annotations=[
-                        dict(
-                            text=f"{total_loans}<br>Total",
-                            x=0.5,
-                            y=0.5,
-                            font_size=18,
-                            showarrow=False
-                        )
-                    ]
+                    height=320, margin=dict(l=10, r=10, t=20, b=10),
+                    annotations=[dict(text=f"{total_loans}<br>Total", x=0.5, y=0.5, font_size=18, showarrow=False)]
                 )
-    
                 st.plotly_chart(fig_pie, use_container_width=True)
-    
             else:
                 st.info("No portfolio data available.")
-    
         except Exception as e:
             st.info(f"Portfolio chart unavailable: {e}")
 
     # --- 5. ACTIVITY FEEDS ---
     st.write("---")
-
     t1, t2 = st.columns(2)
 
     with t1:
-
         st.markdown("#### 📊 Monthly Lending vs Interest")
-    
         try:
-    
             graph_df = loans_df.copy()
-    
-            graph_df["date_dt"] = safe_date(
-                graph_df,
-                ["start_date", "created_at"]
-            )
-    
+            graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
             graph_df = graph_df.dropna(subset=["date_dt"])
     
             if not graph_df.empty:
-    
-                # ==============================
-                # MONTH GROUPING
-                # ==============================
-                graph_df["month"] = (
-                    graph_df["date_dt"]
-                    .dt.to_period("M")
-                    .dt.to_timestamp()
-                )
-    
-                # ==============================
-                # MONTHLY TOTALS
-                # ==============================
-                timeline_df = (
-                    graph_df
-                    .groupby("month")[["principal_n", "interest_n"]]
-                    .sum()
-                    .reset_index()
-                    .sort_values("month")
-                )
-    
-                # ==============================
-                # RENAME FOR CLEAN LEGEND
-                # ==============================
-                timeline_df.rename(columns={
-                    "principal_n": "Loans Issued",
-                    "interest_n": "Interest Expected"
-                }, inplace=True)
-    
-                # ==============================
-                # CHART
-                # ==============================
+                graph_df["month"] = graph_df["date_dt"].dt.to_period("M").dt.to_timestamp()
+                timeline_df = graph_df.groupby("month")[["principal_n", "interest_n"]].sum().reset_index().sort_values("month")
+                timeline_df.rename(columns={"principal_n": "Loans Issued", "interest_n": "Interest Expected"}, inplace=True)
+                
                 fig_portfolio = px.line(
-                    timeline_df,
-                    x="month",
-                    y=["Loans Issued", "Interest Expected"],
-                    template="plotly_white",
-                    markers=True,
-                    color_discrete_map={
-                        "Loans Issued": brand_color,
-                        "Interest Expected": "#10B981"
-                    }
+                    timeline_df, x="month", y=["Loans Issued", "Interest Expected"],
+                    template="plotly_white", markers=True,
+                    color_discrete_map={"Loans Issued": brand_color, "Interest Expected": "#10B981"}
                 )
-    
-                fig_portfolio.update_layout(
-                    height=350,
-                    hovermode="x unified",
-                    xaxis_title="",
-                    yaxis_title="amount (UGX)",
-                    legend_title=""
-                )
-    
-                st.plotly_chart(
-                    fig_portfolio,
-                    use_container_width=True
-                )
-    
+                fig_portfolio.update_layout(height=350, hovermode="x unified", xaxis_title="", yaxis_title="amount (UGX)", legend_title="")
+                st.plotly_chart(fig_portfolio, use_container_width=True)
             else:
                 st.info("Not enough dated records to generate a trend.")
-    
         except Exception as e:
             st.info(f"Growth chart unavailable: {e}")
 
     with t2:
         st.markdown("### 💸 Latest Expenses")
-    
         try:
             if not expenses_df.empty:
-    
-                # --- Prepare data ---
                 df = expenses_df.copy()
-    
                 df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0)
                 df["date"] = pd.to_datetime(df["date"], errors="coerce")
-    
                 df = df.sort_values("date", ascending=False)
-    
                 latest = df.head(5)
-    
-                # --- KPI Row ---
+                
                 total = latest["amount"].sum()
                 avg = latest["amount"].mean()
                 count = len(latest)
-    
+        
                 k1, k2, k3 = st.columns(3)
-
-                k1.markdown(f"""
-                <div style="background:#FEE2E2; padding:16px; border-radius:12px;">
-                    <div style="font-size:12px; color:#991B1B;">Total (Top 5)</div>
-                    <div style="font-size:22px; font-weight:700; color:#B91C1C;">
-                        UGX {total:,.0f}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                k2.markdown(f"""
-                <div style="background:#E0F2FE; padding:16px; border-radius:12px;">
-                    <div style="font-size:12px; color:#075985;">Average</div>
-                    <div style="font-size:22px; font-weight:700; color:#0369A1;">
-                        UGX {avg:,.0f}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                k3.markdown(f"""
-                <div style="background:#ECFDF5; padding:16px; border-radius:12px;">
-                    <div style="font-size:12px; color:#065F46;">Entries</div>
-                    <div style="font-size:22px; font-weight:700; color:#047857;">
-                        {count}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-    
+                k1.markdown(f"""<div style="background:#FEE2E2; padding:16px; border-radius:12px;"><div style="font-size:12px; color:#991B1B;">Total (Top 5)</div><div style="font-size:22px; font-weight:700; color:#B91C1C;">UGX {total:,.0f}</div></div>""", unsafe_allow_html=True)
+                k2.markdown(f"""<div style="background:#E0F2FE; padding:16px; border-radius:12px;"><div style="font-size:12px; color:#075985;">Average</div><div style="font-size:22px; font-weight:700; color:#0369A1;">UGX {avg:,.0f}</div></div>""", unsafe_allow_html=True)
+                k3.markdown(f"""<div style="background:#ECFDF5; padding:16px; border-radius:12px;"><div style="font-size:12px; color:#065F46;">Entries</div><div style="font-size:22px; font-weight:700; color:#047857;">{count}</div></div>""", unsafe_allow_html=True)
+        
                 st.divider()
-    
-                # --- Format table ---
                 display_df = latest.copy()
                 display_df["category"] = display_df["category"].fillna("General")
                 display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
-    
-                # Keep numeric for styling
-                display_df["amount"] = display_df["amount"]
-    
                 final_df = display_df[["category", "amount", "date"]]
-    
-                # --- Styling (no HTML) ---
-                def style_amount(val):
-                    return "color: #EF4444; font-weight: 600;"
-    
-                styled_df = final_df.style\
-                    .format({"amount": "UGX {:,.0f}"})\
-                    .map(style_amount, subset=["amount"])
-    
-                st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-    
+        
+                def style_amount(val): return "color: #EF4444; font-weight: 600;"
+                styled_df = final_df.style.format({"amount": "UGX {:,.0f}"}).map(style_amount, subset=["amount"])
+                st.dataframe(styled_df, use_container_width=True, hide_index=True)
             else:
                 st.info("No recorded expenses.")
-    
         except Exception as e:
             st.error(f"Expenses feed error: {e}")
+
     # --- EXPORT SECTION ---
-        st.write("---")
+    st.write("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        csv_data = loans_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Download Underlying Data (CSV)",
+            data=csv_data,
+            file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
-        c1, c2 = st.columns(2)
-
-        with c1:
-            csv_data = loans_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="📥 Download Underlying Data (CSV)",
-                data=csv_data,
-                file_name=f"portfolio_data_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-
-        with c2:
-            csv2 = expenses_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="⬇️ Export Expenses CSV",
-                data=csv2,
-                file_name="expenses_report.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
+    with c2:
+        csv2 = expenses_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            "⬇️ Export Expenses CSV",
+            csv2,
+            file_name="expenses_report.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
 
     except Exception as e:
         st.error(f"Dashboard recovered from an internal issue: {str(e)}")
