@@ -17,6 +17,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 from supabase import create_client
+from core.database import get_cached_data
 import extra_streamlit_components as stx
 from services.payroll_engine import compute_payroll
 from core.database import (
