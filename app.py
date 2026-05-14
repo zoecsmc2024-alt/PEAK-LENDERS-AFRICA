@@ -18,7 +18,12 @@ import time
 import uuid
 import extra_streamlit_components as stx
 from services.payroll_engine import compute_payroll
-
+from core.database import (
+    supabase,
+    get_cached_data,
+    save_data_saas,
+    delete_data_saas
+)
 
 # --- Page Config stays here ---
 st.set_page_config(
