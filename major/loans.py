@@ -415,17 +415,23 @@ def show_loans():
             total_principal = original_loans["principal"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
             
-            # --- FIX: CALCULATION FOR REMAINING BALANCE ---
-            # 1. Filter for Pending and Active loans
-            active_pending_df = filtered_loans[filtered_loans["status"].isin(["PENDING", "ACTIVE"])].copy()
-        
-            # 2. Ensure numeric types to avoid calculation errors
-            total_rep = pd.to_numeric(active_pending_df["total_repayable"], errors="coerce").fillna(0)
-            paid_so_far = pd.to_numeric(active_pending_df["amount_paid"], errors="coerce").fillna(0)
-        
-            # 3. Calculate True Pending (Remaining Balance)
-            # This prevents early payments from being double-counted in 'Paid' and 'Active'
-            total_pending = (total_rep - paid_so_far).sum()
+            # --- FIXED CALCULATION: (PENDING + ACTIVE) AND (BALANCE > 0) ---
+            # 1. Start with numeric conversion to ensure math works
+            temp_df = filtered_loans.copy()
+            temp_df["total_repayable"] = pd.to_numeric(temp_df["total_repayable"], errors="coerce").fillna(0)
+            temp_df["amount_paid"] = pd.to_numeric(temp_df["amount_paid"], errors="coerce").fillna(0)
+            
+            # 2. Calculate the balance for EVERY loan first
+            temp_df["balance"] = temp_df["total_repayable"] - temp_df["amount_paid"]
+            
+            # 3. Apply the double filter: Correct Status AND Balance > 0
+            active_pending_with_balance = temp_df[
+                (temp_df["status"].isin(["PENDING", "ACTIVE"])) & 
+                (temp_df["balance"] > 0)
+            ]
+            
+            # 4. Sum the outstanding balance only
+            total_pending = active_pending_with_balance["balance"].sum()
         
             col1, col2, col3, col4 = st.columns(4)
 
