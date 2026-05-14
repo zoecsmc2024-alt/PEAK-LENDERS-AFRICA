@@ -398,17 +398,17 @@ def show_overview():
 
         def render_metric_card(container, title, value, subtitle, css_class):
 
-        with container:
-            st.markdown(
-                f"""
-                <div class="metric-box {css_class}">
-                    <div class="metric-title">{title}</div>
-                    <div class="metric-value">{value}</div>
-                    <div class="metric-sub">{subtitle}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+            with container:
+                st.markdown(
+                    f"""
+                    <div class="metric-box {css_class}">
+                        <div class="metric-title">{title}</div>
+                        <div class="metric-value">{value}</div>
+                        <div class="metric-sub">{subtitle}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
         m1, m2, m3, m4 = st.columns(4)
 
         render_metric_card(m1, "Active Principal", f"UGX {total_principal:,.0f}", "Portfolio Value", "blue-card")
