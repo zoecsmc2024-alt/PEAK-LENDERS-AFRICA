@@ -1,7 +1,11 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime, timedelta
+
 from core.database import get_cached_data
 
+# IMPORTANT: correct calendar component
+from streamlit_calendar import calendar
 def show_calendar():
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
