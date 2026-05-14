@@ -30,6 +30,17 @@ def show_calendar():
     today = pd.Timestamp.today().normalize()
 
     # ==========================================
+    # 🛠️ REINFORCED: STATUS VIEW (FIXED)
+    # ==========================================
+    # We cast to Series explicitly to ensure .astype() is available
+    if "Status" in loans_df.columns and "Borrower" in loans_df.columns:
+        # Ensure they are treated as strings first to prevent concatenation issues
+        s_col = pd.Series(loans_df["Status"]).astype(str).fillna("UNKNOWN")
+        b_col = pd.Series(loans_df["Borrower"]).astype(str).fillna("Unknown")
+        
+        loans_df["status_view"] = s_col + " • " + b_col
+
+    # ==========================================
     # 🛡️ FILTER: SHOW ONLY LATEST SN
     # ==========================================
     # Ensures we don't show historical "BCF" cycles on the calendar
