@@ -1,307 +1,95 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
-
+from datetime import datetime
 from core.database import get_cached_data
 from streamlit_calendar import calendar
 
-
 def show_calendar():
-
-    # -----------------------------
-    # 🔄 FORCE FRESH DATA
-    # -----------------------------
     st.cache_data.clear()
+    st.title("📅 Loan Activity & Collections")
 
-    st.title("📅 Activity Calendar")
-
-    # -----------------------------
-    # 1. FETCH DATA
-    # -----------------------------
+    # 1. FETCH & PREP DATA
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("📅 Calendar is clear! No active loans to track.")
+        st.info("📅 No loan data available.")
         return
 
-    # -----------------------------
-    # 👤 BORROWER MAPPING
-    # -----------------------------
+    # Map Borrower Names
     if borrowers_df is not None and not borrowers_df.empty:
-
-        borrowers_df["id"] = borrowers_df["id"].astype(str)
-        loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
-
-        bor_map = dict(
-            zip(
-                borrowers_df["id"],
-                borrowers_df["name"]
-            )
-        )
-
-        loans_df["borrower"] = loans_df["borrower_id"].map(
-            bor_map
-        ).fillna("Unknown borrower")
-
+        bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
+        loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
     else:
-        loans_df["borrower"] = "Unknown borrower"
+        loans_df["borrower"] = "Unknown"
 
-    # -----------------------------
-    # 🛡️ STANDARDIZATION
-    # -----------------------------
-    loans_df["end_date"] = pd.to_datetime(
-        loans_df["end_date"],
-        errors="coerce"
-    )
-
-    loans_df["total_repayable"] = pd.to_numeric(
-        loans_df["total_repayable"],
-        errors="coerce"
-    ).fillna(0)
-
-    loans_df["status"] = (
-        loans_df["status"]
-        .astype(str)
-        .str.upper()
-        .str.strip()
-    )
-
+    # Standardize Dates and Status
+    loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
+    loans_df["status"] = loans_df["status"].astype(str).str.upper().strip()
     today = pd.Timestamp.today().normalize()
 
-    # -----------------------------
-    # ✅ TRUE ACTIVE LOANS ONLY
-    # -----------------------------
-    active_loans = loans_df[
-        loans_df["status"].isin([
-            "ACTIVE",
-            "PENDING",
-            "OVERDUE"
-        ])
-    ].copy()
+    # 2. CATEGORIZATION LOGIC
+    # We split these now so the rest of the page is easy to build
+    pending_mask = loans_df["status"] == "PENDING"
+    active_mask = loans_df["status"] == "ACTIVE"
+    overdue_mask = (loans_df["status"] == "OVERDUE") | ((loans_df["end_date"] < today) & (loans_df["status"] == "ACTIVE"))
 
-    # -----------------------------
-    # 🎨 CALENDAR EVENTS
-    # -----------------------------
+    # 3. CALENDAR SECTION
     calendar_events = []
+    for _, r in loans_df.iterrows():
+        if pd.isna(r["end_date"]): continue
+        
+        # Color Coding logic
+        if r["status"] == "PENDING":
+            color = "#FFA500" # Orange
+        elif r["status"] == "OVERDUE" or r["end_date"] < today:
+            color = "#FF4B4B" # Red
+        else:
+            color = "#4A90E2" # Blue
 
-    for _, r in active_loans.iterrows():
+        calendar_events.append({
+            "title": f"{r['status']}: {r['borrower']}",
+            "start": r["end_date"].strftime("%Y-%m-%d"),
+            "color": color,
+            "allDay": True,
+        })
 
-        if pd.notna(r["end_date"]):
+    calendar(events=calendar_events, options={"initialView": "dayGridMonth"}, key="loan_cal")
 
-            is_overdue = r["end_date"].date() < today.date()
-
-            ev_color = (
-                "#FF4B4B"
-                if is_overdue
-                else "#4A90E2"
-            )
-
-            amount_fmt = f"UGX {float(r['total_repayable']):,.0f}"
-
-            calendar_events.append({
-                "title": f"{amount_fmt} - {r['borrower']}",
-                "start": r["end_date"].strftime("%Y-%m-%d"),
-                "end": r["end_date"].strftime("%Y-%m-%d"),
-                "color": ev_color,
-                "allDay": True,
-            })
-
-    calendar_options = {
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,timeGridWeek"
-        },
-        "initialView": "dayGridMonth",
-        "selectable": True,
-    }
-
-    calendar(
-        events=calendar_events,
-        options=calendar_options,
-        key="collection_cal"
-    )
-
+    # 4. METRICS ROW
     st.divider()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("🟠 Pending Approval", len(loans_df[pending_mask]))
+    m2.metric("🔵 Active Loans", len(loans_df[active_mask]))
+    m3.metric("🔴 Overdue/Action Required", len(loans_df[overdue_mask]))
 
-    # -----------------------------
-    # 2. 📊 DAILY WORKLOAD METRICS
-    # -----------------------------
-    due_today_df = active_loans[
-        active_loans["end_date"].dt.date == today.date()
-    ]
+    # 5. TABBED WORKSPACE (The "Full" part of the page)
+    # This organizes the confusion into clear "buckets"
+    tab1, tab2, tab3 = st.tabs(["⚠️ Overdue & Today", "⏳ Pending Approval", "📑 All Active"])
 
-    upcoming_df = active_loans[
-        (active_loans["end_date"] > today) &
-        (
-            active_loans["end_date"]
-            <= today + pd.Timedelta(days=7)
-        )
-    ]
-
-    overdue_df_metrics = active_loans[
-        active_loans["end_date"] < today
-    ]
-
-    overdue_count = overdue_df_metrics.shape[0]
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        st.metric(
-            "📌 Due Today",
-            f"{len(due_today_df):,} Accounts"
-        )
-
-    with col2:
-        st.metric(
-            "⏳ Upcoming (7 Days)",
-            f"{len(upcoming_df):,} Accounts"
-        )
-
-    with col3:
-        st.metric(
-            "🔴 Total Overdue",
-            f"{overdue_count:,} Accounts"
-        )
-
-    # -----------------------------
-    # 3. 📈 REVENUE FORECAST
-    # -----------------------------
-    st.divider()
-
-    st.subheader("📊 Revenue Forecast (This Month)")
-
-    this_month_df = active_loans[
-        active_loans["end_date"].dt.month == today.month
-    ]
-
-    total_expected = this_month_df[
-        "total_repayable"
-    ].sum()
-
-    f1, f2 = st.columns(2)
-
-    with f1:
-        st.metric(
-            "Expected Collections",
-            f"UGX {total_expected:,.0f}"
-        )
-
-    with f2:
-        st.metric(
-            "Deadlines This Month",
-            f"{len(this_month_df):,}"
-        )
-
-    # -----------------------------
-    # 4. 📌 ACTION ITEMS
-    # -----------------------------
-    st.divider()
-
-    st.subheader("📌 Action Items for Today")
-
-    if due_today_df.empty:
-
-        st.success(
-            "✨ No collection deadlines for today."
-        )
-
-    else:
-
-        today_display = due_today_df.copy()
-
-        today_display["Loan ID"] = today_display.apply(
-            lambda r: (
-                r.get("loan_id_label")
-                if pd.notna(r.get("loan_id_label"))
-                else str(r["id"])[:8]
-            ),
-            axis=1
-        )
-
-        today_display["Amount"] = today_display[
-            "total_repayable"
-        ].apply(lambda x: f"UGX {x:,.0f}")
-
-        today_display["Action"] = "💰 COLLECT NOW"
-
-        st.dataframe(
-            today_display[
-                [
-                    "Loan ID",
-                    "borrower",
-                    "Amount",
-                    "Action"
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
-
-    # -----------------------------
-    # 5. 🔴 OVERDUE FOLLOW-UP
-    # -----------------------------
-    st.divider()
-
-    st.subheader("🔴 Overdue Follow-up")
-
-    try:
-
-        overdue_df = active_loans[
-            active_loans["end_date"] < today
-        ].copy()
-
-        if not overdue_df.empty:
-
-            overdue_df["days_late"] = (
-                today - overdue_df["end_date"]
-            ).dt.days
-
-            overdue_df = overdue_df.sort_values(
-                by="days_late",
-                ascending=False
-            )
-
-            overdue_df["Loan ID"] = overdue_df.apply(
-                lambda r: (
-                    r.get("loan_id_label")
-                    if pd.notna(r.get("loan_id_label"))
-                    else str(r["id"])[:8]
-                ),
-                axis=1
-            )
-
-            overdue_df["Late By"] = overdue_df[
-                "days_late"
-            ].apply(lambda x: f"{x:,} Days")
-
-            overdue_df["Status"] = "🔴 OVERDUE"
-
-            overdue_display = overdue_df[
-                [
-                    "Loan ID",
-                    "borrower",
-                    "Late By",
-                    "Status"
-                ]
-            ].rename(columns={
-                "borrower": "Borrower"
-            })
-
+    with tab1:
+        st.subheader("Immediate Actions")
+        # Filter for anything due today or in the past that isn't closed
+        urgent_df = loans_df[overdue_mask].copy()
+        if not urgent_df.empty:
+            urgent_df["Days Late"] = (today - urgent_df["end_date"]).dt.days
             st.dataframe(
-                overdue_display,
+                urgent_df[["borrower", "total_repayable", "end_date", "Days Late"]],
                 use_container_width=True,
                 hide_index=True
             )
-
         else:
-            st.success(
-                "✨ No overdue loans currently."
-            )
+            st.success("No overdue accounts!")
 
-    except Exception as e:
-        st.error(
-            f"Error generating overdue table: {e}"
-        )
+    with tab2:
+        st.subheader("Loans Awaiting Verification")
+        p_df = loans_df[pending_mask]
+        if not p_df.empty:
+            st.write("These loans need to be approved or moved to Active status.")
+            st.dataframe(p_df[["borrower", "total_repayable", "end_date"]], use_container_width=True)
+        else:
+            st.info("No pending applications.")
+
+    with tab3:
+        st.subheader("Current Loan Book")
+        st.dataframe(loans_df[active_mask][["borrower", "total_repayable", "end_date"]], use_container_width=True)
