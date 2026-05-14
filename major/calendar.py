@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 import uuid
 from core.database import get_cached_data
 from streamlit_calendar import calendar
+
+
 def show_calendar():
     # 1. SETUP - Use the full width of the browser
     # Note: If st.set_page_config is called elsewhere, this may not be needed
