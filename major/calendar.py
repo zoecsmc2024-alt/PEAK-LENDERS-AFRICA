@@ -17,41 +17,41 @@ def show_calendar():
     df.columns = df.columns.str.strip().str.replace(" ", "_")
 
     # 2. TYPE CLEANING & COLUMN REPAIR
-    # We use pd.Series() to wrap the columns. This prevents the 'str' attribute error.
+    # Wrapping in pd.Series prevents the 'str' object has no attribute 'astype' error
     df["Status"] = pd.Series(df.get("Status", "UNKNOWN")).astype(str).str.upper()
     df["Borrower"] = pd.Series(df.get("Borrower", "Unknown")).astype(str)
     df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
     
-    # Numeric Safety
+    # Numeric Safety for your financial tracking
     for col in ["Total_Repayable", "Principal", "Interest", "sn", "cycle_no"]:
         if col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
 
-    # 3. CONSTRUCT STATUS VIEW (SAFE VERSION)
-    # This was the specific line causing your error.
-    df["status_view"] = df["Status"] + " • " + df["Borrower"]
-
-    # 4. FILTER: LATEST CYCLE ONLY
-    # Sort and drop duplicates so we only see the current state of a loan SN
+    # 3. FILTER: LATEST CYCLE ONLY
+    # Based on your cycle-aware logic: only show the most recent record per SN
     df = df.sort_values(["sn", "cycle_no"], ascending=True).drop_duplicates(subset=["sn"], keep="last")
 
-    # 5. KPI METRICS WITH COLORS
+    # 4. DEFINE ACTIVE DATASET
+    # Filtering out historical and closed records
+    active_loans = df[~df["Status"].isin(["CLOSED", "CLEARED", "BCF"])].copy()
+
+    # 5. KPI METRICS (NATIVE COLORS)
     today = pd.Timestamp.today().normalize()
-    active = df[~df["Status"].isin(["CLOSED", "CLEARED", "BCF"])]
     
-    due_today = active[active["End_Date"].dt.date == today.date()]
-    upcoming = active[(active["End_Date"] > today) & (active_loans["End_Date"] <= today + pd.Timedelta(days=7))]
-    overdue = active[active["End_Date"] < today]
+    due_today = active_loans[active_loans["End_Date"].dt.date == today.date()]
+    upcoming = active_loans[(active_loans["End_Date"] > today) & (active_loans["End_Date"] <= today + pd.Timedelta(days=7))]
+    overdue = active_loans[active_loans["End_Date"] < today]
 
     c1, c2, c3 = st.columns(3)
-    c1.metric("Due Today", len(due_today), delta_color="normal")
-    c2.metric("Upcoming (7 Days)", len(upcoming))
-    c3.metric("Overdue", len(overdue), delta=f"-{len(overdue)}", delta_color="inverse")
+    # Using 'delta' to add status colors (Red/Green/Gray)
+    c1.metric("Due Today", len(due_today), delta="Immediate", delta_color="inverse")
+    c2.metric("Upcoming (7 Days)", len(upcoming), delta="Scheduled", delta_color="off")
+    c3.metric("Overdue", len(overdue), delta=f"{len(overdue)} Required", delta_color="normal")
 
     st.divider()
 
-    # 6. DATAFRAME CONFIGURATION (COLORS & FORMATS)
-    # We use column_config instead of HTML to add "Status" colors
+    # 6. DATAFRAME CONFIGURATION
+    # Using column_config for clean, colorful UI interaction
     ui_config = {
         "Status": st.column_config.SelectboxColumn(
             "Status",
@@ -74,10 +74,14 @@ def show_calendar():
     else:
         st.success("No overdue loans. Great job!")
 
-    st.subheader("📅 Upcoming Deadlines")
+    st.subheader("📅 All Active Deadlines")
     st.dataframe(
-        active[["Loan_ID", "Borrower", "Total_Repayable", "End_Date", "Status"]].sort_values("End_Date"),
+        active_loans[["Loan_ID", "Borrower", "Total_Repayable", "End_Date", "Status"]].sort_values("End_Date"),
         column_config=ui_config,
         use_container_width=True,
         hide_index=True
     )
+
+    # 8. REVENUE FORECAST (FOOTER)
+    this_month = active_loans[active_loans["End_Date"].dt.month == today.month]
+    st.info(f"**Monthly Collection Forecast:** UGX {this_month['Total_Repayable'].sum():,.0f} across {len(this_month)} scheduled payments.")
