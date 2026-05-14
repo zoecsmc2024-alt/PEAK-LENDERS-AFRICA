@@ -5,8 +5,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime, timedelta
+
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
+
+
 def show_reports():
     """
     Advanced financial reporting with multi-tenant isolation 
@@ -46,7 +49,6 @@ def show_reports():
     payments = safe_tenant_filter("payments")
     expenses = safe_tenant_filter("expenses")
     payroll = safe_tenant_filter("payroll")
-    petty = safe_tenant_filter("petty_cash")
     borrowers = safe_tenant_filter("borrowers")
 
     if loans.empty:
@@ -57,11 +59,13 @@ def show_reports():
     # 🧰 REUSABLE HELPERS
     # ==============================
     def col_sum(df, col):
-        if df.empty or col not in df.columns: return 0.0
+        if df.empty or col not in df.columns: 
+            return 0.0
         return pd.to_numeric(df[col], errors="coerce").fillna(0).sum()
 
     def to_numeric_series(df, col):
-        if df.empty or col not in df.columns: return pd.Series(dtype=float)
+        if df.empty or col not in df.columns: 
+            return pd.Series(dtype=float)
         return pd.to_numeric(df[col], errors="coerce").fillna(0)
 
     def attach_borrower_names(loans_df, borrowers_df):
@@ -79,55 +83,49 @@ def show_reports():
     # ==============================
     # 🔢 CORE FINANCIAL ACCOUNTING
     # ==============================
-    
-    # Ensure numeric safety
     for col in ["principal", "interest", "cycle_no"]:
         if col in loans.columns:
             loans[col] = pd.to_numeric(loans[col], errors="coerce").fillna(0)
-    
-    # Normalize status
+
     loans["status"] = loans["status"].astype(str).str.upper()
-    
+
     # ==============================
-    # 🧠 ACTIVE CAPITAL (Cycle 1 ONLY, Active/Pending Loans)
+    # 🧠 ACTIVE CAPITAL
     # ==============================
     active_capital_loans = loans[
         (loans["cycle_no"] == 1) &
         (loans["status"].isin(["ACTIVE", "PENDING"]))
     ]
-    
+
     total_capital_out = active_capital_loans["principal"].sum()
-    
+
     # ==============================
-    # 💰 INT. REVENUE (ONLY CLEARED LOANS, ALL CYCLES INCLUDED)
+    # 💰 INT. REVENUE
     # ==============================
     cleared_loans = loans[loans["status"] == "CLEARED"]
-    
     projected_interest = cleared_loans["interest"].sum()
-    
+
     # ==============================
-    # 💵 COLLECTIONS (UNCHANGED)
+    # 💵 COLLECTIONS
     # ==============================
     actual_collected = col_sum(payments, "amount")
-    
+
     # ==============================
-    # 💸 OPEX (UNCHANGED)
+    # 💸 OPEX (PETTY CASH REMOVED COMPLETELY)
     # ==============================
     direct_expenses = col_sum(expenses, "amount")
+
     nssf_tax = col_sum(payroll, "nssf_5") + col_sum(payroll, "nssf_10")
     paye_tax = col_sum(payroll, "paye")
     salary_net = col_sum(payroll, "net_pay")
-    
-    petty_out = 0
-    if not petty.empty and "type" in petty.columns:
-        petty_out = col_sum(petty[petty["type"] == "Out"], "amount")
-    
-    total_opex = direct_expenses + petty_out + nssf_tax + paye_tax + salary_net
-    
+
+    total_opex = direct_expenses + nssf_tax + paye_tax + salary_net
+
     # ==============================
-    # 📊 NET CASHFLOW (UNCHANGED)
+    # 📊 NET CASHFLOW
     # ==============================
     cash_profit = actual_collected - total_opex
+
     # ==============================
     # 💎 KPI TILES
     # ==============================
@@ -153,17 +151,17 @@ def show_reports():
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
 
+    inc_m = pd.Series(dtype=float, name="Income")
+    exp_m = pd.Series(dtype=float, name="Expenses")
+
     if not payments.empty:
         inc_m = payments.set_index("date").resample("ME")["amount"].sum()
         inc_m.name = "Income"
-    else:
-        inc_m = pd.Series(dtype=float, name="Income")
 
     if not expenses.empty:
         exp_m = expenses.set_index("date").resample("ME")["amount"].sum()
         exp_m.name = "Expenses"
-    else:
-        exp_m = pd.Series(dtype=float, name="Expenses")
+
     pl_combined = pd.concat([inc_m, exp_m], axis=1).fillna(0)
     pl_combined["Net"] = pl_combined["Income"] - pl_combined["Expenses"]
 
@@ -185,12 +183,17 @@ def show_reports():
         st.info("📉 No trend data available yet.")
 
     # ==============================
-    # 🧠 INVESTOR INTELLIGENCE METRICS
+    # 🧠 INVESTOR INTELLIGENCE
     # ==============================
-    overdue_loans = loans[loans["status"].astype(str).str.upper().str.contains("OVERDUE", na=False)]
+    overdue_loans = loans[
+        loans["status"].astype(str).str.contains("OVERDUE", na=False)
+    ]
+
     par_value = col_sum(overdue_loans, "balance")
     par_ratio = (par_value / total_capital_out * 100) if total_capital_out > 0 else 0
+
     yield_pct = (projected_interest / total_capital_out * 100) if total_capital_out > 0 else 0
+
     coll_eff = (actual_collected / (total_capital_out + projected_interest) * 100) if (total_capital_out + projected_interest) > 0 else 0
 
     m1, m2, m3, m4 = st.columns(4)
@@ -200,70 +203,51 @@ def show_reports():
     m4.metric("OpEx Ratio", f"{(total_opex/actual_collected*100 if actual_collected > 0 else 0):.1f}%")
 
     # ==============================
-    # 🧾 FINANCIAL STATEMENTS (CYCLE-AWARE)
+    # 🧾 FINANCIAL STATEMENTS
     # ==============================
     s1, s2 = st.columns(2)
-    
-    # ------------------------------
-    # Compute fiscal year: July–June
-    # ------------------------------
+
     def fiscal_year(dt):
         if pd.isna(dt):
             return "Unknown"
         return f"{dt.year}-{dt.year+1}" if dt.month >= 7 else f"{dt.year-1}-{dt.year}"
-    
+
     loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
-    
+
     loans["fiscal_year"] = loans["start_date"].apply(fiscal_year)
     payments["fiscal_year"] = payments["date"].apply(fiscal_year)
     expenses["fiscal_year"] = expenses["date"].apply(fiscal_year)
-    
-    fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
-    
-    # ==============================
-    # 💰 INCOME STATEMENT & BALANCE SHEET (FY-AWARE)
-    # ==============================
-    
-    # ------------------------------
-    # Fiscal Year Selector
-    # ------------------------------
+
     fiscal_years = sorted(loans["fiscal_year"].dropna().unique())
     selected_fy = st.selectbox("Select Financial Year", fiscal_years)
-    
+
     fy_loans = loans[loans["fiscal_year"] == selected_fy]
     fy_expenses = expenses[expenses["fiscal_year"] == selected_fy]
     fy_payments = payments[payments["fiscal_year"] == selected_fy]
-    
-    # ------------------------------
-    # 💰 INCOME STATEMENT
-    # ------------------------------
+
     with s1:
         st.subheader(f"💰 Income Statement (Profit & Loss) — FY {selected_fy}")
-    
-        # Active Capital → Cycle 1 PENDING/ACTIVE only
+
         active_capital = fy_loans[
             (fy_loans["cycle_no"] == 1) &
             (fy_loans["status"].str.upper().isin(["ACTIVE", "PENDING"]))
         ]["principal"].sum()
-    
-        # Interest Revenue → CLEARED loans (all cycles)
+
         int_revenue = fy_loans[
             fy_loans["status"].str.upper() == "CLEARED"
         ]["interest"].sum()
-    
-        # OPEX → Direct expenses only (salaries/taxes already included)
+
         total_opex = col_sum(fy_expenses, "amount")
-    
-        # Net Profit
+
         net_profit = int_revenue - total_opex
-    
+
         st.dataframe(pd.DataFrame({
             "Description": [
-                "Active Capital (Cycle 1 ACTIVE/PENDING)",
-                "Interest Revenue (CLEARED Loans)",
-                "Total Operating Expenses (OPEX)",
+                "Active Capital",
+                "Interest Revenue",
+                "Total Operating Expenses",
                 "Net Profit"
             ],
             "amount (UGX)": [
@@ -273,26 +257,20 @@ def show_reports():
                 f"{net_profit:,.0f}"
             ]
         }), use_container_width=True)
-    
-    # ------------------------------
-    # 🏦 BALANCE SHEET SNAPSHOT
-    # ------------------------------
+
     with s2:
         st.subheader(f"🏦 Balance Sheet — FY {selected_fy}")
-    
-        # Loan Book → all cycles outstanding balances
+
         loan_book_value = fy_loans["balance"].sum()
-    
-        # Cash Position → payments minus expenses
+
         cash_position = col_sum(fy_payments, "amount") - col_sum(fy_expenses, "amount")
-    
-        # Total Assets = Active Capital + Loan Book + Cash Position
+
         total_assets = active_capital + loan_book_value + cash_position
-    
+
         st.dataframe(pd.DataFrame({
             "Description": [
-                "Active Capital (Cycle 1 ACTIVE/PENDING)",
-                "Loan Book (All Outstanding Cycles)",
+                "Active Capital",
+                "Loan Book",
                 "Cash Position",
                 "Total Assets"
             ],
@@ -303,13 +281,13 @@ def show_reports():
                 f"{total_assets:,.0f}"
             ]
         }), use_container_width=True)
-    
-    # ------------------------------
+
+    # ==============================
     # 📤 EXPORT
-    # ------------------------------
+    # ==============================
     with st.expander(f"📥 Export Executive Report — FY {selected_fy}"):
-    
-        export_rows = [{
+
+        export_df = pd.DataFrame([{
             "Fiscal Year": selected_fy,
             "Active Capital": active_capital,
             "Interest Revenue": int_revenue,
@@ -318,12 +296,12 @@ def show_reports():
             "Cash Position": cash_position,
             "Loan Book Value": loan_book_value,
             "Total Assets": total_assets
-        }]
-    
-        export_df = pd.DataFrame(export_rows)
+        }])
+
         st.dataframe(export_df)
-    
+
         csv = export_df.to_csv(index=False).encode("utf-8")
+
         st.download_button(
             label="⬇️ Download Full Executive Report (CSV)",
             data=csv,
