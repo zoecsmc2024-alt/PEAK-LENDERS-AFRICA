@@ -1,104 +1,96 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime
-from core.database import get_cached_data
 from streamlit_calendar import calendar
+from core.database import get_cached_data
 
 def show_calendar():
-    # 🔄 Refresh data on each load
-    st.cache_data.clear()
+    # 1. SETUP - Use the full width of the browser
+    # Note: If st.set_page_config is called elsewhere, this may not be needed
+    st.title("📅 Activity & Collection Dashboard")
     
-    st.title("📅 Collection & Activity Manager")
+    # 🔄 FORCE FRESH DATA
+    st.cache_data.clear()
 
-    # 1. DATA LOADING
+    # 2. FETCH DATA
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("No loan records found.")
+        st.info("📅 No active data to display.")
         return
 
-    # 2. DATA CLEANING (Fixed the 'Series' error here)
-    # Convert to datetime safely
+    # 3. STANDARDIZATION
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
-    
-    # Clean up status strings correctly using .str accessor
     loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
     
-    # Map borrower names
-    if borrowers_df is not None and not borrowers_df.empty:
+    if borrowers_df is not None:
         bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
-    else:
-        loans_df["borrower"] = "Unknown"
+
+    # 4. ROLLOVER LOGIC (Based on image_94de15.png)
+    # Sort so the highest installment number is first, then drop old ones.
+    # This ensures LN-0069 shows 'PENDING' (Inst 2) and hides 'BCF' (Inst 1).
+    loans_df = loans_df.sort_values(by=["loan_id_label", "installment_no"], ascending=[True, False])
+    current_book = loans_df.drop_duplicates(subset=["loan_id_label"], keep="first").copy()
 
     today = pd.Timestamp.today().normalize()
 
-    # 3. DEFINE LOGIC BUCKETS
-    # Pending: Applied but not yet running
-    pending_df = loans_df[loans_df["status"] == "PENDING"].copy()
-    
-    # Active: Currently running and not yet past due date
-    active_df = loans_df[
-        (loans_df["status"] == "ACTIVE") & (loans_df["end_date"] >= today)
-    ].copy()
-    
-    # Overdue: Marked as overdue OR Active but past the end date
-    overdue_df = loans_df[
-        (loans_df["status"] == "OVERDUE") | 
-        ((loans_df["status"] == "ACTIVE") & (loans_df["end_date"] < today))
-    ].copy()
+    # 5. LAYOUT: Top Metrics (Full Width)
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("🟠 Pending", len(current_book[current_book["status"] == "PENDING"]))
+    with m2:
+        st.metric("🔵 Active", len(current_book[current_book["status"] == "ACTIVE"]))
+    with m3:
+        st.metric("🔴 Overdue", len(current_book[current_book["end_date"] < today]))
+    with m4:
+        st.metric("✅ Total Live", len(current_book))
 
-    # 4. TOP LEVEL METRICS
-    m1, m2, m3 = st.columns(3)
-    m1.metric("🟠 Pending", len(pending_df))
-    m2.metric("🔵 Active", len(active_df))
-    m3.metric("🔴 Overdue", len(overdue_df))
-
-    # 5. THE CALENDAR
-    st.subheader("Schedule Overview")
-    calendar_events = []
-    
-    # Combine all relevant categories for the calendar
-    display_df = pd.concat([pending_df, active_df, overdue_df])
-    
-    for _, r in display_df.iterrows():
-        if pd.isna(r["end_date"]): continue
-        
-        # Assign colors based on status logic
-        if r["status"] == "PENDING":
-            color = "#FFA500" # Orange
-        elif r["status"] == "OVERDUE" or r["end_date"] < today:
-            color = "#FF4B4B" # Red
-        else:
-            color = "#4A90E2" # Blue
-
-        calendar_events.append({
-            "title": f"{r['borrower']} ({r['status']})",
-            "start": r["end_date"].strftime("%Y-%m-%d"),
-            "color": color,
-            "allDay": True,
-        })
-
-    calendar(events=calendar_events, options={"initialView": "dayGridMonth"}, key="main_cal")
-
-    # 6. ACTION TABS (Clears up the confusion)
     st.divider()
-    tab_overdue, tab_pending, tab_active = st.tabs(["🚨 Overdue Actions", "⏳ Pending Approval", "📑 Active Book"])
 
-    with tab_overdue:
-        if not overdue_df.empty:
-            st.warning(f"Total Overdue: {len(overdue_df)}")
-            st.dataframe(overdue_df[["borrower", "total_repayable", "end_date", "status"]], use_container_width=True)
-        else:
-            st.success("All collections are up to date!")
+    # 6. TWO-COLUMN DASHBOARD (Calendar on Left, Action List on Right)
+    left_col, right_col = st.columns([2, 1])
 
-    with tab_pending:
-        if not pending_df.empty:
-            st.info("These loans are awaiting status update to 'Active'.")
-            st.dataframe(pending_df[["borrower", "total_repayable", "end_date"]], use_container_width=True)
-        else:
-            st.write("No pending applications.")
+    with left_col:
+        st.subheader("Collection Schedule")
+        calendar_events = []
+        for _, r in current_book.iterrows():
+            if pd.isna(r["end_date"]): continue
+            
+            # Color coding
+            if r["status"] == "PENDING": color = "#FFA500"
+            elif r["end_date"] < today: color = "#FF4B4B"
+            else: color = "#4A90E2"
 
-    with tab_active:
-        st.dataframe(active_df[["borrower", "total_repayable", "end_date"]], use_container_width=True)
+            calendar_events.append({
+                "title": f"{r['loan_id_label']} - {r['borrower']}",
+                "start": r["end_date"].strftime("%Y-%m-%d"),
+                "color": color,
+                "allDay": True,
+            })
+
+        calendar(events=calendar_events, options={"initialView": "dayGridMonth"}, key="dash_cal")
+
+    with right_col:
+        st.subheader("📌 Focus Areas")
+        
+        with st.expander("🚨 Overdue Follow-up", expanded=True):
+            overdue = current_book[current_book["end_date"] < today]
+            st.dataframe(overdue[["loan_id_label", "borrower", "end_date"]], hide_index=True, use_container_width=True)
+            
+        with st.expander("⏳ Pending Approval", expanded=True):
+            pending = current_book[current_book["status"] == "PENDING"]
+            st.dataframe(pending[["loan_id_label", "borrower"]], hide_index=True, use_container_width=True)
+
+    # 7. BOTTOM SECTION: THE COMPLETE DATA TABLE (Full Width)
+    st.divider()
+    st.subheader("📑 Current Status of All Loans")
+    # This replicates the broad view from your image but only shows the 'Live' installment
+    st.dataframe(
+        current_book[[
+            "loan_id_label", "installment_no", "borrower", 
+            "total_repayable", "end_date", "status"
+        ]], 
+        use_container_width=True, 
+        hide_index=True
+    )
