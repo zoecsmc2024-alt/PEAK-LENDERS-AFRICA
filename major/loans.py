@@ -4,16 +4,6 @@ import pandas as pd
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
-def show_loans():
-    st.markdown("## 💵 Loans")
-
-    # Fetch data safely
-    loans_df = get_cached_data("loans")
-    if loans_df.empty:
-        st.info("No loans found")
-        return
-
-    st.dataframe(loans_df)
 # ==============================
 # 🔐 SAAS TENANT CONTEXT (UUID SAFE)
 # ==============================
