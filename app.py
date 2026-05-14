@@ -1,3 +1,5 @@
+from core import database as db
+from services.payroll_engine import compute_payroll
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -16,16 +18,8 @@ import bcrypt
 from twilio.rest import Client as TwilioClient
 import time
 import uuid
-from supabase import create_client
-from core.database import get_cached_data
 import extra_streamlit_components as stx
-from services.payroll_engine import compute_payroll
-from core.database import (
-    supabase,
-    get_cached_data,
-    save_data_saas,
-    delete_data_saas
-)
+
 
 # --- Page Config stays here ---
 st.set_page_config(
