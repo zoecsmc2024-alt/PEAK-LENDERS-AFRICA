@@ -394,47 +394,108 @@ def show_loans():
             "🔍 Search Loan / borrower",
             key="loan_search_main"
         )
-
+    
         # Create a local copy for filtering
-        filtered_loans = loans_df.copy() if not loans_df.empty else pd.DataFrame()
-
+        filtered_loans = (
+            loans_df.copy()
+            if not loans_df.empty
+            else pd.DataFrame()
+        )
+    
         if not filtered_loans.empty and search_query:
             filtered_loans = filtered_loans[
                 filtered_loans.apply(
-                    lambda r: search_query.lower() in str(r).lower(),
+                    lambda r:
+                    search_query.lower()
+                    in str(r).lower(),
                     axis=1
                 )
             ]
+    
+        # =================================
+        # KEEP ONLY LATEST LOAN CYCLE
+        # =================================
+        if not filtered_loans.empty:
+    
+            filtered_loans = (
+                filtered_loans
+                .sort_values(
+                    by=["sn", "cycle_no"],
+                    ascending=[True, False]
+                )
+                .drop_duplicates(
+                    subset=["sn"],
+                    keep="first"
+                )
+                .copy()
+            )
+    
         # ------------------------------
         # 📊 PORTFOLIO METRICS
         # ------------------------------
         if not filtered_loans.empty:
+    
             # Basic Metrics
-            total_loans = filtered_loans["sn"].nunique()
-            original_loans = filtered_loans[filtered_loans["cycle_no"] == 1]  
-            total_principal = original_loans["principal"].sum()
-            total_paid = filtered_loans["amount_paid"].sum()
-            
-            # --- FIXED CALCULATION: (PENDING + ACTIVE) AND (BALANCE > 0) ---
-            # 1. Start with numeric conversion to ensure math works
-            temp_df = filtered_loans.copy()
-            temp_df["total_repayable"] = pd.to_numeric(temp_df["total_repayable"], errors="coerce").fillna(0)
-            temp_df["amount_paid"] = pd.to_numeric(temp_df["amount_paid"], errors="coerce").fillna(0)
-            
-            # 2. Calculate the balance for EVERY loan first
-            temp_df["balance"] = temp_df["total_repayable"] - temp_df["amount_paid"]
-            
-            # 3. Apply the double filter: Correct Status AND Balance > 0
-            active_pending_with_balance = temp_df[
-                (temp_df["status"].isin(["PENDING", "ACTIVE"])) & 
-                (temp_df["balance"] > 0)
+            total_loans = (
+                filtered_loans["sn"]
+                .nunique()
+            )
+    
+            original_loans = filtered_loans[
+                filtered_loans["cycle_no"] == 1
             ]
-            
-            # 4. Sum the outstanding balance only
-            total_pending = active_pending_with_balance["balance"].sum()
-        
+    
+            total_principal = (
+                original_loans["principal"]
+                .sum()
+            )
+    
+            total_paid = (
+                filtered_loans["amount_paid"]
+                .sum()
+            )
+    
+            # --------------------------------
+            # FIXED LIVE PORTFOLIO ENGINE
+            # --------------------------------
+            temp_df = filtered_loans.copy()
+    
+            temp_df["total_repayable"] = pd.to_numeric(
+                temp_df["total_repayable"],
+                errors="coerce"
+            ).fillna(0)
+    
+            temp_df["amount_paid"] = pd.to_numeric(
+                temp_df["amount_paid"],
+                errors="coerce"
+            ).fillna(0)
+    
+            # Safe balance calculation
+            temp_df["balance"] = (
+                temp_df["total_repayable"]
+                - temp_df["amount_paid"]
+            ).clip(lower=0)
+    
+            # Only ACTIVE + PENDING with real balance
+            active_pending_with_balance = temp_df[
+                (
+                    temp_df["status"]
+                    .isin(["PENDING", "ACTIVE"])
+                )
+                &
+                (
+                    temp_df["balance"] > 0
+                )
+            ]
+    
+            # Final live exposure
+            total_pending = (
+                active_pending_with_balance["balance"]
+                .sum()
+            )
+    
             col1, col2, col3, col4 = st.columns(4)
-
+    
             col1.markdown(f"""
             <div style="
                 background: linear-gradient(135deg, #3b82f6, #1e3a8a);
@@ -443,10 +504,12 @@ def show_loans():
                 color:white;
                 text-align:center;">
                 <div style="font-size:14px;">📄 Total Loans</div>
-                <div style="font-size:22px;font-weight:bold;">{total_loans}</div>
+                <div style="font-size:22px;font-weight:bold;">
+                    {total_loans}
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            
+    
             col2.markdown(f"""
             <div style="
                 background: linear-gradient(135deg, #10b981, #065f46);
@@ -455,10 +518,12 @@ def show_loans():
                 color:white;
                 text-align:center;">
                 <div style="font-size:14px;">💰 Principal</div>
-                <div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div>
+                <div style="font-size:22px;font-weight:bold;">
+                    {total_principal:,.0f}
+                </div>
             </div>
             """, unsafe_allow_html=True)
-            
+    
             col3.markdown(f"""
             <div style="
                 background: linear-gradient(135deg, #f59e0b, #92400e);
@@ -467,11 +532,12 @@ def show_loans():
                 color:white;
                 text-align:center;">
                 <div style="font-size:14px;">💳 Paid</div>
-                <div style="font-size:22px;font-weight:bold;">{total_paid:,.0f}</div>
+                <div style="font-size:22px;font-weight:bold;">
+                    {total_paid:,.0f}
+                </div>
             </div>
             """, unsafe_allow_html=True)
-
-            # --- UPDATED METRIC CARD ---
+    
             col4.markdown(f"""
             <div style="
                 background: linear-gradient(135deg, #ef4444, #991b1b);
@@ -479,11 +545,15 @@ def show_loans():
                 border-radius:10px;
                 color:white;
                 text-align:center;">
-                <div style="font-size:14px;">⏳ Active & Pending</div>
-                <div style="font-size:22px;font-weight:bold;">{total_pending:,.0f}</div>
+                <div style="font-size:14px;">
+                    ⏳ Active & Pending
+                </div>
+                <div style="font-size:22px;font-weight:bold;">
+                    {total_pending:,.0f}
+                </div>
             </div>
             """, unsafe_allow_html=True)
-
+    
             st.markdown("---")
         # ------------------------------
         # 📋 LOAN DATA TABLE
