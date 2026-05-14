@@ -352,66 +352,80 @@ def show_calendar():
 
     # ==============================
     # CALENDAR EVENTS
+    # ONLY ACTIVE + PENDING
     # ==============================
     calendar_events = []
-
-    for _, row in active_loans.iterrows():
-
+    
+    calendar_loans = active_loans[
+        active_loans["status"]
+        .isin(["ACTIVE", "PENDING"])
+    ].copy()
+    
+    for _, row in calendar_loans.iterrows():
+    
         if pd.isna(row["end_date"]):
             continue
-
+    
         end_date = row["end_date"]
-
+    
+        # 🔴 Overdue
         if end_date.date() < today.date():
+    
             color = "#ef4444"
-
+    
+        # 🟠 Pending
         elif row["status"] == "PENDING":
+    
             color = "#f59e0b"
-
+    
+        # 🔵 Active
         else:
+    
             color = "#2563eb"
-
+    
         amount = f"{row['balance']:,.0f}"
-
+    
         calendar_events.append({
+    
             "title":
                 f"{row['loan_id_label']} • "
                 f"{row['borrower']} • "
                 f"{amount}",
-
+    
             "start":
                 end_date.strftime("%Y-%m-%d"),
-
+    
             "end":
                 end_date.strftime("%Y-%m-%d"),
-
+    
             "color":
                 color,
-
+    
             "allDay":
                 True,
         })
-
+    
     calendar_options = {
+    
         "headerToolbar": {
             "left": "prev,next today",
             "center": "title",
             "right": "dayGridMonth,timeGridWeek"
         },
-
+    
         "initialView":
             "dayGridMonth",
-
+    
         "height":
             650,
     }
-
+    
     calendar(
         events=calendar_events,
         options=calendar_options,
         key="loan_calendar"
     )
-
+    
     st.divider()
 
     
