@@ -375,18 +375,6 @@ def show_overview():
 
         st.write("")
 
-        # ==============================
-        # EVERYTHING BELOW (UNCHANGED LOGIC)
-        # ==============================
-        # (Your charts, feeds, exports remain EXACTLY as-is)
-
-        # NOTE: No removal of your visualization code
-
-    except Exception as e:
-        st.error(f"Dashboard recovered from an internal issue: {str(e)}")
-
-        st.write("")
-
         # --- 4. DATA VISUALIZATION SECTION ---
         col_l, col_r = st.columns([2, 1])
 
