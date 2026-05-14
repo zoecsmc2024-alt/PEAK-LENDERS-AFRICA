@@ -1,19 +1,19 @@
 import streamlit as st
 import pandas as pd
-import calendar
+
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
 
 def show_calendar():
-    st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color: #2B3F87;'>📅 Activity calendar</h2>", unsafe_allow_html=True)
 
     # 1. FETCH DATA (SAFE ADAPTERS)
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("📅 Calendar is clear! No active loans to track.")
+        st.info("📅 calendar is clear! No active loans to track.")
         return
 
     # --- 🛡️ SMART STATUS LOGIC (FIX FOR CLEARED LOANS) ---
@@ -59,7 +59,7 @@ def show_calendar():
     # Filter for active loans (Excluding CLEARED and BCF)
     active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["CLEARED", "BCF", "CLOSED"])].copy()
 
-    # --- 🎨 VISUAL CALENDAR WIDGET ---
+    # --- 🎨 VISUAL calendar WIDGET ---
     calendar_events = []
     for _, r in active_loans.iterrows():
         if pd.notna(r['end_date']):
