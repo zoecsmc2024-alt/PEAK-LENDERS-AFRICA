@@ -7,6 +7,11 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from io import BytesIO
 from datetime import datetime
+import streamlit as st
+import pandas as pd
+
+# Core DB utilities
+from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 def generate_receipt_pdf(data, filename):
     doc = SimpleDocTemplate(filename)
     styles = getSampleStyleSheet()
