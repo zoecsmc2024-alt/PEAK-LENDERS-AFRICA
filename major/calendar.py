@@ -1,248 +1,148 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, timedelta
 
 from core.database import get_cached_data
-
-# IMPORTANT: correct calendar component
-from streamlit_calendar import calendar
 
 
 def show_calendar():
 
-    st.markdown(
-        "<h2 style='color: #2B3F87;'>📅 Loan Activity Calendar</h2>",
-        unsafe_allow_html=True
-    )
+    st.markdown("## 📅 Activity Calendar")
 
-    tenant_id = st.session_state.get("tenant_id")
-    if not tenant_id:
-        st.error("Session expired.")
+    # ==============================
+    # DATA LOAD
+    # ==============================
+    loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
+
+    if loans_df is None or loans_df.empty:
+        st.info("📅 Calendar is empty — no active loans.")
         return
 
-    # ==============================
-    # FAST SAFE DATA LOADING
-    # ==============================
-    def load(name):
-        df = get_cached_data(name)
-        if df is None:
-            return pd.DataFrame()
-        if "tenant_id" in df.columns:
-            df = df[df["tenant_id"].astype(str) == str(tenant_id)]
-        return df.copy()
-
-    loans_df = load("loans")
-    borrowers_df = load("borrowers")
-
-    if loans_df.empty:
-        st.info("📅 No loan data available yet.")
-        return
+    loans = loans_df.copy()
 
     # ==============================
-    # SAFE NORMALIZATION
+    # CLEAN CORE FIELDS
     # ==============================
-    for col in ["principal", "interest", "cycle_no", "balance"]:
-        if col in loans_df.columns:
-            loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
+    loans["sn"] = loans.get("sn", "").astype(str).str.strip().str.upper()
+    loans["status"] = loans.get("status", "").astype(str).str.upper()
 
-    if "status" in loans_df.columns:
-        loans_df["status"] = loans_df["status"].astype(str).str.upper()
-    else:
-        loans_df["status"] = "UNKNOWN"
+    loans["balance"] = pd.to_numeric(loans.get("balance", 0), errors="coerce").fillna(0)
+    loans["total_repayable"] = pd.to_numeric(loans.get("total_repayable", 0), errors="coerce").fillna(0)
 
-    if "sn" in loans_df.columns:
-        loans_df["sn"] = loans_df["sn"].astype(str).str.upper()
+    loans["cycle_no"] = pd.to_numeric(loans.get("cycle_no", 1), errors="coerce").fillna(1)
+
+    loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
+    loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
 
     # ==============================
-    # BORROWER MAPPING (SAFE)
+    # SMART STATUS FIX
     # ==============================
-    if not borrowers_df.empty and "id" in borrowers_df.columns:
+    loans = loans.sort_values(["sn", "cycle_no", "start_date"])
+
+    for sn, grp in loans.groupby("sn"):
+        idx = grp.index.tolist()
+
+        if len(idx) > 1:
+            loans.loc[idx[:-1], "status"] = "BCF"
+
+        last = idx[-1]
+        if abs(loans.at[last, "balance"]) < 1:
+            loans.at[last, "status"] = "CLEARED"
+
+    loans.loc[
+        (loans["balance"] <= 0) & (loans["status"] != "BCF"),
+        "status"
+    ] = "CLEARED"
+
+    # ==============================
+    # BORROWER MAPPING
+    # ==============================
+    if borrowers_df is not None and not borrowers_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
-        bor_map = dict(zip(borrowers_df["id"], borrowers_df.get("name", "")))
-        if "borrower_id" in loans_df.columns:
-            loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
-            loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown")
+        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+        loans["borrower"] = loans.get("borrower_id", "").astype(str).map(bor_map)
+        loans["borrower"] = loans["borrower"].fillna("Unknown borrower")
     else:
-        loans_df["borrower"] = "Unknown"
+        loans["borrower"] = "Unknown borrower"
 
     # ==============================
-    # DATES
+    # ACTIVE LOANS ONLY
     # ==============================
-    if "end_date" in loans_df.columns:
-        loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
-    else:
-        loans_df["end_date"] = pd.NaT
-
-    today = pd.Timestamp.now().normalize()
-
-    # ==============================
-    # ACTIVE LOANS
-    # ==============================
-    active_loans = loans_df[
-        ~loans_df["status"].isin(["CLEARED", "BCF", "CLOSED"])
+    active_loans = loans[
+        ~loans["status"].isin(["CLEARED", "BCF", "CLOSED"])
     ].copy()
 
-    # ==============================
-    # OVERDUE LOGIC (SAFE)
-    # ==============================
-    overdue_mask = (
-        active_loans["end_date"].notna()
-        & (active_loans["end_date"] < today)
-    )
+    today = pd.Timestamp.today().normalize()
 
-    overdue_count = int(overdue_mask.sum())
+    # ==============================
+    # CALENDAR DATA
+    # ==============================
+    calendar_df = active_loans[active_loans["end_date"].notna()].copy()
 
-    due_today_df = active_loans[
-        active_loans["end_date"].dt.date == today.date()
+    calendar_df["overdue"] = calendar_df["end_date"] < today
+
+    # ==============================
+    # METRICS (NO HTML)
+    # ==============================
+    due_today = calendar_df[calendar_df["end_date"].dt.date == today.date()]
+    upcoming = calendar_df[
+        (calendar_df["end_date"] > today) &
+        (calendar_df["end_date"] <= today + pd.Timedelta(days=7))
     ]
+    overdue = calendar_df[calendar_df["overdue"]]
 
-    upcoming_df = active_loans[
-        (active_loans["end_date"] > today) &
-        (active_loans["end_date"] <= today + pd.Timedelta(days=7))
-    ]
+    c1, c2, c3 = st.columns(3)
 
-    # ==============================
-    # CALENDAR EVENTS (FAST VECTOR STYLE)
-    # ==============================
-    events = []
+    c1.metric("Due Today", len(due_today))
+    c2.metric("Upcoming (7 days)", len(upcoming))
+    c3.metric("Overdue", len(overdue))
 
-    if not active_loans.empty:
-
-        repayable = active_loans.get("total_repayable", active_loans.get("principal", 0))
-        repayable = pd.to_numeric(repayable, errors="coerce").fillna(0)
-
-        is_overdue = active_loans["end_date"] < today
-
-        for i in range(len(active_loans)):
-
-            row = active_loans.iloc[i]
-
-            if pd.isna(row["end_date"]):
-                continue
-
-            color = "#FF4B4B" if is_overdue.iloc[i] else "#4A90E2"
-
-            amount = float(row.get("total_repayable", row.get("principal", 0)))
-
-            borrower = row.get("borrower", "Unknown")
-
-            events.append({
-                "title": f"UGX {amount:,.0f} - {borrower}",
-                "start": row["end_date"].strftime("%Y-%m-%d"),
-                "end": row["end_date"].strftime("%Y-%m-%d"),
-                "color": color,
-                "allDay": True,
-            })
+    st.divider()
 
     # ==============================
-    # RENDER CALENDAR
+    # CALENDAR TABLE (SAFE STREAMLIT UI)
     # ==============================
-    calendar_options = {
-        "headerToolbar": {
-            "left": "prev,next today",
-            "center": "title",
-            "right": "dayGridMonth,timeGridWeek"
-        },
-        "initialView": "dayGridMonth",
-        "selectable": True,
-    }
+    st.subheader("📆 Upcoming Deadlines")
 
-    calendar(events=events, options=calendar_options, key="loan_calendar")
+    if calendar_df.empty:
+        st.info("No scheduled repayments found.")
+    else:
+        display = calendar_df.sort_values("end_date")[[
+            "borrower",
+            "total_repayable",
+            "balance",
+            "end_date",
+            "status"
+        ]].copy()
 
-    st.markdown("---")
+        display["end_date"] = display["end_date"].dt.strftime("%Y-%m-%d")
 
-    # ==============================
-    # KPI METRICS
-    # ==============================
-    col1, col2, col3 = st.columns(3)
+        display = display.rename(columns={
+            "borrower": "Borrower",
+            "total_repayable": "Total Due",
+            "balance": "Balance",
+            "end_date": "Due Date",
+            "status": "Status"
+        })
 
-    col1.markdown(
-        f"""
-        <div style="padding:16px;background:#F0F8FF;border-radius:12px;border-left:4px solid #2B3F87;">
-            <div style="font-size:12px;color:#666;">Due Today</div>
-            <div style="font-size:20px;font-weight:700;color:#2B3F87;">{len(due_today_df)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    col2.markdown(
-        f"""
-        <div style="padding:16px;background:#F5F7FF;border-radius:12px;border-left:4px solid #4A90E2;">
-            <div style="font-size:12px;color:#666;">Next 7 Days</div>
-            <div style="font-size:20px;font-weight:700;color:#4A90E2;">{len(upcoming_df)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    col3.markdown(
-        f"""
-        <div style="padding:16px;background:#FFF5F5;border-radius:12px;border-left:4px solid #D32F2F;">
-            <div style="font-size:12px;color:#666;">Overdue</div>
-            <div style="font-size:20px;font-weight:700;color:#D32F2F;">{overdue_count}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
+        st.dataframe(
+            display,
+            use_container_width=True,
+            hide_index=True
+        )
 
     # ==============================
-    # MONTH FORECAST
+    # TODAY ACTION LIST (NO HTML TABLE)
     # ==============================
-    st.markdown("---")
-    st.markdown("### 📊 Monthly Forecast")
+    st.subheader("📌 Action Items (Today)")
 
-    this_month = active_loans[
-        active_loans["end_date"].dt.month == today.month
-    ]
+    if due_today.empty:
+        st.success("No collections due today.")
+    else:
+        for _, r in due_today.iterrows():
+            col_a, col_b, col_c, col_d = st.columns([2, 3, 2, 2])
 
-    total_expected = pd.to_numeric(
-        this_month.get("total_repayable", this_month.get("principal", 0)),
-        errors="coerce"
-    ).sum()
-
-    m1, m2 = st.columns(2)
-    m1.metric("Expected Collections", f"UGX {total_expected:,.0f}")
-    m2.metric("Loans Due This Month", len(this_month))
-
-    # ==============================
-    # ACTION TABLE
-    # ==============================
-    st.markdown("### 📌 Today’s Action List")
-
-    if due_today_df.empty:
-        st.success("No due payments today.")
-        return
-
-    table_rows = ""
-
-    for _, r in due_today_df.iterrows():
-
-        amount = float(r.get("total_repayable", r.get("principal", 0)))
-
-        table_rows += f"""
-        <tr>
-            <td style="padding:10px;">{str(r.get('id',''))[:8]}</td>
-            <td style="padding:10px;">{r.get('borrower','Unknown')}</td>
-            <td style="padding:10px;text-align:right;">UGX {amount:,.0f}</td>
-            <td style="padding:10px;text-align:center;">
-                <span style="background:#2B3F87;color:white;padding:4px 10px;border-radius:8px;font-size:11px;">
-                    COLLECT
-                </span>
-            </td>
-        </tr>
-        """
-
-    st.markdown(f"""
-    <div style="border:1px solid #2B3F87;border-radius:10px;overflow:hidden;">
-        <table style="width:100%;border-collapse:collapse;">
-            <tr style="background:#2B3F87;color:white;">
-                <th style="padding:10px;">Loan ID</th>
-                <th style="padding:10px;">Borrower</th>
-                <th style="padding:10px;text-align:right;">Amount</th>
-                <th style="padding:10px;">Action</th>
-            </tr>
-            {table_rows}
-        </table>
-    </div>
-    """, unsafe_allow_html=True)
+            col_a.write(f"**{str(r.get('id', 'N/A'))[:8]}**")
+            col_b.write(r["borrower"])
+            col_c.write(f"UGX {r['total_repayable']:,.0f}")
+            col_d.button("Collect", key=f"collect_{r.name}")
