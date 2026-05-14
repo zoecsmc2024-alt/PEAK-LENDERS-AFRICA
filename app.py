@@ -23,7 +23,7 @@ from core.database import supabase
 from major.borrowers import show_borrowers
 from major.loans import show_loans
 from major.collateral import show_collateral
-from major.overview import show_overview
+from major.dashboard_view import show_dashboard_view
 from major.calendar import show_calendar
 from major.expenses import show_expenses
 from major.payments import show_payments
