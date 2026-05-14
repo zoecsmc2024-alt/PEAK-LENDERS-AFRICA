@@ -19,7 +19,7 @@ from twilio.rest import Client as TwilioClient
 import time
 import uuid
 import extra_streamlit_components as stx
-
+from core.database import supabase
 
 # --- Page Config stays here ---
 st.set_page_config(
