@@ -3,7 +3,7 @@ import pandas as pd
 from streamlit_calendar import calendar
 from core.database import get_cached_data
 from datetime import datetime, timedelta
-
+import uuid
 from core.database import get_cached_data
 from streamlit_calendar import calendar
 def show_calendar():
@@ -351,11 +351,7 @@ def show_calendar():
                     "Due Date",
                     "Action"
                 ]
-            ].rename(columns={
-                "borrower":
-                    "borrower"
-            }),
-
+            ],
             use_container_width=True,
             hide_index=True
         )
