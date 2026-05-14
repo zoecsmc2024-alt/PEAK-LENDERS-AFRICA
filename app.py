@@ -16,6 +16,7 @@ import bcrypt
 from twilio.rest import Client as TwilioClient
 import time
 import uuid
+from supabase import create_client
 import extra_streamlit_components as stx
 from services.payroll_engine import compute_payroll
 from core.database import (
