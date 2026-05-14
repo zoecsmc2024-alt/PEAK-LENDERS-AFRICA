@@ -23,7 +23,7 @@ from core.database import supabase
 from major.borrowers import show_borrowers
 from major.loans import show_loans
 from major.collateral import show_collateral
-from major.dashboard_view import show_dashboard_view
+from major.overview import show_overview
 from major.calendar import show_calendar
 from major.expenses import show_expenses
 from major.payments import show_payments
@@ -1224,7 +1224,7 @@ if __name__ == "__main__":
 
             # 4. 🗺️ NAVIGATION ROUTER
             if page == "Overview":
-                show_dashboard_view()
+                show_overview()
                 
             elif page == "loans":
                 show_loans()
