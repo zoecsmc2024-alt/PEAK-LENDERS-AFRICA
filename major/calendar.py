@@ -1,3 +1,10 @@
+import streamlit as st
+import pandas as pd
+
+# Core DB utilities
+from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
+
+
 def show_calendar():
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
