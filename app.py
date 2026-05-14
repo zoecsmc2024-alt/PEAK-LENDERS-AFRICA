@@ -22,6 +22,14 @@ import extra_streamlit_components as stx
 from core.database import supabase
 from major.borrowers import show_borrowers
 from major.loans import show_loans
+from major.collateral import show_collateral
+from major.overview import show_overview
+from major.calendar import show_calendar
+from major.expenses import show_expenses
+from major.payments import show_payments
+from major.ledger import show_ledger
+from major.reports import show_reports
+from major.payroll import show_payroll
 # --- Page Config stays here ---
 st.set_page_config(
     page_title="Lending Manager Pro",
