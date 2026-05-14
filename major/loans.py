@@ -409,16 +409,23 @@ def show_loans():
         # 📊 PORTFOLIO METRICS
         # ------------------------------
         if not filtered_loans.empty:
-        
+            # Basic Metrics
             total_loans = filtered_loans["sn"].nunique()
             original_loans = filtered_loans[filtered_loans["cycle_no"] == 1]  
             total_principal = original_loans["principal"].sum()
             total_paid = filtered_loans["amount_paid"].sum()
             
-            # --- UPDATED CALCULATION: PENDING + ACTIVE ---
-            # We use .isin() to filter for multiple statuses at once
-            active_pending_df = filtered_loans[filtered_loans["status"].isin(["PENDING", "ACTIVE"])]
-            total_pending = active_pending_df["total_repayable"].sum()
+            # --- FIX: CALCULATION FOR REMAINING BALANCE ---
+            # 1. Filter for Pending and Active loans
+            active_pending_df = filtered_loans[filtered_loans["status"].isin(["PENDING", "ACTIVE"])].copy()
+        
+            # 2. Ensure numeric types to avoid calculation errors
+            total_rep = pd.to_numeric(active_pending_df["total_repayable"], errors="coerce").fillna(0)
+            paid_so_far = pd.to_numeric(active_pending_df["amount_paid"], errors="coerce").fillna(0)
+        
+            # 3. Calculate True Pending (Remaining Balance)
+            # This prevents early payments from being double-counted in 'Paid' and 'Active'
+            total_pending = (total_rep - paid_so_far).sum()
         
             col1, col2, col3, col4 = st.columns(4)
 
