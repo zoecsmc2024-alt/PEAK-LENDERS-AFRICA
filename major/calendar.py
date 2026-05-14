@@ -11,7 +11,7 @@ def show_calendar():
     
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
-    loans_df = get_cached_data("Loans")
+    loans_df = get_cached_data("loans")
 
     if loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
