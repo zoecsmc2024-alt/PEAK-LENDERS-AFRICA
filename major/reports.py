@@ -195,33 +195,42 @@ def show_reports():
     fy_pay = payments[payments["fiscal_year"] == selected]
 
     with s1:
-        st.subheader(f"Income Statement — {selected}")
+    st.subheader(f"Income Statement — {selected}")
 
-        fy_active = fy_loans[
-            (fy_loans["cycle_no"] == 1) &
-            (fy_loans["status"].isin(["ACTIVE","PENDING"]))
-        ]["principal"].sum()
+    fy_active = fy_loans[
+        (fy_loans["cycle_no"] == 1) &
+        (fy_loans["status"].isin(["ACTIVE","PENDING"]))
+    ]["principal"].sum()
 
-        # Use proportional interest based on payments
-        fy_interest = compute_realized_interest(fy_loans, fy_pay) if not fy_loans.empty else 0
-        fy_opex = sum_col(fy_exp, "amount")
+    fy_interest = compute_realized_interest(fy_loans, fy_pay) if not fy_loans.empty else 0
+    fy_opex = sum_col(fy_exp, "amount")
 
-        st.dataframe(pd.DataFrame({
-            "Item": ["Active Capital","Interest","OPEX","Net Profit"],
-            "UGX": [fy_active, fy_interest, fy_opex, fy_interest - fy_opex]
-        }))
+    st.dataframe(pd.DataFrame({
+        "Item": ["Active Capital","Interest","OPEX","Net Profit"],
+        "UGX": [
+            f"{fy_active:,.0f}",
+            f"{fy_interest:,.0f}",
+            f"{fy_opex:,.0f}",
+            f"{fy_interest - fy_opex:,.0f}"
+        ]
+    }), use_container_width=True)
 
     with s2:
         st.subheader(f"Balance Sheet — {selected}")
-
+    
         loan_book = fy_loans["balance"].sum()
         cash = sum_col(fy_pay, "amount") - sum_col(fy_exp, "amount")
         total_assets = fy_active + loan_book + cash
-
+    
         st.dataframe(pd.DataFrame({
             "Item": ["Active Capital","Loan Book","Cash","Total Assets"],
-            "UGX": [fy_active, loan_book, cash, total_assets]
-        }))
+            "UGX": [
+                f"{fy_active:,.0f}",
+                f"{loan_book:,.0f}",
+                f"{cash:,.0f}",
+                f"{total_assets:,.0f}"
+            ]
+        }), use_container_width=True)
 
 # -----------------------------
 # HELPER: REALIZED INTEREST CALC
