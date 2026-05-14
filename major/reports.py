@@ -102,8 +102,24 @@ def show_reports():
     # ==============================
     # 💰 INT. REVENUE
     # ==============================
-    cleared_loans = loans[loans["status"] == "CLEARED"]
-    projected_interest = cleared_loans["interest"].sum()
+    # Add interest for ACTIVE/PENDING loans proportionally to amount collected
+    def compute_interest_earned(loans_df, payments_df):
+        loans_df = loans_df.copy()
+        payments_df = payments_df.copy()
+        loans_df["principal"] = pd.to_numeric(loans_df["principal"], errors="coerce").fillna(0)
+        loans_df["interest"] = pd.to_numeric(loans_df["interest"], errors="coerce").fillna(0)
+    
+        interest_earned = 0
+        for _, loan in loans_df.iterrows():
+            loan_payments = payments_df[payments_df["loan_id"] == loan["id"]]["amount"].sum()
+            total_due = loan["principal"] + loan["interest"]
+            if total_due > 0:
+                # proportion of payment applied to interest
+                proportion = min(loan_payments / total_due, 1)
+                interest_earned += loan["interest"] * proportion
+        return interest_earned
+    
+    projected_interest = compute_interest_earned(loans, payments)
 
     # ==============================
     # 💵 COLLECTIONS
