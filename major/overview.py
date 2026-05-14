@@ -187,9 +187,7 @@ def show_overview():
         expenses_df = normalize(load_cached("expenses"))
         borrowers_df = normalize(load_cached("borrowers"))
 
-        if loans_df.empty:
-            st.info("👋 Welcome! No active data found. Add your first borrower or loan.")
-            return
+        
 
         # ==============================
         # SMART STATUS LOGIC (UNCHANGED)
