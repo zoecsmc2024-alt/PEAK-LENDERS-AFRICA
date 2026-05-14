@@ -6,22 +6,22 @@ from core.database import get_cached_data
 
 def show_calendar():
 
-    st.markdown(
-        "## 📅 Activity Calendar",
-        help="Loan repayment tracking dashboard"
-    )
+    st.markdown("## 📅 Loan Operations Center")
 
+    # ==============================
+    # LOAD DATA
+    # ==============================
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("📅 No active loans in the system.")
+        st.info("No active loan data available.")
         return
 
     loans = loans_df.copy()
 
     # ==============================
-    # CLEAN DATA
+    # CLEAN CORE FIELDS
     # ==============================
     loans["status"] = loans.get("status", "").astype(str).str.upper()
     loans["balance"] = pd.to_numeric(loans.get("balance", 0), errors="coerce").fillna(0)
@@ -32,97 +32,149 @@ def show_calendar():
     today = pd.Timestamp.today().normalize()
 
     # ==============================
-    # STATUS COLOR ENGINE 🎨
+    # BORROWER MAPPING
     # ==============================
-    def status_style(row):
+    if borrowers_df is not None and not borrowers_df.empty:
+        borrowers_df["id"] = borrowers_df["id"].astype(str)
+        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
+        loans["borrower"] = loans.get("borrower_id", "").astype(str).map(bor_map)
+        loans["borrower"] = loans["borrower"].fillna("Unknown")
+    else:
+        loans["borrower"] = "Unknown"
+
+    # ==============================
+    # FILTER ACTIVE LOANS
+    # ==============================
+    active = loans[
+        ~loans["status"].isin(["CLEARED", "BCF", "CLOSED"])
+    ].copy()
+
+    # ==============================
+    # 🔥 RISK ENGINE (CORE UPGRADE)
+    # ==============================
+    def risk_score(row):
         if pd.isna(row["end_date"]):
-            return "⚪ Unknown"
+            return 0
 
-        if row["status"] in ["CLEARED", "BCF"]:
-            return "🟢 Completed"
+        days = (row["end_date"] - today).days
 
-        if row["end_date"] < today:
-            return "🔴 Overdue"
+        if row["status"] in ["DEFAULT"]:
+            return 100
 
-        if row["end_date"] <= today + pd.Timedelta(days=7):
-            return "🟠 Due Soon"
+        if days < 0:
+            return 90
 
-        return "🟢 Active"
+        if days <= 3:
+            return 75
 
-    loans["calendar_status"] = loans.apply(status_style, axis=1)
+        if days <= 7:
+            return 50
+
+        return 10
+
+    active["risk_score"] = active.apply(risk_score, axis=1)
 
     # ==============================
-    # METRICS (COLORED FEEL)
+    # COLOR CLASSIFICATION
     # ==============================
-    overdue = loans[loans["calendar_status"] == "🔴 Overdue"]
-    due_soon = loans[loans["calendar_status"] == "🟠 Due Soon"]
-    active = loans[loans["calendar_status"] == "🟢 Active"]
+    def priority_label(score):
+        if score >= 90:
+            return "🔴 CRITICAL"
+        if score >= 70:
+            return "🟠 HIGH"
+        if score >= 40:
+            return "🟡 MEDIUM"
+        return "🟢 LOW"
 
-    c1, c2, c3, c4 = st.columns(4)
+    active["priority"] = active["risk_score"].apply(priority_label)
 
-    c1.metric("🔴 Overdue", len(overdue))
-    c2.metric("🟠 Due Soon", len(due_soon))
-    c3.metric("🟢 Active", len(active))
-    c4.metric("📊 Total Loans", len(loans))
+    # ==============================
+    # KPI STRIP (FAST INSIGHT)
+    # ==============================
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric("🔴 Critical Loans", (active["risk_score"] >= 90).sum())
+    col2.metric("🟠 High Risk", (active["risk_score"].between(70, 89)).sum())
+    col3.metric("🟡 Medium Risk", (active["risk_score"].between(40, 69)).sum())
+    col4.metric("💰 Total Exposure", f"UGX {active['total_repayable'].sum():,.0f}")
 
     st.divider()
 
     # ==============================
-    # COLORFUL CALENDAR TABLE (NO HTML)
+    # SORTED OPERATIONS TABLE
     # ==============================
-    st.subheader("📆 Loan Schedule Overview")
+    st.subheader("📊 Loan Priority Queue (Ops View)")
 
-    view = loans[loans["end_date"].notna()].copy()
+    view = active.sort_values("risk_score", ascending=False)[
+        ["borrower", "total_repayable", "balance", "end_date", "risk_score", "priority"]
+    ].copy()
 
-    view = view.sort_values("end_date")
+    view["end_date"] = view["end_date"].dt.strftime("%Y-%m-%d")
 
-    view["Due Date"] = view["end_date"].dt.strftime("%Y-%m-%d")
-    view["Borrower"] = view.get("borrower", "Unknown")
-    view["Amount"] = view["total_repayable"].apply(lambda x: f"UGX {x:,.0f}")
-    view["Status"] = view["calendar_status"]
-
-    view = view[["Borrower", "Amount", "Due Date", "Status"]]
-
-    # Streamlit native styling (SAFE)
-    def color_status(val):
-        if "Overdue" in val:
-            return "background-color:#FEE2E2; color:#991B1B; font-weight:bold;"
-        if "Due Soon" in val:
-            return "background-color:#FFF7ED; color:#9A3412; font-weight:bold;"
-        if "Active" in val:
-            return "background-color:#ECFDF5; color:#065F46; font-weight:bold;"
-        if "Completed" in val:
-            return "background-color:#EFF6FF; color:#1E3A8A; font-weight:bold;"
-        return ""
-
-    styled = (
-        view.style
-        .applymap(color_status, subset=["Status"])
-        .format({"Amount": "{}"})
-    )
+    view = view.rename(columns={
+        "borrower": "Borrower",
+        "total_repayable": "Total Due",
+        "balance": "Outstanding",
+        "end_date": "Due Date",
+        "risk_score": "Risk Score",
+        "priority": "Priority"
+    })
 
     st.dataframe(
-        styled,
+        view,
         use_container_width=True,
         hide_index=True
     )
 
     # ==============================
-    # TODAY PANEL (COLORED BUT CLEAN)
+    # BORROWER DRILLDOWN
     # ==============================
-    st.subheader("📌 Today's Collection Focus")
+    st.subheader("👤 Borrower Exposure Analysis")
 
-    today_loans = loans[loans["end_date"].dt.date == today.date()]
+    borrower_summary = active.groupby("borrower").agg(
+        loans=("borrower", "count"),
+        exposure=("total_repayable", "sum"),
+        outstanding=("balance", "sum"),
+        avg_risk=("risk_score", "mean")
+    ).reset_index()
 
-    if today_loans.empty:
-        st.success("✨ No collections due today — clean slate!")
+    borrower_summary = borrower_summary.sort_values("exposure", ascending=False)
+
+    st.dataframe(
+        borrower_summary,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # ==============================
+    # TODAY OPS PANEL
+    # ==============================
+    st.subheader("📌 Today's Priority Actions")
+
+    today_ops = active[active["risk_score"] >= 70].copy()
+
+    if today_ops.empty:
+        st.success("All systems stable. No urgent collections today.")
     else:
-        for _, r in today_loans.iterrows():
+        for _, r in today_ops.iterrows():
 
-            status_icon = "🔴" if r["end_date"] < today else "🟠"
+            left, mid, right = st.columns([3, 3, 2])
 
-            col1, col2, col3 = st.columns([3, 3, 2])
+            left.write(f"{r['priority']} **{r['borrower']}**")
+            mid.write(f"UGX {r['total_repayable']:,.0f}")
+            right.button("Collect", key=f"ops_{r.name}")
 
-            col1.write(f"{status_icon} **{r.get('borrower','Unknown')}**")
-            col2.write(f"UGX {r['total_repayable']:,.0f}")
-            col3.button("Collect", key=f"collect_{r.name}")
+    # ==============================
+    # HEALTH SUMMARY FOOTER
+    # ==============================
+    st.divider()
+
+    st.markdown(
+        f"""
+        ### 🧠 Portfolio Health Summary
+
+        - Total Active Loans: **{len(active)}**
+        - High Risk Exposure: **UGX {active[active['risk_score'] >= 70]['total_repayable'].sum():,.0f}**
+        - Portfolio Risk Weighted Score: **{active['risk_score'].mean():.1f}**
+        """
+    )
