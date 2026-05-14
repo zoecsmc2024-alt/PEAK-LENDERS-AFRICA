@@ -23,8 +23,8 @@ def show_collateral():
     # ==============================
     # 📦 FETCH DATA
     # ==============================
-    collateral_df = get_data("collateral") 
-    loans_df = get_data("loans")
+    collateral_df = get_cached_data("collateral") 
+    loans_df = get_cached_data("loans")
 
     # ==============================
     # 🔍 FILTER ELIGIBLE LOANS
