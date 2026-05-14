@@ -455,40 +455,63 @@ def show_loans():
                 .sum()
             )
     
-            # --------------------------------
-            # FIXED LIVE PORTFOLIO ENGINE
-            # --------------------------------
+            # =================================
+            # LIVE PORTFOLIO ENGINE
+            # ONLY USE LATEST LOAN CYCLE
+            # =================================
+            
             temp_df = filtered_loans.copy()
-    
+            
+            # Ensure numeric safety
             temp_df["total_repayable"] = pd.to_numeric(
                 temp_df["total_repayable"],
                 errors="coerce"
             ).fillna(0)
-    
+            
             temp_df["amount_paid"] = pd.to_numeric(
                 temp_df["amount_paid"],
                 errors="coerce"
             ).fillna(0)
-    
+            
             # Safe balance calculation
             temp_df["balance"] = (
                 temp_df["total_repayable"]
                 - temp_df["amount_paid"]
             ).clip(lower=0)
-    
-            # Only ACTIVE + PENDING with real balance
-            active_pending_with_balance = temp_df[
+            
+            # =================================
+            # KEEP ONLY LATEST CYCLE FOR METRICS
+            # =================================
+            latest_cycles = (
+                temp_df
+                .sort_values(
+                    by=["sn", "cycle_no"],
+                    ascending=[True, False]
+                )
+                .drop_duplicates(
+                    subset=["sn"],
+                    keep="first"
+                )
+                .copy()
+            )
+            
+            # =================================
+            # FILTER LIVE LOANS ONLY
+            # =================================
+            active_pending_with_balance = latest_cycles[
                 (
-                    temp_df["status"]
+                    latest_cycles["status"]
                     .isin(["PENDING", "ACTIVE"])
                 )
                 &
                 (
-                    temp_df["balance"] > 0
+                    latest_cycles["balance"] > 0
                 )
             ]
-    
-            # Final live exposure
+            
+            # =================================
+            # FINAL LIVE PORTFOLIO
+            # =================================
             total_pending = (
                 active_pending_with_balance["balance"]
                 .sum()
