@@ -216,7 +216,7 @@ def show_calendar():
         active_loans["end_date"].dt.date
         == today.date()
     ]
-
+    
     upcoming_df = active_loans[
         (
             active_loans["end_date"]
@@ -228,64 +228,126 @@ def show_calendar():
             <= today + pd.Timedelta(days=7)
         )
     ]
-
+    
     overdue_df = active_loans[
         active_loans["end_date"]
         < today
     ]
-
+    
     total_balance = (
         active_loans["balance"]
         .sum()
     )
-
+    
     pending_count = len(
         active_loans[
             active_loans["status"] == "PENDING"
         ]
     )
-
+    
     active_count = len(
         active_loans[
             active_loans["status"] == "ACTIVE"
         ]
     )
-
+    
+    overdue_count = len(overdue_df)
+    
     # ==============================
-    # METRIC CARDS
+    # COLORED METRIC CARDS
     # ==============================
-    m1, m2, m3, m4, m5, m6 = st.columns(6)
-
-    m1.metric(
-        "📌 Due Today",
-        f"{len(due_today_df):,}"
-    )
-
-    m2.metric(
-        "⏳ Upcoming",
-        f"{len(upcoming_df):,}"
-    )
-
-    m3.metric(
-        "🔴 Overdue",
-        f"{len(overdue_df):,}"
-    )
-
-    m4.metric(
-        "🟠 Pending",
-        f"{pending_count:,}"
-    )
-
-    m5.metric(
-        "🔵 Active",
-        f"{active_count:,}"
-    )
-
-    m6.metric(
-        "💰 Portfolio",
-        f"{total_balance:,.0f}"
-    )
-
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
+    
+    with c1:
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#2563eb,#1d4ed8);
+            padding:18px;
+            border-radius:16px;
+            color:white;
+            text-align:center;
+            box-shadow:0 4px 12px rgba(37,99,235,0.25);
+        ">
+            <div style="font-size:13px;">📌 Due Today</div>
+            <div style="font-size:30px;font-weight:bold;">{}</div>
+        </div>
+        """.format(f"{len(due_today_df):,}"), unsafe_allow_html=True)
+    
+    with c2:
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#f59e0b,#d97706);
+            padding:18px;
+            border-radius:16px;
+            color:white;
+            text-align:center;
+            box-shadow:0 4px 12px rgba(245,158,11,0.25);
+        ">
+            <div style="font-size:13px;">⏳ Upcoming</div>
+            <div style="font-size:30px;font-weight:bold;">{}</div>
+        </div>
+        """.format(f"{len(upcoming_df):,}"), unsafe_allow_html=True)
+    
+    with c3:
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#ef4444,#b91c1c);
+            padding:18px;
+            border-radius:16px;
+            color:white;
+            text-align:center;
+            box-shadow:0 4px 12px rgba(239,68,68,0.25);
+        ">
+            <div style="font-size:13px;">🔴 Overdue</div>
+            <div style="font-size:30px;font-weight:bold;">{}</div>
+        </div>
+        """.format(f"{overdue_count:,}"), unsafe_allow_html=True)
+    
+    with c4:
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#f97316,#ea580c);
+            padding:18px;
+            border-radius:16px;
+            color:white;
+            text-align:center;
+            box-shadow:0 4px 12px rgba(249,115,22,0.25);
+        ">
+            <div style="font-size:13px;">🟠 Pending</div>
+            <div style="font-size:30px;font-weight:bold;">{}</div>
+        </div>
+        """.format(f"{pending_count:,}"), unsafe_allow_html=True)
+    
+    with c5:
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#06b6d4,#0891b2);
+            padding:18px;
+            border-radius:16px;
+            color:white;
+            text-align:center;
+            box-shadow:0 4px 12px rgba(6,182,212,0.25);
+        ">
+            <div style="font-size:13px;">🔵 Active</div>
+            <div style="font-size:30px;font-weight:bold;">{}</div>
+        </div>
+        """.format(f"{active_count:,}"), unsafe_allow_html=True)
+    
+    with c6:
+        st.markdown("""
+        <div style="
+            background:linear-gradient(135deg,#10b981,#047857);
+            padding:18px;
+            border-radius:16px;
+            color:white;
+            text-align:center;
+            box-shadow:0 4px 12px rgba(16,185,129,0.25);
+        ">
+            <div style="font-size:13px;">💰 Portfolio</div>
+            <div style="font-size:26px;font-weight:bold;">{}</div>
+        </div>
+        """.format(f"{total_balance:,.0f}"), unsafe_allow_html=True)
+    
     st.divider()
 
     # ==============================
@@ -352,76 +414,22 @@ def show_calendar():
 
     st.divider()
 
-    # ==============================
-    # OVERDUE TABLE
-    # ==============================
-    st.subheader("🔴 Overdue Follow-up")
-
-    if overdue_df.empty:
-
-        st.success(
-            "No overdue live loans."
-        )
-
-    else:
-
-        overdue_df = overdue_df.copy()
-
-        overdue_df["Days Late"] = (
-            today
-            - overdue_df["end_date"]
-        ).dt.days
-
-        overdue_df["Balance"] = (
-            overdue_df["balance"]
-            .apply(
-                lambda x:
-                f"{x:,.0f} UGX"
-            )
-        )
-
-        overdue_df["Due Date"] = (
-            overdue_df["end_date"]
-            .dt.strftime("%d %b %Y")
-        )
-
-        overdue_df = overdue_df.sort_values(
-            by="Days Late",
-            ascending=False
-        )
-
-        st.dataframe(
-            overdue_df[
-                [
-                    "loan_id_label",
-                    "borrower",
-                    "Balance",
-                    "Due Date",
-                    "Days Late",
-                    "status"
-                ]
-            ],
-            use_container_width=True,
-            hide_index=True
-        )
-
-    st.divider()
-
+    
     # ==============================
     # UPCOMING COLLECTIONS
     # ==============================
     st.subheader("⏳ Upcoming Collections")
-
+    
     if upcoming_df.empty:
-
+    
         st.info(
             "No upcoming collections."
         )
-
+    
     else:
-
+    
         upcoming_df = upcoming_df.copy()
-
+    
         upcoming_df["Amount"] = (
             upcoming_df["balance"]
             .apply(
@@ -429,22 +437,60 @@ def show_calendar():
                 f"{x:,.0f} UGX"
             )
         )
-
+    
         upcoming_df["Due Date"] = (
             upcoming_df["end_date"]
             .dt.strftime("%d %b %Y")
         )
-
+    
         upcoming_df["Days Left"] = (
             upcoming_df["end_date"]
             - today
         ).dt.days
-
+    
         upcoming_df = upcoming_df.sort_values(
             by="Days Left"
         )
-
-        st.dataframe(
+    
+        # ==============================
+        # COLOR ENGINE
+        # ==============================
+        def highlight_upcoming(row):
+    
+            days = row["Days Left"]
+    
+            # Due very soon
+            if days <= 2:
+    
+                style = (
+                    "background-color:#fee2e2;"
+                    "color:#991b1b;"
+                    "font-weight:bold;"
+                )
+    
+            # Medium urgency
+            elif days <= 5:
+    
+                style = (
+                    "background-color:#fef3c7;"
+                    "color:#92400e;"
+                    "font-weight:bold;"
+                )
+    
+            # Safe
+            else:
+    
+                style = (
+                    "background-color:#dcfce7;"
+                    "color:#166534;"
+                )
+    
+            return [style] * len(row)
+    
+        # ==============================
+        # INTERACTIVE STYLED TABLE
+        # ==============================
+        styled_upcoming = (
             upcoming_df[
                 [
                     "loan_id_label",
@@ -454,46 +500,20 @@ def show_calendar():
                     "Days Left",
                     "status"
                 ]
-            ],
+            ]
+            .style
+            .apply(
+                highlight_upcoming,
+                axis=1
+            )
+        )
+    
+        st.dataframe(
+            styled_upcoming,
             use_container_width=True,
             hide_index=True
         )
-
-    st.divider()
-
-    # ==============================
-    # FULL LIVE PORTFOLIO
-    # ==============================
-    st.subheader("📑 Live Portfolio")
-
-    portfolio_df = active_loans.copy()
-
-    portfolio_df["Balance"] = (
-        portfolio_df["balance"]
-        .apply(
-            lambda x:
-            f"{x:,.0f} UGX"
-        )
-    )
-
-    portfolio_df["Due Date"] = (
-        portfolio_df["end_date"]
-        .dt.strftime("%d %b %Y")
-    )
-
-    st.dataframe(
-        portfolio_df[
-            [
-                "loan_id_label",
-                "cycle_no",
-                "borrower",
-                "Balance",
-                "Due Date",
-                "status"
-            ]
-        ].sort_values(
-            by=["status", "Due Date"]
-        ),
-        use_container_width=True,
-        hide_index=True
-    )
+    
+        st.divider()
+    
+        
