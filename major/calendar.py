@@ -6,143 +6,123 @@ from core.database import get_cached_data
 
 def show_calendar():
 
-    st.markdown("## 📅 Activity Calendar")
+    st.markdown(
+        "## 📅 Activity Calendar",
+        help="Loan repayment tracking dashboard"
+    )
 
-    # ==============================
-    # DATA LOAD
-    # ==============================
     loans_df = get_cached_data("loans")
     borrowers_df = get_cached_data("borrowers")
 
     if loans_df is None or loans_df.empty:
-        st.info("📅 Calendar is empty — no active loans.")
+        st.info("📅 No active loans in the system.")
         return
 
     loans = loans_df.copy()
 
     # ==============================
-    # CLEAN CORE FIELDS
+    # CLEAN DATA
     # ==============================
-    loans["sn"] = loans.get("sn", "").astype(str).str.strip().str.upper()
     loans["status"] = loans.get("status", "").astype(str).str.upper()
-
     loans["balance"] = pd.to_numeric(loans.get("balance", 0), errors="coerce").fillna(0)
     loans["total_repayable"] = pd.to_numeric(loans.get("total_repayable", 0), errors="coerce").fillna(0)
 
-    loans["cycle_no"] = pd.to_numeric(loans.get("cycle_no", 1), errors="coerce").fillna(1)
-
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
-    loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
-
-    # ==============================
-    # SMART STATUS FIX
-    # ==============================
-    loans = loans.sort_values(["sn", "cycle_no", "start_date"])
-
-    for sn, grp in loans.groupby("sn"):
-        idx = grp.index.tolist()
-
-        if len(idx) > 1:
-            loans.loc[idx[:-1], "status"] = "BCF"
-
-        last = idx[-1]
-        if abs(loans.at[last, "balance"]) < 1:
-            loans.at[last, "status"] = "CLEARED"
-
-    loans.loc[
-        (loans["balance"] <= 0) & (loans["status"] != "BCF"),
-        "status"
-    ] = "CLEARED"
-
-    # ==============================
-    # BORROWER MAPPING
-    # ==============================
-    if borrowers_df is not None and not borrowers_df.empty:
-        borrowers_df["id"] = borrowers_df["id"].astype(str)
-        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
-        loans["borrower"] = loans.get("borrower_id", "").astype(str).map(bor_map)
-        loans["borrower"] = loans["borrower"].fillna("Unknown borrower")
-    else:
-        loans["borrower"] = "Unknown borrower"
-
-    # ==============================
-    # ACTIVE LOANS ONLY
-    # ==============================
-    active_loans = loans[
-        ~loans["status"].isin(["CLEARED", "BCF", "CLOSED"])
-    ].copy()
 
     today = pd.Timestamp.today().normalize()
 
     # ==============================
-    # CALENDAR DATA
+    # STATUS COLOR ENGINE 🎨
     # ==============================
-    calendar_df = active_loans[active_loans["end_date"].notna()].copy()
+    def status_style(row):
+        if pd.isna(row["end_date"]):
+            return "⚪ Unknown"
 
-    calendar_df["overdue"] = calendar_df["end_date"] < today
+        if row["status"] in ["CLEARED", "BCF"]:
+            return "🟢 Completed"
+
+        if row["end_date"] < today:
+            return "🔴 Overdue"
+
+        if row["end_date"] <= today + pd.Timedelta(days=7):
+            return "🟠 Due Soon"
+
+        return "🟢 Active"
+
+    loans["calendar_status"] = loans.apply(status_style, axis=1)
 
     # ==============================
-    # METRICS (NO HTML)
+    # METRICS (COLORED FEEL)
     # ==============================
-    due_today = calendar_df[calendar_df["end_date"].dt.date == today.date()]
-    upcoming = calendar_df[
-        (calendar_df["end_date"] > today) &
-        (calendar_df["end_date"] <= today + pd.Timedelta(days=7))
-    ]
-    overdue = calendar_df[calendar_df["overdue"]]
+    overdue = loans[loans["calendar_status"] == "🔴 Overdue"]
+    due_soon = loans[loans["calendar_status"] == "🟠 Due Soon"]
+    active = loans[loans["calendar_status"] == "🟢 Active"]
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
 
-    c1.metric("Due Today", len(due_today))
-    c2.metric("Upcoming (7 days)", len(upcoming))
-    c3.metric("Overdue", len(overdue))
+    c1.metric("🔴 Overdue", len(overdue))
+    c2.metric("🟠 Due Soon", len(due_soon))
+    c3.metric("🟢 Active", len(active))
+    c4.metric("📊 Total Loans", len(loans))
 
     st.divider()
 
     # ==============================
-    # CALENDAR TABLE (SAFE STREAMLIT UI)
+    # COLORFUL CALENDAR TABLE (NO HTML)
     # ==============================
-    st.subheader("📆 Upcoming Deadlines")
+    st.subheader("📆 Loan Schedule Overview")
 
-    if calendar_df.empty:
-        st.info("No scheduled repayments found.")
+    view = loans[loans["end_date"].notna()].copy()
+
+    view = view.sort_values("end_date")
+
+    view["Due Date"] = view["end_date"].dt.strftime("%Y-%m-%d")
+    view["Borrower"] = view.get("borrower", "Unknown")
+    view["Amount"] = view["total_repayable"].apply(lambda x: f"UGX {x:,.0f}")
+    view["Status"] = view["calendar_status"]
+
+    view = view[["Borrower", "Amount", "Due Date", "Status"]]
+
+    # Streamlit native styling (SAFE)
+    def color_status(val):
+        if "Overdue" in val:
+            return "background-color:#FEE2E2; color:#991B1B; font-weight:bold;"
+        if "Due Soon" in val:
+            return "background-color:#FFF7ED; color:#9A3412; font-weight:bold;"
+        if "Active" in val:
+            return "background-color:#ECFDF5; color:#065F46; font-weight:bold;"
+        if "Completed" in val:
+            return "background-color:#EFF6FF; color:#1E3A8A; font-weight:bold;"
+        return ""
+
+    styled = (
+        view.style
+        .applymap(color_status, subset=["Status"])
+        .format({"Amount": "{}"})
+    )
+
+    st.dataframe(
+        styled,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # ==============================
+    # TODAY PANEL (COLORED BUT CLEAN)
+    # ==============================
+    st.subheader("📌 Today's Collection Focus")
+
+    today_loans = loans[loans["end_date"].dt.date == today.date()]
+
+    if today_loans.empty:
+        st.success("✨ No collections due today — clean slate!")
     else:
-        display = calendar_df.sort_values("end_date")[[
-            "borrower",
-            "total_repayable",
-            "balance",
-            "end_date",
-            "status"
-        ]].copy()
+        for _, r in today_loans.iterrows():
 
-        display["end_date"] = display["end_date"].dt.strftime("%Y-%m-%d")
+            status_icon = "🔴" if r["end_date"] < today else "🟠"
 
-        display = display.rename(columns={
-            "borrower": "Borrower",
-            "total_repayable": "Total Due",
-            "balance": "Balance",
-            "end_date": "Due Date",
-            "status": "Status"
-        })
+            col1, col2, col3 = st.columns([3, 3, 2])
 
-        st.dataframe(
-            display,
-            use_container_width=True,
-            hide_index=True
-        )
-
-    # ==============================
-    # TODAY ACTION LIST (NO HTML TABLE)
-    # ==============================
-    st.subheader("📌 Action Items (Today)")
-
-    if due_today.empty:
-        st.success("No collections due today.")
-    else:
-        for _, r in due_today.iterrows():
-            col_a, col_b, col_c, col_d = st.columns([2, 3, 2, 2])
-
-            col_a.write(f"**{str(r.get('id', 'N/A'))[:8]}**")
-            col_b.write(r["borrower"])
-            col_c.write(f"UGX {r['total_repayable']:,.0f}")
-            col_d.button("Collect", key=f"collect_{r.name}")
+            col1.write(f"{status_icon} **{r.get('borrower','Unknown')}**")
+            col2.write(f"UGX {r['total_repayable']:,.0f}")
+            col3.button("Collect", key=f"collect_{r.name}")
