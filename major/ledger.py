@@ -4,16 +4,6 @@ import pandas as pd
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
-def show_ledger():
-    st.markdown("## 💵 Loans")
-
-    # Fetch data safely
-    loans_df = get_cached_data("ledger")
-    if loans_df.empty:
-        st.info("No ledger found")
-        return
-
-    st.dataframe(ledger_df)
 # ==============================
 # 21. MASTER LEDGER 
 # ==============================
