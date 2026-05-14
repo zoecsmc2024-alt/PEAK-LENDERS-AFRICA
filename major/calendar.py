@@ -1,8 +1,6 @@
 import streamlit as st
 import pandas as pd
-
 from core.database import get_cached_data
-
 
 # ==============================
 # 📅 ACTIVITY CALENDAR PAGE (CLEAN + SAFE + COLORFUL)
@@ -23,6 +21,7 @@ def show_calendar():
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
+    # Use a copy to avoid SettingWithCopy warnings
     loans_df = loans_df.copy()
     loans_df.columns = loans_df.columns.str.strip().str.replace(" ", "_")
 
@@ -36,7 +35,9 @@ def show_calendar():
         "Borrower": "Unknown",
         "Loan_ID": "N/A",
         "Principal": 0,
-        "Interest": 0
+        "Interest": 0,
+        "sn": "N/A",
+        "cycle_no": 1
     }
 
     for col, default in defaults.items():
@@ -50,14 +51,24 @@ def show_calendar():
     loans_df["Total_Repayable"] = pd.to_numeric(loans_df["Total_Repayable"], errors="coerce").fillna(0)
     loans_df["Principal"] = pd.to_numeric(loans_df["Principal"], errors="coerce").fillna(0)
     loans_df["Interest"] = pd.to_numeric(loans_df["Interest"], errors="coerce").fillna(0)
-
     loans_df["Status"] = loans_df["Status"].astype(str).str.upper()
+    
+    # Ensure Borrower is a string to prevent the "Multiple Columns" error
+    loans_df["Borrower"] = loans_df["Borrower"].astype(str)
 
     today = pd.Timestamp.today().normalize()
+
+    # ==========================================
+    # ✨ FILTER: SHOW ONLY LATEST SN (NO DUPLICATES)
+    # ==========================================
+    # This prevents the calendar from showing old cycles that were rolled over (BCF)
+    loans_df = loans_df.sort_values(["sn", "cycle_no"], ascending=True)
+    loans_df = loans_df.drop_duplicates(subset=["sn"], keep="last")
 
     # ==============================
     # ACTIVE LOANS FILTER
     # ==============================
+    # Filter out closed/cleared, leaving only PENDING and ACTIVE
     active_loans = loans_df[
         ~loans_df["Status"].isin(["CLOSED", "CLEARED", "BCF"])
     ].copy()
@@ -88,32 +99,30 @@ def show_calendar():
         active_loans["End_Date"] < today
     ].copy()
 
-    overdue_count = len(overdue_df)
-
     # ==============================
-    # KPI CARDS (COLORFUL BUT SAFE)
+    # KPI CARDS
     # ==============================
     c1, c2, c3 = st.columns(3)
-
     c1.metric("📅 Due Today", len(due_today_df))
     c2.metric("⏳ Upcoming (7 Days)", len(upcoming_df))
-    c3.metric("🚨 Overdue Loans", overdue_count)
+    c3.metric("🚨 Overdue Loans", len(overdue_df))
 
     st.markdown("---")
 
-    # ==============================
-    # OPTIONAL STATUS VIEW (FIXED BUG)
-    # ==============================
+    # ==========================================
+    # 🛠️ FIXED: STATUS VIEW (SAFE CONCAT)
+    # ==========================================
+    # We use .fillna('') and explicit casting to ensure we don't hit a Series mismatch
     loans_df["status_view"] = (
-        loans_df["Status"].astype(str)
+        loans_df["Status"].fillna("UNKNOWN")
         + " • "
-        + loans_df["Borrower"].astype(str)
+        + loans_df["Borrower"].fillna("Unknown")
     )
 
     # ==============================
-    # CLEAN STREAMLIT TABLE (NO HTML)
+    # CLEAN STREAMLIT TABLE
     # ==============================
-    st.subheader("📊 Loan Overview")
+    st.subheader("📊 Loan Overview (Current Cycles)")
 
     st.dataframe(
         loans_df[[
@@ -125,14 +134,14 @@ def show_calendar():
             "Principal",
             "Interest"
         ]].sort_values("End_Date", na_position="last"),
-        use_container_width=True
+        use_container_width=True,
+        hide_index=True
     )
 
     # ==============================
     # DUE TODAY SECTION
     # ==============================
     st.markdown("### 📌 Due Today")
-
     if due_today_df.empty:
         st.success("✨ No deadlines today.")
     else:
@@ -144,14 +153,14 @@ def show_calendar():
                 "End_Date",
                 "Status"
             ]],
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True
         )
 
     # ==============================
     # UPCOMING SECTION
     # ==============================
     st.markdown("### ⏳ Upcoming (7 Days)")
-
     if upcoming_df.empty:
         st.info("No upcoming deadlines.")
     else:
@@ -163,19 +172,19 @@ def show_calendar():
                 "End_Date",
                 "Status"
             ]].sort_values("End_Date"),
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True
         )
 
     # ==============================
-    # OVERDUE SECTION (COLORED VIA STREAMLIT, NOT HTML)
+    # OVERDUE SECTION
     # ==============================
     st.markdown("### 🚨 Overdue Loans (Action Required)")
-
     if overdue_df.empty:
         st.success("Clean sheet 🎉 No overdue loans.")
     else:
+        # Calculate days late
         overdue_df["Days_Late"] = (today - overdue_df["End_Date"]).dt.days
-
         st.dataframe(
             overdue_df[[
                 "Loan_ID",
@@ -185,7 +194,8 @@ def show_calendar():
                 "Days_Late",
                 "Status"
             ]].sort_values("Days_Late", ascending=False),
-            use_container_width=True
+            use_container_width=True,
+            hide_index=True
         )
 
     # ==============================
@@ -204,4 +214,4 @@ def show_calendar():
     col1.metric("Expected Collections", f"UGX {total_expected:,.0f}")
     col2.metric("Scheduled Loans", len(this_month_df))
 
-    st.caption("💡 Click rows above for borrower drill-down (coming next upgrade)")
+    st.caption("💡 Data filtered to show the most recent cycle per SN.")
