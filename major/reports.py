@@ -1,5 +1,5 @@
 # ==========================================
-# 🚀 BALLISTIC FINTECH REPORTS ENGINE (FAST + PRODUCTION SAFE)
+# 🚀 BALLISTIC FINTECH REPORTS ENGINE (FIXED)
 # ==========================================
 import streamlit as st
 import pandas as pd
@@ -60,24 +60,31 @@ def show_reports():
         return float(pd.to_numeric(df.get(col, 0), errors="coerce").fillna(0).sum())
 
     # ==============================
-    # CLEAN LOANS
+    # CLEAN & UNIQUE DATA ENGINE
     # ==============================
     loans = loans.copy()
-    for c in ["principal", "interest", "cycle_no"]:
+    for c in ["principal", "interest", "cycle_no", "balance"]:
         if c in loans.columns:
             loans[c] = pd.to_numeric(loans[c], errors="coerce").fillna(0)
+    
     loans["status"] = loans["status"].astype(str).str.upper()
 
+    # CRITICAL: Create a "Current State" dataframe to avoid double-counting cycles
+    latest_loans = (
+        loans.sort_values(["sn", "cycle_no"], ascending=True)
+        .drop_duplicates(subset=["sn"], keep="last")
+    )
+
     # ==============================
-    # ACTIVE CAPITAL
+    # ACTIVE CAPITAL (FIXED)
     # ==============================
-    active_capital = loans[
-        (loans["cycle_no"] == 1) &
-        (loans["status"].isin(["ACTIVE", "PENDING"]))
+    # We only count principal from the LATEST state of Active/Pending loans
+    active_capital = latest_loans[
+        latest_loans["status"].isin(["ACTIVE", "PENDING", "OVERDUE"])
     ]["principal"].sum()
 
     # ==============================
-    # ⚡ FAST INTEREST ENGINE (PROPORTIONAL TO PAYMENTS)
+    # ⚡ FAST INTEREST ENGINE
     # ==============================
     payments_clean = payments.copy()
     if not payments_clean.empty and "amount" in payments_clean.columns:
@@ -95,21 +102,22 @@ def show_reports():
         ratio = min(paid / row["loan_total"], 1.0)
         return row["interest"] * ratio
 
+    # Realized interest includes historical cycles because that money was earned
     projected_interest = loans.apply(calc_interest, axis=1).sum()
 
     # ==============================
-    # COLLECTIONS
+    # COLLECTIONS & OPEX
     # ==============================
     actual_collected = sum_col(payments, "amount")
-
-    # ==============================
-    # OPEX (NO PETTY CASH)
-    # ==============================
+    
     direct_expenses = sum_col(expenses, "amount")
     nssf = sum_col(payroll, "nssf_5") + sum_col(payroll, "nssf_10")
     paye = sum_col(payroll, "paye")
     salary = sum_col(payroll, "net_pay")
     total_opex = direct_expenses + nssf + paye + salary
+    
+    # Net Profit = Interest Earned - Expenses
+    net_profit_global = projected_interest - total_opex
     cash_profit = actual_collected - total_opex
 
     # ==============================
@@ -127,9 +135,9 @@ def show_reports():
 
     c1, c2, c3, c4 = st.columns(4)
     with c1: kpi("ACTIVE CAPITAL", active_capital, "#1E3A8A")
-    with c2: kpi("INTEREST (REALISED)", projected_interest, "#059669")
-    with c3: kpi("COLLECTIONS", actual_collected, "#7C3AED")
-    with c4: kpi("NET CASHFLOW", cash_profit, "#059669" if cash_profit >= 0 else "#DC2626")
+    with c2: kpi("REALISED INTEREST", projected_interest, "#059669")
+    with c3: kpi("NET PROFIT", net_profit_global, "#059669" if net_profit_global >= 0 else "#DC2626")
+    with c4: kpi("NET CASHFLOW", cash_profit, "#7C3AED")
 
     # ==============================
     # TREND ENGINE
@@ -151,13 +159,15 @@ def show_reports():
     df_trend["Net"] = df_trend["Income"] - df_trend["Expenses"]
 
     if not df_trend.empty:
-        fig = px.area(df_trend, x=df_trend.index, y=["Income","Expenses","Net"])
+        fig = px.area(df_trend, x=df_trend.index, y=["Income","Expenses","Net"], 
+                      color_discrete_map={"Income": "#10B981", "Expenses": "#EF4444", "Net": "#3B82F6"})
+        fig.update_layout(height=300, margin=dict(l=0,r=0,t=20,b=0))
         st.plotly_chart(fig, use_container_width=True)
 
     # ==============================
     # RISK METRICS
     # ==============================
-    overdue = loans[loans["status"].str.contains("OVERDUE", na=False)]
+    overdue = latest_loans[latest_loans["status"].str.contains("OVERDUE", na=False)]
     par = sum_col(overdue, "balance")
     par_ratio = (par / active_capital * 100) if active_capital else 0
     yield_pct = (projected_interest / active_capital * 100) if active_capital else 0
@@ -166,17 +176,17 @@ def show_reports():
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Yield", f"{yield_pct:.1f}%")
     m2.metric("Collection Eff.", f"{eff:.1f}%")
-    m3.metric("PAR", f"{par_ratio:.1f}%")
+    m3.metric("PAR (Latest)", f"{par_ratio:.1f}%")
     m4.metric("Opex Ratio", f"{(total_opex/actual_collected*100 if actual_collected else 0):.1f}%")
 
     # ==============================
     # FINANCIAL STATEMENTS
     # ==============================
+    st.write("---")
     s1, s2 = st.columns(2)
 
     def fy(dt):
-        if pd.isna(dt):
-            return "Unknown"
+        if pd.isna(dt): return "Unknown"
         return f"{dt.year}-{dt.year+1}" if dt.month >= 7 else f"{dt.year-1}-{dt.year}"
 
     loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
@@ -194,43 +204,42 @@ def show_reports():
     fy_exp = expenses[expenses["fiscal_year"] == selected]
     fy_pay = payments[payments["fiscal_year"] == selected]
 
+    # Re-calculate latest state for specific fiscal year
+    fy_latest = fy_loans.sort_values(["sn", "cycle_no"]).drop_duplicates(subset=["sn"], keep="last")
+
     with s1:
         st.subheader(f"Income Statement — {selected}")
     
-        fy_active = fy_loans[
-            (fy_loans["cycle_no"] == 1) &
-            (fy_loans["status"].isin(["ACTIVE","PENDING"]))
-        ]["principal"].sum()
-    
-        fy_interest = compute_realized_interest(fy_loans, fy_pay) if not fy_loans.empty else 0
-        fy_opex = sum_col(fy_exp, "amount")
+        fy_active = fy_latest[fy_latest["status"].isin(["ACTIVE","PENDING","OVERDUE"])]["principal"].sum()
+        fy_interest = compute_realized_interest(fy_loans, fy_pay)
+        fy_opex_val = sum_col(fy_exp, "amount")
     
         st.dataframe(pd.DataFrame({
-            "Item": ["Active Capital","Interest","OPEX","Net Profit"],
+            "Item": ["Active Capital", "Realized Interest", "OPEX", "Net Profit"],
             "UGX": [
                 f"{fy_active:,.0f}",
                 f"{fy_interest:,.0f}",
-                f"{fy_opex:,.0f}",
-                f"{fy_interest - fy_opex:,.0f}"
+                f"{fy_opex_val:,.0f}",
+                f"{fy_interest - fy_opex_val:,.0f}"
             ]
-        }), use_container_width=True)
+        }), use_container_width=True, hide_index=True)
 
     with s2:
         st.subheader(f"Balance Sheet — {selected}")
     
-        loan_book = fy_loans["balance"].sum()
+        # Balance sheet shows what you are owed RIGHT NOW + Cash
+        loan_book = fy_latest["balance"].sum()
         cash = sum_col(fy_pay, "amount") - sum_col(fy_exp, "amount")
-        total_assets = fy_active + loan_book + cash
+        total_assets = loan_book + cash
     
         st.dataframe(pd.DataFrame({
-            "Item": ["Active Capital","Loan Book","Cash","Total Assets"],
+            "Item": ["Loan Book (Receivables)", "Cash at Hand", "Total Assets"],
             "UGX": [
-                f"{fy_active:,.0f}",
                 f"{loan_book:,.0f}",
                 f"{cash:,.0f}",
                 f"{total_assets:,.0f}"
             ]
-        }), use_container_width=True)
+        }), use_container_width=True, hide_index=True)
 
 # -----------------------------
 # HELPER: REALIZED INTEREST CALC
@@ -254,6 +263,7 @@ def compute_realized_interest(loans_df, payments_df):
         paid = loan_pay.get(row.get("id"), 0)
         if row["loan_total"] <= 0:
             return 0
+        # This determines how much of the payment is "profit" vs "capital recovery"
         ratio = min(paid / row["loan_total"], 1.0)
         return row["interest"] * ratio
 
