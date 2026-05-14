@@ -56,7 +56,7 @@ def get_cached_data(table_name):
 # -----------------------------
 # Data Persistence
 # -----------------------------
-def save_data(table_name, dataframe):
+def save_data_saas(table_name, dataframe):
     try:
         if supabase is None:
             st.error("❌ Database not connected")
