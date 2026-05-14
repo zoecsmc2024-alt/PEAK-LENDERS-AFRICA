@@ -9,7 +9,49 @@ from core.database import supabase, get_cached_data, save_data_saas, delete_data
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (BRANDING & WIDE LAYOUT)
 # ==========================================
+st.markdown("""
+<style>
 
+.metric-box {
+    padding: 16px;
+    border-radius: 16px;
+    color: #F9FAFB !important;
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 4px 14px rgba(0,0,0,0.06);
+    margin-bottom: 10px;
+    transition: all 0.22s ease;
+    overflow: hidden;
+}
+
+/* FORCE COLOR VISIBILITY */
+.metric-box * {
+    color: #F9FAFB !important;
+}
+
+/* CARD COLORS */
+.blue-card {
+    background: linear-gradient(135deg, #5B6B8C, #3E4C68) !important;
+}
+
+.green-card {
+    background: linear-gradient(135deg, #5E7C6B, #3E5A4C) !important;
+}
+
+.red-card {
+    background: linear-gradient(135deg, #8B5E5E, #5E3E3E) !important;
+}
+
+.orange-card {
+    background: linear-gradient(135deg, #9A7B5F, #6B523E) !important;
+}
+
+/* STREAMLIT OVERRIDE FIX */
+div[data-testid="stMarkdownContainer"] {
+    background: transparent !important;
+}
+
+</style>
+""", unsafe_allow_html=True)
 st.set_page_config(layout="wide")
 
 # ------------------------------
@@ -355,15 +397,18 @@ def show_overview():
         </style>""", unsafe_allow_html=True)
 
         def render_metric_card(container, title, value, subtitle, css_class):
-            with container:
-                st.markdown(f"""
+
+        with container:
+            st.markdown(
+                f"""
                 <div class="metric-box {css_class}">
                     <div class="metric-title">{title}</div>
                     <div class="metric-value">{value}</div>
                     <div class="metric-sub">{subtitle}</div>
                 </div>
-                """, unsafe_allow_html=True)
-
+                """,
+                unsafe_allow_html=True
+            )
         m1, m2, m3, m4 = st.columns(4)
 
         render_metric_card(m1, "Active Principal", f"UGX {total_principal:,.0f}", "Portfolio Value", "blue-card")
