@@ -195,25 +195,25 @@ def show_reports():
     fy_pay = payments[payments["fiscal_year"] == selected]
 
     with s1:
-    st.subheader(f"Income Statement — {selected}")
-
-    fy_active = fy_loans[
-        (fy_loans["cycle_no"] == 1) &
-        (fy_loans["status"].isin(["ACTIVE","PENDING"]))
-    ]["principal"].sum()
-
-    fy_interest = compute_realized_interest(fy_loans, fy_pay) if not fy_loans.empty else 0
-    fy_opex = sum_col(fy_exp, "amount")
-
-    st.dataframe(pd.DataFrame({
-        "Item": ["Active Capital","Interest","OPEX","Net Profit"],
-        "UGX": [
-            f"{fy_active:,.0f}",
-            f"{fy_interest:,.0f}",
-            f"{fy_opex:,.0f}",
-            f"{fy_interest - fy_opex:,.0f}"
-        ]
-    }), use_container_width=True)
+        st.subheader(f"Income Statement — {selected}")
+    
+        fy_active = fy_loans[
+            (fy_loans["cycle_no"] == 1) &
+            (fy_loans["status"].isin(["ACTIVE","PENDING"]))
+        ]["principal"].sum()
+    
+        fy_interest = compute_realized_interest(fy_loans, fy_pay) if not fy_loans.empty else 0
+        fy_opex = sum_col(fy_exp, "amount")
+    
+        st.dataframe(pd.DataFrame({
+            "Item": ["Active Capital","Interest","OPEX","Net Profit"],
+            "UGX": [
+                f"{fy_active:,.0f}",
+                f"{fy_interest:,.0f}",
+                f"{fy_opex:,.0f}",
+                f"{fy_interest - fy_opex:,.0f}"
+            ]
+        }), use_container_width=True)
 
     with s2:
         st.subheader(f"Balance Sheet — {selected}")
