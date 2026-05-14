@@ -385,51 +385,23 @@ def show_loans():
         "🛠️ Manage/Edit",
         "⚙️ Actions"
     ])
-
-    # ==============================
-    # TAB VIEW
+# ==============================
+    # # TAB VIEW #
     # ==============================
     with tab_view:
-        search_query = st.text_input(
-            "🔍 Search Loan / borrower",
-            key="loan_search_main"
-        )
-    
+        search_query = st.text_input("🔍 Search Loan / borrower", key="loan_search_main")
+        
         # Create a local copy for filtering
-        filtered_loans = (
-            loans_df.copy()
-            if not loans_df.empty
-            else pd.DataFrame()
-        )
-    
+        filtered_loans = loans_df.copy() if not loans_df.empty else pd.DataFrame()
+        
         if not filtered_loans.empty and search_query:
             filtered_loans = filtered_loans[
                 filtered_loans.apply(
-                    lambda r:
-                    search_query.lower()
-                    in str(r).lower(),
-                    axis=1
+                    lambda r: search_query.lower() in str(r).lower(), axis=1
                 )
             ]
-    
-        # =================================
-        # KEEP ONLY LATEST LOAN CYCLE
-        # =================================
-        if not filtered_loans.empty:
-    
-            filtered_loans = (
-                filtered_loans
-                .sort_values(
-                    by=["sn", "cycle_no"],
-                    ascending=[True, False]
-                )
-                .drop_duplicates(
-                    subset=["sn"],
-                    keep="first"
-                )
-                .copy()
-            )
-    
+
+
         # ------------------------------
         # 📊 PORTFOLIO METRICS
         # ------------------------------
