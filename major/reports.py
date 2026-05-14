@@ -8,7 +8,6 @@ from datetime import datetime, timedelta
 
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
-
 def show_reports():
 
     st.markdown("""
@@ -64,11 +63,9 @@ def show_reports():
     # CLEAN LOANS
     # ==============================
     loans = loans.copy()
-
     for c in ["principal", "interest", "cycle_no"]:
         if c in loans.columns:
             loans[c] = pd.to_numeric(loans[c], errors="coerce").fillna(0)
-
     loans["status"] = loans["status"].astype(str).str.upper()
 
     # ==============================
@@ -80,17 +77,15 @@ def show_reports():
     ]["principal"].sum()
 
     # ==============================
-    # ⚡ FAST INTEREST ENGINE (NO LOOP BOTTLENECK)
+    # ⚡ FAST INTEREST ENGINE (PROPORTIONAL TO PAYMENTS)
     # ==============================
     payments_clean = payments.copy()
-
     if not payments_clean.empty and "amount" in payments_clean.columns:
         payments_clean["amount"] = pd.to_numeric(payments_clean["amount"], errors="coerce").fillna(0)
     else:
         payments_clean["amount"] = 0
 
     loan_pay = payments_clean.groupby("loan_id")["amount"].sum().to_dict()
-
     loans["loan_total"] = loans["principal"] + loans["interest"]
 
     def calc_interest(row):
@@ -111,13 +106,10 @@ def show_reports():
     # OPEX (NO PETTY CASH)
     # ==============================
     direct_expenses = sum_col(expenses, "amount")
-
     nssf = sum_col(payroll, "nssf_5") + sum_col(payroll, "nssf_10")
     paye = sum_col(payroll, "paye")
     salary = sum_col(payroll, "net_pay")
-
     total_opex = direct_expenses + nssf + paye + salary
-
     cash_profit = actual_collected - total_opex
 
     # ==============================
@@ -140,7 +132,7 @@ def show_reports():
     with c4: kpi("NET CASHFLOW", cash_profit, "#059669" if cash_profit >= 0 else "#DC2626")
 
     # ==============================
-    # TREND ENGINE (FAST SAFE)
+    # TREND ENGINE
     # ==============================
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
@@ -165,10 +157,7 @@ def show_reports():
     # ==============================
     # RISK METRICS
     # ==============================
-    overdue = loans[
-        loans["status"].str.contains("OVERDUE", na=False)
-    ]
-
+    overdue = loans[loans["status"].str.contains("OVERDUE", na=False)]
     par = sum_col(overdue, "balance")
     par_ratio = (par / active_capital * 100) if active_capital else 0
     yield_pct = (projected_interest / active_capital * 100) if active_capital else 0
@@ -181,7 +170,7 @@ def show_reports():
     m4.metric("Opex Ratio", f"{(total_opex/actual_collected*100 if actual_collected else 0):.1f}%")
 
     # ==============================
-    # FINANCIAL STATEMENTS (UNCHANGED LOGIC)
+    # FINANCIAL STATEMENTS
     # ==============================
     s1, s2 = st.columns(2)
 
@@ -213,7 +202,8 @@ def show_reports():
             (fy_loans["status"].isin(["ACTIVE","PENDING"]))
         ]["principal"].sum()
 
-        fy_interest = fy_loans[fy_loans["status"]=="CLEARED"]["interest"].sum()
+        # Use proportional interest based on payments
+        fy_interest = compute_realized_interest(fy_loans, fy_pay) if not fy_loans.empty else 0
         fy_opex = sum_col(fy_exp, "amount")
 
         st.dataframe(pd.DataFrame({
@@ -226,10 +216,36 @@ def show_reports():
 
         loan_book = fy_loans["balance"].sum()
         cash = sum_col(fy_pay, "amount") - sum_col(fy_exp, "amount")
-
         total_assets = fy_active + loan_book + cash
 
         st.dataframe(pd.DataFrame({
             "Item": ["Active Capital","Loan Book","Cash","Total Assets"],
             "UGX": [fy_active, loan_book, cash, total_assets]
         }))
+
+# -----------------------------
+# HELPER: REALIZED INTEREST CALC
+# -----------------------------
+def compute_realized_interest(loans_df, payments_df):
+    if loans_df.empty:
+        return 0
+    loans_df = loans_df.copy()
+    payments_df = payments_df.copy()
+
+    for col in ["principal", "interest"]:
+        if col not in loans_df.columns:
+            loans_df[col] = 0
+    if payments_df.empty or "amount" not in payments_df.columns:
+        payments_df["amount"] = 0
+
+    loan_pay = payments_df.groupby("loan_id")["amount"].sum().to_dict()
+    loans_df["loan_total"] = loans_df["principal"] + loans_df["interest"]
+
+    def calc(row):
+        paid = loan_pay.get(row.get("id"), 0)
+        if row["loan_total"] <= 0:
+            return 0
+        ratio = min(paid / row["loan_total"], 1.0)
+        return row["interest"] * ratio
+
+    return loans_df.apply(calc, axis=1).sum()
