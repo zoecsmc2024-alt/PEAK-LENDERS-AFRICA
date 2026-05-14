@@ -186,7 +186,7 @@ def show_overview():
             f"""
             <div style='background:{brand_color}; padding:25px; border-radius:15px; margin-bottom:25px; color:white;'>
                 <h1 style='margin:0; font-size:28px;'>🏛️ Financial Control Center</h1>
-                <p style='margin:0; opacity:0.8;'>Real-time insights across loans, Expenses & Petty Cash</p>
+                <p style='margin:0; opacity:0.8;'>Real-time insights across loans & Expenses</p>
             </div>
             """,
             unsafe_allow_html=True
