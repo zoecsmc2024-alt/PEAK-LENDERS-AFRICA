@@ -20,7 +20,8 @@ import time
 import uuid
 import extra_streamlit_components as stx
 from core.database import supabase
-
+from major.borrowers import show_borrowers
+from major.loans import show_loans
 # --- Page Config stays here ---
 st.set_page_config(
     page_title="Lending Manager Pro",
