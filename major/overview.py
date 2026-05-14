@@ -1,7 +1,11 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit as st
+import pandas as pd
 
+# Core DB utilities
+from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (BRANDING & WIDE LAYOUT)
 # ==========================================
