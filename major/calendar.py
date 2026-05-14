@@ -30,7 +30,7 @@ def show_calendar():
     # 4. ROLLOVER LOGIC (Based on image_94de15.png)
     # Sort so the highest installment number is first, then drop old ones.
     # This ensures LN-0069 shows 'PENDING' (Inst 2) and hides 'BCF' (Inst 1).
-    loans_df = loans_df.sort_values(by=["loan_id_label", "installment_no"], ascending=[True, False])
+    loans_df = loans_df.sort_values(by=["loan_id_label", "cycle_no"], ascending=[True, False])
     current_book = loans_df.drop_duplicates(subset=["loan_id_label"], keep="first").copy()
 
     today = pd.Timestamp.today().normalize()
@@ -88,7 +88,7 @@ def show_calendar():
     # This replicates the broad view from your image but only shows the 'Live' installment
     st.dataframe(
         current_book[[
-            "loan_id_label", "installment_no", "borrower", 
+            "loan_id_label", "cycle_no", "borrower", 
             "total_repayable", "end_date", "status"
         ]], 
         use_container_width=True, 
