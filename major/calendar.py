@@ -100,29 +100,125 @@ def show_calendar():
             </tr>""" for _, r in due_today_df.iterrows()])
         st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
-    # 5. 🔴 OVERDUE FOLLOW-UP (Now safely inside the function)
-    st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
+    # 5. 🔴 OVERDUE FOLLOW-UP
+    st.markdown(
+        "<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>",
+        unsafe_allow_html=True
+    )
+    
     try:
-        # Re-using the active_loans we already filtered at the top of the function
-        overdue_df = active_loans[active_loans["end_date"] < today].copy()
-
+        # Ensure datetime
+        active_loans["end_date"] = pd.to_datetime(
+            active_loans["end_date"],
+            errors="coerce"
+        )
+    
+        # Only TRUE overdue active loans
+        overdue_df = active_loans[
+            (active_loans["end_date"] < today) &
+            (active_loans["status"].str.lower().isin([
+                "active",
+                "pending",
+                "overdue"
+            ]))
+        ].copy()
+    
         if not overdue_df.empty:
-            overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
+    
+            overdue_df["days_late"] = (
+                today - overdue_df["end_date"]
+            ).dt.days
+    
+            # Sort by most overdue
+            overdue_df = overdue_df.sort_values(
+                by="days_late",
+                ascending=False
+            )
+    
             od_rows = ""
+    
             for _, r in overdue_df.iterrows():
-                late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
-                label = r.get('loan_id_label') if pd.notna(r.get('loan_id_label')) else str(r['id'])[:8]
+    
+                late_color = "#FF4B4B" if r["days_late"] > 7 else "#FFA500"
+    
+                label = (
+                    r.get("loan_id_label")
+                    if pd.notna(r.get("loan_id_label"))
+                    else str(r["id"])[:8]
+                )
+    
                 od_rows += f"""
                     <tr style="background:#FFF5F5;">
-                        <td style="padding:10px; border-bottom:1px solid #eee;"><b>#{label}</b></td>
-                        <td style="padding:10px; border-bottom:1px solid #eee;">{r['borrower']}</td>
-                        <td style="padding:10px; border-bottom:1px solid #eee; color:{late_color}; font-weight:bold;">{r['days_late']} Days</td>
-                        <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
-                            <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span>
+                        <td style="padding:10px; border-bottom:1px solid #eee;">
+                            <b>#{label}</b>
                         </td>
-                    </tr>"""
-            st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px; text-align:left;">Loan ID</th><th style="padding:10px; text-align:left;">borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+    
+                        <td style="padding:10px; border-bottom:1px solid #eee;">
+                            {r['borrower']}
+                        </td>
+    
+                        <td style="
+                            padding:10px;
+                            border-bottom:1px solid #eee;
+                            color:{late_color};
+                            font-weight:bold;
+                            text-align:center;
+                        ">
+                            {r['days_late']:,} Days
+                        </td>
+    
+                        <td style="
+                            padding:10px;
+                            border-bottom:1px solid #eee;
+                            text-align:center;
+                        ">
+                            <span style="
+                                background:{late_color};
+                                color:white;
+                                padding:4px 10px;
+                                border-radius:12px;
+                                font-size:10px;
+                                font-weight:bold;
+                            ">
+                                OVERDUE
+                            </span>
+                        </td>
+                    </tr>
+                """
+    
+            st.markdown(f"""
+            <div style="
+                border:2px solid #FF4B4B;
+                border-radius:12px;
+                overflow:hidden;
+                box-shadow:0 2px 8px rgba(0,0,0,0.08);
+            ">
+    
+                <table style="
+                    width:100%;
+                    border-collapse:collapse;
+                    font-size:12px;
+                ">
+    
+                    <tr style="
+                        background:#FF4B4B;
+                        color:white;
+                    ">
+                        <th style="padding:12px; text-align:left;">Loan ID</th>
+                        <th style="padding:12px; text-align:left;">Borrower</th>
+                        <th style="padding:12px; text-align:center;">Late By</th>
+                        <th style="padding:12px; text-align:center;">Status</th>
+                    </tr>
+    
+                    {od_rows}
+    
+                </table>
+    
+            </div>
+            """, unsafe_allow_html=True)
+    
         else:
             st.info("No overdue loans currently. Everything is on track! ✨")
+    
     except Exception as e:
-        st.error(f"Error generating overdue table: {e}") 
+        st.error(f"Error generating overdue table: {e}")
