@@ -16,7 +16,11 @@ import pandas as pd
 import uuid
 from datetime import datetime
 from io import BytesIO
+import streamlit as st
+import pandas as pd
 
+# Core DB utilities
+from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
