@@ -5476,7 +5476,7 @@ if __name__ == "__main__":
     if not st.session_state.get("logged_in"):
         st.session_state['theme_color'] = "#1E3A8A"
         apply_master_theme()
-        run_auth_ui(supabase)
+        run_auth_ui(db.supabase)
         # Note: run_auth_ui handles its own views. 
         # We don't want the rest of the script to run if not logged in.
     
