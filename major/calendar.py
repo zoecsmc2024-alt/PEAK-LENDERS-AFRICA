@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import uuid
 from core.database import get_cached_data
 from streamlit_calendar import calendar
+from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
 # ==============================
 # 📅 LOAN COLLECTION CALENDAR
