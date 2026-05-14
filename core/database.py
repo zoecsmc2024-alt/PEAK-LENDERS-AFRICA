@@ -88,3 +88,16 @@ def save_data(table_name, dataframe):
     except Exception as e:
         st.error(f"DB Error [{table_name}]: {e}")
         return False
+
+
+def delete_data_saas(table_name, filters):
+    """
+    Deletes a record from Supabase based on a filter (e.g., payroll_id).
+    """
+    try:
+        # Assuming 'supabase' is your initialized client in database.py
+        response = supabase.table(table_name).delete().match(filters).execute()
+        return True
+    except Exception as e:
+        st.error(f"Database Error: {e}")
+        return False
