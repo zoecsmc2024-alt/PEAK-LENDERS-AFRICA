@@ -299,12 +299,6 @@ def show_borrowers():
     st.markdown("### ⚡ Borrower Actions")
     a1, a2, a3, a4 = st.columns(4)
 
-    # ==========================================
-    # ACTION SECTION HANDLERS
-    # ==========================================
-    st.markdown("### ⚡ Borrower Actions")
-    a1, a2, a3, a4 = st.columns(4)
-
     # Initialize view state if it doesn't exist
     if "show_add_form" not in st.session_state:
         st.session_state.show_add_form = False
