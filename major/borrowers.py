@@ -1,26 +1,15 @@
 # ==========================================
 # VIEW BORROWERS PAGE (STREAMLIT VERSION)
 # ==========================================
-import os
-import sys
-from datetime import datetime, timedelta
-import pandas as pd
 import streamlit as st
+import pandas as pd
+from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
-from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
+from core.database import supabase
 
-# ==========================================
-# MAIN FUNCTION (IMPORT SAFE)
-# ==========================================
 def show_borrowers():
-
-    st.markdown(
-        "<h1 style='color:#0A192F;'>👥 View Borrowers</h1>",
-        unsafe_allow_html=True
-    )
-
     # ==========================================
-    # PAGE CONFIG & CSS (INLINE TO FUNCTION)
+    # STYLING & MARKUP
     # ==========================================
     st.markdown("""
     <style>
@@ -75,7 +64,7 @@ def show_borrowers():
             if not data:
                 return pd.DataFrame()
 
-            df_loaded = pd.DataFrame(data)
+            df_local = pd.DataFrame(data)
 
             # Fill missing columns safely
             expected_cols = [
@@ -87,14 +76,20 @@ def show_borrowers():
                 "email",
                 "total_paid",
                 "open_loans_balance",
-                "status"
+                "status",
+                "gender",
+                "working_status",
+                "city",
+                "province",
+                "loan_officer",
+                "created_at"
             ]
 
             for col in expected_cols:
-                if col not in df_loaded.columns:
-                    df_loaded[col] = ""
+                if col not in df_local.columns:
+                    df_local[col] = ""
 
-            return df_loaded
+            return df_local
 
         except Exception as e:
             st.error(f"Error loading borrowers: {e}")
@@ -105,6 +100,11 @@ def show_borrowers():
     # ==========================================
     df = load_borrowers()
 
+    st.markdown(
+        '<div class="borrower-title">👥 View Borrowers</div>',
+        unsafe_allow_html=True
+    )
+
     # ==========================================
     # TOP ACTIONS
     # ==========================================
@@ -113,7 +113,8 @@ def show_borrowers():
     with top1:
         search = st.text_input(
             "Search Borrowers",
-            placeholder="Search name, phone, email, business..."
+            placeholder="Search name, phone, email, business...",
+            key="borrower_search_input"
         )
 
     with top2:
@@ -136,9 +137,9 @@ def show_borrowers():
         show_filters = st.toggle("Advanced Search")
 
     # ==========================================
-    # ADVANCED SEARCH SIDEBAR / CONTROLS
+    # ADVANCED SEARCH SECTION
     # ==========================================
-    if show_filters:
+    if show_filters and not df.empty:
         st.markdown("### 🔎 Advanced Search")
         f1, f2, f3 = st.columns(3)
 
@@ -169,8 +170,26 @@ def show_borrowers():
         with d2:
             to_date = st.date_input("Created To", value=None)
 
+        # Apply Advanced Filtering Logic
+        if borrower_status:
+            df = df[df["status"].isin(borrower_status)]
+        if gender:
+            df = df[df["gender"].isin(gender)]
+        if working_status:
+            df = df[df["working_status"].isin(working_status)]
+        if city:
+            df = df[df["city"].astype(str).str.lower().str.contains(city.lower())]
+        if province:
+            df = df[df["province"].astype(str).str.lower().str.contains(province.lower())]
+        if officer:
+            df = df[df["loan_officer"].astype(str).str.lower().str.contains(officer.lower())]
+        if from_date:
+            df = df[pd.to_datetime(df["created_at"]).dt.date >= from_date]
+        if to_date:
+            df = df[pd.to_datetime(df["created_at"]).dt.date <= to_date]
+
     # ==========================================
-    # SEARCH FILTER
+    # SEARCH FILTER (KEYWORD STRING MATCH)
     # ==========================================
     if not df.empty and search:
         search_lower = search.lower()
@@ -183,7 +202,7 @@ def show_borrowers():
         ]
 
     # ==========================================
-    # METRICS
+    # METRICS DISPLAY
     # ==========================================
     if not df.empty:
         total_paid = pd.to_numeric(df["total_paid"], errors="coerce").fillna(0).sum()
@@ -191,7 +210,7 @@ def show_borrowers():
 
         m1, m2, m3 = st.columns(3)
         with m1:
-            st.metric("Total Borrowers", len(df))
+            st.metric("Total Borrowers", f"{len(df):,}")
         with m2:
             st.metric("Total Paid", f"{total_paid:,.2f}")
         with m3:
@@ -201,14 +220,14 @@ def show_borrowers():
         open_balance = 0.0
 
     # ==========================================
-    # TABLE
+    # DATA AG-GRID TABLE
     # ==========================================
     st.markdown('<div class="borrower-container">', unsafe_allow_html=True)
 
     if df.empty:
         st.warning("No borrowers found.")
     else:
-        # Rename columns for display
+        # Rename columns safely for end-user display grid representation
         display_df = df.rename(columns={
             "full_name": "Full Name",
             "business_name": "Business",
@@ -220,7 +239,6 @@ def show_borrowers():
             "status": "Status"
         })
 
-        # Select visible columns
         visible_columns = [
             "Full Name",
             "Business",
@@ -236,10 +254,19 @@ def show_borrowers():
         gb = GridOptionsBuilder.from_dataframe(display_df)
         gb.configure_pagination(enabled=True, paginationPageSize=20)
         gb.configure_default_column(sortable=True, filter=True, resizable=True)
-        gb.configure_column("Total Paid", type=["numericColumn"], valueFormatter="x.toLocaleString()")
-        gb.configure_column("Open Loans Balance", type=["numericColumn"], valueFormatter="x.toLocaleString()")
+
+        gb.configure_column(
+            "Total Paid",
+            type=["numericColumn"],
+            valueFormatter="x.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})"
+        )
+        gb.configure_column(
+            "Open Loans Balance",
+            type=["numericColumn"],
+            valueFormatter="x.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})"
+        )
         gb.configure_selection(selection_mode="single", use_checkbox=True)
-        
+
         grid_options = gb.build()
 
         AgGrid(
@@ -256,7 +283,7 @@ def show_borrowers():
     st.markdown("</div>", unsafe_allow_html=True)
 
     # ==========================================
-    # FOOTER TOTALS
+    # FOOTER SUMMARY TOTALS
     # ==========================================
     if not df.empty:
         st.markdown("---")
@@ -267,7 +294,7 @@ def show_borrowers():
             st.error(f"📉 Open Loans Balance: {open_balance:,.2f}")
 
     # ==========================================
-    # ACTION SECTION
+    # ACTION SECTION HANDLERS
     # ==========================================
     st.markdown("### ⚡ Borrower Actions")
     a1, a2, a3, a4 = st.columns(4)
