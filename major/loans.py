@@ -53,35 +53,7 @@ def get_loans():
 
 
 # =========================================================
-# 🧭 SIDEBAR (FIXED - WAS MISSING)
-# =========================================================
-def loans_sidebar():
-
-    st.sidebar.markdown("## 💰 Loans Module")
-
-    return st.sidebar.radio(
-        "Navigation",
-        [
-            "View All Loans",
-            "Add Loan",
-            "Due Loans",
-            "Missed Repayments",
-            "Loans in Arrears",
-            "No Repayments",
-            "Past Maturity Date",
-            "Principal Outstanding",
-            "1 Month Late Loans",
-            "3 Months Late Loans",
-            "Loan Calculator",
-            "Guarantors",
-            "Loan Comments",
-            "Approve Loans"
-        ]
-    )
-
-
-# =========================================================
-# 🧠 SAFE DATA FORMATTER (NO CRASH IF COLUMNS MISSING)
+# 🧠 SAFE DATA FORMATTER
 # =========================================================
 def format_loans_df(df):
 
@@ -116,8 +88,6 @@ def show_loans():
 
     loans_styles()
 
-    menu = loans_sidebar()
-
     st.markdown("""
     <div class="loans-header">
         <h1>📊 Loans Management</h1>
@@ -127,7 +97,31 @@ def show_loans():
     df = get_loans()
 
     # =====================================================
-    # FILTERS (SAFE)
+    # 🧭 HORIZONTAL NAVIGATION (FIXED)
+    # =====================================================
+    menu = st.radio(
+        "",
+        [
+            "View All Loans",
+            "Add Loan",
+            "Due Loans",
+            "Missed Repayments",
+            "Loans in Arrears",
+            "No Repayments",
+            "Past Maturity Date",
+            "Principal Outstanding",
+            "1 Month Late Loans",
+            "3 Months Late Loans",
+            "Loan Calculator",
+            "Guarantors",
+            "Loan Comments",
+            "Approve Loans"
+        ],
+        horizontal=True
+    )
+
+    # =====================================================
+    # 🔍 FILTERS (SIDEBAR ONLY)
     # =====================================================
     with st.sidebar.expander("🔍 Advanced Filters", expanded=False):
 
@@ -148,18 +142,14 @@ def show_loans():
         if status != "All" and "status" in df.columns:
             df = df[df["status"] == status]
 
-    # =====================================================
-    # ROUTING
-    # =====================================================
     clean_df = format_loans_df(df)
 
+    # =====================================================
+    # 📊 ROUTING
+    # =====================================================
     if menu == "View All Loans":
         st.markdown("### 📁 All Loans")
-
-        if clean_df.empty:
-            st.warning("No loans found.")
-        else:
-            st.dataframe(clean_df, use_container_width=True, hide_index=True)
+        st.dataframe(clean_df, use_container_width=True, hide_index=True)
 
     elif menu == "Add Loan":
         st.markdown("### ➕ Add Loan")
@@ -191,43 +181,23 @@ def show_loans():
 
     elif menu == "Due Loans":
         st.markdown("### ⏰ Due Loans")
-
-        if "status" in df.columns:
-            st.dataframe(clean_df[df["status"] == "Due"], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("status") == "Due"], use_container_width=True, hide_index=True)
 
     elif menu == "Missed Repayments":
         st.markdown("### ❌ Missed Repayments")
-
-        if "status" in df.columns:
-            st.dataframe(clean_df[df["status"] == "Missed"], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("status") == "Missed"], use_container_width=True, hide_index=True)
 
     elif menu == "Loans in Arrears":
         st.markdown("### ⚠ Loans in Arrears")
-
-        if "status" in df.columns:
-            st.dataframe(clean_df[df["status"] == "Arrears"], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("status") == "Arrears"], use_container_width=True, hide_index=True)
 
     elif menu == "No Repayments":
         st.markdown("### 🚫 No Repayments")
-
-        if "repayments_count" in df.columns:
-            st.dataframe(clean_df[df["repayments_count"] == 0], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("repayments_count") == 0], use_container_width=True, hide_index=True)
 
     elif menu == "Past Maturity Date":
         st.markdown("### 📅 Past Maturity Loans")
-
-        if "status" in df.columns:
-            st.dataframe(clean_df[df["status"] == "Matured"], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("status") == "Matured"], use_container_width=True, hide_index=True)
 
     elif menu == "Principal Outstanding":
         st.markdown("### 💵 Principal Outstanding")
@@ -235,19 +205,11 @@ def show_loans():
 
     elif menu == "1 Month Late Loans":
         st.markdown("### 📉 1 Month Late Loans")
-
-        if "late_months" in df.columns:
-            st.dataframe(clean_df[df["late_months"] == 1], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("late_months") == 1], use_container_width=True, hide_index=True)
 
     elif menu == "3 Months Late Loans":
         st.markdown("### 📉 3 Months Late Loans")
-
-        if "late_months" in df.columns:
-            st.dataframe(clean_df[df["late_months"] == 3], use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(clean_df)
+        st.dataframe(df[df.get("late_months") == 3], use_container_width=True, hide_index=True)
 
     elif menu == "Loan Calculator":
         st.markdown("### 🧮 Loan Calculator")
@@ -260,11 +222,5 @@ def show_loans():
             total = p + (p * r/100 * t/12)
             st.success(f"Total Payable: {total:,.2f}")
 
-    elif menu == "Guarantors":
-        st.info("Coming soon")
-
-    elif menu == "Loan Comments":
-        st.info("Coming soon")
-
-    elif menu == "Approve Loans":
-        st.info("Coming soon")
+    else:
+        st.info("Coming soon...")
