@@ -165,40 +165,139 @@ def show_loans():
 
     elif menu == "Add Loan":
         st.markdown("### ➕ Add Loan")
-
+    
+        # =====================================================
+        # 📥 FETCH BORROWERS (FOR DROPDOWN)
+        # =====================================================
+        try:
+            res = supabase.table("borrowers").select("id, borrower_name").execute()
+            borrowers = res.data if res.data else []
+        except Exception as e:
+            st.error(f"Error loading borrowers: {e}")
+            borrowers = []
+    
+        borrower_map = {b["borrower_name"]: b["id"] for b in borrowers}
+    
         with st.form("add_loan"):
-            borrower = st.text_input("Borrower Name")
+    
+            # =========================
+            # 👤 BORROWER DROPDOWN
+            # =========================
+            borrower_name = st.selectbox(
+                "Borrower",
+                list(borrower_map.keys()) if borrower_map else []
+            )
+    
             principal = st.number_input("Principal", min_value=0.0)
             interest = st.number_input("Interest (%)", min_value=0.0)
-
+    
+            # =========================
+            # 📅 DATES
+            # =========================
+            start_date = st.date_input("Start Date", value=datetime.today())
+            end_date = st.date_input("End Date")
+    
             submit = st.form_submit_button("Create Loan")
-
+    
             if submit:
-                if not borrower:
+    
+                if not borrower_name:
                     st.error("Borrower required")
+    
+                elif not end_date:
+                    st.error("End date required")
+    
                 else:
                     try:
                         supabase.table("loans").insert({
-                            "borrower_name": borrower,
+                            "borrower_id": borrower_map[borrower_name],
+                            "borrower_name": borrower_name,  # optional redundancy (safe for reporting)
                             "principal": principal,
                             "interest": interest,
+                            "start_date": str(start_date),
+                            "end_date": str(end_date),
                             "created_at": str(datetime.now())
                         }).execute()
-
+    
                         st.success("Loan created successfully")
                         st.rerun()
-
+    
                     except Exception as e:
                         st.error(f"Error: {e}")
 
     elif menu == "Due Loans":
         st.markdown("### ⏰ Due Loans")
-        st.dataframe(df[df.get("status") == "Due"] if not df.empty else df, use_container_width=True, hide_index=True)
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 STATUS FILTER (PRIMARY)
+            # =====================================================
+            if "status" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["status"] == "Due"]
+    
+            # =====================================================
+            # 📅 OPTIONAL: DUE DATE INTELLIGENCE (SMART UPGRADE)
+            # =====================================================
+            if "end_date" in filtered_df.columns:
+                try:
+                    filtered_df["end_date"] = pd.to_datetime(filtered_df["end_date"], errors="coerce")
+                    filtered_df = filtered_df.sort_values(by="end_date", ascending=True)
+                except Exception:
+                    pass
+    
+            # =====================================================
+            # 📊 DISPLAY LOGIC
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 No due loans at the moment.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
     elif menu == "Missed Repayments":
         st.markdown("### ❌ Missed Repayments")
-        st.dataframe(df[df.get("status") == "Missed"] if not df.empty else df, use_container_width=True, hide_index=True)
-
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 FILTER MISSED STATUS
+            # =====================================================
+            if "status" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["status"] == "Missed"]
+    
+            # =====================================================
+            # 💰 FORMAT AMOUNTS WITH COMMAS
+            # =====================================================
+            money_cols = ["principal", "total_repayable", "amount_paid"]
+    
+            for col in money_cols:
+                if col in filtered_df.columns:
+                    filtered_df[col] = pd.to_numeric(filtered_df[col], errors="coerce")
+                    filtered_df[col] = filtered_df[col].apply(
+                        lambda x: f"{x:,.2f}" if pd.notnull(x) else x
+                    )
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 No missed repayments.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
     elif menu == "Loans in Arrears":
         st.markdown("### ⚠ Loans in Arrears")
         st.dataframe(df[df.get("status") == "Arrears"] if not df.empty else df, use_container_width=True, hide_index=True)
