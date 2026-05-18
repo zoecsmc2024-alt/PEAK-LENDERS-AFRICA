@@ -88,12 +88,10 @@ def format_loans_df(df):
     # =====================================================
     # 💰 CONVERT TO NUMERIC & ROUND TO WHOLE NUMBERS
     # =====================================================
-    # Included Interest here to fix the long decimals showing up in that column
     money_cols = ["💰 Principal", "🧾 Total Payable", "💵 Paid", "📊 Interest"]
 
     for col in money_cols:
         if col in df.columns:
-            # Force numeric conversion, replace NaN with 0, then round to closest whole number
             df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).round(0).astype(int)
 
     # =====================================================
@@ -111,8 +109,8 @@ def format_loans_df(df):
 
     for col in display_df.columns:
         if col in all_numeric_cols:
-            # Use {x:,.0f} to completely drop the trailing .00 decimal positions
             display_df[col] = display_df[col].apply(lambda x: f"{x:,.0f}")
+
     # =====================================================
     # 📊 TOTAL ROW (SUMS)
     # =====================================================
@@ -120,7 +118,7 @@ def format_loans_df(df):
 
     for col in display_df.columns:
         if col in money_cols or col == "📉 Balance":
-            total_row[col] = df[col].sum()
+            total_row[col] = f"{df[col].sum():,.0f}"
         else:
             total_row[col] = ""
 
@@ -209,14 +207,12 @@ def show_loans():
         # 📥 FETCH BORROWERS (CORRECTED DATABASE COLUMN)
         # =====================================================
         try:
-            # Changed from 'borrower_name' to 'full_name' to match your actual schema
             res = supabase.table("borrowers").select("id, full_name").execute()
             borrowers = res.data if res.data else []
         except Exception as e:
             st.error(f"Error loading borrowers: {e}")
             borrowers = []
         
-        # Map using the correct database key
         borrower_map = {b["full_name"]: b["id"] for b in borrowers if "full_name" in b}
         
         with st.form("add_loan"):
@@ -229,7 +225,7 @@ def show_loans():
                 list(borrower_map.keys()) if borrower_map else ["No borrowers found"]
             )
         
-            principal = st.number_input("Principal", min_value=0.0, step=50000.0) # Adjusted step for UGX visibility
+            principal = st.number_input("Principal", min_value=0.0, step=50000.0)
             interest = st.number_input("Interest (%)", min_value=0.0)
         
             # =========================
@@ -251,9 +247,9 @@ def show_loans():
                     try:
                         supabase.table("loans").insert({
                             "borrower_id": borrower_map[borrower_name],
-                            "borrower_name": borrower_name, # Keeps your display redundancy safe
-                            "principal": principal,
-                            "interest": interest,
+                            "borrower_name": borrower_name,
+                            "principal": int(principal),
+                            "interest": float(interest),
                             "start_date": str(start_date),
                             "end_date": str(end_date),
                             "created_at": str(datetime.now())
@@ -264,6 +260,7 @@ def show_loans():
         
                     except Exception as e:
                         st.error(f"Database Write Error: {e}")
+
     elif menu == "Due Loans":
         st.markdown("### ⏰ Due Loans")
         
@@ -313,18 +310,6 @@ def show_loans():
             # =====================================================
             if "status" in filtered_df.columns:
                 filtered_df = filtered_df[filtered_df["status"] == "Missed"]
-        
-            # =====================================================
-            # 💰 FORMAT AMOUNTS WITH COMMAS
-            # =====================================================
-            money_cols = ["principal", "total_repayable", "amount_paid"]
-        
-            for col in money_cols:
-                if col in filtered_df.columns:
-                    filtered_df[col] = pd.to_numeric(filtered_df[col], errors="coerce")
-                    filtered_df[col] = filtered_df[col].apply(
-                        lambda x: f"{x:,.2f}" if pd.notnull(x) else x
-                    )
         
             # =====================================================
             # 📊 DISPLAY
@@ -477,17 +462,15 @@ def show_loans():
             filtered_df = filtered_df.sort_values(by="principal_outstanding", ascending=False)
         
             # =====================================================
-            # 💰 FORMAT FOR DISPLAY
+            # 💰 FORMAT FOR DISPLAY (CONVERTED TO WHOLE NUMBERS)
             # =====================================================
             display_df = filtered_df.copy()
-        
             money_cols = ["principal", "amount_paid", "principal_outstanding"]
         
             for col in money_cols:
                 if col in display_df.columns:
-                    display_df[col] = display_df[col].apply(
-                        lambda x: f"{x:,.2f}" if pd.notnull(x) else x
-                    )
+                    display_df[col] = pd.to_numeric(display_df[col], errors="coerce").fillna(0).round(0).astype(int)
+                    display_df[col] = display_df[col].apply(lambda x: f"{x:,.0f}")
         
             # =====================================================
             # 📊 DISPLAY
@@ -578,11 +561,11 @@ def show_loans():
                 if p <= 0 or t <= 0:
                     st.error("Principal and Duration must be greater than zero.")
                 else:
-                    # =========================
-                    # 💰 SIMPLE INTEREST MODEL
-                    # =========================
-                    interest_amount = (p * r / 100) * (t / 12)
-                    total_payable = p + interest_amount
+                    # =====================================================
+                    # 💰 SIMPLE INTEREST MODEL (CONVERTED TO WHOLE NUMBERS)
+                    # =====================================================
+                    interest_amount = round((p * r / 100) * (t / 12), 0)
+                    total_payable = round(p + interest_amount, 0)
         
                     # =========================
                     # 📊 FORMATTED OUTPUT
@@ -591,8 +574,8 @@ def show_loans():
         
                     col1, col2, col3 = st.columns(3)
         
-                    col1.metric("Principal", f"{p:,.2f}")
-                    col2.metric("Interest", f"{interest_amount:,.2f}")
-                    col3.metric("Total Payable", f"{total_payable:,.2f}")
+                    col1.metric("Principal", f"{p:,.0f}")
+                    col2.metric("Interest", f"{interest_amount:,.0f}")
+                    col3.metric("Total Payable", f"{total_payable:,.0f}")
         
-                    st.success(f"💵 Total Repayment: {total_payable:,.2f}")
+                    st.success(f"💵 Total Repayment: {total_payable:,.0f}")
