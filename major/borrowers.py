@@ -299,9 +299,53 @@ def show_borrowers():
     st.markdown("### ⚡ Borrower Actions")
     a1, a2, a3, a4 = st.columns(4)
 
+    # ==========================================
+    # ACTION SECTION HANDLERS
+    # ==========================================
+    st.markdown("### ⚡ Borrower Actions")
+    a1, a2, a3, a4 = st.columns(4)
+
+    # Initialize view state if it doesn't exist
+    if "show_add_form" not in st.session_state:
+        st.session_state.show_add_form = False
+
     with a1:
         if st.button("➕ Add Borrower"):
-            st.switch_page("pages/add_borrower.py")
+            st.session_state.show_add_form = not st.session_state.show_add_form
+
+    # Render the input form right here if toggled on
+    if st.session_state.show_add_form:
+        st.markdown("---")
+        st.markdown("### 📝 Create New Borrower Profile")
+        with st.form("new_borrower_form", clear_on_submit=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                new_name = st.text_input("Full Name *")
+                new_phone = st.text_input("Mobile Number *")
+                new_email = st.text_input("Email Address")
+            with col2:
+                new_biz = st.text_input("Business Name")
+                new_id = st.text_input("Unique Number / ID")
+            
+            submit_btn = st.form_submit_button("Save Profile")
+            if submit_btn:
+                if not new_name or not new_phone:
+                    st.error("Name and Mobile Number are required fields.")
+                else:
+                    try:
+                        supabase.table("borrowers").insert({
+                            "full_name": new_name,
+                            "mobile": new_phone,
+                            "email": new_email,
+                            "business_name": new_biz,
+                            "unique_number": new_id,
+                            "status": "Active"
+                        }).execute()
+                        st.success(f"Successfully added {new_name}!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    except Exception as ex:
+                        st.error(f"Failed to save profile: {ex}")
 
     with a2:
         if st.button("📄 Export Excel"):
