@@ -304,7 +304,7 @@ def show_payments():
         )
 
     # ==============================
-    # ✨ SHOW LATEST CYCLE ONLY
+    # 🔁 SHOW LATEST CYCLE ONLY
     # ==============================
     if (
         "sn" in loans_df.columns
