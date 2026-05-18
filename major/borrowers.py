@@ -43,6 +43,20 @@ def show_borrowers():
         border-radius: 14px;
         border: 1px solid #E5E7EB;
     }
+
+    /* Force Enterprise SaaS Typography overrides across the Ag-Grid Dom Tree */
+    .borrower-container .ag-theme-streamlit,
+    .borrower-container .ag-cell, 
+    .borrower-container .ag-header-cell-text,
+    .borrower-container .ag-paging-panel {
+        font-family: 'Inter', '-apple-system', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+        font-size: 14px !important;
+    }
+    
+    .borrower-container .ag-header-cell-text {
+        font-weight: 600 !important;
+        color: #1E293B !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
