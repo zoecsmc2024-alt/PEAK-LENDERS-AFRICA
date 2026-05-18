@@ -6,15 +6,14 @@ from supabase import create_client
 # -----------------------------
 # Helpers
 # -----------------------------
-def require_tenant():
-    tenant = st.session_state.get("tenant_id")
-    if not tenant:
-        st.error("Tenant session missing")
+def get_current_tenant():
+    tenant_id = st.session_state.get("tenant_id")
+
+    if not tenant_id or tenant_id in ["", "default_tenant", None]:
+        st.warning("⚠️ Please log in again (tenant missing).")
         st.stop()
 
-def get_tenant_id():
-    return str(st.session_state.get("tenant_id"))
-
+    return str(tenant_id).strip()
 # -----------------------------
 # Supabase Init
 # -----------------------------
