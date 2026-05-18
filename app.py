@@ -415,9 +415,9 @@ def safe_audit_log(supabase, payload):
 # =========================================
 
 import streamlit as st
+import uuid
 
 def auth_styles():
-
     st.markdown("""
     <style>
 
@@ -471,15 +471,33 @@ def auth_styles():
         border: none !important;
     }
 
+    /* Clean Secondary Action Buttons Style */
+    div[data-testid="column"] .stButton > button {
+        background-color: #F8FAFC !important;
+        color: #475569 !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        height: 38px !important;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    div[data-testid="column"] .stButton > button:hover {
+        background-color: #F1F5F9 !important;
+        border-color: #CBD5E1 !important;
+        color: #1E3A8A !important;
+    }
+
     </style>
     """, unsafe_allow_html=True)
 
-import uuid
-import streamlit as st
 
+# =========================================
+# 🏢 REGISTER COMPANY
+# =========================================
 @st.dialog("🏢 Register Organization")
 def admin_company_registration(supabase):
-
     with st.form("company_form"):
         company = st.text_input("Company Name")
         admin = st.text_input("Admin Name")
@@ -516,9 +534,12 @@ def admin_company_registration(supabase):
             except Exception as e:
                 st.error(e)
 
+
+# =========================================
+# 👥 STAFF SIGNUP
+# =========================================
 @st.dialog("👥 Staff Signup")
 def view_staff_signup(supabase):
-
     with st.form("staff_form"):
         company = st.text_input("Company Name")
         name = st.text_input("Full Name")
@@ -548,39 +569,43 @@ def view_staff_signup(supabase):
             except Exception as e:
                 st.error(e)
 
+
+# =========================================
+# 🔑 RESET PASSWORD
+# =========================================
 @st.dialog("🔑 Reset Password")
 def forgot_password_page(supabase):
-
     email = st.text_input("Email")
-
-    if st.button("Send Reset Link"):
+    if st.button("Send Reset Link", use_container_width=True):
         try:
             supabase.auth.reset_password_for_email(email)
             st.success("Reset link sent")
         except Exception as e:
             st.error(e)
 
-def login_page(supabase):
 
+# =========================================
+# 🔐 SECURE LOGIN PAGE
+# =========================================
+def login_page(supabase):
     auth_styles()
 
     _, center, _ = st.columns([1, 1.3, 1])
 
     with center:
-
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
 
         st.markdown("""
         <div class="portal-badge-header">
             <div class="badge-left">
-                <span style="color:#3498DB;">🏢 Peak-Lenders Africa</span>
+                <span style="color:#3498DB; font-weight: 600;">🏢 Peak-Lenders Africa</span>
                 <span>|</span>
-                <span>🔒 Secure Login</span>
+                <span style="color:#2ECC71;">🔒 Secure Login</span>
             </div>
         </div>
         """, unsafe_allow_html=True)
 
-        st.title("Login")
+        st.markdown("<h2 style='color:#1E3A8A; margin-top:0;'>Login</h2>", unsafe_allow_html=True)
 
         with st.form("login_form"):
             company = st.text_input("Company")
@@ -589,24 +614,27 @@ def login_page(supabase):
 
             submit = st.form_submit_button("Login")
 
+        # Divider line between form and footer utility buttons
+        st.markdown("<div style='margin-top: 20px; border-top: 1px solid #F1F5F9; padding-top: 15px;'></div>", unsafe_allow_html=True)
+
+        # Actions Row — Nested safely inside the card block layout context
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            if st.button("New Company", use_container_width=True):
+                admin_company_registration(supabase)
+
+        with col2:
+            if st.button("Staff Signup", use_container_width=True):
+                view_staff_signup(supabase)
+
+        with col3:
+            if st.button("Reset Password", use_container_width=True):
+                forgot_password_page(supabase)
+
         st.markdown("</div>", unsafe_allow_html=True)
 
-    # actions
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("New Company"):
-            admin_company_registration(supabase)
-
-    with col2:
-        if st.button("Staff Signup"):
-            view_staff_signup(supabase)
-
-    with col3:
-        if st.button("Reset Password"):
-            forgot_password_page(supabase)
-
-    # login logic
+    # login execution logic pipeline
     if submit:
         try:
             res = supabase.auth.sign_in_with_password({
@@ -629,8 +657,8 @@ def login_page(supabase):
         except Exception as e:
             st.error(e)
 
-def run_auth_ui(supabase):
 
+def run_auth_ui(supabase):
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
@@ -638,16 +666,12 @@ def run_auth_ui(supabase):
 
     if view == "login":
         login_page(supabase)
-
     elif view == "signup":
         view_staff_signup(supabase)
-
     elif view == "create_company":
         admin_company_registration(supabase)
-
     elif view == "reset":
         forgot_password_page(supabase)
-
     elif view == "main":
         st.empty()
 
