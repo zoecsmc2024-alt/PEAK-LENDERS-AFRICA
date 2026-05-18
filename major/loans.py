@@ -10,54 +10,46 @@ from core.database import supabase, get_cached_data
 def loans_styles():
     st.markdown("""
     <style>
-
-    .loans-header{
-        background: linear-gradient(90deg,#0A192F,#112240);
-        padding:16px 20px;
-        border-radius:12px;
-        margin-bottom:20px;
+    .loans-header {
+        background: linear-gradient(90deg, #0A192F, #112240);
+        padding: 16px 20px;
+        border-radius: 12px;
+        margin-bottom: 20px;
     }
-
-    .loans-header h1{
-        color:white;
-        margin:0;
-        font-size:24px;
-        font-weight:700;
+    .loans-header h1 {
+        color: white;
+        margin: 0;
+        font-size: 24px;
+        font-weight: 700;
     }
-
-    .loan-top-card{
-        background:white;
-        padding:14px;
-        border-radius:12px;
-        border:1px solid #E2E8F0;
-        margin-bottom:15px;
+    .loan-top-card {
+        background: white;
+        padding: 14px;
+        border-radius: 12px;
+        border: 1px solid #E2E8F0;
+        margin-bottom: 15px;
     }
-
-    .stButton > button{
-        background:#2563EB;
-        color:white;
-        border:none;
-        border-radius:8px;
-        height:40px;
-        font-weight:600;
+    .stButton > button {
+        background: #2563EB;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        height: 40px;
+        font-weight: 600;
     }
-
-    .stButton > button:hover{
-        background:#1D4ED8;
-        color:white;
+    .stButton > button:hover {
+        background: #1D4ED8;
+        color: white;
     }
-
-    div[data-baseweb="select"] > div{
-        border-radius:10px;
+    div[data-baseweb="select"] > div {
+        border-radius: 10px;
     }
-
-    .metric-card{
-        background:white;
-        border:1px solid #E2E8F0;
-        padding:12px;
-        border-radius:12px;
+    .metric-card {
+        background: white;
+        border: 1px solid #E2E8F0;
+        padding: 12px;
+        border-radius: 12px;
     }
-
     </style>
     """, unsafe_allow_html=True)
 
@@ -102,12 +94,12 @@ def get_payments():
 # 🧠 FORMAT DATAFRAME
 # =========================================================
 def format_loans_df(df):
-
     if df.empty:
         return df
 
     display_df = df.copy()
 
+    # Base Whitelist of Mapped Headers
     safe_cols = {
         "sn": "📌 SN",
         "loan_id_label": "🏷 Loan ID",
@@ -119,9 +111,11 @@ def format_loans_df(df):
         "amount_paid": "💵 Paid",
         "balance": "📉 Balance",
         "status": "📌 Status",
-        "cycle_no": "🔁 Cycle"
+        "cycle_no": "🔁 Cycle",
+        "principal_outstanding": "💵 Principal Outstanding"  # Added to prevent stripping out on Outstanding module
     }
 
+    # Dynamically pick available whitelisted columns
     available = [c for c in safe_cols.keys() if c in display_df.columns]
     display_df = display_df[available].copy()
 
@@ -134,7 +128,8 @@ def format_loans_df(df):
         "💰 Principal",
         "🧾 Total Payable",
         "💵 Paid",
-        "📉 Balance"
+        "📉 Balance",
+        "💵 Principal Outstanding"
     ]
 
     for col in money_cols:
@@ -153,12 +148,9 @@ def format_loans_df(df):
             )
 
     total_row = {}
-
     for col in display_df.columns:
-
         if col in money_cols:
             total_row[col] = f"{raw_df[col].sum():,.0f}"
-
         else:
             total_row[col] = ""
 
@@ -177,7 +169,6 @@ def format_loans_df(df):
 # 📁 MAIN LOANS PAGE
 # =========================================================
 def show_loans():
-
     loans_styles()
 
     st.markdown("""
@@ -198,28 +189,16 @@ def show_loans():
     # =====================================================
     if loans_df.empty:
         loans_df = pd.DataFrame(columns=[
-            "id",
-            "sn",
-            "loan_id_label",
-            "borrower_id",
-            "borrower",
-            "loan_type",
-            "principal",
-            "interest",
-            "total_repayable",
-            "amount_paid",
-            "balance",
-            "status",
-            "cycle_no",
-            "start_date",
-            "end_date"
+            "id", "sn", "loan_id_label", "borrower_id", "borrower",
+            "loan_type", "principal", "interest", "total_repayable",
+            "amount_paid", "balance", "status", "cycle_no",
+            "start_date", "end_date"
         ])
 
     # =====================================================
     # 🔧 CLEANUP
     # =====================================================
     for df in [loans_df, borrowers_df, payments_df]:
-
         if not df.empty:
             df.columns = (
                 df.columns
@@ -232,7 +211,6 @@ def show_loans():
     # 🔗 BORROWER SYNC
     # =====================================================
     if not borrowers_df.empty:
-
         borrowers_df["id"] = borrowers_df["id"].astype(str)
 
         if "full_name" in borrowers_df.columns:
@@ -241,30 +219,24 @@ def show_loans():
                 borrowers_df["full_name"]
             ))
 
-            loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
-
-            loans_df["borrower"] = (
-                loans_df["borrower_id"]
-                .map(borrower_map)
-                .fillna("Unknown")
-            )
+            if "borrower_id" in loans_df.columns:
+                loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
+                loans_df["borrower"] = (
+                    loans_df["borrower_id"]
+                    .map(borrower_map)
+                    .fillna("Unknown")
+                )
 
     # =====================================================
     # 💰 NUMERIC CLEANUP
     # =====================================================
     numeric_cols = [
-        "principal",
-        "interest",
-        "total_repayable",
-        "amount_paid",
-        "balance"
+        "principal", "interest", "total_repayable", "amount_paid", "balance"
     ]
 
     for col in numeric_cols:
-
         if col not in loans_df.columns:
             loans_df[col] = 0
-
         loans_df[col] = pd.to_numeric(
             loans_df[col],
             errors="coerce"
@@ -274,19 +246,13 @@ def show_loans():
     # 🔗 PAYMENT SYNC
     # =====================================================
     if not payments_df.empty and "loan_id" in payments_df.columns:
-
         payments_df["loan_id"] = payments_df["loan_id"].astype(str)
-
         payments_df["amount"] = pd.to_numeric(
             payments_df["amount"],
             errors="coerce"
         ).fillna(0)
 
-        payment_sums = (
-            payments_df
-            .groupby("loan_id")["amount"]
-            .sum()
-        )
+        payment_sums = payments_df.groupby("loan_id")["amount"].sum()
 
         loans_df["amount_paid"] = (
             loans_df["id"]
@@ -296,14 +262,14 @@ def show_loans():
         )
 
     loans_df["balance"] = (
-        loans_df["total_repayable"]
-        - loans_df["amount_paid"]
+        loans_df["total_repayable"] - loans_df["amount_paid"]
     ).clip(lower=0)
 
     # =====================================================
     # 📌 STATUS ENGINE
     # =====================================================
-    today = pd.Timestamp.today()
+    # Normalize to midnight date context to prevent immediate Arrears drops
+    today = pd.Timestamp.today().normalize()
 
     if "end_date" in loans_df.columns:
         loans_df["end_date"] = pd.to_datetime(
@@ -314,36 +280,15 @@ def show_loans():
     if "status" not in loans_df.columns:
         loans_df["status"] = "ACTIVE"
 
-    loans_df.loc[
-        (loans_df["balance"] <= 0),
-        "status"
-    ] = "CLEARED"
-
-    loans_df.loc[
-        (
-            loans_df["balance"] > 0
-        ) &
-        (
-            loans_df["end_date"] < today
-        ),
-        "status"
-    ] = "ARREARS"
-
-    loans_df.loc[
-        (
-            loans_df["balance"] > 0
-        ) &
-        (
-            loans_df["end_date"] >= today
-        ),
-        "status"
-    ] = "ACTIVE"
+    # Strict logical ordering for status assignments
+    loans_df.loc[(loans_df["balance"] <= 0), "status"] = "CLEARED"
+    loans_df.loc[(loans_df["balance"] > 0) & (loans_df["end_date"] < today), "status"] = "ARREARS"
+    loans_df.loc[(loans_df["balance"] > 0) & (loans_df["end_date"] >= today), "status"] = "ACTIVE"
 
     # =====================================================
     # 🧾 SERIAL LABELS
     # =====================================================
     if "sn" in loans_df.columns:
-
         loans_df["loan_id_label"] = (
             loans_df["sn"]
             .astype(str)
@@ -355,15 +300,11 @@ def show_loans():
     # 📊 METRICS
     # =====================================================
     total_loans = len(loans_df)
-
     total_principal = loans_df["principal"].sum()
-
     total_paid = loans_df["amount_paid"].sum()
-
     total_balance = loans_df["balance"].sum()
 
     m1, m2, m3, m4 = st.columns(4)
-
     m1.metric("📁 Loans", f"{total_loans:,}")
     m2.metric("💰 Principal", f"{total_principal:,.0f}")
     m3.metric("💵 Paid", f"{total_paid:,.0f}")
@@ -391,45 +332,31 @@ def show_loans():
     # 🔍 FILTERS
     # =====================================================
     with st.sidebar.expander("🔍 Advanced Filters"):
-
         search_name = st.text_input("Borrower")
-
         search_status = st.selectbox(
             "Status",
             ["All", "ACTIVE", "ARREARS", "CLEARED"]
         )
-
         apply_filters = st.button("Apply Filters")
 
     filtered_df = loans_df.copy()
 
     if apply_filters:
-
-        if search_name:
+        if search_name and "borrower" in filtered_df.columns:
             filtered_df = filtered_df[
                 filtered_df["borrower"]
                 .astype(str)
-                .str.contains(
-                    search_name,
-                    case=False,
-                    na=False
-                )
+                .str.contains(search_name, case=False, na=False)
             ]
-
-        if search_status != "All":
-            filtered_df = filtered_df[
-                filtered_df["status"] == search_status
-            ]
-
-    clean_df = format_loans_df(filtered_df)
+        if search_status != "All" and "status" in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df["status"] == search_status]
 
     # =====================================================
     # 📁 VIEW ALL LOANS
     # =====================================================
     if menu == "View All Loans":
-
         st.markdown("### 📁 All Loans")
-
+        clean_df = format_loans_df(filtered_df)
         st.dataframe(
             clean_df,
             use_container_width=True,
@@ -440,39 +367,27 @@ def show_loans():
     # ➕ ADD LOAN
     # =====================================================
     elif menu == "Add Loan":
-
         st.markdown("### ➕ Add Loan")
 
         borrower_options = {}
-
         if not borrowers_df.empty and "full_name" in borrowers_df.columns:
-
             borrower_options = dict(zip(
                 borrowers_df["full_name"],
                 borrowers_df["id"]
             ))
 
         with st.form("add_loan_form"):
-
             col1, col2 = st.columns(2)
 
             with col1:
-
                 borrower_name = st.selectbox(
                     "👤 Borrower",
-                    list(borrower_options.keys())
+                    list(borrower_options.keys()) if borrower_options else ["No Borrowers Found"]
                 )
-
                 loan_type = st.selectbox(
                     "📂 Loan Type",
-                    [
-                        "Business",
-                        "Personal",
-                        "School Fees",
-                        "Emergency"
-                    ]
+                    ["Business", "Personal", "School Fees", "Emergency"]
                 )
-
                 principal = st.number_input(
                     "💰 Principal",
                     min_value=0.0,
@@ -480,95 +395,56 @@ def show_loans():
                 )
 
             with col2:
-
                 interest = st.number_input(
                     "📊 Interest %",
                     min_value=0.0,
                     step=1.0
                 )
-
                 start_date = st.date_input(
                     "📅 Start Date",
                     value=datetime.today()
                 )
-
                 end_date = st.date_input(
-                    "📅 End Date"
+                    "📅 End Date",
+                    value=datetime.today()  # Fixed blank mapping value crash
                 )
 
-            submit = st.form_submit_button(
-                "💾 Create Loan"
-            )
+            submit = st.form_submit_button("💾 Create Loan")
 
             if submit:
+                if not borrower_options:
+                    st.error("Cannot create a loan without a valid borrower selection.")
+                else:
+                    try:
+                        total_payable = principal + (principal * (interest / 100))
 
-                try:
+                        # Fixed error layout by dropping non-existent text column payload
+                        supabase.table("loans").insert({
+                            "borrower_id": borrower_options[borrower_name],
+                            "loan_type": loan_type,
+                            "principal": float(principal),
+                            "interest": float(interest),
+                            "total_repayable": float(total_payable),
+                            "amount_paid": 0.0,
+                            "balance": float(total_payable),
+                            "status": "ACTIVE",
+                            "start_date": str(start_date),
+                            "end_date": str(end_date),
+                            "created_at": datetime.now().isoformat()
+                        }).execute()
 
-                    total_payable = (
-                        principal
-                        + (
-                            principal
-                            * (interest / 100)
-                        )
-                    )
+                        st.success("✅ Loan created successfully")
+                        st.rerun()
 
-                    supabase.table("loans").insert({
-
-                        "borrower_id":
-                            borrower_options[borrower_name],
-
-                        "borrower":
-                            borrower_name,
-
-                        "loan_type":
-                            loan_type,
-
-                        "principal":
-                            float(principal),
-
-                        "interest":
-                            float(interest),
-
-                        "total_repayable":
-                            float(total_payable),
-
-                        "amount_paid":
-                            0,
-
-                        "balance":
-                            float(total_payable),
-
-                        "status":
-                            "ACTIVE",
-
-                        "start_date":
-                            str(start_date),
-
-                        "end_date":
-                            str(end_date),
-
-                        "created_at":
-                            str(datetime.now())
-
-                    }).execute()
-
-                    st.success("✅ Loan created successfully")
-                    st.rerun()
-
-                except Exception as e:
-                    st.error(f"Loan creation error: {e}")
+                    except Exception as e:
+                        st.error(f"Loan creation error: {e}")
 
     # =====================================================
     # ⏰ DUE LOANS
     # =====================================================
     elif menu == "Due Loans":
-
         st.markdown("### ⏰ Due Loans")
-
-        due_df = loans_df[
-            loans_df["status"] == "ACTIVE"
-        ]
-
+        due_df = filtered_df[filtered_df["status"] == "ACTIVE"]
         st.dataframe(
             format_loans_df(due_df),
             use_container_width=True,
@@ -579,13 +455,8 @@ def show_loans():
     # ⚠ ARREARS
     # =====================================================
     elif menu == "Loans in Arrears":
-
         st.markdown("### ⚠ Loans in Arrears")
-
-        arrears_df = loans_df[
-            loans_df["status"] == "ARREARS"
-        ]
-
+        arrears_df = filtered_df[filtered_df["status"] == "ARREARS"]
         st.dataframe(
             format_loans_df(arrears_df),
             use_container_width=True,
@@ -596,13 +467,8 @@ def show_loans():
     # 📅 PAST MATURITY
     # =====================================================
     elif menu == "Past Maturity Date":
-
         st.markdown("### 📅 Past Maturity Loans")
-
-        matured_df = loans_df[
-            loans_df["end_date"] < today
-        ]
-
+        matured_df = filtered_df[filtered_df["end_date"] < today]
         st.dataframe(
             format_loans_df(matured_df),
             use_container_width=True,
@@ -613,14 +479,12 @@ def show_loans():
     # 💵 PRINCIPAL OUTSTANDING
     # =====================================================
     elif menu == "Principal Outstanding":
-
         st.markdown("### 💵 Principal Outstanding")
-
-        outstanding_df = loans_df.copy()
-
+        outstanding_df = filtered_df.copy()
+        
+        # Calculate specific dynamic metric row logic
         outstanding_df["principal_outstanding"] = (
-            outstanding_df["principal"]
-            - outstanding_df["amount_paid"]
+            outstanding_df["principal"] - outstanding_df["amount_paid"]
         ).clip(lower=0)
 
         st.dataframe(
@@ -633,52 +497,21 @@ def show_loans():
     # 🧮 LOAN CALCULATOR
     # =====================================================
     elif menu == "Loan Calculator":
-
         st.markdown("### 🧮 Loan Calculator")
 
         c1, c2, c3 = st.columns(3)
-
         with c1:
-            principal = st.number_input(
-                "Principal",
-                min_value=0.0
-            )
-
+            calc_principal = st.number_input("Principal", min_value=0.0, key="calc_p")
         with c2:
-            rate = st.number_input(
-                "Interest %",
-                min_value=0.0
-            )
-
+            calc_rate = st.number_input("Interest %", min_value=0.0, key="calc_r")
         with c3:
-            months = st.number_input(
-                "Months",
-                min_value=1
-            )
+            calc_months = st.number_input("Months", min_value=1, key="calc_m")
 
         if st.button("Calculate Loan"):
-
-            interest_amount = (
-                principal
-                * (rate / 100)
-                * (months / 12)
-            )
-
-            total = principal + interest_amount
+            interest_amount = calc_principal * (calc_rate / 100) * (calc_months / 12)
+            total = calc_principal + interest_amount
 
             r1, r2, r3 = st.columns(3)
-
-            r1.metric(
-                "💰 Principal",
-                f"{principal:,.0f}"
-            )
-
-            r2.metric(
-                "📊 Interest",
-                f"{interest_amount:,.0f}"
-            )
-
-            r3.metric(
-                "🧾 Total Payable",
-                f"{total:,.0f}"
-            )
+            r1.metric("💰 Principal", f"{calc_principal:,.0f}")
+            r2.metric("📊 Interest", f"{interest_amount:,.0f}")
+            r3.metric("🧾 Total Payable", f"{total:,.0f}")
