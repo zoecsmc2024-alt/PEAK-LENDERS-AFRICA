@@ -348,13 +348,42 @@ def show_borrowers():
                         st.error(f"Failed to save profile: {ex}")
 
     with a2:
-        if st.button("📄 Export Excel"):
-            st.info("Excel export coming soon")
-
+        if st.button("📄 Export Excel", use_container_width=True):
+    
+            if "df" in globals() and not df.empty:
+                import io
+    
+                output = io.BytesIO()
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="Borrowers")
+    
+                st.download_button(
+                    label="⬇ Download Excel File",
+                    data=output.getvalue(),
+                    file_name="borrowers.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            else:
+                st.warning("No data to export")
+    
     with a3:
-        if st.button("🖨 Print"):
-            st.info("Print feature coming soon")
-
+        if st.button("🖨 Print Report", use_container_width=True):
+            st.markdown("""
+            <script>
+                window.print();
+            </script>
+            """, unsafe_allow_html=True)
+            st.info("Print dialog opened")
+    
     with a4:
-        if st.button("👁 Show / Hide Columns"):
-            st.info("Column customization coming soon")
+        if st.button("👁 Show / Hide Columns", use_container_width=True):
+    
+            if "show_columns" not in st.session_state:
+                st.session_state["show_columns"] = True
+            else:
+                st.session_state["show_columns"] = not st.session_state["show_columns"]
+    
+            if st.session_state["show_columns"]:
+                st.success("Columns Visible Mode Enabled")
+            else:
+                st.warning("Column Compact Mode Enabled")
