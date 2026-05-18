@@ -33,6 +33,7 @@ from major.payments import show_payments
 from major.ledger import show_ledger
 from major.reports import show_reports
 from major.payroll import show_payroll
+from major.staff import show_staff
 # --- Page Config stays here ---
 st.set_page_config(
     page_title="Lending Manager Pro",
@@ -814,6 +815,7 @@ def render_sidebar():
             "Expenses": "📉",
             "Payments": "💰",
             "Reports": "📊",
+            "Staff": "👥",
             "Settings": "⚙️"
         }
 
@@ -1075,6 +1077,8 @@ if __name__ == "__main__":
                 
             elif page == "Reports":
                 show_reports()
+            elif page == "Staff":
+                show_staff()
                 
             elif page == "Settings":
                 show_settings()
