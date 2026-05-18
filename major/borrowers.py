@@ -26,20 +26,7 @@ def show_borrowers():
         unsafe_allow_html=True
     )
 
-    # ==========================================
-    # FETCH DATA
-    # ==========================================
 
-    @st.cache_data(ttl=60)
-    def get_borrowers():
-        try:
-            res = supabase.table("borrowers").select("*").execute()
-            return pd.DataFrame(res.data) if res.data else pd.DataFrame()
-        except Exception as e:
-            st.error(f"Database error: {e}")
-            return pd.DataFrame()
-
-    df = get_borrowers()
 
     # ==========================================
     # TOP CONTROLS
