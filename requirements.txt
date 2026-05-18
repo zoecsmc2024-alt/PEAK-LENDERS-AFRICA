@@ -12,3 +12,4 @@ extra-streamlit-components
 openpyxl
 streamlit-extras
 streamlit-aggrid
+xlsxwriter
