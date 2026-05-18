@@ -106,35 +106,47 @@ def show_borrowers():
     )
 
     # ==========================================
-    # TOP ACTIONS
+    # 🧭 TOP ACTION BAR (CLEAN SAAS LAYOUT)
     # ==========================================
-    top1, top2, top3, top4 = st.columns([2, 1, 1, 1])
-
-    with top1:
-        search = st.text_input(
-            "Search Borrowers",
-            placeholder="Search name, phone, email, business...",
-            key="borrower_search_input"
-        )
-
-    with top2:
+    
+    # =========================
+    # ROW 1: SEARCH (FULL WIDTH)
+    # =========================
+    search = st.text_input(
+        "🔍 Search Borrowers",
+        placeholder="Search name, phone, email, business...",
+        key="borrower_search_input"
+    )
+    
+    st.markdown("---")
+    
+    # =========================
+    # ROW 2: ACTIONS
+    # =========================
+    col1, col2, col3, col4 = st.columns([1.2, 1, 1, 1])
+    
+    with col1:
+        show_filters = st.toggle("⚙ Advanced Filters")
+    
+    with col2:
         if not df.empty:
             st.download_button(
                 "⬇ Export CSV",
                 data=df.to_csv(index=False),
                 file_name="borrowers.csv",
-                mime="text/csv"
+                mime="text/csv",
+                use_container_width=True
             )
         else:
-            st.button("⬇ Export CSV", disabled=True)
-
-    with top3:
-        if st.button("🔄 Refresh"):
+            st.button("⬇ Export CSV", disabled=True, use_container_width=True)
+    
+    with col3:
+        if st.button("🔄 Refresh", use_container_width=True):
             st.cache_data.clear()
             st.rerun()
-
-    with top4:
-        show_filters = st.toggle("Advanced Search")
+    
+    with col4:
+        st.markdown(" ")  # spacing placeholder
 
     # ==========================================
     # ADVANCED SEARCH SECTION
