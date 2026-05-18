@@ -5,25 +5,35 @@ from core.database import supabase
 
 
 # =========================================================
-# 🎨 LOANS PAGE STYLING (ENTERPRISE SAAS)
+# 🎨 LOANS PAGE STYLING (ENTERPRISE SAAS - VISIBILITY FIX)
 # =========================================================
 def loans_styles():
     st.markdown("""
     <style>
 
+    /* Header Panel styling */
     .loans-header {
         background: linear-gradient(90deg, #0A192F, #112240);
         padding: 14px 18px;
         border-radius: 10px;
         color: white;
-        margin-bottom: 15px;
+        margin-bottom: 25px;
     }
 
     .loans-header h1 {
         margin: 0;
         font-size: 22px;
+        color: #FFFFFF !important;
     }
 
+    /* Force visibility on selection box labels & components */
+    div[data-testid="stSelectbox"] label p {
+        color: #1E293B !important;
+        font-weight: 600 !important;
+        font-size: 15px;
+    }
+
+    /* Primary buttons styling */
     .stButton > button {
         background: #2563EB;
         color: white;
@@ -97,10 +107,11 @@ def show_loans():
     df = get_loans()
 
     # =====================================================
-    # 🧭 HORIZONTAL NAVIGATION (FIXED)
+    # 🧭 CLEAN SUB-HEADER NAVIGATION DROPDOWN
     # =====================================================
-    menu = st.radio(
-        "",
+    # Replaced st.radio(horizontal=True) to fix text cutoff/wrapping bugs
+    menu = st.selectbox(
+        "📂 Select Loans Module Category",
         [
             "View All Loans",
             "Add Loan",
@@ -116,9 +127,10 @@ def show_loans():
             "Guarantors",
             "Loan Comments",
             "Approve Loans"
-        ],
-        horizontal=True
+        ]
     )
+
+    st.markdown("---")
 
     # =====================================================
     # 🔍 FILTERS (SIDEBAR ONLY)
@@ -181,23 +193,23 @@ def show_loans():
 
     elif menu == "Due Loans":
         st.markdown("### ⏰ Due Loans")
-        st.dataframe(df[df.get("status") == "Due"], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("status") == "Due"] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "Missed Repayments":
         st.markdown("### ❌ Missed Repayments")
-        st.dataframe(df[df.get("status") == "Missed"], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("status") == "Missed"] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "Loans in Arrears":
         st.markdown("### ⚠ Loans in Arrears")
-        st.dataframe(df[df.get("status") == "Arrears"], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("status") == "Arrears"] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "No Repayments":
         st.markdown("### 🚫 No Repayments")
-        st.dataframe(df[df.get("repayments_count") == 0], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("repayments_count") == 0] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "Past Maturity Date":
         st.markdown("### 📅 Past Maturity Loans")
-        st.dataframe(df[df.get("status") == "Matured"], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("status") == "Matured"] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "Principal Outstanding":
         st.markdown("### 💵 Principal Outstanding")
@@ -205,11 +217,11 @@ def show_loans():
 
     elif menu == "1 Month Late Loans":
         st.markdown("### 📉 1 Month Late Loans")
-        st.dataframe(df[df.get("late_months") == 1], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("late_months") == 1] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "3 Months Late Loans":
         st.markdown("### 📉 3 Months Late Loans")
-        st.dataframe(df[df.get("late_months") == 3], use_container_width=True, hide_index=True)
+        st.dataframe(df[df.get("late_months") == 3] if not df.empty else df, use_container_width=True, hide_index=True)
 
     elif menu == "Loan Calculator":
         st.markdown("### 🧮 Loan Calculator")
@@ -223,4 +235,4 @@ def show_loans():
             st.success(f"Total Payable: {total:,.2f}")
 
     else:
-        st.info("Coming soon...")
+        st.info(f"{menu} module coming soon...")
