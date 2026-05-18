@@ -202,16 +202,18 @@ def show_loans():
         st.markdown("### ➕ Add Loan")
         
         # =====================================================
-        # 📥 FETCH BORROWERS (FOR DROPDOWN)
+        # 📥 FETCH BORROWERS (CORRECTED DATABASE COLUMN)
         # =====================================================
         try:
-            res = supabase.table("borrowers").select("id, borrower_name").execute()
+            # Changed from 'borrower_name' to 'full_name' to match your actual schema
+            res = supabase.table("borrowers").select("id, full_name").execute()
             borrowers = res.data if res.data else []
         except Exception as e:
             st.error(f"Error loading borrowers: {e}")
             borrowers = []
         
-        borrower_map = {b["borrower_name"]: b["id"] for b in borrowers}
+        # Map using the correct database key
+        borrower_map = {b["full_name"]: b["id"] for b in borrowers if "full_name" in b}
         
         with st.form("add_loan"):
         
@@ -220,10 +222,10 @@ def show_loans():
             # =========================
             borrower_name = st.selectbox(
                 "Borrower",
-                list(borrower_map.keys()) if borrower_map else []
+                list(borrower_map.keys()) if borrower_map else ["No borrowers found"]
             )
         
-            principal = st.number_input("Principal", min_value=0.0)
+            principal = st.number_input("Principal", min_value=0.0, step=50000.0) # Adjusted step for UGX visibility
             interest = st.number_input("Interest (%)", min_value=0.0)
         
             # =========================
@@ -235,18 +237,17 @@ def show_loans():
             submit = st.form_submit_button("Create Loan")
         
             if submit:
-        
-                if not borrower_name:
-                    st.error("Borrower required")
-        
+                if not borrower_map:
+                    st.error("Cannot create a loan without a valid borrower selection.")
+                elif not borrower_name or borrower_name == "No borrowers found":
+                    st.error("Valid Borrower required")
                 elif not end_date:
                     st.error("End date required")
-        
                 else:
                     try:
                         supabase.table("loans").insert({
                             "borrower_id": borrower_map[borrower_name],
-                            "borrower_name": borrower_name,
+                            "borrower_name": borrower_name, # Keeps your display redundancy safe
                             "principal": principal,
                             "interest": interest,
                             "start_date": str(start_date),
@@ -254,12 +255,11 @@ def show_loans():
                             "created_at": str(datetime.now())
                         }).execute()
         
-                        st.success("Loan created successfully")
+                        st.success("Loan created successfully!")
                         st.rerun()
         
                     except Exception as e:
-                        st.error(f"Error: {e}")
-
+                        st.error(f"Database Write Error: {e}")
     elif menu == "Due Loans":
         st.markdown("### ⏰ Due Loans")
         
