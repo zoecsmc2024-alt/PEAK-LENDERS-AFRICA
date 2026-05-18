@@ -411,15 +411,17 @@ def safe_audit_log(supabase, payload):
 
 
 # =========================================
-# 🎨 GLOBAL STYLING
+# 🎨 GLOBAL STYLING & HEADERS
 # =========================================
-def auth_styles():
+import streamlit as st
+import uuid
+from datetime import datetime
 
+def auth_styles():
     st.markdown("""
     <style>
-
     .stApp {
-        background: linear-gradient(135deg,#EEF4FF,#F8FAFC);
+        background: linear-gradient(135deg, #EEF4FF, #F8FAFC);
     }
 
     .auth-card {
@@ -439,12 +441,12 @@ def auth_styles():
     }
 
     .stFormSubmitButton > button {
-        background: linear-gradient(90deg,#1D4ED8,#2563EB);
+        background: linear-gradient(90deg, #1D4ED8, #2563EB);
         color: white;
     }
 
     .stFormSubmitButton > button:hover {
-        background: linear-gradient(90deg,#2563EB,#3B82F6);
+        background: linear-gradient(90deg, #2563EB, #3B82F6);
         color: white;
     }
 
@@ -467,7 +469,58 @@ def auth_styles():
         background: #EFF6FF;
     }
 
+    /* Loandisk Meta Top Header */
+    .top-meta-bar {
+        background-color: #1A252F;
+        padding: 10px 16px;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        color: #FFFFFF;
+        font-family: Arial, sans-serif;
+    }
+    
+    .meta-left {
+        display: flex;
+        gap: 15px;
+        align-items: center;
+    }
+    
+    .meta-company {
+        font-size: 15px;
+        font-weight: 700;
+        color: #3498DB;
+    }
+    
+    .meta-item {
+        font-size: 13px;
+        color: #ECF0F1;
+    }
+    
+    .meta-branch {
+        font-size: 12px;
+        color: #2ECC71;
+        font-weight: 600;
+    }
     </style>
+    """, unsafe_allow_html=True)
+
+
+def show_loandisk_header(staff_name="Guest User", company_name="Zoe Consults Admin", branch="Branch #1"):
+    """Renders the translated Loandisk header navbar metadata block at the top of the app."""
+    st.markdown(f"""
+    <div class="top-meta-bar">
+        <div class="meta-left">
+            <span class="meta-company">🏢 {company_name}</span>
+            <span class="meta-item">👤 <b>Staff:</b> {staff_name}</span>
+            <span class="meta-branch">🟢 {branch}</span>
+        </div>
+        <div>
+            <span style="font-size: 11px; color: #BDC3C7;">Portal Secure</span>
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
 
@@ -476,11 +529,9 @@ def auth_styles():
 # =========================================
 @st.dialog("🏢 Register Company")
 def admin_company_registration(supabase):
-
     st.caption("Create your organization account")
 
     with st.form("company_reg_form"):
-
         company_name = st.text_input(
             "Organization Name",
             placeholder="Peak-Lenders Africa"
@@ -507,13 +558,11 @@ def admin_company_registration(supabase):
         )
 
     if submit:
-
         if not all([company_name, admin_name, email, pwd]):
             st.error("All fields are required")
             return
 
         try:
-
             # CREATE AUTH USER
             res = supabase.auth.sign_up({
                 "email": email,
@@ -525,11 +574,7 @@ def admin_company_registration(supabase):
                 return
 
             tenant_id = str(uuid.uuid4())
-
-            company_code = (
-                f"{company_name[:3].upper()}"
-                f"{uuid.uuid4().int % 999}"
-            )
+            company_code = f"{company_name[:3].upper()}{uuid.uuid4().int % 999}"
 
             # CREATE TENANT
             supabase.table("tenants").insert({
@@ -547,18 +592,19 @@ def admin_company_registration(supabase):
                 "role": "Admin"
             }).execute()
 
-            # SAFE AUDIT
-            safe_audit_log(supabase, {
-                "user_id": res.user.id,
-                "action": "CREATE_COMPANY",
-                "tenant_id": tenant_id,
-                "timestamp": datetime.now().isoformat()
-            })
+            # SAFE AUDIT LOG
+            try:
+                from core.database import safe_audit_log
+                safe_audit_log(supabase, {
+                    "user_id": res.user.id,
+                    "action": "CREATE_COMPANY",
+                    "tenant_id": tenant_id,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except ImportError:
+                pass
 
-            st.success(
-                f"✅ Organization created!\n\n"
-                f"Company Code: {company_code}"
-            )
+            st.success(f"✅ Organization created!\n\nCompany Code: {company_code}")
 
         except Exception as e:
             st.error(f"Registration failed: {e}")
@@ -569,11 +615,9 @@ def admin_company_registration(supabase):
 # =========================================
 @st.dialog("👥 Staff Registration")
 def view_staff_signup(supabase):
-
     st.caption("Create a staff account")
 
     with st.form("staff_signup_form"):
-
         company = st.text_input(
             "Company Name",
             placeholder="Peak-Lenders Africa"
@@ -600,13 +644,11 @@ def view_staff_signup(supabase):
         )
 
     if submit:
-
         if not all([company, name, email, pwd]):
             st.error("All fields are required")
             return
 
         try:
-
             # FIND COMPANY
             tenant_query = supabase.table("tenants") \
                 .select("*") \
@@ -638,13 +680,17 @@ def view_staff_signup(supabase):
                 "role": "Staff"
             }).execute()
 
-            # SAFE AUDIT
-            safe_audit_log(supabase, {
-                "user_id": res.user.id,
-                "action": "CREATE_STAFF",
-                "tenant_id": tenant["id"],
-                "timestamp": datetime.now().isoformat()
-            })
+            # SAFE AUDIT LOG
+            try:
+                from core.database import safe_audit_log
+                safe_audit_log(supabase, {
+                    "user_id": res.user.id,
+                    "action": "CREATE_STAFF",
+                    "tenant_id": tenant["id"],
+                    "timestamp": datetime.now().isoformat()
+                })
+            except ImportError:
+                pass
 
             st.success("✅ Staff account created!")
 
@@ -657,7 +703,6 @@ def view_staff_signup(supabase):
 # =========================================
 @st.dialog("🔑 Forgot Password")
 def forgot_password_page(supabase):
-
     st.caption("Reset your account password")
 
     email = st.text_input(
@@ -665,23 +710,14 @@ def forgot_password_page(supabase):
         placeholder="you@example.com"
     )
 
-    if st.button(
-        "📩 Send Reset Link",
-        use_container_width=True
-    ):
-
+    if st.button("📩 Send Reset Link", use_container_width=True):
         if not email:
             st.error("Email required")
             return
 
         try:
-
             supabase.auth.reset_password_for_email(email)
-
-            st.success(
-                "✅ Password reset email sent"
-            )
-
+            st.success("✅ Password reset email sent")
         except Exception as e:
             st.error(f"Reset failed: {e}")
 
@@ -690,27 +726,24 @@ def forgot_password_page(supabase):
 # 🔐 LOGIN PAGE
 # =========================================
 def login_page(supabase):
-
     auth_styles()
 
-    st.write("")
+    # Renders the stylized top banner structure derived from Loandisk header tags
+    show_loandisk_header(staff_name="Authentication Required", company_name="Zoe Consults Admin", branch="System Vault")
+
     st.write("")
     st.write("")
 
     left, center, right = st.columns([1, 1.2, 1])
 
     with center:
-
         with st.container(border=True):
-
             st.markdown("# 💰 PEAK-LENDERS AFRICA")
             st.caption("Secure Business Login Portal")
-
             st.divider()
 
             # LOGIN FORM
             with st.form("login_form"):
-
                 company_name = st.text_input(
                     "Business Name",
                     placeholder="Enter company name"
@@ -738,122 +771,101 @@ def login_page(supabase):
             col1, col2, col3 = st.columns(3)
 
             with col1:
-                if st.button(
-                    "🏢 Register",
-                    use_container_width=True
-                ):
+                if st.button("🏢 Register", use_container_width=True):
                     admin_company_registration(supabase)
 
             with col2:
-                if st.button(
-                    "👥 Staff",
-                    use_container_width=True
-                ):
+                if st.button("👥 Staff", use_container_width=True):
                     view_staff_signup(supabase)
 
             with col3:
-                if st.button(
-                    "🔑 Reset",
-                    use_container_width=True
-                ):
+                if st.button("🔑 Reset", use_container_width=True):
                     forgot_password_page(supabase)
 
     # =====================================
     # 🔐 LOGIN LOGIC (FIXED + STABLE)
     # =====================================
     if submit:
-    
         email = email.strip().lower()
         company_name = company_name.strip().lower()
-    
+
         if not all([company_name, email, pwd]):
             st.error("All fields are required")
             return
-    
+
         try:
-    
-            # =========================
             # AUTH LOGIN
-            # =========================
             res = supabase.auth.sign_in_with_password({
                 "email": email,
                 "password": pwd
             })
-    
+
             if not res or not res.user:
                 st.error("Invalid credentials")
                 return
-    
-            # =========================
+
             # PROFILE FETCH
-            # =========================
             user_query = supabase.table("users") \
                 .select("*, tenants(name)") \
                 .eq("id", res.user.id) \
                 .execute()
-    
+
             data = getattr(user_query, "data", None)
-    
+
             if not data:
                 st.error("Profile not found")
                 return
-    
+
             user = data[0]
-    
-            db_company = (
-                (user.get("tenants") or {}).get("name", "")
-            ).lower()
-    
+            db_company = ((user.get("tenants") or {}).get("name", "")).lower()
+
             if db_company != company_name:
                 st.error(f"Not linked to '{company_name}'")
                 return
-    
-            # =========================
+
             # SESSION STATE (SOURCE OF TRUTH)
-            # =========================
             st.session_state["logged_in"] = True
             st.session_state["authenticated"] = True
             st.session_state["user_id"] = user["id"]
+            st.session_state["user_name"] = user.get("name", "Evans Ahuura")
             st.session_state["tenant_id"] = user["tenant_id"]
             st.session_state["role"] = user.get("role", "Staff")
             st.session_state["company"] = db_company
-    
+
             # IMPORTANT: reset view so login page disappears
             st.session_state["view"] = "main"
-    
+
             st.success("Login successful")
             st.rerun()
-    
+
         except Exception as e:
             st.error(f"Login failed: {e}")
 
-    # =========================================
-    # 🌐 AUTH ROUTER
-    # =========================================
-    def run_auth_ui(supabase):
-    
-        if "view" not in st.session_state:
-            st.session_state["view"] = "login"
-    
-        view = st.session_state["view"]
-    
-        # 🔥 LOGIN FLOW
-        if view == "login":
-            login_page(supabase)
-    
-        # 👥 STAFF SIGNUP
-        elif view == "signup":
-            view_staff_signup(supabase)
-    
-        # 🏢 COMPANY REGISTRATION
-        elif view == "create_company":
-            admin_company_registration(supabase)
-    
-        # 🚀 AFTER LOGIN SAFE STATE (prevents stuck UI)
-        elif view == "main":
-            st.empty()
-            # Do nothing → main app will take over in router
 
+# =========================================
+# 🌐 AUTH ROUTER
+# =========================================
+def run_auth_ui(supabase):
+    if "view" not in st.session_state:
+        st.session_state["view"] = "login"
+
+    view = st.session_state["view"]
+
+    # 🔥 LOGIN FLOW
+    if view == "login":
+        login_page(supabase)
+
+    # 👥 STAFF SIGNUP
+    elif view == "signup":
+        view_staff_signup(supabase)
+
+    # 🏢 COMPANY REGISTRATION
+    elif view == "create_company":
+        admin_company_registration(supabase)
+
+    # 🚀 AFTER LOGIN SAFE STATE
+    elif view == "main":
+        st.empty()
 
 # ============================================================
 # ⚡ ENTERPRISE SIDEBAR (FAST + CLEAN + SAFE)
