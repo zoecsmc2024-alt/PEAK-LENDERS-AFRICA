@@ -6,6 +6,7 @@ import pandas as pd
 from datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 from core.database import supabase
+import io
 
 def show_borrowers():
     # ==========================================
@@ -135,7 +136,7 @@ def show_borrowers():
     col1, col2, col3, col4 = st.columns([1.2, 1, 1, 1])
     
     with col1:
-        show_filters = st.toggle("⚙ Advanced Filters")
+        show_filters = st.toggle("⚙ Advanced Filters", key="toggle_adv_filters")
     
     with col2:
         if not df.empty:
@@ -144,13 +145,14 @@ def show_borrowers():
                 data=df.to_csv(index=False),
                 file_name="borrowers.csv",
                 mime="text/csv",
-                use_container_width=True
+                use_container_width=True,
+                key="btn_export_csv"
             )
         else:
-            st.button("⬇ Export CSV", disabled=True, use_container_width=True)
+            st.button("⬇ Export CSV", disabled=True, use_container_width=True, key="btn_export_csv_disabled")
     
     with col3:
-        if st.button("🔄 Refresh", use_container_width=True):
+        if st.button("🔄 Refresh", use_container_width=True, key="btn_refresh_data"):
             st.cache_data.clear()
             st.rerun()
     
@@ -167,29 +169,32 @@ def show_borrowers():
         with f1:
             borrower_status = st.multiselect(
                 "Loan Status",
-                ["Current", "Due Today", "Missed Repayment", "Arrears", "Past Maturity", "Fully Paid", "Defaulted"]
+                ["Current", "Due Today", "Missed Repayment", "Arrears", "Past Maturity", "Fully Paid", "Defaulted"],
+                key="filter_status"
             )
             gender = st.multiselect(
                 "Gender",
-                ["Male", "Female", "Nonbinary", "Other"]
+                ["Male", "Female", "Nonbinary", "Other"],
+                key="filter_gender"
             )
 
         with f2:
             working_status = st.multiselect(
                 "Working Status",
-                ["Employee", "Government Employee", "Private Sector Employee", "Owner", "Student", "Pensioner", "Unemployed"]
+                ["Employee", "Government Employee", "Private Sector Employee", "Owner", "Student", "Pensioner", "Unemployed"],
+                key="filter_working_status"
             )
-            city = st.text_input("City")
+            city = st.text_input("City", key="filter_city")
 
         with f3:
-            province = st.text_input("Province / State")
-            officer = st.text_input("Loan Officer")
+            province = st.text_input("Province / State", key="filter_province")
+            officer = st.text_input("Loan Officer", key="filter_officer")
 
         d1, d2 = st.columns(2)
         with d1:
-            from_date = st.date_input("Created From", value=None)
+            from_date = st.date_input("Created From", value=None, key="filter_from_date")
         with d2:
-            to_date = st.date_input("Created To", value=None)
+            to_date = st.date_input("Created To", value=None, key="filter_to_date")
 
         # Apply Advanced Filtering Logic
         if borrower_status:
@@ -290,7 +295,7 @@ def show_borrowers():
 
         grid_options = gb.build()
 
-        AgGrid(
+        grid_response = AgGrid(
             display_df,
             gridOptions=grid_options,
             height=600,
@@ -300,6 +305,16 @@ def show_borrowers():
             allow_unsafe_jscode=True,
             theme="streamlit"
         )
+        
+        # Track selected row state globally for upcoming app pages
+        if grid_response and "selected_rows" in grid_response and grid_response["selected_rows"] is not None:
+            selected_rows = grid_response["selected_rows"]
+            if isinstance(selected_rows, pd.DataFrame):
+                st.session_state["selected_borrower"] = selected_rows.to_dict(orient="records")[0] if not selected_rows.empty else None
+            elif isinstance(selected_rows, list) and len(selected_rows) > 0:
+                st.session_state["selected_borrower"] = selected_rows[0]
+            else:
+                st.session_state["selected_borrower"] = None
 
     st.markdown("</div>", unsafe_allow_html=True)
 
@@ -325,7 +340,7 @@ def show_borrowers():
         st.session_state.show_add_form = False
 
     with a1:
-        if st.button("➕ Add Borrower"):
+        if st.button("➕ Add Borrower", key="btn_toggle_add_form"):
             st.session_state.show_add_form = not st.session_state.show_add_form
 
     # Render the input form right here if toggled on
@@ -335,12 +350,12 @@ def show_borrowers():
         with st.form("new_borrower_form", clear_on_submit=True):
             col1, col2 = st.columns(2)
             with col1:
-                new_name = st.text_input("Full Name *")
-                new_phone = st.text_input("Mobile Number *")
-                new_email = st.text_input("Email Address")
+                new_name = st.text_input("Full Name *", key="input_new_name")
+                new_phone = st.text_input("Mobile Number *", key="input_new_phone")
+                new_email = st.text_input("Email Address", key="input_new_email")
             with col2:
-                new_biz = st.text_input("Business Name")
-                new_id = st.text_input("Unique Number / ID")
+                new_biz = st.text_input("Business Name", key="input_new_biz")
+                new_id = st.text_input("Unique Number / ID", key="input_new_id")
             
             submit_btn = st.form_submit_button("Save Profile")
             if submit_btn:
@@ -363,42 +378,41 @@ def show_borrowers():
                         st.error(f"Failed to save profile: {ex}")
 
     with a2:
-        if st.button("📄 Export Excel", use_container_width=True):
-    
-            if "df" in globals() and not df.empty:
-                import io
-    
-                output = io.BytesIO()
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                    df.to_excel(writer, index=False, sheet_name="Borrowers")
-    
-                st.download_button(
-                    label="⬇ Download Excel File",
-                    data=output.getvalue(),
-                    file_name="borrowers.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                )
-            else:
-                st.warning("No data to export")
+        # Fixed Excel Download Logic pattern preventing download button disappearances
+        if not df.empty:
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df.to_excel(writer, index=False, sheet_name="Borrowers")
+            excel_data = output.getvalue()
+            
+            st.download_button(
+                label="📄 Export Excel",
+                data=excel_data,
+                file_name="borrowers.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+                key="btn_download_excel"
+            )
+        else:
+            st.button("📄 Export Excel", disabled=True, use_container_width=True, key="btn_download_excel_disabled")
     
     with a3:
-        if st.button("🖨 Print Report", use_container_width=True):
-            st.markdown("""
+        if st.button("🖨 Print Report", use_container_width=True, key="btn_print_report"):
+            st.components.v1.html("""
             <script>
                 window.print();
             </script>
-            """, unsafe_allow_html=True)
+            """, height=0, width=0)
             st.info("Print dialog opened")
     
     with a4:
-        if st.button("👁 Show / Hide Columns", use_container_width=True):
-    
+        if st.button("👁 Show / Hide Columns", use_container_width=True, key="btn_toggle_columns"):
             if "show_columns" not in st.session_state:
                 st.session_state["show_columns"] = True
             else:
                 st.session_state["show_columns"] = not st.session_state["show_columns"]
     
-            if st.session_state["show_columns"]:
-                st.success("Columns Visible Mode Enabled")
-            else:
-                st.warning("Column Compact Mode Enabled")
+        if st.session_state.get("show_columns", True):
+            st.success("Columns Visible Mode Enabled")
+        else:
+            st.warning("Column Compact Mode Enabled")
