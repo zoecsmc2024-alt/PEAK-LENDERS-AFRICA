@@ -97,10 +97,10 @@ def loans_styles():
 # 💵 LOANS MANAGEMENT PAGE
 # ==========================================
 def show_loans():
-    # Inject Premium Styles
+    # Inject V2 Base Stylesheets
     loans_styles()
 
-    # Premium Header Block
+    # Premium Layout Header Component
     st.markdown("""
     <div class="loans-header">
         <h1>💵 Loans Portfolio & Risk Management</h1>
@@ -108,13 +108,13 @@ def show_loans():
     """, unsafe_allow_html=True)
 
     # ------------------------------
-    # LOAD DATA (V1 Secure Adapter Isolation)
+    # LOAD DATA (V1 Multi-Tenant Wrappers)
     # ------------------------------
     raw_loans = get_data("loans")
     borrowers_df = get_data("borrowers")
     payments_df = get_data("payments")
 
-    # Anti-Corruption Filter from V2
+    # V2 Protection: Filter out accidental string calculations or summaries
     if not raw_loans.empty and "status" in raw_loans.columns:
         loans_df = raw_loans[raw_loans["status"] != "TOTAL"].copy()
     else:
@@ -150,7 +150,7 @@ def show_loans():
     loans_df = loans_df.copy()
     payments_df = payments_df.copy()
 
-    # Data Types Engine
+    # Strict Casting
     loans_df["id"] = loans_df["id"].astype(str)
     loans_df["borrower_id"] = loans_df["borrower_id"].astype(str)
     loans_df["parent_loan_id"] = loans_df["parent_loan_id"].fillna("").astype(str)
@@ -158,7 +158,7 @@ def show_loans():
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["loan_id"] = payments_df["loan_id"].astype(str)
 
-    # Numeric Normalization Engine
+    # Numerical Engine Formatting
     for col in ["principal", "interest", "total_repayable", "amount_paid", "balance"]:
         loans_df[col] = pd.to_numeric(loans_df[col], errors="coerce").fillna(0)
 
@@ -169,7 +169,7 @@ def show_loans():
         loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
 
     # ------------------------------
-    # PAYMENT AGGREGATION & SYNC
+    # REAL-TIME PAYMENT RECONCILIATION
     # ------------------------------
     loans_df["amount_paid"] = 0.0
     if not payments_df.empty and "loan_id" in payments_df.columns:
@@ -179,7 +179,7 @@ def show_loans():
     loans_df["balance"] = (loans_df["total_repayable"] - loans_df["amount_paid"]).clip(lower=0)
 
     # ==============================
-    # SERIAL ENGINE (V1 TRUSTED LINEAGE)
+    # SERIAL ENGINE (V1 TRUSTED LINEAGE WALKER)
     # ==============================
     existing_nums = []
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip()
@@ -204,7 +204,7 @@ def show_loans():
         parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
         inherited_sn = ""
 
-        # Walk Deep Family Lineage Tree
+        # Walk Deep Family Tree Recursively
         while parent_id != "":
             parent_match = loans_df[loans_df["id"] == parent_id]
             if parent_match.empty:
@@ -224,12 +224,12 @@ def show_loans():
             next_sn_val += 1
             loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
 
-    # Sort and Calculate Recurrent Cycles Chronologically
+    # Sort Chronologically for Cycle Identifications
     loans_df = loans_df.sort_values(by=["sn", "start_date", "id"])
     loans_df["cycle_no"] = loans_df.groupby("sn").cumcount() + 1
 
     # ==============================
-    # SMART STATUS LOGIC V2 (V1 TRUSTED)
+    # SMART STATUS ENGINE V2 (V1 TRUTH)
     # ==============================
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
     loans_df = loans_df.sort_values(by=["sn", "cycle_no", "start_date"])
@@ -238,7 +238,7 @@ def show_loans():
         indices = grp.index.tolist()
         latest_idx = indices[-1]
 
-        # Historical elements in lineage tree become Brought Forward (BCF)
+        # Prior historical steps in generation chain auto-convert to Brought Forward
         if len(indices) > 1:
             loans_df.loc[indices[:-1], "status"] = "BCF"
 
@@ -252,10 +252,10 @@ def show_loans():
             else:
                 loans_df.at[latest_idx, "status"] = "PENDING"
 
-    # Absolute Overrides
+    # Absolute System Constraints
     loans_df.loc[loans_df["balance"] <= 0, "status"] = "CLEARED"
 
-    # Final Serialization Sort Array
+    # Final Serialization Sort 
     loans_df = loans_df.sort_values(by=["sn", "cycle_no"], ascending=[True, True]).reset_index(drop=True)
     loans_df["loan_id_label"] = loans_df["sn"].str.replace("LN-", "", regex=False).str.zfill(4)
 
@@ -278,7 +278,7 @@ def show_loans():
     to_sync = loans_df[loans_df.apply(needs_update, axis=1)]
 
     if not to_sync.empty:
-        with st.status("🔄 Optimizing & Syncing Loan Ledgers...", expanded=False) as status:
+        with st.status("🔄 Synchronizing Generated Ledger Formats...", expanded=False) as status:
             for _, row in to_sync.iterrows():
                 sync_data = {
                     "sn": row["sn"],
@@ -288,13 +288,13 @@ def show_loans():
                 try:
                     supabase.table("loans").update(sync_data).eq("id", row["id"]).execute()
                 except Exception as e:
-                    st.error(f"Sync Execution Failure on Object {row['id']}: {e}")
+                    st.error(f"Sync Interrupted on Item Row {row['id']}: {e}")
             
             st.cache_data.clear()
-            status.update(label="✅ Database Serial Alignments Hardened!", state="complete", expanded=False)
+            status.update(label="✅ Database Records Validated and Aligned!", state="complete", expanded=False)
             st.rerun()
 
-    # Mapping Relational Profiles
+    # Dynamic Relational Mapping
     if not borrowers_df.empty:
         borrowers_df["id"] = borrowers_df["id"].astype(str)
         bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
@@ -306,7 +306,7 @@ def show_loans():
     )
 
     # ==============================
-    # APPLICATION SYSTEM TABS
+    # TAB CONFIGURATION LAYOUT
     # ==============================
     tab_view, tab_add, tab_manage, tab_actions = st.tabs([
         "📑 Portfolio View",
@@ -319,7 +319,7 @@ def show_loans():
     # TAB 1: PORTFOLIO VIEW
     # ==============================
     with tab_view:
-        search_query = st.text_input("🔍 Filter Ledger By String (Borrower, SN, Label, Type)", key="loan_search_main")
+        search_query = st.text_input("🔍 Filter Master Book (Borrower Name, Serial, Class Type)", key="loan_search_main")
         filtered_loans = loans_df.copy()
 
         if not filtered_loans.empty and search_query:
@@ -327,7 +327,7 @@ def show_loans():
                 filtered_loans.apply(lambda r: search_query.lower() in str(r).lower(), axis=1)
             ]
 
-        # Fiscal Year Engine Calculation (July to June Target Cycle)
+        # Fiscal Reporting Calculations (July–June Bounds Validation)
         if not filtered_loans.empty:
             start_dt = pd.to_datetime(filtered_loans["start_date"], errors="coerce")
             start_dt = start_dt.fillna(pd.Timestamp.today())
@@ -339,13 +339,13 @@ def show_loans():
             filtered_loans["fiscal_year"] = fiscal_years_list
 
             fy_unique = sorted(list(set(fiscal_years_list)))
-            fy_selected = st.selectbox("📅 Isolated Fiscal Reporting Cycle", ["All Cycles"] + fy_unique)
+            fy_selected = st.selectbox("📅 Structural Fiscal Reporting Cycle", ["All Business Years"] + fy_unique)
             
-            if fy_selected != "All Cycles":
+            if fy_selected != "All Business Years":
                 filtered_loans = filtered_loans[filtered_loans["fiscal_year"] == fy_selected]
 
         # ------------------------------
-        # METRIC METRICS CONTAINER BLOCK (V2 Neon Linear Styling)
+        # METRIC METRICS CONTAINER BLOCK (V2 Premium Gradations)
         # ------------------------------
         if not filtered_loans.empty:
             total_loans = filtered_loans["sn"].nunique()
@@ -355,15 +355,15 @@ def show_loans():
             total_pending = filtered_loans[filtered_loans["status"] == "PENDING"]["total_repayable"].sum()
 
             m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-            m_col1.markdown(f'<div style="background: linear-gradient(135deg, #3b82f6, #1e3a8a); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Unique Loan Books</div><div style="font-size:22px;font-weight:bold;">{total_loans}</div></div>', unsafe_allow_html=True)
-            m_col2.markdown(f'<div style="background: linear-gradient(135deg, #10b981, #065f46); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Total Principal Issued</div><div style="font-size:22px;font-weight:bold;">{total_principal:,.0f} UGX</div></div>', unsafe_allow_html=True)
-            m_col3.markdown(f'<div style="background: linear-gradient(135deg, #f59e0b, #92400e); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Aggregated Recoveries</div><div style="font-size:22px;font-weight:bold;">{total_paid:,.0f} UGX</div></div>', unsafe_allow_html=True)
-            m_col4.markdown(f'<div style="background: linear-gradient(135deg, #ef4444, #991b1b); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Outstanding Risk Pool</div><div style="font-size:22px;font-weight:bold;">{total_pending:,.0f} UGX</div></div>', unsafe_allow_html=True)
+            m_col1.markdown(f'<div style="background: linear-gradient(135deg, #3b82f6, #1e3a8a); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Total Unique Loans</div><div style="font-size:22px;font-weight:bold;">{total_loans}</div></div>', unsafe_allow_html=True)
+            m_col2.markdown(f'<div style="background: linear-gradient(135deg, #10b981, #065f46); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Principal Exposure</div><div style="font-size:22px;font-weight:bold;">{total_principal:,.0f} UGX</div></div>', unsafe_allow_html=True)
+            m_col3.markdown(f'<div style="background: linear-gradient(135deg, #f59e0b, #92400e); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Total Recovered</div><div style="font-size:22px;font-weight:bold;">{total_paid:,.0f} UGX</div></div>', unsafe_allow_html=True)
+            m_col4.markdown(f'<div style="background: linear-gradient(135deg, #ef4444, #991b1b); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:13px;opacity:0.9;">Active Risk Tranche</div><div style="font-size:22px;font-weight:bold;">{total_pending:,.0f} UGX</div></div>', unsafe_allow_html=True)
             
             st.markdown("---")
 
             # ------------------------------
-            # STYLED HIGH-PERFORMANCE DATA MATRIX
+            # STYLED DATAFRAME VIEW PORT
             # ------------------------------
             show_cols = ["sn", "loan_id_label", "borrower", "cycle_no", "principal", "total_repayable", "amount_paid", "balance", "start_date", "end_date", "status"]
             
@@ -393,37 +393,37 @@ def show_loans():
 
             st.dataframe(styled_df, column_order=show_cols, use_container_width=True, hide_index=True)
         else:
-            st.warning("No operational loans verified within selected parameter subsets.")
+            st.warning("No operational loan files discovered matching target filter variants.")
 
     # ==============================
     # TAB 2: NEW LOAN AGREEMENT
     # ==============================
     with tab_add:
         if active_borrowers_unit.empty:
-            st.info("💡 Operational Notice: Construct and Activate a Borrower profile prior to initializing loan underwriting tracks.")
+            st.info("💡 Structural Advisory: Active borrower profile verification missing. Complete entity registration initialization loops.")
         else:
             with st.form("loan_issue_form_v2"):
-                st.markdown("<h4 style='color:#0A192F;'>📝 Originate Underwriting Framework</h4>", unsafe_allow_html=True)
+                st.markdown("<h4 style='color:#0A192F;'>📝 Originate Secured Asset Placement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
 
                 borrower_map = dict(zip(active_borrowers_unit["name"], active_borrowers_unit["id"]))
-                selected_name = col1.selectbox("Counterparty Borrower Entity", list(borrower_map.keys()))
+                selected_name = col1.selectbox("Target Counterparty Asset Entity", list(borrower_map.keys()))
                 selected_id = str(borrower_map[selected_name]).strip()
 
-                amount = col1.number_input("Principal Exposure (UGX)", min_value=0, step=50000)
-                date_issued = col1.date_input("Deployment Value Date", value=datetime.now())
+                amount = col1.number_input("Principal Commitment Target (UGX)", min_value=0, step=50000)
+                date_issued = col1.date_input("Origination Execution Date", value=datetime.now())
 
-                loan_type = col2.selectbox("Facility Classification Category", ["Business", "Personal", "Emergency", "Other"])
-                interest_rate = col2.number_input("Periodic Base Interest Yield (%)", min_value=0.0, step=0.5)
-                date_due = col2.date_input("Contractual Maturity Date", value=date_issued + timedelta(days=30))
+                loan_type = col2.selectbox("Underwriting Allocation Frame", ["Business", "Personal", "Emergency", "Other"])
+                interest_rate = col2.number_input("Nominal Base Margin Multiplier (%)", min_value=0.0, step=0.5)
+                date_due = col2.date_input("Target Maturation End Date", value=date_issued + timedelta(days=30))
 
                 total_due = amount + (amount * interest_rate / 100)
-                st.info(f"Underwriting Yield Forecast: Total Contractual Repayable Liability mapped at {total_due:,.0f} UGX")
+                st.info(f"Origination Parameter Ledger Preview: Total Repayable calculated at {total_due:,.0f} UGX")
 
-                if st.form_submit_button("🚀 Commit Underwriting Execution"):
+                if st.form_submit_button("🚀 Finalize Underwriting Placement"):
                     tenant_id = get_current_tenant()
                     if not tenant_id:
-                        st.error("Access Revoked: SaaS Tenancy Context signature validation failure.")
+                        st.error("System Error: Tenant access session configuration data corrupted.")
                         st.stop()
 
                     loan_data = {
@@ -436,7 +436,7 @@ def show_loans():
                     }
 
                     if save_data_saas("loans", pd.DataFrame([loan_data])):
-                        st.success("✅ Ledger Asset Profile Deployed Successfully.")
+                        st.success("✅ Underlying Loan Agreement Registered Successfully.")
                         st.cache_data.clear()
                         st.rerun()
 
@@ -444,23 +444,23 @@ def show_loans():
     # TAB 3: FINANCIAL ROLLOVER OPERATIONS
     # ==============================
     with tab_actions:
-        st.markdown("<h4 style='color: #0A192F;'>🔄 Sequential Rolling Lineage Optimization</h4>", unsafe_allow_html=True)
+        st.markdown("<h4 style='color: #0A192F;'>🔄 Multi-Stage Lineage Rollover Protocol</h4>", unsafe_allow_html=True)
         eligible_loans = loans_df[(~loans_df["status"].isin(["CLEARED"])) & (loans_df["balance"] > 0)]
 
         if eligible_loans.empty:
-            st.success("Clean Book Horizon: All Multi-stage assets balanced or cleared perfectly. ✨")
+            st.success("Zero Exposure Risk: All accounts normalized or fully settled. ✨")
         else:
             roll_map = {
-                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Rem. Bal: {row['balance']:,.0f}": row["id"]
+                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal: {row['balance']:,.0f}": row["id"]
                 for _, row in eligible_loans.iterrows()
             }
-            roll_sel = st.selectbox("Select Asset Tranche to Forward-Roll", list(roll_map.keys()))
+            roll_sel = st.selectbox("Select Exposure Target to Roll Forward", list(roll_map.keys()))
             parent_id = roll_map[roll_sel]
             loan_to_roll = eligible_loans[eligible_loans["id"] == parent_id].iloc[0]
 
-            new_interest_rate = st.number_input("Rollover Facility Periodic Yield (%)", value=3.0, step=0.5)
+            new_interest_rate = st.number_input("New Term Periodic Interest Multiplier (%)", value=3.0, step=0.5)
 
-            if st.button("🔥 Finalize Execution Lineage Rollover Step", use_container_width=True):
+            if st.button("🔥 Execute Lineage Node Chain Step", use_container_width=True):
                 old_due = pd.to_datetime(loan_to_roll["end_date"], errors="coerce")
                 if pd.isna(old_due):
                     old_due = datetime.now()
@@ -487,7 +487,7 @@ def show_loans():
                 }
 
                 if save_data_saas("loans", pd.DataFrame([new_row])):
-                    st.success(f"✅ Asset Matrix Rolled Forward. Inherited Node Assigned to Cycle {int(loan_to_roll['cycle_no']) + 1}")
+                    st.success(f"✅ Lineage Block Configured. Asset Allocated to Trailing Cycle Row {int(loan_to_roll['cycle_no']) + 1}")
                     st.cache_data.clear()
                     st.rerun()
 
@@ -500,7 +500,7 @@ def show_loans():
                 f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}": row["id"]
                 for _, row in loans_df.iterrows()
             }
-            selected = st.selectbox("Select Target Registry Row for Alteration", list(edit_map.keys()))
+            selected = st.selectbox("Select Target Segment Entry Row", list(edit_map.keys()))
             target_id = edit_map[selected]
             loan_match = loans_df[loans_df["id"] == target_id]
 
@@ -508,22 +508,22 @@ def show_loans():
                 loan_to_edit = loan_match.iloc[0]
 
                 with st.form(f"edit_form_{target_id}"):
-                    e_princ = st.number_input("Adjust Principal Allocation Base", value=float(loan_to_edit["principal"]))
+                    e_princ = st.number_input("Alter Asset Core Principal Base Value", value=float(loan_to_edit["principal"]))
                     status_options = ["ACTIVE", "PENDING", "CLEARED", "BCF", "CLOSED"]
                     current_stat = str(loan_to_edit["status"]).upper()
                     idx = status_options.index(current_stat) if current_stat in status_options else 0
-                    e_stat = st.selectbox("Manually Reset State Override", status_options, index=idx)
+                    e_stat = st.selectbox("Manual State Flag Assignment", status_options, index=idx)
 
-                    if st.form_submit_button("💾 Commit Structural Modifications to Remote Instance"):
+                    if st.form_submit_button("💾 Force Commit System Database Refactor"):
                         supabase.table("loans").update({"principal": e_princ, "status": e_stat}).eq("id", target_id).execute()
-                        st.success("✅ Ledger Adjustments Hardened and Synchronized.")
+                        st.success("✅ Ledger Elements Rewritten and Synchronized Globally.")
                         st.cache_data.clear()
                         st.rerun()
 
-                # Destructive Actions Group
-                st.markdown("<br><hr><h5 style='color:red;'>Destructive Root Protocols</h5>", unsafe_allow_html=True)
-                if st.button("🗑️ Delete Target Asset Registry Entry Permanently", use_container_width=True):
+                # Core Data Deletion Layer
+                st.markdown("<br><hr><h5 style='color:#dc2626;'>Destructive Superuser Protocols</h5>", unsafe_allow_html=True)
+                if st.button("🗑️ Drop Target Entry Record Irreversibly From Table Rows", use_container_width=True):
                     supabase.table("loans").delete().eq("id", target_id).execute()
-                    st.warning("Data Mutation Protocol Terminated: Object completely deleted from source cluster tables.")
+                    st.warning("Data dropped from cloud relational sequence mapping context.")
                     st.cache_data.clear()
                     st.rerun()
