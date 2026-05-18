@@ -86,13 +86,15 @@ def format_loans_df(df):
     df.rename(columns={k: v for k, v in safe_cols.items() if k in df.columns}, inplace=True)
 
     # =====================================================
-    # 💰 CONVERT TO NUMERIC (SAFE)
+    # 💰 CONVERT TO NUMERIC & ROUND TO WHOLE NUMBERS
     # =====================================================
-    money_cols = ["💰 Principal", "🧾 Total Payable", "💵 Paid"]
+    # Included Interest here to fix the long decimals showing up in that column
+    money_cols = ["💰 Principal", "🧾 Total Payable", "💵 Paid", "📊 Interest"]
 
     for col in money_cols:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+            # Force numeric conversion, replace NaN with 0, then round to closest whole number
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0).round(0).astype(int)
 
     # =====================================================
     # 📉 BALANCE COLUMN
@@ -101,14 +103,16 @@ def format_loans_df(df):
         df["📉 Balance"] = df["🧾 Total Payable"] - df["💵 Paid"]
 
     # =====================================================
-    # 💰 FORMAT WITH COMMAS (DISPLAY ONLY)
+    # 💰 FORMAT WITH COMMAS ONLY (NO DECIMAL PLACES)
     # =====================================================
     display_df = df.copy()
 
-    for col in display_df.columns:
-        if col in money_cols or col == "📉 Balance":
-            display_df[col] = display_df[col].apply(lambda x: f"{x:,.2f}")
+    all_numeric_cols = money_cols + ["📉 Balance"]
 
+    for col in display_df.columns:
+        if col in all_numeric_cols:
+            # Use {x:,.0f} to completely drop the trailing .00 decimal positions
+            display_df[col] = display_df[col].apply(lambda x: f"{x:,.0f}")
     # =====================================================
     # 📊 TOTAL ROW (SUMS)
     # =====================================================
