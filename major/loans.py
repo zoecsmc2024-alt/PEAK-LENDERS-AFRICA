@@ -85,10 +85,46 @@ def format_loans_df(df):
 
     df.rename(columns={k: v for k, v in safe_cols.items() if k in df.columns}, inplace=True)
 
+    # =====================================================
+    # 💰 CONVERT TO NUMERIC (SAFE)
+    # =====================================================
+    money_cols = ["💰 Principal", "🧾 Total Payable", "💵 Paid"]
+
+    for col in money_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
+
+    # =====================================================
+    # 📉 BALANCE COLUMN
+    # =====================================================
     if "🧾 Total Payable" in df.columns and "💵 Paid" in df.columns:
         df["📉 Balance"] = df["🧾 Total Payable"] - df["💵 Paid"]
 
-    return df
+    # =====================================================
+    # 💰 FORMAT WITH COMMAS (DISPLAY ONLY)
+    # =====================================================
+    display_df = df.copy()
+
+    for col in display_df.columns:
+        if col in money_cols or col == "📉 Balance":
+            display_df[col] = display_df[col].apply(lambda x: f"{x:,.2f}")
+
+    # =====================================================
+    # 📊 TOTAL ROW (SUMS)
+    # =====================================================
+    total_row = {}
+
+    for col in display_df.columns:
+        if col in money_cols or col == "📉 Balance":
+            total_row[col] = df[col].sum()
+        else:
+            total_row[col] = ""
+
+    total_row["📌 SN"] = "TOTAL"
+
+    display_df = pd.concat([display_df, pd.DataFrame([total_row])], ignore_index=True)
+
+    return display_df
 
 
 # =========================================================
