@@ -1,335 +1,395 @@
+# ==========================================
+# VIEW BORROWERS PAGE (STREAMLIT VERSION)
+# ==========================================
+
 import streamlit as st
 import pandas as pd
+from datetime import datetime
+from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
+from core.database import supabase
 
-# Core DB utilities
-from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
-# ==============================
-# 🚀 borrowers ENGINE (PRODUCTION)
-# ==============================
+# ==========================================
+# PAGE CONFIG
+# ==========================================
 
-def show_borrowers():
+st.set_page_config(
+    page_title="View Borrowers",
+    layout="wide"
+)
 
-    # ==============================
-    # 🎨 BRANDING & THEME
-    # ==============================
-    brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f"<h2 style='color:{brand_color};'>🚀 borrowers Registry</h2>", unsafe_allow_html=True)
+st.markdown("""
+<style>
+.borrower-title {
+    font-size: 32px;
+    font-weight: 700;
+    color: #0A192F;
+    margin-bottom: 10px;
+}
 
-    # ==============================
-    # 🔐 TENANT SESSION CHECK
-    # ==============================
-    tenant_id = st.session_state.get("tenant_id")
-    if not tenant_id:
-        st.error("Session expired. Please log in again.")
-        st.stop()
+.metric-card {
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid #E5E7EB;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
 
-    # ==============================
-    # 🧠 SAFE HELPERS (INTERNAL)
-    # ==============================
-    def safe_df(df):
-        """
-        Ensure the object is a valid pandas DataFrame.
-        Returns an empty DataFrame if not.
-        """
-        return df if isinstance(df, pd.DataFrame) else pd.DataFrame()
+.search-box input {
+    border-radius: 10px !important;
+}
 
-    def safe_numeric(df, col, default=0.0, as_int=False):
-        """
-        Safely extract a numeric column from a DataFrame.
-        - If column doesn't exist, fills with default.
-        - If as_int=True, returns int64 dtype (useful for BIGINT DB fields).
-        """
-        if not isinstance(df, pd.DataFrame) or df.empty:
-            return pd.Series(dtype="int64" if as_int else "float64")
+.stButton button {
+    border-radius: 8px !important;
+    font-weight: 600;
+}
 
-        if col in df.columns:
-            s = pd.to_numeric(df[col], errors="coerce")
-        else:
-            s = pd.Series([default] * len(df), index=df.index)
+.borrower-container {
+    background: white;
+    padding: 15px;
+    border-radius: 14px;
+    border: 1px solid #E5E7EB;
+}
 
-        s = s.fillna(default)
+</style>
+""", unsafe_allow_html=True)
 
-        if as_int:
-            return s.astype("int64")
-        return s
 
-    # ==============================
-    # 📥 LOAD & NORMALIZE DATA
-    # ==============================
-    borrowers_df = safe_df(get_cached_data("borrowers"))
-    loans_df = safe_df(get_cached_data("loans"))
-    # Force lowercase column names for consistency
-    for df in [borrowers_df, loans_df]:
-        if not df.empty:
-            df.columns = df.columns.str.strip().str.lower()
+# ==========================================
+# FETCH BORROWERS
+# ==========================================
 
-    # Apply Tenant Filters
-    if not loans_df.empty and "tenant_id" in loans_df.columns:
-        loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(tenant_id)]
+@st.cache_data(ttl=60)
+def load_borrowers():
 
-    # Ensure required structural columns exist
-    required_cols = ["id", "name", "phone", "email", "status", "national_id", "next_of_kin"]
-    for col in required_cols:
-        if col not in borrowers_df.columns:
-            borrowers_df[col] = ""
+    try:
+        response = (
+            supabase
+            .table("borrowers")
+            .select("*")
+            .execute()
+        )
 
-    # ==============================
-    # 🔗 THE name FIX: DATA LINKAGE
-    # ==============================
-    if not borrowers_df.empty and not loans_df.empty:
-        borrowers_df["id"] = borrowers_df["id"].astype(str).str.strip()
-        loans_df["borrower_id"] = loans_df["borrower_id"].astype(str).str.strip()
-        
-        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
-        loans_df["borrower"] = loans_df["borrower_id"].map(bor_map).fillna("Unknown borrower")
-    else:
-        loans_df["borrower"] = "Unknown"
+        data = response.data if response.data else []
 
-    # ==============================
-    # 🔥 REAL-TIME RISK ENGINE
-    # ==============================
-    risk_map = {}
-    if not loans_df.empty:
-        loans_df["balance"] = safe_numeric(loans_df, "balance")
-        # Handle different end_date column naming possibilities
-        date_col = "end_date" if "end_date" in loans_df.columns else "due_date"
-        loans_df["parsed_due_date"] = pd.to_datetime(loans_df[date_col], errors="coerce")
+        if not data:
+            return pd.DataFrame()
 
-        today = pd.Timestamp.today().normalize()
-        loans_df["days_overdue"] = (today - loans_df["parsed_due_date"]).dt.days
-        loans_df["days_overdue"] = loans_df["days_overdue"].apply(lambda x: x if x > 0 else 0)
-        loans_df["is_overdue"] = (loans_df["days_overdue"] > 0) & (loans_df["balance"] > 0)
+        df = pd.DataFrame(data)
 
-        risk_df = loans_df.groupby("borrower_id").agg({
-            "balance": "sum",
-            "is_overdue": "sum",
-            "days_overdue": "max"
-        }).reset_index()
+        # Fill missing columns safely
+        expected_cols = [
+            "id",
+            "full_name",
+            "business_name",
+            "unique_number",
+            "mobile",
+            "email",
+            "total_paid",
+            "open_loans_balance",
+            "status"
+        ]
 
-        risk_df.rename(columns={"balance": "exposure", "is_overdue": "overdue_count", "days_overdue": "max_days"}, inplace=True)
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = ""
 
-        def classify_risk(row):
-            if row["overdue_count"] == 0: return "🟢 Healthy"
-            elif row["max_days"] <= 7: return "🟡 Watch"
-            elif row["max_days"] <= 30: return "🟠 Risk"
-            else: return "🔴 Critical"
+        return df
 
-        risk_df["risk_label"] = risk_df.apply(classify_risk, axis=1)
-        risk_map = risk_df.set_index("borrower_id").to_dict("index")
+    except Exception as e:
+        st.error(f"Error loading borrowers: {e}")
+        return pd.DataFrame()
 
-    # ==============================
-    # 📑 UI NAVIGATION
-    # ==============================
-    tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add borrower"])
 
-    with tab_add:
-        with st.form("add_borrower_form", clear_on_submit=True):
-            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New borrower</h4>", unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            name = c1.text_input("Full name*")
-            phone = c2.text_input("Phone Number*")
-            email = c1.text_input("Email Address")
-            nid = c2.text_input("National ID / NIN")
-            addr = c1.text_input("Physical Address")
-            nok = c2.text_input("Next of Kin (name & Contact)")
-            
-            if st.form_submit_button("🚀 Save borrower Profile", use_container_width=True):
-                if name and phone:
-                    new_id = str(uuid.uuid4())
-                    new_entry = pd.DataFrame([{
-                        "id": new_id, "name": name, "phone": phone, "email": email,
-                        "national_id": nid, "address": addr, "next_of_kin": nok,
-                        "status": "Active", "tenant_id": str(st.session_state.get("tenant_id"))
-                    }])
-                
-                    if save_data_saas("borrowers", new_entry):
-                        st.write("Saving to tenant:", st.session_state.get("tenant_id"))
-                        st.success(f"✅ {name} registered successfully!")
-                        st.cache_data.clear()
-                        st.rerun()
-                else:
-                    st.error("⚠️ Full name and Phone Number are required.")
+# ==========================================
+# LOAD DATA
+# ==========================================
 
-    with tab_view:
+df = load_borrowers()
 
-        st.markdown("### 👥 Borrowers Registry")
-    
-        search = st.text_input("🔍 Search by name or phone...").lower()
-    
-        if not borrowers_df.empty:
-    
-            df = borrowers_df.copy()
-    
-            # --- Clean types ---
-            for col in ["name", "phone", "national_id", "next_of_kin", "status"]:
-                df[col] = df[col].astype(str)
-    
-            # --- Attach risk info safely ---
-            def get_risk_label(b_id):
-                r = risk_map.get(str(b_id), {})
-                return r.get("risk_label", "🟢 Healthy")
-    
-            df["Risk Status"] = df["id"].apply(get_risk_label)
-    
-            # --- Search filter ---
-            df_filtered = df[
-                df["name"].str.lower().str.contains(search, na=False) |
-                df["phone"].str.contains(search, na=False)
+st.markdown(
+    '<div class="borrower-title">👥 View Borrowers</div>',
+    unsafe_allow_html=True
+)
+
+# ==========================================
+# TOP ACTIONS
+# ==========================================
+
+top1, top2, top3, top4 = st.columns([2,1,1,1])
+
+with top1:
+    search = st.text_input(
+        "Search Borrowers",
+        placeholder="Search name, phone, email, business..."
+    )
+
+with top2:
+    export_csv = st.download_button(
+        "⬇ Export CSV",
+        data=df.to_csv(index=False),
+        file_name="borrowers.csv",
+        mime="text/csv"
+    )
+
+with top3:
+    if st.button("🔄 Refresh"):
+        st.cache_data.clear()
+        st.rerun()
+
+with top4:
+    show_filters = st.toggle("Advanced Search")
+
+
+# ==========================================
+# ADVANCED SEARCH SIDEBAR
+# ==========================================
+
+if show_filters:
+
+    st.markdown("### 🔎 Advanced Search")
+
+    f1, f2, f3 = st.columns(3)
+
+    with f1:
+        borrower_status = st.multiselect(
+            "Loan Status",
+            [
+                "Current",
+                "Due Today",
+                "Missed Repayment",
+                "Arrears",
+                "Past Maturity",
+                "Fully Paid",
+                "Defaulted"
             ]
-    
-            if not df_filtered.empty:
-    
-                # --- Color mapping (no HTML needed) ---
-                def style_risk(val):
-                    if "🔴" in val:
-                        return "color: #EF4444; font-weight:700;"
-                    elif "🟠" in val:
-                        return "color: #F97316; font-weight:700;"
-                    elif "🟡" in val:
-                        return "color: #F59E0B; font-weight:700;"
-                    else:
-                        return "color: #10B981; font-weight:700;"
-    
-                # --- Display table ---
-                display_df = df_filtered[[
-                    "name",
-                    "phone",
-                    "national_id",
-                    "next_of_kin",
-                    "Risk Status",
-                    "status"
-                ]].copy()
-    
-                display_df.columns = [
-                    "Borrower Name",
-                    "Phone",
-                    "National ID",
-                    "Next of Kin",
-                    "Risk Status",
-                    "Status"
-                ]
-    
-                # --- Make status uppercase ---
-                display_df["Status"] = display_df["Status"].str.upper()
-    
-                # --- Interactive table ---
-                styled_df = display_df.style.map(
-                    style_risk,
-                    subset=["Risk Status"]
-                )
-    
-                st.dataframe(
-                    styled_df,
-                    use_container_width=True,
-                    hide_index=True
-                )
-    
-                # --- Select borrower (kept your logic) ---
-                st.markdown("### 🎯 Management Actions")
-    
-                selected_name = st.selectbox(
-                    "Select borrower:",
-                    ["-- Choose borrower --"] + df_filtered["name"].tolist()
-                )
-    
-                if selected_name != "-- Choose borrower --":
-                    sel_id = df_filtered[df_filtered["name"] == selected_name]["id"].values[0]
-                    st.session_state["selected_borrower"] = sel_id
-    
-                    st.success(f"Selected: {selected_name}")
-    
-            else:
-                st.info("No records match your search criteria.")
-    
-        else:
-            st.info("The registry is currently empty.")
+        )
 
-    # ==============================
-    # 👤 borrower PROFILE PANEL (EXPANDED)
-    # ==============================
-    selected_id = st.session_state.get("selected_borrower")
+        gender = st.multiselect(
+            "Gender",
+            [
+                "Male",
+                "Female",
+                "Nonbinary",
+                "Other"
+            ]
+        )
 
-    if selected_id:
-        st.write("---")
-        st.markdown(f"### 👤 Profile Detail: {str(selected_id)[:8]}")
+    with f2:
+        working_status = st.multiselect(
+            "Working Status",
+            [
+                "Employee",
+                "Government Employee",
+                "Private Sector Employee",
+                "Owner",
+                "Student",
+                "Pensioner",
+                "Unemployed"
+            ]
+        )
 
-        borrower_query = borrowers_df[borrowers_df["id"].astype(str) == str(selected_id)]
+        city = st.text_input("City")
 
-        if not borrower_query.empty:
-            borrower = borrower_query.iloc[0]
+    with f3:
+        province = st.text_input("Province / State")
 
-            with st.container(border=True):
-                c1, c2 = st.columns(2)
-                upd_name = c1.text_input("name", borrower["name"])
-                upd_phone = c2.text_input("Phone", borrower["phone"])
-                upd_email = c1.text_input("Email", borrower["email"])
-                upd_nid = c2.text_input("National ID", borrower.get("national_id", ""))
-                
-                c3, c4 = st.columns(2)
-                upd_nok = c3.text_input("Next of Kin", borrower.get("next_of_kin", ""))
-                upd_addr = c4.text_input("Address", borrower.get("address", ""))
+        officer = st.text_input("Loan Officer")
 
-                # 📊 NESTED LOAN HISTORY
-                st.markdown("#### 💳 Loan Statement")
-                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy()
+    d1, d2 = st.columns(2)
 
-                if not user_loans.empty:
-                    # Apply currency formatting with commas
-                    st.dataframe(
-                        user_loans, 
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config={
-                            "id": None, "tenant_id": None, "borrower_id": None, "borrower": None,
-                            "principal": st.column_config.NumberColumn("principal", format="%d UGX"),
-                            "interest": st.column_config.NumberColumn("interest", format="%d UGX"),
-                            "balance": st.column_config.NumberColumn("balance", format="%d UGX"),
-                            "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
-                            "start_date": st.column_config.dateColumn("date Issued"),
-                            "end_date": st.column_config.dateColumn("Due date"),
-                        }
-                    )
-                    
-                    csv = user_loans.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download Statement (CSV)",
-                        data=csv,
-                        file_name=f"Statement_{upd_name.replace(' ', '_')}.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    st.info("This borrower has no loan history.")
+    with d1:
+        from_date = st.date_input(
+            "Created From",
+            value=None
+        )
 
-                # 🛠️ ACTION BUTTONS
-                st.write("---")
-                act_c1, act_c2, act_c3 = st.columns([1, 1, 2])
+    with d2:
+        to_date = st.date_input(
+            "Created To",
+            value=None
+        )
 
-                if act_c1.button("💾 Save Changes", use_container_width=True):
-                    # Logic to update row in DataFrame
-                    idx = borrowers_df.index[borrowers_df["id"].astype(str) == str(selected_id)].tolist()[0]
-                    borrowers_df.at[idx, "name"] = upd_name
-                    borrowers_df.at[idx, "phone"] = upd_phone
-                    borrowers_df.at[idx, "email"] = upd_email
-                    borrowers_df.at[idx, "national_id"] = upd_nid
-                    borrowers_df.at[idx, "next_of_kin"] = upd_nok
-                    borrowers_df.at[idx, "address"] = upd_addr
-                    
-                    if save_data_saas("borrowers", borrowers_df):
-                        st.success("Profile Updated Successfully")
-                        st.cache_data.clear()
-                        st.rerun()
 
-                if act_c2.button("🗑️ Delete", use_container_width=True):
-                    # Filter out the deleted user
-                    updated_df = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
-                    if save_data_saas("borrowers", updated_df):
-                        st.warning("Profile Removed")
-                        st.cache_data.clear()
-                        st.session_state.pop("selected_borrower", None)
-                        st.rerun()
-                
-                if act_c3.button("❌ Close Profile", use_container_width=True):
-                    st.session_state.pop("selected_borrower", None)
-                    st.rerun()
+# ==========================================
+# SEARCH FILTER
+# ==========================================
 
+if not df.empty and search:
+
+    search_lower = search.lower()
+
+    df = df[
+        df.astype(str)
+        .apply(
+            lambda row: row.str.lower().str.contains(search_lower).any(),
+            axis=1
+        )
+    ]
+
+
+# ==========================================
+# METRICS
+# ==========================================
+
+if not df.empty:
+
+    total_paid = pd.to_numeric(
+        df["total_paid"],
+        errors="coerce"
+    ).fillna(0).sum()
+
+    open_balance = pd.to_numeric(
+        df["open_loans_balance"],
+        errors="coerce"
+    ).fillna(0).sum()
+
+    m1, m2, m3 = st.columns(3)
+
+    with m1:
+        st.metric(
+            "Total Borrowers",
+            len(df)
+        )
+
+    with m2:
+        st.metric(
+            "Total Paid",
+            f"{total_paid:,.2f}"
+        )
+
+    with m3:
+        st.metric(
+            "Open Loan Balance",
+            f"{open_balance:,.2f}"
+        )
+
+
+# ==========================================
+# TABLE
+# ==========================================
+
+st.markdown('<div class="borrower-container">', unsafe_allow_html=True)
+
+if df.empty:
+
+    st.warning("No borrowers found.")
+
+else:
+
+    # Rename columns for display
+    display_df = df.rename(columns={
+        "full_name": "Full Name",
+        "business_name": "Business",
+        "unique_number": "Unique#",
+        "mobile": "Mobile",
+        "email": "Email",
+        "total_paid": "Total Paid",
+        "open_loans_balance": "Open Loans Balance",
+        "status": "Status"
+    })
+
+    # Select visible columns
+    visible_columns = [
+        "Full Name",
+        "Business",
+        "Unique#",
+        "Mobile",
+        "Email",
+        "Total Paid",
+        "Open Loans Balance",
+        "Status"
+    ]
+
+    display_df = display_df[visible_columns]
+
+    gb = GridOptionsBuilder.from_dataframe(display_df)
+
+    gb.configure_pagination(
+        enabled=True,
+        paginationPageSize=20
+    )
+
+    gb.configure_default_column(
+        sortable=True,
+        filter=True,
+        resizable=True
+    )
+
+    gb.configure_column(
+        "Total Paid",
+        type=["numericColumn"],
+        valueFormatter="x.toLocaleString()"
+    )
+
+    gb.configure_column(
+        "Open Loans Balance",
+        type=["numericColumn"],
+        valueFormatter="x.toLocaleString()"
+    )
+
+    gb.configure_selection(
+        selection_mode="single",
+        use_checkbox=True
+    )
+
+    grid_options = gb.build()
+
+    AgGrid(
+        display_df,
+        gridOptions=grid_options,
+        height=600,
+        width="100%",
+        fit_columns_on_grid_load=True,
+        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        allow_unsafe_jscode=True,
+        theme="streamlit"
+    )
+
+st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ==========================================
+# FOOTER TOTALS
+# ==========================================
+
+if not df.empty:
+
+    st.markdown("---")
+
+    f1, f2 = st.columns(2)
+
+    with f1:
+        st.success(
+            f"💰 Total Paid: {total_paid:,.2f}"
+        )
+
+    with f2:
+        st.error(
+            f"📉 Open Loans Balance: {open_balance:,.2f}"
+        )
+
+
+# ==========================================
+# ACTION SECTION
+# ==========================================
+
+st.markdown("### ⚡ Borrower Actions")
+
+a1, a2, a3, a4 = st.columns(4)
+
+with a1:
+    if st.button("➕ Add Borrower"):
+        st.switch_page("pages/add_borrower.py")
+
+with a2:
+    if st.button("📄 Export Excel"):
+        st.info("Excel export coming soon")
+
+with a3:
+    if st.button("🖨 Print"):
+        st.info("Print feature coming soon")
+
+with a4:
+    if st.button("👁 Show / Hide Columns"):
+        st.info("Column customization coming soon")
