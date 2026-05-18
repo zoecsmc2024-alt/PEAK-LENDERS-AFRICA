@@ -4,7 +4,164 @@
 
 import streamlit as st
 import pandas as pd
-from datetime import datetime
+from # ==========================================
+# BORROWERS MODULE (SAAS READY)
+# ==========================================
+
+import streamlit as st
+import pandas as pd
+from core.database import supabase
+
+
+# ==========================================
+# MAIN FUNCTION (IMPORT SAFE)
+# ==========================================
+
+def show_borrowers():
+
+    st.markdown(
+        "<h1 style='color:#0A192F;'>👥 View Borrowers</h1>",
+        unsafe_allow_html=True
+    )
+
+    # ==========================================
+    # FETCH DATA
+    # ==========================================
+
+    @st.cache_data(ttl=60)
+    def get_borrowers():
+        try:
+            res = supabase.table("borrowers").select("*").execute()
+            return pd.DataFrame(res.data) if res.data else pd.DataFrame()
+        except Exception as e:
+            st.error(f"Database error: {e}")
+            return pd.DataFrame()
+
+    df = get_borrowers()
+
+    # ==========================================
+    # TOP CONTROLS
+    # ==========================================
+
+    col1, col2, col3 = st.columns([2, 1, 1])
+
+    with col1:
+        search = st.text_input("🔎 Search Borrowers", "")
+
+    with col2:
+        refresh = st.button("🔄 Refresh")
+        if refresh:
+            st.cache_data.clear()
+            st.rerun()
+
+    with col3:
+        if not df.empty:
+            st.download_button(
+                "⬇ Export CSV",
+                df.to_csv(index=False),
+                file_name="borrowers.csv",
+                mime="text/csv"
+            )
+
+    # ==========================================
+    # FILTER SEARCH
+    # ==========================================
+
+    if not df.empty and search:
+        search = search.lower()
+        df = df[df.astype(str).apply(
+            lambda row: row.str.lower().str.contains(search).any(),
+            axis=1
+        )]
+
+    # ==========================================
+    # METRICS
+    # ==========================================
+
+    if not df.empty:
+
+        df["total_paid"] = pd.to_numeric(df.get("total_paid", 0), errors="coerce").fillna(0)
+        df["open_loans_balance"] = pd.to_numeric(df.get("open_loans_balance", 0), errors="coerce").fillna(0)
+
+        c1, c2, c3 = st.columns(3)
+
+        with c1:
+            st.metric("Total Borrowers", len(df))
+
+        with c2:
+            st.metric("Total Paid", f"{df['total_paid'].sum():,.2f}")
+
+        with c3:
+            st.metric("Open Loans Balance", f"{df['open_loans_balance'].sum():,.2f}")
+
+    # ==========================================
+    # TABLE DISPLAY
+    # ==========================================
+
+    if df.empty:
+        st.warning("No borrowers found.")
+        return
+
+    # Safe column mapping
+    display_df = df.copy()
+
+    column_map = {
+        "full_name": "Full Name",
+        "business_name": "Business",
+        "unique_number": "Unique #",
+        "mobile": "Mobile",
+        "email": "Email",
+        "total_paid": "Total Paid",
+        "open_loans_balance": "Open Balance",
+        "status": "Status"
+    }
+
+    display_df.rename(columns=column_map, inplace=True)
+
+    # Ensure required columns exist
+    required_cols = [
+        "Full Name",
+        "Business",
+        "Unique #",
+        "Mobile",
+        "Email",
+        "Total Paid",
+        "Open Balance",
+        "Status"
+    ]
+
+    for col in required_cols:
+        if col not in display_df.columns:
+            display_df[col] = ""
+
+    display_df = display_df[required_cols]
+
+    st.dataframe(
+        display_df,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    # ==========================================
+    # ACTIONS
+    # ==========================================
+
+    st.markdown("---")
+    st.subheader("⚡ Actions")
+
+    a1, a2, a3 = st.columns(3)
+
+    with a1:
+        if st.button("➕ Add Borrower"):
+            st.info("Navigate to Add Borrower page")
+
+    with a2:
+        if st.button("📄 Export Excel"):
+            st.info("Excel export can be added next")
+
+    with a3:
+        if st.button("🖨 Print"):
+            st.info("Print feature can be added next")datetime import datetime
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode, JsCode
 from core.database import supabase
 
