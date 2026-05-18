@@ -300,12 +300,72 @@ def show_loans():
                 )
     elif menu == "Loans in Arrears":
         st.markdown("### ⚠ Loans in Arrears")
-        st.dataframe(df[df.get("status") == "Arrears"] if not df.empty else df, use_container_width=True, hide_index=True)
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 FILTER ARREARS
+            # =====================================================
+            if "status" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["status"] == "Arrears"]
+    
+            # =====================================================
+            # 📅 OPTIONAL: SORT BY MOST CRITICAL FIRST
+            # =====================================================
+            if "end_date" in filtered_df.columns:
+                try:
+                    filtered_df["end_date"] = pd.to_datetime(filtered_df["end_date"], errors="coerce")
+                    filtered_df = filtered_df.sort_values(by="end_date", ascending=True)
+                except Exception:
+                    pass
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 No loans currently in arrears.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
     elif menu == "No Repayments":
         st.markdown("### 🚫 No Repayments")
-        st.dataframe(df[df.get("repayments_count") == 0] if not df.empty else df, use_container_width=True, hide_index=True)
-
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 FILTER: NO REPAYMENTS
+            # =====================================================
+            if "repayments_count" in filtered_df.columns:
+                filtered_df["repayments_count"] = pd.to_numeric(
+                    filtered_df["repayments_count"], errors="coerce"
+                ).fillna(0)
+    
+                filtered_df = filtered_df[filtered_df["repayments_count"] == 0]
+            else:
+                st.info("Repayments data not available.")
+                filtered_df = pd.DataFrame()
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 All loans have at least one repayment.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
     elif menu == "Past Maturity Date":
         st.markdown("### 📅 Past Maturity Loans")
         st.dataframe(df[df.get("status") == "Matured"] if not df.empty else df, use_container_width=True, hide_index=True)
