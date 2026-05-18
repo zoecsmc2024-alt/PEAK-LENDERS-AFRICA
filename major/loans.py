@@ -101,13 +101,20 @@ def loans_sidebar():
 
 
 # =========================================================
-# 📁 MAIN LOANS PAGE
+# 📁 MAIN LOANS PAGE (RENAMED TO MATCH APP.PY IMPORT)
 # =========================================================
 def show_loans():
 
     loans_styles()
-
     menu = loans_sidebar()
+
+    # Initialize filter states in session state so they persist across rerenders
+    if "search_name" not in st.session_state:
+        st.session_state.search_name = ""
+    if "search_mobile" not in st.session_state:
+        st.session_state.search_mobile = ""
+    if "search_status" not in st.session_state:
+        st.session_state.search_status = "All"
 
     # =====================================================
     # HEADER (LIKE HTML <h1>View Loans</h1>)
@@ -124,39 +131,44 @@ def show_loans():
     # FILTER PANEL (LIKE LEFT SEARCH SIDEBAR IN HTML)
     # =====================================================
     with st.sidebar.expander("🔍 Advanced Search Filters", expanded=False):
-
-        name = st.text_input("Borrower Name")
-        mobile = st.text_input("Mobile")
+        name = st.text_input("Borrower Name", value=st.session_state.search_name)
+        mobile = st.text_input("Mobile", value=st.session_state.search_mobile)
         status = st.selectbox(
             "Loan Status",
-            ["All", "Open", "Closed", "Pending", "Defaulted"]
+            ["All", "Open", "Closed", "Pending", "Defaulted"],
+            index=["All", "Open", "Closed", "Pending", "Defaulted"].index(st.session_state.search_status)
         )
 
         date_from = st.date_input("From Date")
         date_to = st.date_input("To Date")
 
         apply = st.button("Search Loans")
+        
+        if apply:
+            st.session_state.search_name = name
+            st.session_state.search_mobile = mobile
+            st.session_state.search_status = status
 
-    # Apply filters (simple demo logic)
-    if apply and not df.empty:
+    # Process and execute advanced filters on the dataframe
+    if not df.empty:
+        if st.session_state.search_name:
+            if "borrower_name" in df.columns:
+                df = df[df["borrower_name"].str.contains(st.session_state.search_name, case=False, na=False)]
+            elif "name" in df.columns:
+                df = df[df["name"].str.contains(st.session_state.search_name, case=False, na=False)]
 
-        if name:
-            df = df[df["borrower_name"].str.contains(name, case=False, na=False)]
+        if st.session_state.search_mobile and "mobile" in df.columns:
+            df = df[df["mobile"].astype(str).str.contains(st.session_state.search_mobile)]
 
-        if mobile:
-            df = df[df["mobile"].astype(str).str.contains(mobile)]
-
-        if status != "All":
-            df = df[df["status"] == status]
+        if st.session_state.search_status != "All" and "status" in df.columns:
+            df = df[df["status"] == st.session_state.search_status]
 
 
     # =====================================================
     # PAGE ROUTING (LIKE LOANDISK MENU)
     # =====================================================
     if menu == "View All Loans":
-
         st.markdown("### 📁 All Loans")
-
         if df.empty:
             st.warning("No loan data found.")
         else:
@@ -167,60 +179,85 @@ def show_loans():
 
         with st.form("add_loan"):
             borrower = st.text_input("Borrower Name")
-            amount = st.number_input("Loan Amount")
-            interest = st.number_input("Interest Rate")
+            amount = st.number_input("Loan Amount", min_value=0.0, format="%.2f")
+            interest = st.number_input("Interest Rate", min_value=0.0, format="%.2f")
             submit = st.form_submit_button("Create Loan")
 
             if submit:
-                try:
-                    supabase.table("loans").insert({
-                        "borrower_name": borrower,
-                        "amount": amount,
-                        "interest_rate": interest,
-                        "created_at": str(datetime.now())
-                    }).execute()
-                    st.success("Loan created successfully")
-                except Exception as e:
-                    st.error(e)
+                if not borrower:
+                    st.error("Please enter a Borrower Name.")
+                else:
+                    try:
+                        supabase.table("loans").insert({
+                            "borrower_name": borrower,
+                            "amount": amount,
+                            "interest_rate": interest,
+                            "created_at": str(datetime.now())
+                        }).execute()
+                        st.success("Loan created successfully!")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error saving data: {e}")
 
     elif menu == "Due Loans":
         st.markdown("### ⏰ Due Loans")
-        st.dataframe(df[df.get("status") == "Due"] if not df.empty else df)
+        if not df.empty and "status" in df.columns:
+            st.dataframe(df[df["status"] == "Due"], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "Missed Repayments":
         st.markdown("### ❌ Missed Repayments")
-        st.dataframe(df[df.get("status") == "Missed"] if not df.empty else df)
+        if not df.empty and "status" in df.columns:
+            st.dataframe(df[df["status"] == "Missed"], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "Loans in Arrears":
         st.markdown("### ⚠ Loans in Arrears")
-        st.dataframe(df[df.get("status") == "Arrears"] if not df.empty else df)
+        if not df.empty and "status" in df.columns:
+            st.dataframe(df[df["status"] == "Arrears"], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "No Repayments":
         st.markdown("### 🚫 No Repayments")
-        st.dataframe(df[df.get("repayments_count") == 0] if not df.empty else df)
+        if not df.empty and "repayments_count" in df.columns:
+            st.dataframe(df[df["repayments_count"] == 0], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "Past Maturity Date":
         st.markdown("### 📅 Past Maturity Loans")
-        st.dataframe(df[df.get("status") == "Matured"] if not df.empty else df)
+        if not df.empty and "status" in df.columns:
+            st.dataframe(df[df["status"] == "Matured"], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "Principal Outstanding":
         st.markdown("### 💵 Principal Outstanding")
-        st.dataframe(df)
+        st.dataframe(df, use_container_width=True)
 
     elif menu == "1 Month Late Loans":
         st.markdown("### 📉 1 Month Late Loans")
-        st.dataframe(df[df.get("late_months") == 1] if not df.empty else df)
+        if not df.empty and "late_months" in df.columns:
+            st.dataframe(df[df["late_months"] == 1], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "3 Months Late Loans":
         st.markdown("### 📉 3 Months Late Loans")
-        st.dataframe(df[df.get("late_months") == 3] if not df.empty else df)
+        if not df.empty and "late_months" in df.columns:
+            st.dataframe(df[df["late_months"] == 3], use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
 
     elif menu == "Loan Calculator":
         st.markdown("### 🧮 Loan Calculator")
 
-        p = st.number_input("Principal")
-        r = st.number_input("Interest Rate (%)")
-        t = st.number_input("Time (months)")
+        p = st.number_input("Principal", min_value=0.0, format="%.2f")
+        r = st.number_input("Interest Rate (%)", min_value=0.0, format="%.2f")
+        t = st.number_input("Time (months)", min_value=0.0, format="%.1f")
 
         if st.button("Calculate"):
             total = p + (p * r/100 * t/12)
