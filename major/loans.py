@@ -524,14 +524,33 @@ def show_loans():
 
     elif menu == "Loan Calculator":
         st.markdown("### 🧮 Loan Calculator")
-
-        p = st.number_input("Principal", 0.0)
-        r = st.number_input("Interest %", 0.0)
-        t = st.number_input("Months", 0.0)
-
-        if st.button("Calculate"):
-            total = p + (p * r/100 * t/12)
-            st.success(f"Total Payable: {total:,.2f}")
-
-    else:
-        st.info(f"{menu} module coming soon...")
+    
+        with st.container():
+    
+            p = st.number_input("Principal Amount", min_value=0.0, step=100.0)
+            r = st.number_input("Interest Rate (%)", min_value=0.0, step=0.1)
+            t = st.number_input("Duration (Months)", min_value=0.0, step=1.0)
+    
+            if st.button("Calculate"):
+    
+                if p <= 0 or t <= 0:
+                    st.error("Principal and Duration must be greater than zero.")
+                else:
+                    # =========================
+                    # 💰 SIMPLE INTEREST MODEL
+                    # =========================
+                    interest_amount = (p * r / 100) * (t / 12)
+                    total_payable = p + interest_amount
+    
+                    # =========================
+                    # 📊 FORMATTED OUTPUT
+                    # =========================
+                    st.markdown("### 📊 Loan Breakdown")
+    
+                    col1, col2, col3 = st.columns(3)
+    
+                    col1.metric("Principal", f"{p:,.2f}")
+                    col2.metric("Interest", f"{interest_amount:,.2f}")
+                    col3.metric("Total Payable", f"{total_payable:,.2f}")
+    
+                    st.success(f"💵 Total Repayment: {total_payable:,.2f}")
