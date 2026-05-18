@@ -411,31 +411,32 @@ def safe_audit_log(supabase, payload):
 
 
 # =========================================
-# 🎨 GLOBAL STYLING & HEADERS
+# 🎨 GLOBAL STYLES
 # =========================================
+
 import streamlit as st
-import uuid
-from datetime import datetime
 
 def auth_styles():
+
     st.markdown("""
     <style>
-    /* Clean, modern light background */
+
+    /* Background */
     .stApp {
         background: linear-gradient(135deg, #F0F4F8, #E2E8F0);
     }
 
-    /* Cohesive Login Card Container */
+    /* Auth Card */
     .auth-card {
         padding: 2.5rem;
         border-radius: 20px;
         background: #FFFFFF;
-        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.05), 0 5px 15px rgba(0, 0, 0, 0.03);
+        box-shadow: 0 15px 35px rgba(0,0,0,0.05);
         border: 1px solid #E2E8F0;
         margin-top: 2rem;
     }
 
-    /* Custom Form Embedded Header */
+    /* Top Header Bar */
     .portal-badge-header {
         background-color: #1A252F;
         padding: 10px 14px;
@@ -444,265 +445,209 @@ def auth_styles():
         justify-content: space-between;
         align-items: center;
         margin-bottom: 1.5rem;
-        color: #FFFFFF;
+        color: #fff;
     }
-    
+
     .badge-left {
         display: flex;
         gap: 12px;
-        font-family: sans-serif;
         font-size: 12px;
     }
 
-    /* Core Input Customizations */
-    .stTextInput > div > div > input {
+    /* Inputs */
+    .stTextInput input {
         border-radius: 10px !important;
         border: 1px solid #CBD5E1 !important;
     }
 
-    /* Primary Interactive Buttons */
-    .stFormSubmitButton > button {
+    /* Primary button */
+    .stFormSubmitButton button {
         background: linear-gradient(90deg, #1E3A8A, #2563EB) !important;
         color: white !important;
         border-radius: 10px !important;
-        font-weight: 600 !important;
-        height: 44px !important;
-        width: 100% !important;
+        height: 44px;
+        width: 100%;
+        font-weight: 600;
         border: none !important;
     }
 
-    /* Secondary Utility Buttons Alignment */
-    div[data-testid="column"] .stButton > button {
-        background-color: #F8FAFC !important;
-        color: #334155 !important;
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 10px !important;
-        font-size: 13px !important;
-        height: 38px !important;
-    }
-    div[data-testid="column"] .stButton > button:hover {
-        background-color: #F1F5F9 !important;
-        border-color: #CBD5E1 !important;
-    }
     </style>
     """, unsafe_allow_html=True)
 
+import uuid
+import streamlit as st
 
-# =========================================
-# 🏢 REGISTER COMPANY (MODAL DIALOG)
-# =========================================
-@st.dialog("🏢 Register Organization Profile")
+@st.dialog("🏢 Register Organization")
 def admin_company_registration(supabase):
-    st.caption("Establish a new isolated multi-tenant environment")
-    with st.form("company_reg_form"):
-        company_name = st.text_input("Organization Name", placeholder="e.g., Zoe Consults")
-        admin_name = st.text_input("Administrator Full Name")
-        email = st.text_input("Root Administrative Email")
-        pwd = st.text_input("Master Account Password", type="password")
-        
-        if st.form_submit_button("✨ Initialize Environment", use_container_width=True):
-            if not all([company_name, admin_name, email, pwd]):
-                st.error("All parameters must be supplied.")
+
+    with st.form("company_form"):
+        company = st.text_input("Company Name")
+        admin = st.text_input("Admin Name")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+
+        if st.form_submit_button("Create Company"):
+            if not all([company, admin, email, password]):
+                st.error("All fields required")
                 return
+
             try:
-                res = supabase.auth.sign_up({"email": email, "password": pwd})
-                if not res.user:
-                    st.error("Credential framework registration failed.")
-                    return
+                user = supabase.auth.sign_up({"email": email, "password": password})
 
                 tenant_id = str(uuid.uuid4())
-                company_code = f"{company_name[:3].upper()}{uuid.uuid4().int % 999}"
+                code = f"{company[:3].upper()}{uuid.uuid4().int % 999}"
 
                 supabase.table("tenants").insert({
-                    "id": tenant_id, "name": company_name, "company_code": company_code
+                    "id": tenant_id,
+                    "name": company,
+                    "company_code": code
                 }).execute()
 
                 supabase.table("users").insert({
-                    "id": res.user.id, "name": admin_name, "email": email, "tenant_id": tenant_id, "role": "Admin"
+                    "id": user.user.id,
+                    "name": admin,
+                    "email": email,
+                    "tenant_id": tenant_id,
+                    "role": "Admin"
                 }).execute()
 
-                st.success(f"✅ Infrastructure generated! Company Code: {company_code}")
+                st.success(f"Company created: {code}")
+
             except Exception as e:
-                st.error(f"Execution halted: {e}")
+                st.error(e)
 
-
-# =========================================
-# 👥 STAFF SIGNUP (MODAL DIALOG)
-# =========================================
-@st.dialog("👥 Request Staff Access Credentials")
+@st.dialog("👥 Staff Signup")
 def view_staff_signup(supabase):
-    st.caption("Provision a user seat under an active firm profile")
-    with st.form("staff_signup_form"):
-        company = st.text_input("Target Organization Name", placeholder="e.g., Zoe Consults")
-        name = st.text_input("Your Full Name")
-        email = st.text_input("Assigned Email Address")
-        pwd = st.text_input("Access Password", type="password")
-        
-        if st.form_submit_button("🚀 Submit Credentials Request", use_container_width=True):
-            if not all([company, name, email, pwd]):
-                st.error("All registration entries are required.")
-                return
-            try:
-                tenant_query = supabase.table("tenants").select("*").ilike("name", company).execute()
-                if not tenant_query.data:
-                    st.error("Target company domain verification failed.")
-                    return
-                tenant = tenant_query.data[0]
 
-                res = supabase.auth.sign_up({"email": email, "password": pwd})
-                if not res.user:
-                    st.error("Authentication vault registration failed.")
+    with st.form("staff_form"):
+        company = st.text_input("Company Name")
+        name = st.text_input("Full Name")
+        email = st.text_input("Email")
+        password = st.text_input("Password", type="password")
+
+        if st.form_submit_button("Submit"):
+            try:
+                tenant = supabase.table("tenants").select("*").ilike("name", company).execute()
+
+                if not tenant.data:
+                    st.error("Company not found")
                     return
+
+                user = supabase.auth.sign_up({"email": email, "password": password})
 
                 supabase.table("users").insert({
-                    "id": res.user.id, "name": name, "email": email, "tenant_id": tenant["id"], "role": "Staff"
+                    "id": user.user.id,
+                    "name": name,
+                    "email": email,
+                    "tenant_id": tenant.data[0]["id"],
+                    "role": "Staff"
                 }).execute()
 
-                st.success("✅ Staff identity file provisioned.")
+                st.success("Staff created")
+
             except Exception as e:
-                st.error(f"Provisional registry failed: {e}")
+                st.error(e)
 
-
-# =========================================
-# 🔑 FORGOT PASSWORD (MODAL DIALOG)
-# =========================================
-@st.dialog("🔑 Password Reset Gateway")
+@st.dialog("🔑 Reset Password")
 def forgot_password_page(supabase):
-    st.caption("Request a secure cryptographic recovery vector")
-    email = st.text_input("Registered Recovery Email Address")
-    if st.button("📩 Dispatch Link Token", use_container_width=True):
-        if not email:
-            st.error("Email destination vector missing.")
-            return
+
+    email = st.text_input("Email")
+
+    if st.button("Send Reset Link"):
         try:
             supabase.auth.reset_password_for_email(email)
-            st.success("✅ Security token transmitted successfully.")
+            st.success("Reset link sent")
         except Exception as e:
-            st.error(f"Transmission failed: {e}")
+            st.error(e)
 
-
-# =========================================
-# 🔐 CLEANED UP LOGIN INTERFACE
-# =========================================
 def login_page(supabase):
+
     auth_styles()
 
-    # Center alignment column structure
-    _, central_grid, _ = st.columns([1, 1.4, 1])
+    _, center, _ = st.columns([1, 1.3, 1])
 
-    with central_grid:
-        # Wrap everything cleanly inside a single structured element block
+    with center:
+
         st.markdown('<div class="auth-card">', unsafe_allow_html=True)
-        
-        # Embedded Header Bar - Replaces the disorganized external top header
+
         st.markdown("""
         <div class="portal-badge-header">
             <div class="badge-left">
-                <span style="color: #3498DB; font-weight: bold;">🏢 Zoe Consults Admin</span>
-                <span style="color: #BDC3C7;">|</span>
-                <span style="color: #2ECC71;">🔒 System Vault</span>
+                <span style="color:#3498DB;">🏢 Peak-Lenders Africa</span>
+                <span>|</span>
+                <span>🔒 Secure Login</span>
             </div>
-            <span style="font-size: 10px; color: #95A5A6; letter-spacing: 0.5px;">PORTAL SECURE</span>
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<h2 style='text-align: center; margin-bottom: 2px; color: #1E3A8A;'>PEAK-LENDERS AFRICA</h2>", unsafe_allow_html=True)
-        st.markdown("<p style='text-align: center; color: #64748B; font-size: 14px; margin-bottom: 24px;'>Enterprise Multi-Tenant Node Login</p>", unsafe_allow_html=True)
+        st.title("Login")
 
-        # Main login form block
-        with st.form("login_form", clear_on_submit=False):
-            company_name = st.text_input("Business Name Identification", placeholder="e.g., Zoe Consults")
-            email = st.text_input("Email Address Address", placeholder="operator@firm.com")
-            pwd = st.text_input("Security Access Code", type="password", placeholder="••••••••")
-            
-            st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
-            submit = st.form_submit_button("🔓 Authenticate & Access Dashboard")
+        with st.form("login_form"):
+            company = st.text_input("Company")
+            email = st.text_input("Email")
+            password = st.text_input("Password", type="password")
 
-        st.markdown("<div style='margin-top: 20px; border-top: 1px solid #F1F5F9; padding-top: 15px;'></div>", unsafe_allow_html=True)
+            submit = st.form_submit_button("Login")
 
-        # Realigned bottom utility columns
-        util_1, util_2, util_3 = st.columns(3)
-        with util_1:
-            if st.button("🏢 New Organization", use_container_width=True):
-                admin_company_registration(supabase)
-        with util_2:
-            if st.button("👥 Staff Signup", use_container_width=True):
-                view_staff_signup(supabase)
-        with util_3:
-            if st.button("🔑 Reset Pass", use_container_width=True):
-                forgot_password_page(supabase)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    # actions
+    col1, col2, col3 = st.columns(3)
 
-    # =====================================
-    # 🔐 REGISTRY & REDIRECT DISPATCHER
-    # =====================================
+    with col1:
+        if st.button("New Company"):
+            admin_company_registration(supabase)
+
+    with col2:
+        if st.button("Staff Signup"):
+            view_staff_signup(supabase)
+
+    with col3:
+        if st.button("Reset Password"):
+            forgot_password_page(supabase)
+
+    # login logic
     if submit:
-        email = email.strip().lower()
-        company_name = company_name.strip().lower()
-
-        if not all([company_name, email, pwd]):
-            st.error("All credential vectors are required.")
-            return
-
         try:
-            res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
-            if not res or not res.user:
-                st.error("Authentication sequence rejected.")
+            res = supabase.auth.sign_in_with_password({
+                "email": email,
+                "password": password
+            })
+
+            if not res.user:
+                st.error("Login failed")
                 return
 
-            user_query = supabase.table("users").select("*, tenants(name)").eq("id", res.user.id).execute()
-            data = getattr(user_query, "data", None)
+            st.session_state.update({
+                "user_id": res.user.id,
+                "logged_in": True,
+                "view": "main"
+            })
 
-            if not data:
-                st.error("Identity data target record missing.")
-                return
-
-            user = data[0]
-            db_company = ((user.get("tenants") or {}).get("name", "")).lower()
-
-            if db_company != company_name:
-                st.error(f"Identity profile is not provisioned under context: '{company_name}'")
-                return
-
-            # Save clean state variables
-            st.session_state["logged_in"] = True
-            st.session_state["authenticated"] = True
-            st.session_state["user_id"] = user["id"]
-            st.session_state["user_name"] = user.get("name", "Evans Ahuura")
-            st.session_state["tenant_id"] = user["tenant_id"]
-            st.session_state["role"] = user.get("role", "Staff")
-            st.session_state["company"] = user.get("tenants", {}).get("name", "Zoe Consults")
-
-            st.session_state["view"] = "main"
-            st.success("Context token approved.")
             st.rerun()
 
         except Exception as e:
-            st.error(f"Process failed: {e}")
-
+            st.error(e)
 
 def run_auth_ui(supabase):
+
     if "view" not in st.session_state:
         st.session_state["view"] = "login"
 
-    if st.session_state["view"] == "login":
-        login_page(supabase)
-    elif st.session_state["view"] == "main":
-        st.empty()
-    # 🔥 LOGIN FLOW
+    view = st.session_state["view"]
+
     if view == "login":
         login_page(supabase)
 
-    # 👥 STAFF SIGNUP
     elif view == "signup":
         view_staff_signup(supabase)
 
-    # 🏢 COMPANY REGISTRATION
     elif view == "create_company":
         admin_company_registration(supabase)
 
-    # 🚀 AFTER LOGIN SAFE STATE
+    elif view == "reset":
+        forgot_password_page(supabase)
+
     elif view == "main":
         st.empty()
 
