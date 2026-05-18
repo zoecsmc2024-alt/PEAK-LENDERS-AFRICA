@@ -20,6 +20,9 @@ import time
 import uuid
 import extra_streamlit_components as stx
 from core.database import supabase
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from major.borrowers import show_borrowers
 from major.loans import show_loans
 from major.collateral import show_collateral
