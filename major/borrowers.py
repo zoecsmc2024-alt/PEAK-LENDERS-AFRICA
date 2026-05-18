@@ -12,6 +12,7 @@ from core.database import supabase
 # ==========================================
 # PAGE CONFIG
 # ==========================================
+def show_borrowers:
 
 st.set_page_config(
     page_title="View Borrowers",
