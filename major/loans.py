@@ -368,19 +368,159 @@ def show_loans():
                 )
     elif menu == "Past Maturity Date":
         st.markdown("### 📅 Past Maturity Loans")
-        st.dataframe(df[df.get("status") == "Matured"] if not df.empty else df, use_container_width=True, hide_index=True)
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 SMART MATURITY LOGIC (STATUS + DATE BACKUP)
+            # =====================================================
+            if "status" in filtered_df.columns:
+                filtered_df = filtered_df[filtered_df["status"] == "Matured"]
+    
+            # =====================================================
+            # 📅 OPTIONAL FALLBACK: end_date-based maturity
+            # =====================================================
+            if "end_date" in filtered_df.columns:
+                try:
+                    filtered_df["end_date"] = pd.to_datetime(filtered_df["end_date"], errors="coerce")
+                    today = pd.Timestamp.today()
+    
+                    filtered_df = filtered_df[
+                        (filtered_df["end_date"].notna()) &
+                        (filtered_df["end_date"] < today)
+                    ]
+                except Exception:
+                    pass
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 No past maturity loans found.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
     elif menu == "Principal Outstanding":
         st.markdown("### 💵 Principal Outstanding")
-        st.dataframe(clean_df, use_container_width=True, hide_index=True)
-
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 💰 CALCULATE OUTSTANDING PRINCIPAL
+            # =====================================================
+            if "principal" in filtered_df.columns:
+                filtered_df["principal"] = pd.to_numeric(filtered_df["principal"], errors="coerce").fillna(0)
+    
+            if "amount_paid" in filtered_df.columns:
+                filtered_df["amount_paid"] = pd.to_numeric(filtered_df["amount_paid"], errors="coerce").fillna(0)
+            else:
+                filtered_df["amount_paid"] = 0
+    
+            filtered_df["principal_outstanding"] = (
+                filtered_df["principal"] - filtered_df["amount_paid"]
+            )
+    
+            # =====================================================
+            # 📊 SORT BY HIGHEST RISK EXPOSURE
+            # =====================================================
+            filtered_df = filtered_df.sort_values(by="principal_outstanding", ascending=False)
+    
+            # =====================================================
+            # 💰 FORMAT FOR DISPLAY
+            # =====================================================
+            display_df = filtered_df.copy()
+    
+            money_cols = ["principal", "amount_paid", "principal_outstanding"]
+    
+            for col in money_cols:
+                if col in display_df.columns:
+                    display_df[col] = display_df[col].apply(
+                        lambda x: f"{x:,.2f}" if pd.notnull(x) else x
+                    )
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            st.dataframe(
+                display_df,
+                use_container_width=True,
+                hide_index=True
+            )
     elif menu == "1 Month Late Loans":
         st.markdown("### 📉 1 Month Late Loans")
-        st.dataframe(df[df.get("late_months") == 1] if not df.empty else df, use_container_width=True, hide_index=True)
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 SAFE FILTER: 1 MONTH LATE
+            # =====================================================
+            if "late_months" in filtered_df.columns:
+                filtered_df["late_months"] = pd.to_numeric(
+                    filtered_df["late_months"], errors="coerce"
+                ).fillna(0)
+    
+                filtered_df = filtered_df[filtered_df["late_months"] == 1]
+            else:
+                st.info("Late payment data not available.")
+                filtered_df = pd.DataFrame()
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 No loans in 1-month delay category.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
     elif menu == "3 Months Late Loans":
         st.markdown("### 📉 3 Months Late Loans")
-        st.dataframe(df[df.get("late_months") == 3] if not df.empty else df, use_container_width=True, hide_index=True)
+    
+        if df.empty:
+            st.warning("No loan data available.")
+        else:
+            filtered_df = df.copy()
+    
+            # =====================================================
+            # 🎯 SAFE FILTER: 3 MONTHS LATE
+            # =====================================================
+            if "late_months" in filtered_df.columns:
+                filtered_df["late_months"] = pd.to_numeric(
+                    filtered_df["late_months"], errors="coerce"
+                ).fillna(0)
+    
+                filtered_df = filtered_df[filtered_df["late_months"] == 3]
+            else:
+                st.info("Late payment data not available.")
+                filtered_df = pd.DataFrame()
+    
+            # =====================================================
+            # 📊 DISPLAY
+            # =====================================================
+            if filtered_df.empty:
+                st.info("🎉 No loans in 3-month delay category.")
+            else:
+                st.dataframe(
+                    format_loans_df(filtered_df),
+                    use_container_width=True,
+                    hide_index=True
+                )
 
     elif menu == "Loan Calculator":
         st.markdown("### 🧮 Loan Calculator")
