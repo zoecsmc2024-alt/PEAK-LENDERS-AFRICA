@@ -544,7 +544,7 @@ def show_payroll():
                 col_del = "🗑️ Delete Record"
                 
                 if st.button(
-                    delete_lbl,
+                    del_lbl,
                     use_container_width=True,
                     key=f"del_btn_{sel_id}",
                     type="secondary"
