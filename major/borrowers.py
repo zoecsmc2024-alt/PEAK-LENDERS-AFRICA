@@ -128,34 +128,121 @@ def show_borrowers():
     # ==============================
     tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add borrower"])
 
+    # ==========================================
+    # ➕ ADD BORROWER (POPUP VERSION)
+    # ==========================================
+    
+    # ---------- Styled Button ----------
+    st.markdown("""
+    <style>
+    .add-borrower-btn button {
+        background: linear-gradient(135deg, #2563eb, #1e3a8a);
+        color: white !important;
+        border: none;
+        border-radius: 12px;
+        padding: 0.7rem 1rem;
+        font-weight: 700;
+        font-size: 15px;
+        transition: 0.25s ease;
+    }
+    
+    .add-borrower-btn button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 18px rgba(37,99,235,0.35);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     with tab_add:
-        with st.form("add_borrower_form", clear_on_submit=True):
-            st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New borrower</h4>", unsafe_allow_html=True)
-            c1, c2 = st.columns(2)
-            name = c1.text_input("Full name*")
-            phone = c2.text_input("Phone Number*")
-            email = c1.text_input("Email Address")
-            nid = c2.text_input("National ID / NIN")
-            addr = c1.text_input("Physical Address")
-            nok = c2.text_input("Next of Kin (name & Contact)")
-            
-            if st.form_submit_button("Save borrower", use_container_width=True):
-                if name and phone:
-                    new_id = str(uuid.uuid4())
-                    new_entry = pd.DataFrame([{
-                        "id": new_id, "name": name, "phone": phone, "email": email,
-                        "national_id": nid, "address": addr, "next_of_kin": nok,
-                        "status": "Active", "tenant_id": str(st.session_state.get("tenant_id"))
-                    }])
-                
-                    if save_data_saas("borrowers", new_entry):
-                        st.write("Saving to tenant:", st.session_state.get("tenant_id"))
-                        st.success(f"✅ {name} registered successfully!")
-                        st.cache_data.clear()
+    
+        st.markdown("### 👥 Borrower Registration")
+    
+        # ---------- Open Modal Button ----------
+        with st.container():
+            st.markdown('<div class="add-borrower-btn">', unsafe_allow_html=True)
+    
+            open_popup = st.button(
+                "➕ Register New Borrower",
+                use_container_width=True
+            )
+    
+            st.markdown('</div>', unsafe_allow_html=True)
+    
+        # ---------- Popup Modal ----------
+        if open_popup:
+    
+            @st.dialog("📝 Register New Borrower")
+            def add_borrower_popup():
+    
+                c1, c2 = st.columns(2)
+    
+                name = c1.text_input("Full Name *")
+                phone = c2.text_input("Phone Number *")
+    
+                email = c1.text_input("Email Address")
+                nid = c2.text_input("National ID / NIN")
+    
+                addr = c1.text_input("Physical Address")
+                nok = c2.text_input("Next of Kin")
+    
+                st.write("")
+    
+                save_btn, cancel_btn = st.columns(2)
+    
+                # ---------- SAVE ----------
+                with save_btn:
+    
+                    if st.button(
+                        "💾 Save Borrower",
+                        use_container_width=True
+                    ):
+    
+                        if name and phone:
+    
+                            new_id = str(uuid.uuid4())
+    
+                            new_entry = pd.DataFrame([{
+                                "id": new_id,
+                                "name": name,
+                                "phone": phone,
+                                "email": email,
+                                "national_id": nid,
+                                "address": addr,
+                                "next_of_kin": nok,
+                                "status": "Active",
+                                "tenant_id": str(
+                                    st.session_state.get("tenant_id")
+                                )
+                            }])
+    
+                            if save_data_saas(
+                                "borrowers",
+                                new_entry
+                            ):
+    
+                                st.success(
+                                    f"✅ {name} registered successfully!"
+                                )
+    
+                                st.cache_data.clear()
+    
+                                st.rerun()
+    
+                        else:
+                            st.error(
+                                "⚠️ Full Name and Phone Number are required."
+                            )
+    
+                # ---------- CANCEL ----------
+                with cancel_btn:
+    
+                    if st.button(
+                        "❌ Cancel",
+                        use_container_width=True
+                    ):
                         st.rerun()
-                else:
-                    st.error("⚠️ Full name and Phone Number are required.")
-
+    
+            add_borrower_popup()
     with tab_view:
 
         st.markdown("### 👥 Borrowers")
