@@ -289,10 +289,19 @@ def authenticate(supabase_client, company_code, email, password):
         if not tenant_info:
             return {"success": False, "error": "No business entity linked to this account"}
 
-        # Step 3: Company Code Validation (Security Layer)
-        if tenant_info["company_code"].strip().upper() != company_code.strip().upper():
-            return {"success": False, "error": "Incorrect Company Code"}
-
+        # -----------------------------
+        # Updated Security Validation Layer
+        # -----------------------------
+        # Clean up what the user typed in the login form
+        input_company = company_code.strip().upper()
+        
+        # Clean up database values for comparison
+        db_code = tenant_info["company_code"].strip().upper()
+        db_name = tenant_info.get("name", "").strip().upper()
+        
+        # Allow access if what they typed matches EITHER the short code OR the full company name
+        if input_company != db_code and input_company != db_name:
+            return {"success": False, "error": "Incorrect Company Code or Name"}
         return {
             "success": True,
             "user_id": res.user.id,
