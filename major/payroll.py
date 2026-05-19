@@ -456,6 +456,7 @@ def show_payroll():
                     st.success(f"✅ Saved for {employee_name}")
                     st.rerun()
                     
+
     # =================================
     # HISTORY TAB
     # =================================
@@ -468,29 +469,29 @@ def show_payroll():
                 try: return f"{int(float(x)):,}" 
                 except: return "0"
 
-            # --- CALCULATE PAYROLL TOTALS FROM ACTUAL DATAFRAME ---
-            t_arrears = payroll_df['arrears'].sum() if 'arrears' in payroll_df.columns else payroll_df['Arrears'].sum()
-            t_basic = payroll_df['basic_salary'].sum() if 'basic_salary' in payroll_df.columns else payroll_df['Basic_Salary'].sum()
-            t_gross = payroll_df['gross_salary'].sum() if 'gross_salary' in payroll_df.columns else payroll_df['Gross_Salary'].sum()
-            t_paye = payroll_df['paye'].sum() if 'paye' in payroll_df.columns else payroll_df['PAYE'].sum()
-            t_n5 = payroll_df['nssf_5'].sum() if 'nssf_5' in payroll_df.columns else payroll_df['NSSF_5'].sum()
-            t_net = payroll_df['net_pay'].sum() if 'net_pay' in payroll_df.columns else payroll_df['Net_Pay'].sum()
-            t_n10 = payroll_df['nssf_10'].sum() if 'nssf_10' in payroll_df.columns else payroll_df['NSSF_10'].sum()
-            t_n15 = payroll_df['nssf_15'].sum() if 'nssf_15' in payroll_df.columns else payroll_df['NSSF_15'].sum()
+            # --- CALCULATE PAYROLL TOTALS FROM CORRECT LOWERCASE COLUMNS ---
+            t_arrears = payroll_df['arrears'].sum() if 'arrears' in payroll_df.columns else 0
+            t_basic = payroll_df['basic_salary'].sum() if 'basic_salary' in payroll_df.columns else 0
+            t_gross = payroll_df['gross_salary'].sum() if 'gross_salary' in payroll_df.columns else 0
+            t_paye = payroll_df['paye'].sum() if 'paye' in payroll_df.columns else 0
+            t_n5 = payroll_df['nssf_5'].sum() if 'nssf_5' in payroll_df.columns else 0
+            t_net = payroll_df['net_pay'].sum() if 'net_pay' in payroll_df.columns else 0
+            t_n10 = payroll_df['nssf_10'].sum() if 'nssf_10' in payroll_df.columns else 0
+            t_n15 = payroll_df['nssf_15'].sum() if 'nssf_15' in payroll_df.columns else 0
 
             rows_html = ""
             for i, r in payroll_df.iterrows():
-                # Dynamically fetch lowercase/uppercase columns safely
-                emp_val = r.get('employee', r.get('Employee', ''))
-                des_val = r.get('designation', r.get('Designation', '-'))
-                arr_val = r.get('arrears', r.get('Arrears', 0))
-                bas_val = r.get('basic_salary', r.get('Basic_Salary', 0))
-                gro_val = r.get('gross_salary', r.get('Gross_Salary', 0))
-                pay_val = r.get('paye', r.get('PAYE', 0))
-                n5_val = r.get('nssf_5', r.get('NSSF_5', 0))
-                net_val = r.get('net_pay', r.get('Net_Pay', 0))
-                n10_val = r.get('nssf_10', r.get('NSSF_10', 0))
-                n15_val = r.get('nssf_15', r.get('NSSF_15', 0))
+                # Safely pull the lowercase values from your database payload schema
+                emp_val = r.get('employee', '-')
+                des_val = r.get('designation', '-')
+                arr_val = r.get('arrears', 0)
+                bas_val = r.get('basic_salary', 0)
+                gro_val = r.get('gross_salary', 0)
+                pay_val = r.get('paye', 0)
+                n5_val = r.get('nssf_5', 0)
+                net_val = r.get('net_pay', 0)
+                n10_val = r.get('nssf_10', 0)
+                n15_val = r.get('nssf_15', 0)
 
                 rows_html += f"""
                     <tr>
@@ -509,7 +510,7 @@ def show_payroll():
                         <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(n15_val)}</td>
                     </tr>"""
 
-            # --- ADD THE TOTALS ROW TO THE HTML ---
+            # --- GRAND TOTALS ROW ---
             rows_html += f"""
                 <tr style="background:#2B3F87; color:white; font-weight:bold;">
                     <td colspan="2" style="text-align:center; padding:12px; border:1px solid #ddd;">GRAND TOTALS</td>
@@ -523,6 +524,36 @@ def show_payroll():
                     <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n15)}</td>
                 </tr>"""
 
+            printable_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: sans-serif; padding: 20px; }}
+                    table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+                    th {{ background: #2B3F87; color: white; padding: 10px; border: 1px solid #ddd; }}
+                    @media print {{ @page {{ size: landscape; margin: 1cm; }} }}
+                </style>
+            </head>
+            <body>
+                <div style="text-align:center; border-bottom:3px solid #2B3F87; margin-bottom:20px;">
+                    <h1 style="color:#2B3F87;">ZOE CONSULTS SMC LTD</h1>
+                    <p><b>PAYROLL REPORT - {datetime.now().strftime('%B %Y')}</b></p>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>S/N</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
+                            <th>P.A.Y.E</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th><th>NSSF(15%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+            </body>
+            </html>
+            """
+            
+            # Render your HTML Table in Streamlit so it displays clearly
+            st.markdown(printable_html, unsafe_allow_html=True)
             printable_html = f"""
             <html>
             <head>
