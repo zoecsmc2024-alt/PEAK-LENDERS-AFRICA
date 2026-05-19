@@ -7,6 +7,7 @@ import pandas as pd
 import uuid
 from datetime import datetime
 from io import BytesIO
+
 def delete_data_saas(table_name, filters):
     """
     Deletes a record from Supabase based on a filter (e.g., payroll_id).
@@ -18,6 +19,7 @@ def delete_data_saas(table_name, filters):
     except Exception as e:
         st.error(f"Database Error: {e}")
         return False
+
 def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     from openpyxl import Workbook
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -183,6 +185,7 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     buffer.seek(0)
 
     return buffer
+
 # ---------------------------------
 # Payroll Calculation
 # ---------------------------------
@@ -308,6 +311,57 @@ def format_payroll_display(df):
 # ---------------------------------
 def show_payroll():
 
+    # ==============================
+    # 🎨 1. MASTER BUTTON STYLING (GLOBAL OVERRIDE)
+    # ==============================
+    st.markdown("""
+    <style>
+    /* MASTER BUTTON SELECTOR - Uniform look across the entire application workspace */
+    div.stButton > button,
+    div.stFormSubmitButton > button {
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 0.7rem 1.5rem !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        height: 48px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        transition: all 0.25s ease-out !important;
+        box-shadow: 0 4px 14px rgba(30, 58, 138, 0.2) !important;
+        width: auto;
+    }
+    
+    div.stButton > button[width="100%"] {
+        width: 100% !important;
+    }
+
+    /* HOVER STATE (FLOAT EFFECT) */
+    div.stButton > button:hover,
+    div.stFormSubmitButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(30, 58, 138, 0.35) !important;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    }
+    
+    /* ACTIVE/CLICK STATE */
+    div.stButton > button:active,
+    div.stFormSubmitButton > button:active {
+        transform: translateY(1px) !important;
+        box-shadow: 0 2px 8px rgba(30, 58, 138, 0.15) !important;
+    }
+
+    /* Specific icon adjustments */
+    .save-icon { font-size: 1.1em; color: #a3e635; margin-right: 2px; }
+    .cancel-icon { font-size: 1.1em; color: #f87171; margin-right: 2px; }
+    .download-icon { font-size: 1.1em; color: #60a5fa; margin-right: 2px; }
+    </style>
+    """, unsafe_allow_html=True)
+
     tenant = st.session_state.get("tenant_id")
     role = st.session_state.get("role")
 
@@ -370,7 +424,9 @@ def show_payroll():
             f_adv = c9.number_input("Advance", min_value=0.0)
             f_other = c10.number_input("Other Deductions", min_value=0.0)
     
-            if st.form_submit_button("💳 Save Payroll"):
+            # Connected with structural styling tokens
+            save_payroll_lbl = "💳 Save Payroll"
+            if st.form_submit_button(save_payroll_lbl, use_container_width=True):
     
                 if not employee_name or f_basic <= 0:
                     st.error("Enter valid employee & salary")
@@ -419,6 +475,7 @@ def show_payroll():
                     get_cached_data.clear()
                     st.success(f"✅ Saved for {employee_name}")
                     st.rerun()
+                    
     # =================================
     # HISTORY TAB
     # =================================
@@ -458,11 +515,13 @@ def show_payroll():
             col_edit, col_del = st.columns(2)
 
             with col_edit:
-                if st.button("📝 Edit Selected Record"):
+                edit_lbl = "📝 Edit Selected Record"
+                if st.button(edit_lbl, use_container_width=True, key=f"edit_btn_{sel_id}"):
                     st.warning("To edit: Adjust details in the 'Process Payroll' tab with the same name and month to overwrite, or use the database editor.")
             
             with col_del:
-                if st.button("🗑️ Delete Record", type="primary"):
+                delete_lbl = "<span class='cancel-icon'>🗑️</span> Delete Record"
+                if st.button(delete_lbl, use_container_width=True, key=f"del_btn_{sel_id}"):
                     # This will now find the function in your imported modules
                     if delete_data_saas("payroll", {"payroll_id": full_record['payroll_id']}):
                         get_cached_data.clear()
@@ -476,19 +535,24 @@ def show_payroll():
         c1, c2 = st.columns(2)
         with c1:
             csv = payroll_df.to_csv(index=False).encode("utf-8")
+            csv_lbl = "📄 Download CSV"
             st.download_button(
-                "📄 Download CSV",
+                csv_lbl,
                 data=csv,
                 file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv",
-                use_container_width=True
+                use_container_width=True,
+                key="payroll_csv_dl"
             )
 
         with c2:
             excel_file = export_styled_excel(payroll_df)
+            excel_lbl = "<span class='download-icon'>📥</span> Download Styled Excel"
             st.download_button(
-                "📥 Download Styled Excel",
+                excel_lbl,
                 data=excel_file,
                 file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
+                use_container_width=True,
+                key="payroll_xlsx_dl",
+                unsafe_allow_html=True
             )
