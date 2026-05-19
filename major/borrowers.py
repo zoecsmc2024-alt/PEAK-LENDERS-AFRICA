@@ -115,10 +115,10 @@ def show_borrowers():
         risk_df.rename(columns={"balance": "exposure", "is_overdue": "overdue_count", "days_overdue": "max_days"}, inplace=True)
 
         def classify_risk(row):
-            if row["overdue_count"] == 0: return "🟢 Healthy"
-            elif row["max_days"] <= 7: return "🟡 Watch"
-            elif row["max_days"] <= 30: return "🟠 Risk"
-            else: return "🔴 Critical"
+            if row["overdue_count"] == 0: return "⚪ Healthy"
+            elif row["max_days"] <= 7: return "⚪ Watch"
+            elif row["max_days"] <= 30: return "⚪ Risk"
+            else: return "⚪ Critical"
 
         risk_df["risk_label"] = risk_df.apply(classify_risk, axis=1)
         risk_map = risk_df.set_index("borrower_id").to_dict("index")
@@ -215,18 +215,17 @@ def show_borrowers():
     """, unsafe_allow_html=True)
     
     with tab_add:
-    st.markdown("### 👥 Borrower Registration")
-    st.write("Click the button below to open up the secure entry profile portal.")
-    
-    # Clean, centered layout structure
-    _, center_col, _ = st.columns([1, 2, 1])
-    
-    with center_col:
-        # The CSS will automatically center text/icons and style this nicely
-        if st.button("➕ Register New Borrower", use_container_width=True):
-            add_borrower_popup()
+        st.markdown("### 👥 Borrower Registration")
+        st.write("Click the button below to open up the secure entry profile portal.")
+        
+        # Clean, centered layout structure
+        _, center_col, _ = st.columns([1, 2, 1])
+        
+        with center_col:
+            # The CSS will automatically center text/icons and style this nicely
+            if st.button("➕ Register New Borrower", use_container_width=True):
+                add_borrower_popup()
                 
-            st.markdown('</div>', unsafe_allow_html=True)
     with tab_view:
 
         st.markdown("### 👥 Borrowers")
@@ -244,7 +243,7 @@ def show_borrowers():
             # --- Attach risk info safely ---
             def get_risk_label(b_id):
                 r = risk_map.get(str(b_id), {})
-                return r.get("risk_label", "🟢 Healthy")
+                return r.get("risk_label", "⚪ Healthy")
     
             df["Risk Status"] = df["id"].apply(get_risk_label)
     
@@ -258,11 +257,11 @@ def show_borrowers():
     
                 # --- Color mapping (no HTML needed) ---
                 def style_risk(val):
-                    if "🔴" in val:
+                    if "Critical" in val:
                         return "color: #EF4444; font-weight:700;"
-                    elif "🟠" in val:
+                    elif "Risk" in val:
                         return "color: #F97316; font-weight:700;"
-                    elif "🟡" in val:
+                    elif "Watch" in val:
                         return "color: #F59E0B; font-weight:700;"
                     else:
                         return "color: #10B981; font-weight:700;"
