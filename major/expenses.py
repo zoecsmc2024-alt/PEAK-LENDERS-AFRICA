@@ -261,65 +261,190 @@ def show_expenses():
                 )
 
     # ==========================================
-    # ⚙️ TAB 3: MAINTENANCE LAYER (CRUD ENGINE)
+    # ⚙️ TAB 3: MAINTENANCE LAYER (NO HTML)
     # ==========================================
+    
     with tab_manage:
+    
         st.markdown("### 🛠️ Record Maintenance Engine")
-
+    
         if df.empty:
-            st.info("No logs currently tracked inside database system storage array profiles.")
-        else:
-            # Construct dictionary mapped by a strict primary key identity token array matrix
-            df["selector_label"] = df.apply(
-                lambda r: f"{r.get('payment_date', 'N/A')} | {r.get('category', 'N/A')} | UGX {r['amount']:,.0f} | [ID: {r['id'][:8]}]", axis=1
+    
+            st.info(
+                "No logs currently tracked inside database system storage array profiles."
             )
-            
-            # Map unique labels cleanly back to their unique record dictionaries
-            record_lookup_matrix = {row["selector_label"]: row.to_dict() for _, row in df.iterrows()}
-            selected_target_label = st.selectbox("Choose Target Entry for Adjustment Profile", list(record_lookup_matrix.keys()))
-
+    
+        else:
+    
+            # ----------------------------------
+            # BUILD SELECT LABELS
+            # ----------------------------------
+            df["selector_label"] = df.apply(
+                lambda r:
+                f"{r.get('payment_date', 'N/A')} | "
+                f"{r.get('category', 'N/A')} | "
+                f"UGX {r['amount']:,.0f} | "
+                f"[ID: {str(r['id'])[:8]}]",
+                axis=1
+            )
+    
+            # ----------------------------------
+            # LOOKUP MAP
+            # ----------------------------------
+            record_lookup_matrix = {
+                row["selector_label"]: row.to_dict()
+                for _, row in df.iterrows()
+            }
+    
+            selected_target_label = st.selectbox(
+                "Choose Target Entry for Adjustment Profile",
+                list(record_lookup_matrix.keys())
+            )
+    
+            # ----------------------------------
+            # TARGET RECORD
+            # ----------------------------------
             if selected_target_label:
+    
                 target_record = record_lookup_matrix[selected_target_label]
+    
                 target_id = target_record["id"]
-
-                # Use dynamic unique ID prefixes to prevent state clashes between forms
+    
+                # ==================================
+                # EDIT FORM
+                # ==================================
                 with st.form(f"edit_form_container_{target_id}"):
-                    st.write(f"#### Modify Transaction Profile: {target_id[:8]}")
-                    
-                    adjusted_amount = st.number_input("Update Transacted Amount (UGX)", value=float(target_record["amount"]), min_value=0.0, step=5000.0)
-                    adjusted_desc = st.text_input("Update Description Specs", value=str(target_record["description"]))
-                    
+    
+                    st.write(
+                        f"#### Modify Transaction Profile: {str(target_id)[:8]}"
+                    )
+    
+                    adjusted_amount = st.number_input(
+                        "Update Transacted Amount (UGX)",
+                        value=float(target_record["amount"]),
+                        min_value=0.0,
+                        step=5000.0
+                    )
+    
+                    adjusted_desc = st.text_input(
+                        "Update Description Specs",
+                        value=str(target_record["description"])
+                    )
+    
+                    st.write("")
+    
                     col_m1, col_m2 = st.columns(2)
-                    
-                    # Connected with master design tags using structural template parameters
-                    save_lbl = '<span class="save-icon">💾</span> Save Structural Corrections'
-                    action_save = col_m1.form_submit_button(save_lbl, use_container_width=True)
-                    
-                    delete_lbl = '<span class="cancel-icon">🗑️</span> Purge Record Safely'
-                    action_delete = col_m2.form_submit_button(delete_lbl, use_container_width=True)
-
-                    # Update Operational Event
+    
+                    # ----------------------------------
+                    # BUTTONS
+                    # ----------------------------------
+                    action_save = col_m1.form_submit_button(
+                        "💾 Save Structural Corrections",
+                        use_container_width=True,
+                        type="primary"
+                    )
+    
+                    action_delete = col_m2.form_submit_button(
+                        "🗑️ Purge Record Safely",
+                        use_container_width=True
+                    )
+    
+                    # ==================================
+                    # SAVE EVENT
+                    # ==================================
                     if action_save:
+    
                         if adjusted_amount > 0 and adjusted_desc.strip():
-                            # Package localized transaction payload matching data schemas
+    
                             mutation_payload = pd.DataFrame([{
                                 "id": str(target_id),
                                 "amount": float(adjusted_amount),
                                 "description": adjusted_desc.strip(),
                                 "tenant_id": str(current_tenant)
                             }])
-
-                            if save_data_saas("expenses", mutation_payload):
-                                st.success("✅ Database Sync Complete: Adjustment tracked successfully!")
+    
+                            if save_data_saas(
+                                "expenses",
+                                mutation_payload
+                            ):
+    
+                                st.success(
+                                    "✅ Database Sync Complete: "
+                                    "Adjustment tracked successfully!"
+                                )
+    
                                 st.cache_data.clear()
+    
                                 st.rerun()
+    
                         else:
-                            st.error("❌ Action Interrupted: Data fields cannot be updated to empty arrays.")
-
-                    # Delete Operational Event
+    
+                            st.error(
+                                "❌ Action Interrupted: "
+                                "Data fields cannot be empty."
+                            )
+    
+                    # ==================================
+                    # DELETE EVENT
+                    # ==================================
                     if action_delete:
-                        # Invoke targeted single row row deletion routine targeted by strict key index 
-                        if delete_data_saas("expenses", target_id):
-                            st.warning("🗑️ Entry purged permanently from cloud storage arrays.")
-                            st.cache_data.clear()
-                            st.rerun()
+    
+                        st.session_state["confirm_delete_expense"] = True
+    
+                # ==================================
+                # DELETE CONFIRMATION POPUP
+                # ==================================
+                if st.session_state.get("confirm_delete_expense", False):
+    
+                    @st.dialog("⚠️ Confirm Permanent Deletion")
+                    def confirm_delete_dialog():
+    
+                        st.warning(
+                            "This action will permanently remove "
+                            "the selected transaction record."
+                        )
+    
+                        c1, c2 = st.columns(2)
+    
+                        # CANCEL
+                        with c1:
+    
+                            if st.button(
+                                "❌ Cancel",
+                                use_container_width=True
+                            ):
+    
+                                st.session_state[
+                                    "confirm_delete_expense"
+                                ] = False
+    
+                                st.rerun()
+    
+                        # CONFIRM DELETE
+                        with c2:
+    
+                            if st.button(
+                                "🔥 Yes, Delete",
+                                use_container_width=True,
+                                type="primary"
+                            ):
+    
+                                if delete_data_saas(
+                                    "expenses",
+                                    target_id
+                                ):
+    
+                                    st.session_state[
+                                        "confirm_delete_expense"
+                                    ] = False
+    
+                                    st.warning(
+                                        "🗑️ Entry purged permanently "
+                                        "from cloud storage arrays."
+                                    )
+    
+                                    st.cache_data.clear()
+    
+                                    st.rerun()
+    
+                    confirm_delete_dialog()
