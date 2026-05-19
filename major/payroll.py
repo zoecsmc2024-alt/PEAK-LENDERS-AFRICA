@@ -195,48 +195,37 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
 # ---------------------------------
 # Payroll Calculation
 # ---------------------------------
-def compute_payroll(basic, arrears, absent, advance, other, apply_lst=True):
-    gross = round(float(basic) + float(arrears) - float(absent))
-
-    # -----------------------------
-    # NSSF
-    # -----------------------------
-    nssf_5 = round(gross * 0.05)   # Employee deduction
-    nssf_10 = round(gross * 0.10)  # Employer (NOT deducted)
-    nssf_15 = nssf_5 + nssf_10
-
-    # -----------------------------
-    # TAXABLE INCOME
-    # -----------------------------
-    taxable_income = gross - nssf_5
-
-    # -----------------------------
-    # PAYE (Uganda)
-    # -----------------------------
+def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
+    # 1. Gross Calculation
+    gross = (float(basic) + float(arrears)) - float(absent_deduct)
+    
+    # 2. Local Service Tax (LST) Logic
+    lst = 100000 / 12 if gross > 1000000 else 0
+    
+    # 3. NSSF Logic (Calculated but NOT subtracted from tax base)
+    n5 = gross * 0.05
+    n10 = gross * 0.10
+    n15 = n5 + n10
+    
+    # 4. --- THE EXCEL MATCHING PAYE LOGIC ---
+    # Based on your sheet: Tax = 25,000 + (30% * (Gross - 410,000))
     paye = 0
-    if taxable_income <= 235000:
-        paye = 0
-    elif taxable_income <= 335000:
-        paye = (taxable_income - 235000) * 0.10
-    elif taxable_income <= 410000:
-        paye = 10000 + (taxable_income - 335000) * 0.20
-    else:
-        paye = 25000 + (taxable_income - 410000) * 0.30
-
-    paye = round(paye)
-
-    # -----------------------------
-    # LST (Optional Toggle)
-    # -----------------------------
-    # Only calculate if the toggle is ON and they meet the salary threshold
-    lst = 0
-    if apply_lst and (gross * 12 > 1200000):
-        lst = round(100000 / 12)
-
-    # -----------------------------
-    # TOTAL DEDUCTIONS
-    # -----------------------------
-    total_deductions = paye + nssf_5 + advance + other + lst
+    if gross > 410000:
+        excess = gross - 410000
+        paye = 25000 + (0.30 * excess)
+    elif gross > 235000:
+        # Lower tier fallback
+        paye = (gross - 235000) * 0.10
+        
+    # 5. Final Deductions & Net Pay
+    # Deductions = PAYE + LST + NSSF(5%) + Advance + Other
+    total_deductions = paye + lst + n5 + float(advance) + float(other)
+    net = gross - total_deductions
+    
+    return {
+        "gross": round(gross), "lst": round(lst), "n5": round(n5), 
+        "n10": round(n10), "n15": round(n15), "paye": round(paye), "net": round(net)
+    }
 
     # -----------------------------
     # NET PAY
