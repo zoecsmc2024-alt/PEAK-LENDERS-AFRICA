@@ -325,7 +325,35 @@ def show_borrowers():
 
                 # 📊 NESTED LOAN HISTORY
                 st.markdown("#### 💳 Loan Statement")
-                user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy()
+                
+                # ---------------------------------
+                # SAFE FALLBACK
+                # ---------------------------------
+                user_loans = pd.DataFrame()
+                
+                if isinstance(loans_df, pd.DataFrame) and not loans_df.empty:
+                
+                    # normalize columns
+                    loans_df.columns = (
+                        loans_df.columns
+                        .astype(str)
+                        .str.strip()
+                        .str.lower()
+                    )
+                
+                    # ensure borrower_id exists
+                    if "borrower_id" in loans_df.columns:
+                
+                        user_loans = loans_df[
+                            loans_df["borrower_id"]
+                            .astype(str)
+                            .str.strip() == str(selected_id).strip()
+                        ].copy()
+                
+                    else:
+                        st.warning(
+                            "⚠️ Loans table missing borrower_id column."
+                        )
 
                 if not user_loans.empty:
                     # Clean up columns to make sure key matches configuration safely
