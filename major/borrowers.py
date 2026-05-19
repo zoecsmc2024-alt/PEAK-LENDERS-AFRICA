@@ -399,34 +399,34 @@ def show_borrowers():
                     st.write("---")
                     act_c1, act_c2, act_c3 = st.columns([1, 1, 2])
     
-                    if act_c1.button("💾 Save Changes", use_container_width=True):
-                        idx = borrowers_df.index[borrowers_df["id"].astype(str) == str(selected_id)].tolist()[0]
-                        borrowers_df.at[idx, "name"] = upd_name
-                        borrowers_df.at[idx, "phone"] = upd_phone
-                        borrowers_df.at[idx, "email"] = upd_email
-                        borrowers_df.at[idx, "national_id"] = upd_nid
-                        borrowers_df.at[idx, "next_of_kin"] = upd_nok
-                        borrowers_df.at[idx, "address"] = upd_addr
-                        
-                        if save_data_saas("borrowers", borrowers_df):
-                            st.success("Profile Updated Successfully")
-                            st.cache_data.clear()
-                            st.rerun()
+                    with act_c1:
+                        if st.button("💾 Save Changes", use_container_width=True):
+                            idx = borrowers_df.index[borrowers_df["id"].astype(str) == str(selected_id)].tolist()[0]
+                            borrowers_df.at[idx, "name"] = upd_name
+                            borrowers_df.at[idx, "phone"] = upd_phone
+                            borrowers_df.at[idx, "email"] = upd_email
+                            borrowers_df.at[idx, "national_id"] = upd_nid
+                            borrowers_df.at[idx, "next_of_kin"] = upd_nok
+                            borrowers_df.at[idx, "address"] = upd_addr
+                            
+                            if save_data_saas("borrowers", borrowers_df):
+                                st.success("Profile Updated Successfully")
+                                st.cache_data.clear()
+                                st.rerun()
     
-                    if act_c2.button("🗑️ Delete", use_container_width=True):
-                        updated_df = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
-                        if save_data_saas("borrowers", updated_df):
-                            st.warning("Profile Removed")
-                            st.cache_data.clear()
-                            st.session_state.pop("selected_borrower", None)
-                            st.rerun()
+                    with act_c2:
+                        if st.button("🗑️ Delete", use_container_width=True):
+                            updated_df = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
+                            if save_data_saas("borrowers", updated_df):
+                                st.warning("Profile Removed")
+                                st.cache_data.clear()
+                                st.session_state.pop("selected_borrower", None)
+                                st.rerun()
                     
-                    if act_c3:
+                    with act_c3:
                         st.button(
                             "❌ Close Profile", 
                             use_container_width=True,
                             key=f"close_profile_{selected_id}",
-                            on_click=handle_close_profile  # 👈 This fires instantly before anything else!
+                            on_click=handle_close_profile
                         )
-                        
-                            st.rerun()
