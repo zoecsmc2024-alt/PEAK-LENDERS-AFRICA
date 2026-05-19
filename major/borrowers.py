@@ -19,7 +19,7 @@ def show_borrowers():
     # 🎨 BRANDING & THEME
     # ==============================
     brand_color = st.session_state.get("theme_color", "#1E3A8A")
-    st.markdown(f"<h2 style='color:{brand_color};'>🚀 borrowers Registry</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color:{brand_color};'>Borrowers Registry</h2>", unsafe_allow_html=True)
 
     # ==============================
     # 🔐 TENANT SESSION CHECK
