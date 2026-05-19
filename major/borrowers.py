@@ -180,36 +180,51 @@ def show_borrowers():
     # ==============================
     tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add borrower"])
     
-    # Global Button Style definitions
+    # ==========================================
+    # 🎨 REFINED MODERN BUTTON STYLING
+    # ==========================================
     st.markdown("""
     <style>
-    .add-borrower-btn button {
-        background: linear-gradient(135deg, #2563eb, #1e3a8a);
+    /* target modern streamlit action buttons directly */
+    div.stButton > button {
+        background: linear-gradient(135deg, #2563eb 0%, #1e3a8a 100%) !important;
         color: white !important;
-        border: none;
-        border-radius: 12px;
-        padding: 0.7rem 1rem;
-        font-weight: 700;
-        font-size: 15px;
-        transition: 0.25s ease;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 0.6rem 2rem !important;
+        font-weight: 600 !important;
+        font-size: 15px !important;
+        height: 46px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important; /* Forces center alignment */
+        transition: all 0.2s ease-in-out !important;
+        box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15) !important;
     }
     
-    .add-borrower-btn button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 6px 18px rgba(37,99,235,0.35);
+    div.stButton > button:hover {
+        transform: translateY(-1px) !important;
+        box-shadow: 0 6px 20px rgba(37, 99, 235, 0.3) !important;
+        background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+    }
+    
+    div.stButton > button:active {
+        transform: translateY(1px) !important;
     }
     </style>
     """, unsafe_allow_html=True)
     
     with tab_add:
-        st.markdown("### 👥 Borrower Registration")
+    st.markdown("### 👥 Borrower Registration")
+    st.write("Click the button below to open up the secure entry profile portal.")
     
-        with st.container():
-            st.markdown('<div class="add-borrower-btn">', unsafe_allow_html=True)
-            
-            # Triggering the registration modal directly
-            if st.button("➕ Register New Borrower", use_container_width=True):
-                add_borrower_popup()
+    # Clean, centered layout structure
+    _, center_col, _ = st.columns([1, 2, 1])
+    
+    with center_col:
+        # The CSS will automatically center text/icons and style this nicely
+        if st.button("➕ Register New Borrower", use_container_width=True):
+            add_borrower_popup()
                 
             st.markdown('</div>', unsafe_allow_html=True)
     with tab_view:
