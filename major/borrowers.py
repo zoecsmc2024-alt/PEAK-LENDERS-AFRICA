@@ -6,7 +6,7 @@ import pandas as pd
 from datetime import datetime
 from core.database import supabase
 import io
-
+from core.database import supabase, get_cached_data
 # ==============================
 # 🚀 borrowers ENGINE (PRODUCTION)
 # ==============================
