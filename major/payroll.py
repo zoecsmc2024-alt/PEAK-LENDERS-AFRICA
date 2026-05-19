@@ -381,7 +381,7 @@ def show_payroll():
         employee_list = sorted(payroll_df["employee"].dropna().astype(str).unique())
 
     # Tabs
-    tab_process, tab_history = st.tabs(["💳 Process Payroll", "📜 Payroll History"])
+    tab_process, tab_logs = st.tabs(["💳 Process Payroll", "📜 Payroll History"])
 
     # =================================
     # PROCESS TAB
