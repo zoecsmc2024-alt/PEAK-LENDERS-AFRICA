@@ -298,129 +298,129 @@ def show_borrowers():
         else:
             st.info("The registry is currently empty.")
 
-    # ==============================
-    # 👤 borrower PROFILE PANEL (EXPANDED)
-    # ==============================
-    selected_id = st.session_state.get("selected_borrower")
-
-    if selected_id:
-        st.write("---")
-        st.markdown(f"### 👤 Profile Detail: {str(selected_id)[:8]}")
-
-        borrower_query = borrowers_df[borrowers_df["id"].astype(str) == str(selected_id)]
-
-        if not borrower_query.empty:
-            borrower = borrower_query.iloc[0]
-
-            with st.container(border=True):
-                c1, c2 = st.columns(2)
-                upd_name = c1.text_input("Name", borrower["name"])
-                upd_phone = c2.text_input("Phone", borrower["phone"])
-                upd_email = c1.text_input("Email", borrower["email"])
-                upd_nid = c2.text_input("National ID", borrower.get("national_id", ""))
-                
-                c3, c4 = st.columns(2)
-                upd_nok = c3.text_input("Next of Kin", borrower.get("next_of_kin", ""))
-                upd_addr = c4.text_input("Address", borrower.get("address", ""))
-
-                # 📊 NESTED LOAN HISTORY
-                st.markdown("#### 💳 Loan Statement")
-                
-                # ---------------------------------
-                # SAFE FALLBACK
-                # ---------------------------------
-                user_loans = pd.DataFrame()
-                
-                if isinstance(loans_df, pd.DataFrame) and not loans_df.empty:
-                
-                    # normalize columns
-                    loans_df.columns = (
-                        loans_df.columns
-                        .astype(str)
-                        .str.strip()
-                        .str.lower()
-                    )
-                
-                    # ensure borrower_id exists
-                    if "borrower_id" in loans_df.columns:
-                
-                        user_loans = loans_df[
-                            loans_df["borrower_id"]
+        # ==============================
+        # 👤 borrower PROFILE PANEL (EXPANDED)
+        # ==============================
+        selected_id = st.session_state.get("selected_borrower")
+    
+        if selected_id:
+            st.write("---")
+            st.markdown(f"### 👤 Profile Detail: {str(selected_id)[:8]}")
+    
+            borrower_query = borrowers_df[borrowers_df["id"].astype(str) == str(selected_id)]
+    
+            if not borrower_query.empty:
+                borrower = borrower_query.iloc[0]
+    
+                with st.container(border=True):
+                    c1, c2 = st.columns(2)
+                    upd_name = c1.text_input("Name", borrower["name"])
+                    upd_phone = c2.text_input("Phone", borrower["phone"])
+                    upd_email = c1.text_input("Email", borrower["email"])
+                    upd_nid = c2.text_input("National ID", borrower.get("national_id", ""))
+                    
+                    c3, c4 = st.columns(2)
+                    upd_nok = c3.text_input("Next of Kin", borrower.get("next_of_kin", ""))
+                    upd_addr = c4.text_input("Address", borrower.get("address", ""))
+    
+                    # 📊 NESTED LOAN HISTORY
+                    st.markdown("#### 💳 Loan Statement")
+                    
+                    # ---------------------------------
+                    # SAFE FALLBACK
+                    # ---------------------------------
+                    user_loans = pd.DataFrame()
+                    
+                    if isinstance(loans_df, pd.DataFrame) and not loans_df.empty:
+                    
+                        # normalize columns
+                        loans_df.columns = (
+                            loans_df.columns
                             .astype(str)
-                            .str.strip() == str(selected_id).strip()
-                        ].copy()
-                
-                    else:
-                        st.warning(
-                            "⚠️ Loans table missing borrower_id column."
+                            .str.strip()
+                            .str.lower()
                         )
-
-                if not user_loans.empty:
-                    # Clean up columns to make sure key matches configuration safely
-                    avail_cols = user_loans.columns.tolist()
                     
-                    # Safe fallback for total repayable calculation or display column name mapping
-                    tr_col = "total_repayable" if "total_repayable" in avail_cols else ("total_due" if "total_due" in avail_cols else None)
-                    due_date_col = "end_date" if "end_date" in avail_cols else ("due_date" if "due_date" in avail_cols else None)
-                    issued_date_col = "start_date" if "start_date" in avail_cols else ("issue_date" if "issue_date" in avail_cols else None)
-
-                    column_config_dict = {
-                        "id": None, "tenant_id": None, "borrower_id": None, "borrower": None, "parsed_due_date": None, "days_overdue": None, "is_overdue": None,
-                        "principal": st.column_config.NumberColumn("Principal", format="%d UGX"),
-                        "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
-                        "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
-                    }
-
-                    if tr_col:
-                        column_config_dict[tr_col] = st.column_config.NumberColumn("Total Due", format="%d UGX")
-                    if issued_date_col:
-                        column_config_dict[issued_date_col] = st.column_config.DateColumn("Date Issued") # 💡 Capitalized DateColumn
-                    if due_date_col:
-                        column_config_dict[due_date_col] = st.column_config.DateColumn("Due Date") # 💡 Capitalized DateColumn
-
-                    st.dataframe(
-                        user_loans, 
-                        use_container_width=True,
-                        hide_index=True,
-                        column_config=column_config_dict
-                    )
+                        # ensure borrower_id exists
+                        if "borrower_id" in loans_df.columns:
                     
-                    csv = user_loans.to_csv(index=False).encode('utf-8')
-                    st.download_button(
-                        label="📥 Download Statement (CSV)",
-                        data=csv,
-                        file_name=f"Statement_{upd_name.replace(' ', '_')}.csv",
-                        mime="text/csv",
-                    )
-                else:
-                    st.info("This borrower has no loan history.")
-
-                # 🛠️ ACTION BUTTONS
-                st.write("---")
-                act_c1, act_c2, act_c3 = st.columns([1, 1, 2])
-
-                if act_c1.button("💾 Save Changes", use_container_width=True):
-                    idx = borrowers_df.index[borrowers_df["id"].astype(str) == str(selected_id)].tolist()[0]
-                    borrowers_df.at[idx, "name"] = upd_name
-                    borrowers_df.at[idx, "phone"] = upd_phone
-                    borrowers_df.at[idx, "email"] = upd_email
-                    borrowers_df.at[idx, "national_id"] = upd_nid
-                    borrowers_df.at[idx, "next_of_kin"] = upd_nok
-                    borrowers_df.at[idx, "address"] = upd_addr
+                            user_loans = loans_df[
+                                loans_df["borrower_id"]
+                                .astype(str)
+                                .str.strip() == str(selected_id).strip()
+                            ].copy()
                     
-                    if save_data_saas("borrowers", borrowers_df):
-                        st.success("Profile Updated Successfully")
-                        st.cache_data.clear()
-                        st.rerun()
-
-                if act_c2.button("🗑️ Delete", use_container_width=True):
-                    updated_df = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
-                    if save_data_saas("borrowers", updated_df):
-                        st.warning("Profile Removed")
-                        st.cache_data.clear()
+                        else:
+                            st.warning(
+                                "⚠️ Loans table missing borrower_id column."
+                            )
+    
+                    if not user_loans.empty:
+                        # Clean up columns to make sure key matches configuration safely
+                        avail_cols = user_loans.columns.tolist()
+                        
+                        # Safe fallback for total repayable calculation or display column name mapping
+                        tr_col = "total_repayable" if "total_repayable" in avail_cols else ("total_due" if "total_due" in avail_cols else None)
+                        due_date_col = "end_date" if "end_date" in avail_cols else ("due_date" if "due_date" in avail_cols else None)
+                        issued_date_col = "start_date" if "start_date" in avail_cols else ("issue_date" if "issue_date" in avail_cols else None)
+    
+                        column_config_dict = {
+                            "id": None, "tenant_id": None, "borrower_id": None, "borrower": None, "parsed_due_date": None, "days_overdue": None, "is_overdue": None,
+                            "principal": st.column_config.NumberColumn("Principal", format="%d UGX"),
+                            "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
+                            "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
+                        }
+    
+                        if tr_col:
+                            column_config_dict[tr_col] = st.column_config.NumberColumn("Total Due", format="%d UGX")
+                        if issued_date_col:
+                            column_config_dict[issued_date_col] = st.column_config.DateColumn("Date Issued") # 💡 Capitalized DateColumn
+                        if due_date_col:
+                            column_config_dict[due_date_col] = st.column_config.DateColumn("Due Date") # 💡 Capitalized DateColumn
+    
+                        st.dataframe(
+                            user_loans, 
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config=column_config_dict
+                        )
+                        
+                        csv = user_loans.to_csv(index=False).encode('utf-8')
+                        st.download_button(
+                            label="📥 Download Statement (CSV)",
+                            data=csv,
+                            file_name=f"Statement_{upd_name.replace(' ', '_')}.csv",
+                            mime="text/csv",
+                        )
+                    else:
+                        st.info("This borrower has no loan history.")
+    
+                    # 🛠️ ACTION BUTTONS
+                    st.write("---")
+                    act_c1, act_c2, act_c3 = st.columns([1, 1, 2])
+    
+                    if act_c1.button("💾 Save Changes", use_container_width=True):
+                        idx = borrowers_df.index[borrowers_df["id"].astype(str) == str(selected_id)].tolist()[0]
+                        borrowers_df.at[idx, "name"] = upd_name
+                        borrowers_df.at[idx, "phone"] = upd_phone
+                        borrowers_df.at[idx, "email"] = upd_email
+                        borrowers_df.at[idx, "national_id"] = upd_nid
+                        borrowers_df.at[idx, "next_of_kin"] = upd_nok
+                        borrowers_df.at[idx, "address"] = upd_addr
+                        
+                        if save_data_saas("borrowers", borrowers_df):
+                            st.success("Profile Updated Successfully")
+                            st.cache_data.clear()
+                            st.rerun()
+    
+                    if act_c2.button("🗑️ Delete", use_container_width=True):
+                        updated_df = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
+                        if save_data_saas("borrowers", updated_df):
+                            st.warning("Profile Removed")
+                            st.cache_data.clear()
+                            st.session_state.pop("selected_borrower", None)
+                            st.rerun()
+                    
+                    if act_c3.button("❌ Close Profile", use_container_width=True):
                         st.session_state.pop("selected_borrower", None)
                         st.rerun()
-                
-                if act_c3.button("❌ Close Profile", use_container_width=True):
-                    st.session_state.pop("selected_borrower", None)
-                    st.rerun()
