@@ -783,11 +783,47 @@ def render_sidebar():
         # ----------------------------------------------------
         # 3. UPDATE THEME (FAST STATE ONLY)
         # ----------------------------------------------------
-        st.session_state["theme_color"] = active_company.get(
-            "brand_color",
-            "#1E3A8A"
+        # ==============================
+        # 🎨 GLOBAL BRAND COLOR
+        # ==============================
+        brand_color = st.session_state.get(
+            "theme_color",
+            "#2B3F87"
         )
-
+        
+        # ==============================
+        # 🎨 SIDEBAR BRANDING ENGINE
+        # ==============================
+        st.markdown(f"""
+        <style>
+        
+        /* SIDEBAR */
+        section[data-testid="stSidebar"] {{
+            background: {brand_color} !important;
+        }}
+        
+        /* SIDEBAR TEXT */
+        section[data-testid="stSidebar"] * {{
+            color: white !important;
+        }}
+        
+        /* SIDEBAR BUTTONS */
+        section[data-testid="stSidebar"] .stButton > button {{
+            background: rgba(255,255,255,0.12) !important;
+            border: none !important;
+            color: white !important;
+            border-radius: 10px !important;
+        }}
+        
+        /* ACTIVE PAGE */
+        section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {{
+            background: rgba(255,255,255,0.08);
+            border-radius: 10px;
+            padding: 6px;
+        }}
+        
+        </style>
+        """, unsafe_allow_html=True)
         # ----------------------------------------------------
         # 4. LOGO + BRANDING
         # ----------------------------------------------------
