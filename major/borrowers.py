@@ -421,18 +421,12 @@ def show_borrowers():
                             st.session_state.pop("selected_borrower", None)
                             st.rerun()
                     
-                    if act_c3.button(
-                        "❌ Close Profile",
+                    with act_c3:
+                    st.button(
+                        "❌ Close Profile", 
                         use_container_width=True,
-                        key=f"close_profile_{selected_id}"
-                    ):
-                    
-                        # Remove all borrower profile state
-                        for k in [
-                            "selected_borrower",
-                            "borrower_profile_open"
-                        ]:
-                            if k in st.session_state:
-                                del st.session_state[k]
+                        key=f"close_profile_{selected_id}",
+                        on_click=handle_close_profile  # 👈 This fires instantly before anything else!
+                    )
                     
                         st.rerun()
