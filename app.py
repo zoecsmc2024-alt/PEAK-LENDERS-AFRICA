@@ -586,9 +586,9 @@ def forgot_password_page(supabase):
 
 
 # =========================================
-# 🔐 SECURE LOGIN PAGE
+# 🔐 SECURE LOGIN PAGE (INTEGRATED)
 # =========================================
-def login_page(supabase):
+def login_page(supabase_client):
     auth_styles()
 
     _, center, _ = st.columns([1, 1.3, 1])
@@ -609,7 +609,7 @@ def login_page(supabase):
         st.markdown("<h2 style='color:#1E3A8A; margin-top:0;'>Login</h2>", unsafe_allow_html=True)
 
         with st.form("login_form"):
-            company = st.text_input("Company")
+            company = st.text_input("Company Code / Name")
             email = st.text_input("Email")
             password = st.text_input("Password", type="password")
 
@@ -623,41 +623,52 @@ def login_page(supabase):
 
         with col1:
             if st.button("New Company", use_container_width=True):
-                admin_company_registration(supabase)
+                admin_company_registration(supabase_client)
 
         with col2:
             if st.button("Staff Signup", use_container_width=True):
-                view_staff_signup(supabase)
+                view_staff_signup(supabase_client)
 
         with col3:
             if st.button("Reset Password", use_container_width=True):
-                forgot_password_page(supabase)
+                forgot_password_page(supabase_client)
 
         st.markdown("</div>", unsafe_allow_html=True)
 
     # login execution logic pipeline
     if submit:
-        try:
-            res = supabase.auth.sign_in_with_password({
-                "email": email,
-                "password": password
+        if not all([company, email, password]):
+            st.error("Please fill out all login fields.")
+            return
+
+        # ⚡ Check Brute Force protection
+        if not check_rate_limit(email):
+            st.error(f"Too many failed attempts. Locked out for {LOCKOUT_MINUTES} minutes.")
+            return
+
+        with st.spinner("Authenticating secure session..."):
+            # 🔥 CRITICAL FIX: Direct submission to your robust multi-tenant auth layer
+            auth_result = authenticate(supabase_client, company, email, password)
+
+        if auth_result["success"]:
+            # Reset rate limit metrics on success
+            if "login_attempts" in st.session_state and email in st.session_state["login_attempts"]:
+                del st.session_state["login_attempts"][email]
+            
+            # Securely log operational audit events
+            safe_audit_log(supabase_client, {
+                "user_id": auth_result["user_id"],
+                "tenant_id": auth_result["tenant_id"],
+                "action": "LOGIN_SUCCESS",
+                "timestamp": datetime.now().isoformat()
             })
 
-            if not res.user:
-                st.error("Login failed")
-                return
-
-            st.session_state.update({
-                "user_id": res.user.id,
-                "logged_in": True,
-                "view": "main"
-            })
-
-            st.rerun()
-
-        except Exception as e:
-            st.error(e)
-
+            # 🔥 CRITICAL FIX: Establish global session states & update tenant verification tokens
+            create_session(auth_result, remember_me=False)
+        else:
+            # Register failures for lockouts
+            record_failed_attempt(email)
+            st.error(f"❌ Verification Failed: {auth_result['error']}")
 
 def run_auth_ui(supabase):
     if "view" not in st.session_state:
