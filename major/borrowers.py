@@ -158,7 +158,7 @@ def show_borrowers():
 
     with tab_view:
 
-        st.markdown("### 👥 Borrowers Registry")
+        st.markdown("### 👥 Borrowers")
     
         search = st.text_input("🔍 Search by name or phone...").lower()
     
