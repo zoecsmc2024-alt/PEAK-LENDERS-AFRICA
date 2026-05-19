@@ -139,7 +139,7 @@ def show_borrowers():
             addr = c1.text_input("Physical Address")
             nok = c2.text_input("Next of Kin (name & Contact)")
             
-            if st.form_submit_button("🚀 Save borrower Profile", use_container_width=True):
+            if st.form_submit_button("Save borrower", use_container_width=True):
                 if name and phone:
                     new_id = str(uuid.uuid4())
                     new_entry = pd.DataFrame([{
