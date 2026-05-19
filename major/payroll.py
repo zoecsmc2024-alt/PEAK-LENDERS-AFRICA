@@ -597,24 +597,31 @@ def show_payroll():
         selected_record_str = st.selectbox("Select a record to Edit or Delete", options=record_options)
 
         if selected_record_str:
-            # Extract the actual payroll_id from the selection string
-            sel_id = selected_record_str.split("| ID: ")[1].strip()
-            # Match back to the full ID in the dataframe
-            full_record = payroll_df[payroll_df['payroll_id'].str.contains(sel_id)].iloc[0]
-
-            col_edit, col_del = st.columns(2)
-
-            with col_edit:
-                if st.button("📝 Edit Selected Record", use_container_width=True, key=f"edit_btn_{sel_id}"):
-                    st.warning("To edit: Adjust details in the 'Process Payroll' tab with the same name and month to overwrite, or use the database editor.")
+            # Extract the actual 8-character chunk of the payroll_id
+            sel_id_short = selected_record_str.split("| ID: ")[1].strip()
             
-            with col_del:
-                if st.button("🗑️ Delete Record", use_container_width=True, key=f"del_btn_{sel_id}", type="primary"):
-                    # This will now find the function in your imported modules
-                    if delete_data_saas("payroll", {"payroll_id": full_record['payroll_id']}):
-                        get_cached_data.clear()
-                        st.success(f"Deleted payroll for {full_record['employee']}")
-                        st.rerun()
+            # Match back safely by checking which full ID starts with or contains our short selection string
+            matched_rows = payroll_df[payroll_df['payroll_id'].astype(str).str.contains(sel_id_short)]
+            
+            if not matched_rows.empty:
+                full_record = matched_rows.iloc[0]
+                actual_full_id = full_record['payroll_id']
+
+                col_edit, col_del = st.columns(2)
+
+                with col_edit:
+                    if st.button("📝 Edit Selected Record", use_container_width=True, key=f"edit_btn_{sel_id_short}"):
+                        st.warning("To edit: Adjust details in the 'Process Payroll' tab with the same name and month to overwrite, or use the database editor.")
+                
+                with col_del:
+                    if st.button("🗑️ Delete Record", use_container_width=True, key=f"del_btn_{sel_id_short}", type="primary"):
+                        # Use the precise, complete ID string instead of a shorthand variable
+                        if delete_data_saas("payroll", {"payroll_id": actual_full_id}):
+                            get_cached_data.clear()
+                            st.success(f"Deleted payroll for {full_record['employee']}")
+                            st.rerun()
+            else:
+                st.error("Could not trace the unique record ID in the database. Please clear cache and try again.")
 
         st.markdown("---")
         # -----------------------------
@@ -622,6 +629,7 @@ def show_payroll():
         # -----------------------------
         c1, c2 = st.columns(2)
         with c1:
+            # Ensure we're converting the clean, top-level dataframe to CSV
             csv = payroll_df.to_csv(index=False).encode("utf-8")
             st.download_button(
                 label="📄 Download CSV",
@@ -632,12 +640,16 @@ def show_payroll():
             )
 
         with c2:
-            excel_file = export_styled_excel(payroll_df)
-            st.download_button(
-                label="📥 Download Styled Excel",
-                data=excel_file,
-                file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="payroll_xlsx_dl"
-            )
+            try:
+                # Pass the unmodified original dataframe explicitly
+                excel_file = export_styled_excel(payroll_df)
+                st.download_button(
+                    label="📥 Download Styled Excel",
+                    data=excel_file,
+                    file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="payroll_xlsx_dl"
+                )
+            except Exception as e:
+                st.error(f"Excel export unavailable: {str(e)}")
