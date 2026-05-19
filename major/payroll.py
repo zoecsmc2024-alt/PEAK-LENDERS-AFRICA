@@ -8,10 +8,6 @@ from core.database import supabase
 import io
 from core.database import save_data_saas, get_cached_data
 import uuid
-import streamlit as st
-import pandas as pd
-import uuid
-from datetime import datetime
 from io import BytesIO
 
 def delete_data_saas(table_name, filters):
@@ -116,28 +112,28 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
     for i, r in df.iterrows():
         ws.append([
             i+1,
-            r["employee"],
-            r["tin"],
-            r["designation"],
-            r["mob_no"],
-            r["account_no"],
-            r["nssf_no"],
-            r["arrears"],
-            r["basic_salary"],
+            r.get("employee", "-"),
+            r.get("tin", "-"),
+            r.get("designation", "-"),
+            r.get("mob_no", "-"),
+            r.get("account_no", "-"),
+            r.get("nssf_no", "-"),
+            r.get("arrears", 0),
+            r.get("basic_salary", 0),
             0,
-            r["absent_deduction"],
-            r["lst"],
-            r["gross_salary"],
-            r["paye"],
-            r["paye"],
-            r["nssf_5"],
-            r["advance_drs"],
-            r["other_deductions"],
-            r["paye"] + r["nssf_5"] + r["advance_drs"] + r["other_deductions"],
-            r["net_pay"],
-            r["paye"],
-            r["nssf_10"],
-            r["nssf_15"]
+            r.get("absent_deduction", 0),
+            r.get("lst", 0),
+            r.get("gross_salary", 0),
+            r.get("paye", 0),
+            r.get("paye", 0),
+            r.get("nssf_5", 0),
+            r.get("advance_drs", 0),
+            r.get("other_deductions", 0),
+            float(r.get("paye", 0)) + float(r.get("nssf_5", 0)) + float(r.get("advance_drs", 0)) + float(r.get("other_deductions", 0)),
+            r.get("net_pay", 0),
+            r.get("paye", 0),
+            r.get("nssf_10", 0),
+            r.get("nssf_15", 0)
         ])
 
     # -----------------------------
@@ -200,26 +196,22 @@ def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other, 
     gross = (float(basic) + float(arrears)) - float(absent_deduct)
     
     # 2. Local Service Tax (LST) Logic
-    # Added optional tracking parameter toggle consistency check 
     lst = 100000 / 12 if (apply_lst and gross > 1000000) else 0
     
-    # 3. NSSF Logic (Calculated but NOT subtracted from tax base)
+    # 3. NSSF Logic
     n5 = gross * 0.05
     n10 = gross * 0.10
     n15 = n5 + n10
     
-    # 4. --- THE EXCEL MATCHING PAYE LOGIC ---
-    # Based on your sheet: Tax = 25,000 + (30% * (Gross - 410,000))
+    # 4. PAYE LOGIC
     paye = 0
     if gross > 410000:
         excess = gross - 410000
         paye = 25000 + (0.30 * excess)
     elif gross > 235000:
-        # Lower tier fallback
         paye = (gross - 235000) * 0.10
         
     # 5. Final Deductions & Net Pay
-    # Deductions = PAYE + LST + NSSF(5%) + Advance + Other
     total_deductions = paye + lst + n5 + float(advance) + float(other)
     net = gross - total_deductions
     
@@ -297,7 +289,6 @@ def show_payroll():
     # ==============================
     st.markdown("""
     <style>
-    /* MASTER BUTTON SELECTOR - Uniform look across the entire application workspace */
     div.stButton > button,
     div.stFormSubmitButton > button {
         background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%) !important;
@@ -321,7 +312,6 @@ def show_payroll():
         width: 100% !important;
     }
 
-    /* HOVER STATE (FLOAT EFFECT) */
     div.stButton > button:hover,
     div.stFormSubmitButton > button:hover {
         transform: translateY(-2px) !important;
@@ -329,14 +319,12 @@ def show_payroll():
         background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
     }
     
-    /* ACTIVE/CLICK STATE */
     div.stButton > button:active,
     div.stFormSubmitButton > button:active {
         transform: translateY(1px) !important;
         box-shadow: 0 2px 8px rgba(30, 58, 138, 0.15) !important;
     }
 
-    /* Specific icon adjustments */
     .save-icon { font-size: 1.1em; color: #a3e635; margin-right: 2px; }
     .cancel-icon { font-size: 1.1em; color: #f87171; margin-right: 2px; }
     .download-icon { font-size: 1.1em; color: #60a5fa; margin-right: 2px; }
@@ -393,7 +381,6 @@ def show_payroll():
     
             st.subheader("💰 Earnings & Deductions")
     
-            # Added the LST toggle as requested to make it optional
             f_apply_lst = st.checkbox("Deduct Local Service Tax (LST)?", value=True)
     
             c6, c7, c8 = st.columns(3)
@@ -405,7 +392,6 @@ def show_payroll():
             f_adv = c9.number_input("Advance", min_value=0.0)
             f_other = c10.number_input("Other Deductions", min_value=0.0)
     
-            # Form submission buttons accept string labels and are styled globally by the CSS wrapper
             if st.form_submit_button("💳 Save Payroll", use_container_width=True):
     
                 if not employee_name or f_basic <= 0:
@@ -423,7 +409,6 @@ def show_payroll():
                         st.warning("Payroll already exists for this month")
                         return
     
-                # Routed accurately through your actual custom sync execution mapping block
                 calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other, apply_lst=f_apply_lst)
     
                 new_row = pd.DataFrame([{
@@ -469,7 +454,7 @@ def show_payroll():
                 try: return f"{int(float(x)):,}" 
                 except: return "0"
 
-            # --- CALCULATE PAYROLL TOTALS FROM CORRECT LOWERCASE COLUMNS ---
+            # --- CALCULATE PAYROLL TOTALS ---
             t_arrears = payroll_df['arrears'].sum() if 'arrears' in payroll_df.columns else 0
             t_basic = payroll_df['basic_salary'].sum() if 'basic_salary' in payroll_df.columns else 0
             t_gross = payroll_df['gross_salary'].sum() if 'gross_salary' in payroll_df.columns else 0
@@ -481,7 +466,6 @@ def show_payroll():
 
             rows_html = ""
             for i, r in payroll_df.iterrows():
-                # Safely pull the lowercase values from your database payload schema
                 emp_val = r.get('employee', '-')
                 des_val = r.get('designation', '-')
                 arr_val = r.get('arrears', 0)
@@ -548,36 +532,6 @@ def show_payroll():
                     </thead>
                     <tbody>{rows_html}</tbody>
                 </table>
-            </body>
-            </html>
-            """
-            
-            # Render your HTML Table in Streamlit so it displays clearly
-            st.markdown(printable_html, unsafe_allow_html=True)
-            printable_html = f"""
-            <html>
-            <head>
-                <style>
-                    body {{ font-family: sans-serif; padding: 20px; }}
-                    table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
-                    th {{ background: #2B3F87; color: white; padding: 10px; border: 1px solid #ddd; }}
-                    @media print {{ @page {{ size: landscape; margin: 1cm; }} }}
-                </style>
-            </head>
-            <body>
-                <div style="text-align:center; border-bottom:3px solid #2B3F87; margin-bottom:20px;">
-                    <h1 style="color:#2B3F87;">ZOE CONSULTS SMC LTD</h1>
-                    <p><b>PAYROLL REPORT - {datetime.now().strftime('%B %Y')}</b></p>
-                </div>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>S/N</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
-                            <th>P.A.Y.E</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th><th>NSSF(15%)</th>
-                        </tr>
-                    </thead>
-                    <tbody>{rows_html}</tbody>
-                </table>
                 <div style="margin-top:50px; display:flex; justify-content:space-around;">
                     <p>___________________<br>Prepared By</p>
                     <p>___________________<br>Approved By</p>
@@ -585,6 +539,8 @@ def show_payroll():
             </body>
             </html>
             """
+            
+            st.markdown(printable_html, unsafe_allow_html=True)
 
         # -----------------------------
         # 🛠️ EDIT / DELETE SECTION
@@ -592,15 +548,12 @@ def show_payroll():
         st.markdown("---")
         st.subheader("🛠️ Manage Records")
         
-        # Select record by Employee and date for clarity
-        record_options = payroll_df.apply(lambda x: f"{x['employee']} ({x['month']}) | ID: {x['payroll_id'][:8]}", axis=1).tolist()
+        # Select record safely
+        record_options = payroll_df.apply(lambda x: f"{x['employee']} ({x['month']}) | ID: {x['payroll_id'][:8]}", axis=1).tolist() if not payroll_df.empty else []
         selected_record_str = st.selectbox("Select a record to Edit or Delete", options=record_options)
 
         if selected_record_str:
-            # Extract the actual 8-character chunk of the payroll_id
             sel_id_short = selected_record_str.split("| ID: ")[1].strip()
-            
-            # Match back safely by checking which full ID starts with or contains our short selection string
             matched_rows = payroll_df[payroll_df['payroll_id'].astype(str).str.contains(sel_id_short)]
             
             if not matched_rows.empty:
@@ -615,13 +568,12 @@ def show_payroll():
                 
                 with col_del:
                     if st.button("🗑️ Delete Record", use_container_width=True, key=f"del_btn_{sel_id_short}", type="primary"):
-                        # Use the precise, complete ID string instead of a shorthand variable
                         if delete_data_saas("payroll", {"payroll_id": actual_full_id}):
                             get_cached_data.clear()
                             st.success(f"Deleted payroll for {full_record['employee']}")
                             st.rerun()
             else:
-                st.error("Could not trace the unique record ID in the database. Please clear cache and try again.")
+                st.error("Could not trace the unique record ID in the database.")
 
         st.markdown("---")
         # -----------------------------
@@ -629,8 +581,7 @@ def show_payroll():
         # -----------------------------
         c1, c2 = st.columns(2)
         with c1:
-            # Ensure we're converting the clean, top-level dataframe to CSV
-            csv = payroll_df.to_csv(index=False).encode("utf-8")
+            csv = payroll_df.to_csv(index=False).encode("utf-8") if not payroll_df.empty else b""
             st.download_button(
                 label="📄 Download CSV",
                 data=csv,
@@ -641,15 +592,17 @@ def show_payroll():
 
         with c2:
             try:
-                # Pass the unmodified original dataframe explicitly
-                excel_file = export_styled_excel(payroll_df)
-                st.download_button(
-                    label="📥 Download Styled Excel",
-                    data=excel_file,
-                    file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    use_container_width=True,
-                    key="payroll_xlsx_dl"
-                )
+                if not payroll_df.empty:
+                    excel_file = export_styled_excel(payroll_df)
+                    st.download_button(
+                        label="📥 Download Styled Excel",
+                        data=excel_file,
+                        file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        use_container_width=True,
+                        key="payroll_xlsx_dl"
+                    )
+                else:
+                    st.button("📥 Download Styled Excel (No Data Available)", disabled=True, use_container_width=True, key="payroll_xlsx_dl_disabled")
             except Exception as e:
                 st.error(f"Excel export unavailable: {str(e)}")
