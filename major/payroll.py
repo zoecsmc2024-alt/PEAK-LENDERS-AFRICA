@@ -195,12 +195,13 @@ def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
 # ---------------------------------
 # Payroll Calculation
 # ---------------------------------
-def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
+def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other, apply_lst=True):
     # 1. Gross Calculation
     gross = (float(basic) + float(arrears)) - float(absent_deduct)
     
     # 2. Local Service Tax (LST) Logic
-    lst = 100000 / 12 if gross > 1000000 else 0
+    # Added optional tracking parameter toggle consistency check 
+    lst = 100000 / 12 if (apply_lst and gross > 1000000) else 0
     
     # 3. NSSF Logic (Calculated but NOT subtracted from tax base)
     n5 = gross * 0.05
@@ -225,21 +226,6 @@ def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
     return {
         "gross": round(gross), "lst": round(lst), "n5": round(n5), 
         "n10": round(n10), "n15": round(n15), "paye": round(paye), "net": round(net)
-    }
-
-    # -----------------------------
-    # NET PAY
-    # -----------------------------
-    net = gross - total_deductions
-
-    return {
-        "gross": gross,
-        "lst": lst,
-        "n5": nssf_5,
-        "n10": nssf_10,
-        "n15": nssf_15,
-        "paye": paye,
-        "net": round(net)
     }
 
 # ---------------------------------
@@ -437,8 +423,8 @@ def show_payroll():
                         st.warning("Payroll already exists for this month")
                         return
     
-                # Updated to pass the f_apply_lst toggle to your compute_payroll function
-                calc = compute_payroll(f_basic, f_arrears, f_absent, f_adv, f_other, apply_lst=f_apply_lst)
+                # Routed accurately through your actual custom sync execution mapping block
+                calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other, apply_lst=f_apply_lst)
     
                 new_row = pd.DataFrame([{
                     "payroll_id": str(uuid.uuid4()),
@@ -474,7 +460,7 @@ def show_payroll():
     # HISTORY TAB
     # =================================
     with tab_logs:
-        if not df.empty:
+        if not payroll_df.empty:
             p_col1, p_col2 = st.columns([4, 1])
             p_col1.markdown(f"<h3 style='color: #4A90E2;'>{datetime.now().strftime('%B %Y')} Summary</h3>", unsafe_allow_html=True)
             
@@ -482,33 +468,45 @@ def show_payroll():
                 try: return f"{int(float(x)):,}" 
                 except: return "0"
 
-            # --- CALCULATE PAYROLL TOTALS ---
-            t_arrears = df['Arrears'].sum()
-            t_basic = df['Basic_Salary'].sum()
-            t_gross = df['Gross_Salary'].sum()
-            t_paye = df['PAYE'].sum()
-            t_n5 = df['NSSF_5'].sum()
-            t_net = df['Net_Pay'].sum()
-            t_n10 = df['NSSF_10'].sum()
-            t_n15 = df['NSSF_15'].sum()
+            # --- CALCULATE PAYROLL TOTALS FROM ACTUAL DATAFRAME ---
+            t_arrears = payroll_df['arrears'].sum() if 'arrears' in payroll_df.columns else payroll_df['Arrears'].sum()
+            t_basic = payroll_df['basic_salary'].sum() if 'basic_salary' in payroll_df.columns else payroll_df['Basic_Salary'].sum()
+            t_gross = payroll_df['gross_salary'].sum() if 'gross_salary' in payroll_df.columns else payroll_df['Gross_Salary'].sum()
+            t_paye = payroll_df['paye'].sum() if 'paye' in payroll_df.columns else payroll_df['PAYE'].sum()
+            t_n5 = payroll_df['nssf_5'].sum() if 'nssf_5' in payroll_df.columns else payroll_df['NSSF_5'].sum()
+            t_net = payroll_df['net_pay'].sum() if 'net_pay' in payroll_df.columns else payroll_df['Net_Pay'].sum()
+            t_n10 = payroll_df['nssf_10'].sum() if 'nssf_10' in payroll_df.columns else payroll_df['NSSF_10'].sum()
+            t_n15 = payroll_df['nssf_15'].sum() if 'nssf_15' in payroll_df.columns else payroll_df['NSSF_15'].sum()
 
             rows_html = ""
-            for i, r in df.iterrows():
+            for i, r in payroll_df.iterrows():
+                # Dynamically fetch lowercase/uppercase columns safely
+                emp_val = r.get('employee', r.get('Employee', ''))
+                des_val = r.get('designation', r.get('Designation', '-'))
+                arr_val = r.get('arrears', r.get('Arrears', 0))
+                bas_val = r.get('basic_salary', r.get('Basic_Salary', 0))
+                gro_val = r.get('gross_salary', r.get('Gross_Salary', 0))
+                pay_val = r.get('paye', r.get('PAYE', 0))
+                n5_val = r.get('nssf_5', r.get('NSSF_5', 0))
+                net_val = r.get('net_pay', r.get('Net_Pay', 0))
+                n10_val = r.get('nssf_10', r.get('NSSF_10', 0))
+                n15_val = r.get('nssf_15', r.get('NSSF_15', 0))
+
                 rows_html += f"""
                     <tr>
                         <td style='text-align:center; border:1px solid #ddd; padding: 10px;'>{i+1}</td>
                         <td style='border:1px solid #ddd; padding: 10px;'>
-                            <div style="font-weight:bold; font-size:12px;">{r['Employee']}</div>
-                            <div style="font-size:10px; color:#555;">{r.get('Designation', '-')}</div>
+                            <div style="font-weight:bold; font-size:12px;">{emp_val}</div>
+                            <div style="font-size:10px; color:#555;">{des_val}</div>
                         </td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Arrears'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Basic_Salary'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; font-weight:bold;'>{fm(r['Gross_Salary'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['PAYE'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['NSSF_5'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#E3F2FD; font-weight:bold;'>{fm(r['Net_Pay'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4;'>{fm(r['NSSF_10'])}</td>
-                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(r['NSSF_15'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(arr_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(bas_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; font-weight:bold;'>{fm(gro_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(pay_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(n5_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#E3F2FD; font-weight:bold;'>{fm(net_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4;'>{fm(n10_val)}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(n15_val)}</td>
                     </tr>"""
 
             # --- ADD THE TOTALS ROW TO THE HTML ---
