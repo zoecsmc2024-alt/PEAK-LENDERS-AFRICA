@@ -792,34 +792,27 @@ def render_sidebar():
         )
         
         # ==============================
-        # 🎨 SIDEBAR BRANDING ENGINE
+        # 🎨 SIDEBAR BACKGROUND ONLY
         # ==============================
         st.markdown(f"""
         <style>
         
-        /* SIDEBAR */
+        /* MAIN SIDEBAR BACKGROUND */
         section[data-testid="stSidebar"] {{
-            background: {brand_color} !important;
+            background-color: {brand_color} !important;
         }}
         
-        /* SIDEBAR TEXT */
+        /* REMOVE INNER BLOCK COLORS */
+        section[data-testid="stSidebar"] .stButton > button {{
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            color: white !important;
+        }}
+        
+        /* TEXT */
         section[data-testid="stSidebar"] * {{
             color: white !important;
-        }}
-        
-        /* SIDEBAR BUTTONS */
-        section[data-testid="stSidebar"] .stButton > button {{
-            background: rgba(255,255,255,0.12) !important;
-            border: none !important;
-            color: white !important;
-            border-radius: 10px !important;
-        }}
-        
-        /* ACTIVE PAGE */
-        section[data-testid="stSidebar"] .stRadio label[data-baseweb="radio"] {{
-            background: rgba(255,255,255,0.08);
-            border-radius: 10px;
-            padding: 6px;
         }}
         
         </style>
