@@ -265,6 +265,14 @@ def show_borrowers():
                         return "color: #F59E0B; font-weight:700;"
                     else:
                         return "color: #10B981; font-weight:700;"
+                
+                # --- Alternating Row Background Styling Function ---
+                def style_alternating_rows(row):
+                    # Check if the row position number is odd/even
+                    # #F0F4F8 is a beautiful premium-looking faint blue tint
+                    is_even = row.name % 2 == 0
+                    bg_color = "background-color: #F0F4F8;" if is_even else "background-color: #FFFFFF;"
+                    return [bg_color] * len(row)
     
                 # --- Display table ---
                 display_df = df_filtered[[
@@ -287,9 +295,17 @@ def show_borrowers():
     
                 # --- Make status uppercase ---
                 display_df["Status"] = display_df["Status"].str.upper()
+                
+                # Reset index cleanly so row.name inside the loop maps strictly to 0, 1, 2, 3...
+                display_df = display_df.reset_index(drop=True)
     
                 # --- Interactive table ---
-                styled_df = display_df.style.map(
+                # 1. First apply alternating faint blue/white backgrounds row-by-row
+                # 2. Then map the custom font colors over the "Risk Status" values
+                styled_df = display_df.style.apply(
+                    style_alternating_rows, 
+                    axis=1
+                ).map(
                     style_risk,
                     subset=["Risk Status"]
                 )
