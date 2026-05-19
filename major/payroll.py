@@ -521,44 +521,72 @@ def show_payroll():
             col_edit, col_del = st.columns(2)
 
             with col_edit:
+                # ---------------------------------
+                # EDIT BUTTON
+                # ---------------------------------
                 edit_lbl = "📝 Edit Selected Record"
-                if st.button(edit_lbl, use_container_width=True, key=f"edit_btn_{sel_id}"):
-                    st.warning("To edit: Adjust details in the 'Process Payroll' tab with the same name and month to overwrite, or use the database editor.")
-            
-            with col_del:
-                delete_lbl = "<span class='cancel-icon'>🗑️</span> Delete Record"
-                if st.button(delete_lbl, use_container_width=True, key=f"del_btn_{sel_id}"):
-                    # This will now find the function in your imported modules
-                    if delete_data_saas("payroll", {"payroll_id": full_record['payroll_id']}):
+                
+                if st.button(
+                    edit_lbl,
+                    use_container_width=True,
+                    key=f"edit_btn_{sel_id}",
+                    type="secondary"
+                ):
+                    st.warning(
+                        "To edit: Adjust details in the "
+                        "'Process Payroll' tab with the "
+                        "same name and month to overwrite."
+                    )
+                
+                # ---------------------------------
+                # DELETE BUTTON
+                # ---------------------------------
+                col_del = "🗑️ Delete Record"
+                
+                if st.button(
+                    delete_lbl,
+                    use_container_width=True,
+                    key=f"del_btn_{sel_id}",
+                    type="secondary"
+                ):
+                
+                    if delete_data_saas(
+                        "payroll",
+                        {"payroll_id": full_record['payroll_id']}
+                    ):
+                
                         get_cached_data.clear()
-                        st.success(f"Deleted payroll for {full_record['employee']}")
+                
+                        st.success(
+                            f"Deleted payroll for "
+                            f"{full_record['employee']}"
+                        )
+                
                         st.rerun()
-
-        st.markdown("---")
-        # -----------------------------
-        # 📄 DOWNLOADS
-        # -----------------------------
-        c1, c2 = st.columns(2)
-        with c1:
-            csv = payroll_df.to_csv(index=False).encode("utf-8")
-            csv_lbl = "📄 Download CSV"
-            st.download_button(
-                csv_lbl,
-                data=csv,
-                file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv",
-                use_container_width=True,
-                key="payroll_csv_dl"
-            )
-
-        with c2:
-            excel_file = export_styled_excel(payroll_df)
-            excel_lbl = "<span class='download-icon'>📥</span> Download Styled Excel"
-            st.download_button(
-                excel_lbl,
-                data=excel_file,
-                file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="payroll_xlsx_dl",
-                unsafe_allow_html=True
-            )
+                
+                # ---------------------------------
+                # CSV DOWNLOAD BUTTON
+                # ---------------------------------
+                csv_lbl = "📄 Download CSV"
+                
+                st.download_button(
+                    csv_lbl,
+                    data=csv,
+                    file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv",
+                    use_container_width=True,
+                    key="payroll_csv_dl"
+                )
+                
+                # ---------------------------------
+                # EXCEL DOWNLOAD BUTTON
+                # ---------------------------------
+                excel_lbl = "📥 Download Styled Excel"
+                
+                st.download_button(
+                    excel_lbl,
+                    data=excel_file,
+                    file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    use_container_width=True,
+                    key="payroll_xlsx_dl"
+                )
