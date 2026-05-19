@@ -11,7 +11,62 @@ from core.database import supabase, get_cached_data, save_data_saas, delete_data
 # 📁 EXPENSE MANAGEMENT MODULE
 # ==========================================
 def show_expenses():
-    st.markdown("<h2 style='color: #2B3F87;'>📁 Expense Management</h2>", unsafe_allow_html=True)
+    # ==============================
+    # 🎨 1. MASTER BUTTON STYLING (GLOBAL OVERRIDE)
+    # ==============================
+    st.markdown("""
+    <style>
+    /* MASTER BUTTON SELECTOR - Uniform look across the entire application workspace */
+    div.stButton > button,
+    div.stFormSubmitButton > button {
+        background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 12px !important;
+        padding: 0.7rem 1.5rem !important;
+        font-weight: 700 !important;
+        font-size: 15px !important;
+        height: 48px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 8px !important;
+        transition: all 0.25s ease-out !important;
+        box-shadow: 0 4px 14px rgba(30, 58, 138, 0.2) !important;
+        width: auto;
+    }
+    
+    div.stButton > button[width="100%"] {
+        width: 100% !important;
+    }
+
+    /* HOVER STATE (FLOAT EFFECT) */
+    div.stButton > button:hover,
+    div.stFormSubmitButton > button:hover {
+        transform: translateY(-2px) !important;
+        box-shadow: 0 8px 25px rgba(30, 58, 138, 0.35) !important;
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
+    }
+    
+    /* ACTIVE/CLICK STATE */
+    div.stButton > button:active,
+    div.stFormSubmitButton > button:active {
+        transform: translateY(1px) !important;
+        box-shadow: 0 2px 8px rgba(30, 58, 138, 0.15) !important;
+    }
+
+    /* Specific icon adjustments */
+    .save-icon { font-size: 1.1em; color: #a3e635; margin-right: 2px; }
+    .cancel-icon { font-size: 1.1em; color: #f87171; margin-right: 2px; }
+    .download-icon { font-size: 1.1em; color: #60a5fa; margin-right: 2px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+    # ==============================
+    # 🎨 BRANDING & THEME
+    # ==============================
+    brand_color = st.session_state.get("theme_color", "#1E3A8A")
+    st.markdown(f"<h2 style='color:{brand_color};'>📉 Operating Expenses</h2>", unsafe_allow_html=True)
 
     current_tenant = st.session_state.get('tenant_id')
     if not current_tenant:
