@@ -40,8 +40,10 @@ def get_cached_data(table_name):
     try:
         if supabase is None:
             return pd.DataFrame()
-        require_tenant()
-        tenant_id = get_tenant_id()
+        
+        # FIX: Call the correct helper function that checks and returns the tenant ID
+        tenant_id = get_current_tenant() 
+        
         res = supabase.table(table_name).select("*").eq("tenant_id", tenant_id).execute()
         if res.data:
             df = pd.DataFrame(res.data)
@@ -60,12 +62,15 @@ def save_data_saas(table_name, dataframe):
         if supabase is None:
             st.error("❌ Database not connected")
             return False
-        require_tenant()
+        
         if dataframe is None or dataframe.empty:
             st.error("No Data")
             return False
+            
         df_to_save = dataframe.copy()
-        df_to_save["tenant_id"] = get_tenant_id()
+        # FIX: Call the correct helper function here as well
+        df_to_save["tenant_id"] = get_current_tenant()
+        
         records = df_to_save.replace({np.nan: None}).to_dict("records")
         response = supabase.table(table_name).upsert(records).execute()
         if response.data:
