@@ -65,10 +65,21 @@ def show_borrowers():
     borrowers_df = safe_df(get_cached_data("borrowers"))
     loans_df = safe_df(get_cached_data("loans"))
     
-    # Force lowercase column names for consistency
+    # 💡 SAFE UPPER/LOWER COLUMN ALIGNMENT FOR PANDAS
     for df_obj in [borrowers_df, loans_df]:
         if not df_obj.empty:
+            # First strip extra spaces and convert to a uniform lowercase structure
             df_obj.columns = df_obj.columns.str.strip().str.lower()
+            
+            # If your database stores them as camelCase or uppercase, map them explicitly:
+            rename_dict = {}
+            for col in df_obj.columns:
+                if "borrower" in col and "id" in col:
+                    rename_dict[col] = "borrower_id"
+                elif col == "id":
+                    rename_dict[col] = "id"
+            if rename_dict:
+                df_obj.rename(columns=rename_dict, inplace=True)
 
     # Apply Tenant Filters
     if not loans_df.empty and "tenant_id" in loans_df.columns:
@@ -79,7 +90,6 @@ def show_borrowers():
     for col in required_cols:
         if col not in borrowers_df.columns:
             borrowers_df[col] = ""
-
     # ==============================
     # 🔗 THE name FIX: DATA LINKAGE
     # ==============================
