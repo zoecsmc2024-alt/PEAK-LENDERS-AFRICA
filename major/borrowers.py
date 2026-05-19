@@ -123,16 +123,64 @@ def show_borrowers():
         risk_df["risk_label"] = risk_df.apply(classify_risk, axis=1)
         risk_map = risk_df.set_index("borrower_id").to_dict("index")
 
+   
+    # ==========================================
+    # 📝 MODAL DIALOG DECLARATION (Top Level)
+    # ==========================================
+    @st.dialog("📝 Register New Borrower")
+    def add_borrower_popup():
+        c1, c2 = st.columns(2)
+    
+        name = c1.text_input("Full Name *")
+        phone = c2.text_input("Phone Number *")
+    
+        email = c1.text_input("Email Address")
+        nid = c2.text_input("National ID / NIN")
+    
+        addr = c1.text_input("Physical Address")
+        nok = c2.text_input("Next of Kin")
+    
+        st.write("")
+        save_btn, cancel_btn = st.columns(2)
+    
+        # ---------- SAVE ACTION ----------
+        with save_btn:
+            if st.button("💾 Save Borrower", use_container_width=True):
+                if name and phone:
+                    new_id = str(uuid.uuid4())
+                    new_entry = pd.DataFrame([{
+                        "id": new_id,
+                        "name": name,
+                        "phone": phone,
+                        "email": email,
+                        "national_id": nid,
+                        "address": addr,
+                        "next_of_kin": nok,
+                        "status": "Active",
+                        "tenant_id": str(st.session_state.get("tenant_id"))
+                    }])
+    
+                    if save_data_saas("borrowers", new_entry):
+                        st.success(f"✅ {name} registered successfully!")
+                        # Clear global data caches safely
+                        st.cache_data.clear()
+                        # Clean rerun automatically dismisses the modal view
+                        st.rerun()
+                else:
+                    st.error("⚠️ Full Name and Phone Number are required.")
+    
+        # ---------- CANCEL ACTION ----------
+        with cancel_btn:
+            if st.button("❌ Cancel", use_container_width=True):
+                st.rerun()
+    
+    
     # ==============================
-    # 📑 UI NAVIGATION
+    # 📑 MAIN UI NAVIGATION
     # ==============================
     tab_view, tab_add = st.tabs(["📋 View borrowers", "➕ Add borrower"])
-
-    # ==========================================
-    # ➕ ADD BORROWER (POPUP VERSION)
-    # ==========================================
     
-    # ---------- Styled Button ----------
+    # Global Button Style definitions
     st.markdown("""
     <style>
     .add-borrower-btn button {
@@ -154,95 +202,16 @@ def show_borrowers():
     """, unsafe_allow_html=True)
     
     with tab_add:
-    
         st.markdown("### 👥 Borrower Registration")
     
-        # ---------- Open Modal Button ----------
         with st.container():
             st.markdown('<div class="add-borrower-btn">', unsafe_allow_html=True)
-    
-            open_popup = st.button(
-                "➕ Register New Borrower",
-                use_container_width=True
-            )
-    
+            
+            # Triggering the registration modal directly
+            if st.button("➕ Register New Borrower", use_container_width=True):
+                add_borrower_popup()
+                
             st.markdown('</div>', unsafe_allow_html=True)
-    
-        # ---------- Popup Modal ----------
-        if open_popup:
-    
-            @st.dialog("📝 Register New Borrower")
-            def add_borrower_popup():
-    
-                c1, c2 = st.columns(2)
-    
-                name = c1.text_input("Full Name *")
-                phone = c2.text_input("Phone Number *")
-    
-                email = c1.text_input("Email Address")
-                nid = c2.text_input("National ID / NIN")
-    
-                addr = c1.text_input("Physical Address")
-                nok = c2.text_input("Next of Kin")
-    
-                st.write("")
-    
-                save_btn, cancel_btn = st.columns(2)
-    
-                # ---------- SAVE ----------
-                with save_btn:
-    
-                    if st.button(
-                        "💾 Save Borrower",
-                        use_container_width=True
-                    ):
-    
-                        if name and phone:
-    
-                            new_id = str(uuid.uuid4())
-    
-                            new_entry = pd.DataFrame([{
-                                "id": new_id,
-                                "name": name,
-                                "phone": phone,
-                                "email": email,
-                                "national_id": nid,
-                                "address": addr,
-                                "next_of_kin": nok,
-                                "status": "Active",
-                                "tenant_id": str(
-                                    st.session_state.get("tenant_id")
-                                )
-                            }])
-    
-                            if save_data_saas(
-                                "borrowers",
-                                new_entry
-                            ):
-    
-                                st.success(
-                                    f"✅ {name} registered successfully!"
-                                )
-    
-                                st.cache_data.clear()
-    
-                                st.rerun()
-    
-                        else:
-                            st.error(
-                                "⚠️ Full Name and Phone Number are required."
-                            )
-    
-                # ---------- CANCEL ----------
-                with cancel_btn:
-    
-                    if st.button(
-                        "❌ Cancel",
-                        use_container_width=True
-                    ):
-                        st.rerun()
-    
-            add_borrower_popup()
     with tab_view:
 
         st.markdown("### 👥 Borrowers")
