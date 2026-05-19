@@ -8,7 +8,80 @@ from core.database import supabase
 import io
 from core.database import save_data_saas, get_cached_data
 import uuid
+def auth_styles():
+    st.markdown("""
+    <style>
 
+    /* Background */
+    .stApp {
+        background: linear-gradient(135deg, #F0F4F8, #E2E8F0);
+    }
+
+    /* Auth Card */
+    .auth-card {
+        padding: 2.5rem;
+        border-radius: 20px;
+        background: #FFFFFF;
+        box-shadow: 0 15px 35px rgba(0,0,0,0.05);
+        border: 1px solid #E2E8F0;
+        margin-top: 2rem;
+    }
+
+    /* Top Header Bar */
+    .portal-badge-header {
+        background-color: #1A252F;
+        padding: 10px 14px;
+        border-radius: 8px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+        color: #fff;
+    }
+
+    .badge-left {
+        display: flex;
+        gap: 12px;
+        font-size: 12px;
+    }
+
+    /* Inputs */
+    .stTextInput input {
+        border-radius: 10px !important;
+        border: 1px solid #CBD5E1 !important;
+    }
+
+    /* Primary button */
+    .stFormSubmitButton button {
+        background: linear-gradient(90deg, #1E3A8A, #2563EB) !important;
+        color: white !important;
+        border-radius: 10px !important;
+        height: 44px;
+        width: 100%;
+        font-weight: 600;
+        border: none !important;
+    }
+
+    /* Clean Secondary Action Buttons Style */
+    div[data-testid="column"] .stButton > button {
+        background-color: #F8FAFC !important;
+        color: #475569 !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        font-size: 13px !important;
+        height: 38px !important;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+    
+    div[data-testid="column"] .stButton > button:hover {
+        background-color: #F1F5F9 !important;
+        border-color: #CBD5E1 !important;
+        color: #1E3A8A !important;
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
 # ==============================
 # 🚀 borrowers ENGINE (PRODUCTION)
 # ==============================
