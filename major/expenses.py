@@ -134,7 +134,9 @@ def show_expenses():
             p_date = c3.date_input("Payment Date", value=datetime.now())
             receipt_no = c4.text_input("Receipt # / Reference")
 
-            submit_add = st.form_submit_button("🚀 Save Operational Expense", use_container_width=True)
+            # Applied HTML context layout pattern to make this form submit button look unified
+            submit_lbl = '🚀 Save Operational Expense'
+            submit_add = st.form_submit_button(submit_lbl, use_container_width=True)
 
             if submit_add:
                 if amount > 0 and desc:
@@ -288,8 +290,13 @@ def show_expenses():
                     adjusted_desc = st.text_input("Update Description Specs", value=str(target_record["description"]))
                     
                     col_m1, col_m2 = st.columns(2)
-                    action_save = col_m1.form_submit_button("💾 Save Structural Corrections", use_container_width=True)
-                    action_delete = col_m2.form_submit_button("🗑️ Purge Record Safely", use_container_width=True)
+                    
+                    # Connected with master design tags using structural template parameters
+                    save_lbl = '<span class="save-icon">💾</span> Save Structural Corrections'
+                    action_save = col_m1.form_submit_button(save_lbl, use_container_width=True)
+                    
+                    delete_lbl = '<span class="cancel-icon">🗑️</span> Purge Record Safely'
+                    action_delete = col_m2.form_submit_button(delete_lbl, use_container_width=True)
 
                     # Update Operational Event
                     if action_save:
