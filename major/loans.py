@@ -709,13 +709,9 @@ def show_loans():
                         "tenant_id": tenant_id
                     }
 
-                    if save_data(
-                        "loans",
-                        pd.DataFrame([loan_data])
-                    ):
-                        st.success("✅ Loan issued.")
+                    if save_data_saas("loans", new_loan_df):
+                        st.success("🎉 Loan Agreement Issued Successfully!")
                         st.cache_data.clear()
-                        st.session_state.pop("loans", None)
                         st.rerun()
     # ==============================
     # TAB ACTIONS
