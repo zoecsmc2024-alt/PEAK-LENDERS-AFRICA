@@ -936,8 +936,8 @@ def show_loans():
                     # Prepare the updated data payload
                     updated_payload = {
                         "principal": e_princ,
-                        "date": e_date_val.strftime("%Y-%m-%d"),
-                        "interest_rate": e_interest,
+                        "start_date": e_date_val.strftime("%Y-%m-%d"),
+                        "interest": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
                     }
