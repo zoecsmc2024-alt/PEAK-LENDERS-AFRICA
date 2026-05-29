@@ -936,7 +936,7 @@ def show_loans():
 
                     supabase.table("loans").update({
                         "principal": e_princ,
-                        "date": e_date_val.strftime("%Y-%m-%d"),
+                        "start_date": e_date_val.strftime("%Y-%m-%d"),
                         "interest_rate": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
