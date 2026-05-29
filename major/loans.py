@@ -603,12 +603,6 @@ def show_loans():
                 })
             )
         
-            # Format datetime columns as string strings to avoid serialization layers issues
-            if "start_date" in filtered_loans.columns:
-                filtered_loans["start_date"] = filtered_loans["start_date"].dt.strftime("%Y-%m-%d").fillna("")
-            if "end_date" in filtered_loans.columns:
-                filtered_loans["end_date"] = filtered_loans["end_date"].dt.strftime("%Y-%m-%d").fillna("")
-
             st.dataframe(
                 styled_df,
                 column_order=show_cols,
@@ -804,11 +798,6 @@ def show_loans():
                         "status"
                     ] = "BCF"
     
-                # Strip dates to strings before calling core DB drivers to prevent json timestamp layer issues
-                for col_target in ["start_date", "end_date"]:
-                    if col_target in loans_df.columns:
-                        loans_df[col_target] = loans_df[col_target].dt.strftime("%Y-%m-%d").fillna("")
-
                 save_data_saas(bytes("loans", encoding="utf-8").decode("utf-8"), loans_df)
                 # ----------------------------------------------
     
@@ -849,6 +838,7 @@ def show_loans():
                     st.success("%s Loan rolled forward." % "✅")
                     st.cache_data.clear()
                     st.rerun()
+
 
     # ==============================
     # TAB MANAGE
