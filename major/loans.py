@@ -846,6 +846,7 @@ def show_loans():
 
         if not loans_df.empty:
 
+            # NOTE: Double check that row["id"] is explicitly the loan's primary key ID
             edit_map = {
                 f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}":
                 row["id"]
@@ -878,14 +879,13 @@ def show_loans():
                     )
                 )
 
-                # --- Added Fields (Fixed Missing 'date' Name Error) ---
+                # --- Added Fields ---
                 raw_date = loan_to_edit.get("date")
                 if isinstance(raw_date, str):
                     default_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
-                elif hasattr(raw_date, "strftime"): # Safely checks for any date/datetime object
+                elif hasattr(raw_date, "strftime"): 
                     default_date = raw_date
                 else:
-                    # Fallback if no date exists using standard datetime library
                     import datetime as dt_mod
                     default_date = dt_mod.date.today()
 
@@ -934,20 +934,25 @@ def show_loans():
                     "💾 Save Changes"
                 ):
 
-                    supabase.table("loans").update({
+                    # Changed payload to update database safely
+                    response = supabase.table("loans").update({
                         "principal": e_princ,
                         "start_date": e_date_val.strftime("%Y-%m-%d"),
                         "interest": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
                     }).eq(
-                        "id",
+                        "id", # Verify if your primary key column is named "id" or something like "loan_id"
                         target_id
                     ).execute()
 
-                    st.success("✅ Updated!")
-                    st.cache_data.clear()
-                    st.rerun()
+                    # Check if the database actually modified any rows
+                    if hasattr(response, 'data') and len(response.data) == 0:
+                        st.error(f"⚠️ Row found in UI but no matching ID ({target_id}) exists in the 'loans' table.")
+                    else:
+                        st.success("✅ Updated successfully in database!")
+                        st.cache_data.clear()
+                        st.rerun()
 
             if st.button(
                 "🗑️ Delete Loan Permanently",
