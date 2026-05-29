@@ -935,22 +935,32 @@ def show_loans():
                     
                     # Prepare the updated data payload
                     updated_payload = {
-                        "id": target_id,
                         "principal": e_princ,
-                        "start_date": e_date_val.strftime("%Y-%m-%d"),
-                        "interest": e_interest,
+                        "date": e_date_val.strftime("%Y-%m-%d"),
+                        "interest_rate": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
                     }
-
+                
                     # Use your application's dedicated multi-tenant adapter function to save
                     try:
-                        # Passing the payload through your tenant-safe database adapter
-                        save_data_saas("loans", updated_payload)
-                        
+                
+                        # ✅ FORCE UPDATE THE EXISTING ROW
+                        supabase.table("loans").update(
+                            updated_payload
+                        ).eq(
+                            "id",
+                            target_id
+                        ).execute()
+                
                         st.success("✅ Updated successfully in database!")
+                
+                        # Clear cache
                         st.cache_data.clear()
+                
+                        # Force fresh reload
                         st.rerun()
+                
                     except Exception as e:
                         st.error(f"Database Error: {str(e)}")
 
