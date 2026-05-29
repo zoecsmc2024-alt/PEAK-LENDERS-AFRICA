@@ -964,3 +964,17 @@ def show_loans():
                         st.success("📝 Changes committed successfully!")
                         st.cache_data.clear()
                         st.rerun()
+
+                if st.button(
+                    "🗑️ Delete Loan Permanently",
+                    use_container_width=True
+                ):
+    
+                    supabase.table("loans").delete().eq(
+                        "id",
+                        target_id
+                    ).execute()
+    
+                    st.warning("Loan Deleted.")
+                    st.cache_data.clear()
+                    st.rerun()
