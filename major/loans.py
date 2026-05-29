@@ -291,7 +291,7 @@ def show_loans():
             next_sn_val += 1
             loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
     
-    # ✅ SORT BEFORE ASSIGNING CYCLES (Ensures Parent is Cycle 1)
+        # ✅ SORT BEFORE ASSIGNING CYCLES (Ensures Parent is Cycle 1)
     loans_df = loans_df.sort_values(by=["sn", "start_date", "id"])
     
     loans_df["cycle_no"] = (
@@ -893,9 +893,10 @@ def show_loans():
                     value=default_date
                 )
 
-                e_interest = st.number_input(
+                # Fixed target matching interest key assignment
+                e_interest_rate = st.number_input(
                     "Interest Rate (%)",
-                    value=float(loan_to_edit.get("interest_rate", 0.0)),
+                    value=float(loan_to_edit.get("interest_rate", loan_to_edit.get("interest", 0.0))),
                     step=0.01
                 )
 
@@ -932,37 +933,31 @@ def show_loans():
                 if st.form_submit_button(
                     "💾 Save Changes"
                 ):
+                    # Construct a full updated row preserving crucial operational metrics
+                    updated_row = dict(loan_to_edit)
+                    updated_row["principal"] = float(e_princ)
+                    updated_row["start_date"] = str(e_date_val)
                     
-                    # Prepare the updated data payload
-                    updated_payload = {
-                        "principal": e_princ,
-                        "start_date": e_date_val.strftime("%Y-%m-%d"),
-                        "interest": e_interest,
-                        "loan_type": e_type,
-                        "status": e_stat
-                    }
-                
-                    # Use your application's dedicated multi-tenant adapter function to save
-                    try:
-                
-                        # ✅ FORCE UPDATE THE EXISTING ROW
-                        supabase.table("loans").update(
-                            updated_payload
-                        ).eq(
-                            "id",
-                            target_id
-                        ).execute()
-                
-                        st.success("✅ Updated successfully in database!")
-                
-                        # Clear cache
+                    # Target both keys to bypass mismatch logic
+                    updated_row["interest_rate"] = float(e_interest_rate)
+                    updated_row["interest"] = float(e_princ * (e_interest_rate / 100)) if e_interest_rate > 0 else float(loan_to_edit.get("interest", 0.0))
+                    
+                    updated_row["total_repayable"] = float(updated_row["principal"] + updated_row["interest"])
+                    updated_row["balance"] = float(updated_row["total_repayable"] - loan_to_edit.get("amount_paid", 0.0))
+                    updated_row["loan_type"] = str(e_type)
+                    updated_row["status"] = str(e_stat)
+                    updated_row["tenant_id"] = get_current_tenant()
+
+                    # Convert to required pandas DataFrame format for multi-tenant connector pipeline
+                    payload_df = pd.DataFrame([updated_row])
+                    
+                    # Direct multi-tenant adapter execution
+                    if save_data_saas_local("loans", payload_df):
+                        st.success("💾 Changes pushed and synchronized successfully!")
                         st.cache_data.clear()
-                
-                        # Force fresh reload
                         st.rerun()
-                
-                    except Exception as e:
-                        st.error(f"Database Error: {str(e)}")
+                    else:
+                        st.error("❌ Failed to push dataset changes. Verify database connectivity.")
 
             if st.button(
                 "🗑️ Delete Loan Permanently",
