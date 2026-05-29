@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import uuid
-import datetime
 from datetime import datetime, timedelta
 from core.database import save_data_saas, get_cached_data
 
@@ -879,9 +878,9 @@ def show_loans():
                     )
                 )
 
-                # --- Added Fields ---
+                # --- Added Fields (Fixed Scoping Error) ---
                 import datetime
-                # Handle potential nulls or string types from database
+                
                 raw_date = loan_to_edit.get("date")
                 if isinstance(raw_date, str):
                     default_date = datetime.datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
@@ -890,7 +889,7 @@ def show_loans():
                 else:
                     default_date = datetime.date.today()
 
-                e_date = st.date_input(
+                e_date_val = st.date_input(
                     "Date",
                     value=default_date
                 )
@@ -937,7 +936,7 @@ def show_loans():
 
                     supabase.table("loans").update({
                         "principal": e_princ,
-                        "date": e_date.strftime("%Y-%m-%d"),
+                        "date": e_date_val.strftime("%Y-%m-%d"), # Updated to use e_date_val
                         "interest_rate": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
