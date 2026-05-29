@@ -846,7 +846,6 @@ def show_loans():
 
         if not loans_df.empty:
 
-            # NOTE: Double check that row["id"] is explicitly the loan's primary key ID
             edit_map = {
                 f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}":
                 row["id"]
@@ -933,26 +932,27 @@ def show_loans():
                 if st.form_submit_button(
                     "💾 Save Changes"
                 ):
-
-                    # Changed payload to update database safely
-                    response = supabase.table("loans").update({
+                    
+                    # Prepare the updated data payload
+                    updated_payload = {
+                        "id": target_id,
                         "principal": e_princ,
                         "start_date": e_date_val.strftime("%Y-%m-%d"),
                         "interest": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
-                    }).eq(
-                        "id", # Verify if your primary key column is named "id" or something like "loan_id"
-                        target_id
-                    ).execute()
+                    }
 
-                    # Check if the database actually modified any rows
-                    if hasattr(response, 'data') and len(response.data) == 0:
-                        st.error(f"⚠️ Row found in UI but no matching ID ({target_id}) exists in the 'loans' table.")
-                    else:
+                    # Use your application's dedicated multi-tenant adapter function to save
+                    try:
+                        # Passing the payload through your tenant-safe database adapter
+                        save_data_saas("loans", updated_payload)
+                        
                         st.success("✅ Updated successfully in database!")
                         st.cache_data.clear()
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Database Error: {str(e)}")
 
             if st.button(
                 "🗑️ Delete Loan Permanently",
