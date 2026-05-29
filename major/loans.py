@@ -879,7 +879,7 @@ def show_loans():
                 )
 
                 # --- Added Fields ---
-                raw_date = loan_to_edit.get("date")
+                raw_date = loan_to_edit.get("start_date")
                 if isinstance(raw_date, str):
                     default_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
                 elif hasattr(raw_date, "strftime"): 
