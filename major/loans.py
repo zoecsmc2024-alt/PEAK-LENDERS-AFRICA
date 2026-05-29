@@ -491,93 +491,209 @@ def show_loans():
     # TAB MANAGE
     # ==============================
     with tab_manage:
+    
         if not loans_df.empty:
-            edit_map = {f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}": row["id"] for _, row in loans_df.iterrows()}
-            selected = st.selectbox("Select Loan to Edit", list(edit_map.keys()))
+    
+            edit_map = {
+                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}":
+                row["id"]
+                for _, row in loans_df.iterrows()
+            }
+    
+            selected = st.selectbox(
+                "Select Loan to Edit",
+                list(edit_map.keys())
+            )
+    
             target_id = edit_map[selected]
-            loan_match = loans_df[loans_df["id"] == target_id]
-
+    
+            loan_match = loans_df[
+                loans_df["id"] == target_id
+            ]
+    
             if loan_match.empty:
                 st.error("Loan not found.")
                 st.stop()
-
+    
             loan_to_edit = loan_match.iloc[0]
-
-            # 🛠️ FIXED: Unique key context wrapper for dynamic form instantiation
+    
+            # =====================================
+            # FORM
+            # =====================================
             with st.form(key=f"edit_form_container_{target_id}"):
-                e_princ = st.number_input("Principal", value=float(loan_to_edit["principal"]))
-
-                # Core date format resolution block
+    
+                e_princ = st.number_input(
+                    "Principal",
+                    value=float(loan_to_edit["principal"])
+                )
+    
                 raw_date = loan_to_edit.get("start_date")
+    
                 if isinstance(raw_date, str) and raw_date != "":
-                    default_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
-                elif hasattr(raw_date, "date"): 
+                    default_date = datetime.strptime(
+                        raw_date[:10],
+                        "%Y-%m-%d"
+                    ).date()
+    
+                elif hasattr(raw_date, "date"):
                     default_date = raw_date.date()
+    
                 elif hasattr(raw_date, "strftime"):
                     default_date = raw_date
+    
                 else:
                     default_date = dt_mod.date.today()
-
-                e_date_val = st.date_input("Date", value=default_date)
-
+    
+                e_date_val = st.date_input(
+                    "Date",
+                    value=default_date
+                )
+    
                 e_interest_rate = st.number_input(
-                    "Interest Rate (%)", 
-                    value=float(loan_to_edit.get("interest_rate", loan_to_edit.get("interest", 0.0))),
+                    "Interest Rate (%)",
+                    value=float(
+                        loan_to_edit.get(
+                            "interest_rate",
+                            loan_to_edit.get("interest", 0.0)
+                        )
+                    ),
                     step=0.01
                 )
-
-                e_type = st.text_input("Loan Type", value=str(loan_to_edit.get("loan_type", "")))
-
-                status_options = ["ACTIVE", "PENDING", "CLEARED", "BCF", "CLOSED"]
-                current_stat = str(loan_to_edit["status"]).upper().strip()
-                idx = status_options.index(current_stat) if current_stat in status_options else 0
-
-                e_stat = st.selectbox("Status", status_options, index=idx)
-
-                # 🛠️ FIXED: Changed from st.button() to st.form_submit_button()
-                save_changes = st.form_submit_button("💾 Save Changes")
-
+    
+                e_type = st.text_input(
+                    "Loan Type",
+                    value=str(
+                        loan_to_edit.get("loan_type", "")
+                    )
+                )
+    
+                status_options = [
+                    "ACTIVE",
+                    "PENDING",
+                    "CLEARED",
+                    "BCF",
+                    "CLOSED"
+                ]
+    
+                current_stat = str(
+                    loan_to_edit["status"]
+                ).upper().strip()
+    
+                idx = (
+                    status_options.index(current_stat)
+                    if current_stat in status_options
+                    else 0
+                )
+    
+                e_stat = st.selectbox(
+                    "Status",
+                    status_options,
+                    index=idx
+                )
+    
+                save_changes = st.form_submit_button(
+                    "💾 Save Changes"
+                )
+    
+            # =====================================
+            # SAVE LOGIC
+            # =====================================
             if save_changes:
-                # 🛠️ FIXED: Convert datetime/timestamp objects safely to string representations
+    
                 formatted_start_date = str(e_date_val)
-                
-                # Maintain original parent lineage contexts safely
+    
                 updated_row = {
                     "id": target_id,
                     "sn": loan_to_edit["sn"],
                     "loan_id_label": loan_to_edit["loan_id_label"],
-                    "parent_loan_id": loan_to_edit["parent_loan_id"] if pd.notna(loan_to_edit["parent_loan_id"]) and loan_to_edit["parent_loan_id"] != "" else None,
+                    "parent_loan_id": (
+                        loan_to_edit["parent_loan_id"]
+                        if pd.notna(
+                            loan_to_edit["parent_loan_id"]
+                        )
+                        and loan_to_edit["parent_loan_id"] != ""
+                        else None
+                    ),
                     "borrower_id": loan_to_edit["borrower_id"],
                     "borrower": loan_to_edit["borrower"],
                     "loan_type": e_type,
                     "principal": float(e_princ),
-                    "interest": float(e_princ * e_interest_rate / 100) if e_interest_rate > 0 else float(loan_to_edit["interest"]),
-                    "total_repayable": float(e_princ + (e_princ * e_interest_rate / 100)),
-                    "amount_paid": float(loan_to_edit["amount_paid"]),
-                    "balance": float((e_princ + (e_princ * e_interest_rate / 100)) - loan_to_edit["amount_paid"]),
+    
+                    "interest": float(
+                        e_princ * e_interest_rate / 100
+                    ),
+    
+                    "total_repayable": float(
+                        e_princ + (
+                            e_princ * e_interest_rate / 100
+                        )
+                    ),
+    
+                    "amount_paid": float(
+                        loan_to_edit["amount_paid"]
+                    ),
+    
+                    "balance": float(
+                        (
+                            e_princ + (
+                                e_princ * e_interest_rate / 100
+                            )
+                        ) - loan_to_edit["amount_paid"]
+                    ),
+    
                     "status": e_stat,
+    
                     "start_date": formatted_start_date,
-                    "end_date": str((datetime.combine(e_date_val, datetime.min.time()) + timedelta(days=30)).date()),
-                    "cycle_no": int(loan_to_edit["cycle_no"]),
+    
+                    "end_date": str(
+                        (
+                            datetime.combine(
+                                e_date_val,
+                                datetime.min.time()
+                            ) + timedelta(days=30)
+                        ).date()
+                    ),
+    
+                    "cycle_no": int(
+                        loan_to_edit["cycle_no"]
+                    ),
+    
                     "tenant_id": get_current_tenant()
                 }
-
-                # Replace inside dataframe array space and push back down to Postgres
-                update_df = pd.DataFrame([updated_row])
-                if save_data_saas("loans", update_df):
-                    st.success("🎉 Loan configurations updated cleanly!")
-                    st.cache_data.clear()
-                    st.rerun()
-                if st.button(
-                    "🗑️ Delete Loan Permanently",
-                    use_container_width=True
-                ):
     
-                    supabase.table("loans").delete().eq(
-                        "id",
-                        target_id
-                    ).execute()
+                # DIRECT DATABASE UPDATE
+                supabase.table("loans").update(
+                    updated_row
+                ).eq(
+                    "id",
+                    target_id
+                ).execute()
     
-                    st.warning("Loan Deleted.")
-                    st.cache_data.clear()
-                    st.rerun()
+                st.success(
+                    "🎉 Loan configurations updated cleanly!"
+                )
+    
+                st.cache_data.clear()
+    
+                st.rerun()
+    
+            # =====================================
+            # DELETE BUTTON
+            # OUTSIDE FORM
+            # =====================================
+            if st.button(
+                "🗑️ Delete Loan Permanently",
+                use_container_width=True,
+                key=f"delete_{target_id}"
+            ):
+    
+                supabase.table("loans").delete().eq(
+                    "id",
+                    target_id
+                ).execute()
+    
+                st.warning("Loan Deleted.")
+    
+                st.cache_data.clear()
+    
+                st.rerun()
