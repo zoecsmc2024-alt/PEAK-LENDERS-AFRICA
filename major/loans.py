@@ -878,16 +878,17 @@ def show_loans():
                     )
                 )
 
-                # --- Added Fields (Fixed Scoping Error) ---
-                import datetime
-                
+                # --- Added Fields (Using existing top-level datetime imports) ---
                 raw_date = loan_to_edit.get("date")
                 if isinstance(raw_date, str):
-                    default_date = datetime.datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
-                elif isinstance(raw_date, (datetime.date, datetime.datetime)):
+                    # Uses the 'datetime' class imported at line 4
+                    default_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
+                elif isinstance(raw_date, (date, datetime)): 
                     default_date = raw_date
                 else:
-                    default_date = datetime.date.today()
+                    # Fallback if no date exists
+                    from datetime import date as dt_date
+                    default_date = dt_date.today()
 
                 e_date_val = st.date_input(
                     "Date",
@@ -936,7 +937,7 @@ def show_loans():
 
                     supabase.table("loans").update({
                         "principal": e_princ,
-                        "date": e_date_val.strftime("%Y-%m-%d"), # Updated to use e_date_val
+                        "date": e_date_val.strftime("%Y-%m-%d"),
                         "interest_rate": e_interest,
                         "loan_type": e_type,
                         "status": e_stat
