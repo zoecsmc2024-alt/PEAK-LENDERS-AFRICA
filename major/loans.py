@@ -603,6 +603,12 @@ def show_loans():
                 })
             )
         
+            # Format datetime columns as string strings to avoid serialization layers issues
+            if "start_date" in filtered_loans.columns:
+                filtered_loans["start_date"] = filtered_loans["start_date"].dt.strftime("%Y-%m-%d").fillna("")
+            if "end_date" in filtered_loans.columns:
+                filtered_loans["end_date"] = filtered_loans["end_date"].dt.strftime("%Y-%m-%d").fillna("")
+
             st.dataframe(
                 styled_df,
                 column_order=show_cols,
@@ -798,6 +804,11 @@ def show_loans():
                         "status"
                     ] = "BCF"
     
+                # Strip dates to strings before calling core DB drivers to prevent json timestamp layer issues
+                for col_target in ["start_date", "end_date"]:
+                    if col_target in loans_df.columns:
+                        loans_df[col_target] = loans_df[col_target].dt.strftime("%Y-%m-%d").fillna("")
+
                 save_data_saas(bytes("loans", encoding="utf-8").decode("utf-8"), loans_df)
                 # ----------------------------------------------
     
@@ -880,7 +891,7 @@ def show_loans():
 
                 # --- Added Fields ---
                 raw_date = loan_to_edit.get("start_date")
-                if isinstance(raw_date, str):
+                if isinstance(raw_date, str) and raw_date != "":
                     default_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
                 elif hasattr(raw_date, "strftime"): 
                     default_date = raw_date
@@ -930,45 +941,26 @@ def show_loans():
                     index=idx
                 )
 
-                if st.form_submit_button(
-                    "💾 Save Changes"
-                ):
-                    # Construct a full updated row preserving crucial operational metrics
-                    updated_row = dict(loan_to_edit)
-                    updated_row["principal"] = float(e_princ)
-                    updated_row["start_date"] = str(e_date_val)
+                # Process state updating block context on valid interaction
+                save_changes = st.form_submit_button("💾 Save Changes")
+                
+                if save_changes:
+                    # Update parameters locally inside loans_df reference
+                    loans_df.loc[loans_df["id"] == target_id, "principal"] = float(e_princ)
+                    loans_df.loc[loans_df["id"] == target_id, "start_date"] = str(e_date_val)
+                    loans_df.loc[loans_df["id"] == target_id, "interest"] = float(e_interest_rate)
+                    loans_df.loc[loans_df["id"] == target_id, "loan_type"] = str(e_type)
+                    loans_df.loc[loans_df["id"] == target_id, "status"] = str(e_stat)
                     
-                    # Target both keys to bypass mismatch logic
-                    updated_row["interest_rate"] = float(e_interest_rate)
-                    updated_row["interest"] = float(e_princ * (e_interest_rate / 100)) if e_interest_rate > 0 else float(loan_to_edit.get("interest", 0.0))
-                    
-                    updated_row["total_repayable"] = float(updated_row["principal"] + updated_row["interest"])
-                    updated_row["balance"] = float(updated_row["total_repayable"] - loan_to_edit.get("amount_paid", 0.0))
-                    updated_row["loan_type"] = str(e_type)
-                    updated_row["status"] = str(e_stat)
-                    updated_row["tenant_id"] = get_current_tenant()
+                    # Convert pandas datetime objects back into text fields to ensure simple API layer transport
+                    for date_col in ["start_date", "end_date"]:
+                        if date_col in loans_df.columns:
+                            if hasattr(loans_df[date_col], "dt"):
+                                loans_df[date_col] = loans_df[date_col].dt.strftime("%Y-%m-%d").fillna("")
+                            else:
+                                loans_df[date_col] = loans_df[date_col].astype(str)
 
-                    # Convert to required pandas DataFrame format for multi-tenant connector pipeline
-                    payload_df = pd.DataFrame([updated_row])
-                    
-                    # Direct multi-tenant adapter execution
-                    if save_data_saas_local("loans", payload_df):
-                        st.success("💾 Changes pushed and synchronized successfully!")
+                    if save_data_saas_local("loans", loans_df):
+                        st.success("📝 Changes committed successfully!")
                         st.cache_data.clear()
                         st.rerun()
-                    else:
-                        st.error("❌ Failed to push dataset changes. Verify database connectivity.")
-
-            if st.button(
-                "🗑️ Delete Loan Permanently",
-                use_container_width=True
-            ):
-
-                supabase.table("loans").delete().eq(
-                    "id",
-                    target_id
-                ).execute()
-
-                st.warning("Loan Deleted.")
-                st.cache_data.clear()
-                st.rerun()
