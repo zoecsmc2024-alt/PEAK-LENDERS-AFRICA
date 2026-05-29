@@ -878,6 +878,34 @@ def show_loans():
                     )
                 )
 
+                # --- Added Fields ---
+                import datetime
+                # Handle potential nulls or string types from database
+                raw_date = loan_to_edit.get("date")
+                if isinstance(raw_date, str):
+                    default_date = datetime.datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
+                elif isinstance(raw_date, (datetime.date, datetime.datetime)):
+                    default_date = raw_date
+                else:
+                    default_date = datetime.date.today()
+
+                e_date = st.date_input(
+                    "Date",
+                    value=default_date
+                )
+
+                e_interest = st.number_input(
+                    "Interest Rate (%)",
+                    value=float(loan_to_edit.get("interest_rate", 0.0)),
+                    step=0.01
+                )
+
+                e_type = st.text_input(
+                    "Loan Type",
+                    value=str(loan_to_edit.get("loan_type", ""))
+                )
+                # --------------------
+
                 status_options = [
                     "ACTIVE",
                     "PENDING",
@@ -908,6 +936,9 @@ def show_loans():
 
                     supabase.table("loans").update({
                         "principal": e_princ,
+                        "date": e_date.strftime("%Y-%m-%d"),
+                        "interest_rate": e_interest,
+                        "loan_type": e_type,
                         "status": e_stat
                     }).eq(
                         "id",
