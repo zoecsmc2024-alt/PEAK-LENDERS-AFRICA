@@ -878,17 +878,16 @@ def show_loans():
                     )
                 )
 
-                # --- Added Fields (Using existing top-level datetime imports) ---
+                # --- Added Fields (Fixed Missing 'date' Name Error) ---
                 raw_date = loan_to_edit.get("date")
                 if isinstance(raw_date, str):
-                    # Uses the 'datetime' class imported at line 4
                     default_date = datetime.strptime(raw_date[:10], "%Y-%m-%d").date()
-                elif isinstance(raw_date, (date, datetime)): 
+                elif hasattr(raw_date, "strftime"): # Safely checks for any date/datetime object
                     default_date = raw_date
                 else:
-                    # Fallback if no date exists
-                    from datetime import date as dt_date
-                    default_date = dt_date.today()
+                    # Fallback if no date exists using standard datetime library
+                    import datetime as dt_mod
+                    default_date = dt_mod.date.today()
 
                 e_date_val = st.date_input(
                     "Date",
