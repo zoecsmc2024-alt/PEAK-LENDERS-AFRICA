@@ -687,6 +687,7 @@ def show_loans():
                         st.error("borrower ID missing.")
                         st.stop()
 
+                    # 📝 1. Your dictionary remains structured perfectly
                     loan_data = {
                         "id": str(uuid.uuid4()),
                         "sn": "",
@@ -709,6 +710,10 @@ def show_loans():
                         "tenant_id": tenant_id
                     }
 
+                    # 💡 2. CONVERT DICTIONARY TO PANDAS DATAFRAME HERE
+                    new_loan_df = pd.DataFrame([loan_data])
+
+                    # 🚀 3. NOW THIS WILL SAVE FLUSH AND RERUN SMOOTHLY!
                     if save_data_saas("loans", new_loan_df):
                         st.success("🎉 Loan Agreement Issued Successfully!")
                         st.cache_data.clear()
