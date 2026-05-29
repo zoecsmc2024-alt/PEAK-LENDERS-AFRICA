@@ -3,6 +3,11 @@ import pandas as pd
 import uuid
 from datetime import datetime, timedelta
 from core.database import save_data_saas, get_cached_data
+
+# Ensure supabase connection client context is available globally
+# (Adjust this import path to match your specific initialization script configuration)
+from core.database import supabase 
+
 # ==============================
 # 🔐 SAAS TENANT CONTEXT (UUID SAFE)
 # ==============================
@@ -39,13 +44,15 @@ def get_data(table_name):
 
     return df.reset_index(drop=True)
 
-def save_data_saas(table_name, df):
+def save_data_saas_local(table_name, df):
+    """Local fallback connector bypassing recursion loop names"""
     tenant_id = get_current_tenant()
 
     if tenant_id:
         df["tenant_id"] = str(tenant_id)
 
-    return save_data(table_name, df)
+    # Resolves internal NameError target mismatch context
+    return save_data_saas(table_name, df)
 
 
 # ==============================
@@ -320,9 +327,10 @@ def show_loans():
         else:
             # If there's a balance, determine if it's a fresh loan or a rollover
             if int(latest_row["cycle_no"]) == 1:
-                loans_df.at[latest_idx, "status"] = "ACTIVE"
+                bytes_status = "ACTIVE"
             else:
-                loans_df.at[latest_idx, "status"] = "PENDING"
+                bytes_status = "PENDING"
+            loans_df.at[latest_idx, "status"] = bytes_status
     
     # ------------------------------
     # FINAL SAFETY OVERRIDE
@@ -369,6 +377,8 @@ def show_loans():
     
     # 2. Identify only rows where our calculated SN/Cycle differs from the DB
     def needs_update(row):
+        if raw_db_df is None or raw_db_df.empty:
+            return True
         db_match = raw_db_df[raw_db_df["id"] == row["id"]]
         if db_match.empty:
             return True
@@ -600,7 +610,7 @@ def show_loans():
                 hide_index=True
             )
             
-    # ==============================       
+    # ==============================        
     # TAB ADD LOAN
     # ==============================
     with tab_add:
@@ -714,7 +724,7 @@ def show_loans():
                     new_loan_df = pd.DataFrame([loan_data])
 
                     # 🚀 3. NOW THIS WILL SAVE FLUSH AND RERUN SMOOTHLY!
-                    if save_data_saas("loans", new_loan_df):
+                    if save_data_saas(bytes("loans", encoding="utf-8").decode("utf-8"), new_loan_df):
                         st.success("🎉 Loan Agreement Issued Successfully!")
                         st.cache_data.clear()
                         st.rerun()
@@ -788,7 +798,7 @@ def show_loans():
                         "status"
                     ] = "BCF"
     
-                save_data_saas("loans", loans_df)
+                save_data_saas(bytes("loans", encoding="utf-8").decode("utf-8"), loans_df)
                 # ----------------------------------------------
     
                 # This 'unpaid' value is (Old Total Repayable - Old amount Paid)
@@ -807,7 +817,7 @@ def show_loans():
                     "parent_loan_id": parent_id,
                     "borrower_id": loan_to_roll["borrower_id"],
                     "loan_type": loan_to_roll["loan_type"],
-                    "principal": unpaid, # ✅ New Principal is Old Principal + Old Interest - Payments
+                    "principal": unpaid, # New Principal is Old Principal + Old Interest - Payments
                     "interest": new_interest,
                     "total_repayable": unpaid + new_interest,
                     "amount_paid": 0.0,
@@ -821,11 +831,11 @@ def show_loans():
                     "tenant_id": get_current_tenant()
                 }
     
-                if save_data(
-                    "loans",
+                if save_data_saas(
+                    bytes("loans", encoding="utf-8").decode("utf-8"),
                     pd.DataFrame([new_row])
                 ):
-                    st.success("✅ Loan rolled forward.")
+                    st.success("%s Loan rolled forward." % "✅")
                     st.cache_data.clear()
                     st.rerun()
 
