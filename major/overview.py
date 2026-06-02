@@ -147,22 +147,30 @@ def show_overview():
         expenses_df = normalize(load_cached("expenses", tenant_id))
 
         # =========================================================
-        # CRITICAL FIX: EXPLICIT TENANT ISOLATION FILTERING
+        # CRITICAL FIX: BULLETPROOF TENANT ISOLATION FILTERING
         # =========================================================
-        # This guarantees that calculations only run on data belonging to the selected client
+        # Force the session token to a clean, lowercase string comparison format
         str_tenant = str(tenant_id).strip().lower()
 
         if not loans_df.empty and "tenant_id" in loans_df.columns:
-            loans_df["tenant_id"] = loans_df["tenant_id"].astype(str).str.strip().str.lower()
-            loans_df = loans_df[loans_df["tenant_id"] == str_tenant]
+            # Drop any unexpected NaN rows in the tenant column first
+            loans_df = loans_df.dropna(subset=["tenant_id"])
+            # Clean up the dataframe column to guarantee a perfect match
+            loans_df["tenant_id_clean"] = loans_df["tenant_id"].astype(str).str.strip().str.lower()
+            loans_df = loans_df[loans_df["tenant_id_clean"] == str_tenant]
+            loans_df.drop(columns=["tenant_id_clean"], inplace=True)
 
         if not payments_df.empty and "tenant_id" in payments_df.columns:
-            payments_df["tenant_id"] = payments_df["tenant_id"].astype(str).str.strip().str.lower()
-            payments_df = payments_df[payments_df["tenant_id"] == str_tenant]
+            payments_df = payments_df.dropna(subset=["tenant_id"])
+            payments_df["tenant_id_clean"] = payments_df["tenant_id"].astype(str).str.strip().str.lower()
+            payments_df = payments_df[payments_df["tenant_id_clean"] == str_tenant]
+            payments_df.drop(columns=["tenant_id_clean"], inplace=True)
 
         if not expenses_df.empty and "tenant_id" in expenses_df.columns:
-            expenses_df["tenant_id"] = expenses_df["tenant_id"].astype(str).str.strip().str.lower()
-            expenses_df = expenses_df[expenses_df["tenant_id"] == str_tenant]
+            expenses_df = expenses_df.dropna(subset=["tenant_id"])
+            expenses_df["tenant_id_clean"] = expenses_df["tenant_id"].astype(str).str.strip().str.lower()
+            expenses_df = expenses_df[expenses_df["tenant_id_clean"] == str_tenant]
+            expenses_df.drop(columns=["tenant_id_clean"], inplace=True)
         # =========================================================
 
         # --- SMART STATUS LOGIC ---
