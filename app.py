@@ -1099,39 +1099,36 @@ if __name__ == "__main__":
         st.session_state['theme_color'] = "#1E3A8A"
         apply_master_theme()
         run_auth_ui(db.supabase)
-        # Note: run_auth_ui handles its own views. 
-        # We don't want the rest of the script to run if not logged in.
-    
+        st.stop()  # Hard stop to prevent frame leaks during login state
+        
     # 3. 🚀 MAIN APP (Only runs if logged_in is True)
     else:
         try:
             check_session_timeout()
 
             # ----------------------------------------------------
-            # 🔥 HARD SYNCHRONIZATION INTERCEPTOR
+            # 🔥 SAFETY INTERCEPTOR (No st.locals typo)
             # ----------------------------------------------------
-            # If the user changed the company dropdown, Streamlit updates the 
-            # widget state key BEFORE running __main__. Let's catch it here!
-            if "sidebar_business_selector" in st.session_state and "tenants" in st.locals or True:
+            # If a widget selection event changed the dropdown choice, 
+            # synchronize the active global session state BEFORE rendering pages.
+            if "sidebar_business_selector" in st.session_state:
                 try:
-                    # Fetch fresh tenant mapping to resolve names to IDs immediately
-                    from __main__ import get_tenants
                     tenants = get_tenants()
                     tenant_map = {t["name"]: t for t in tenants}
-                    
                     chosen_name = st.session_state["sidebar_business_selector"]
+                    
                     if chosen_name in tenant_map:
                         new_id = tenant_map[chosen_name].get("id")
-                        # If the dropdown state is ahead of our current active data context...
+                        # If our data context trails behind the selector, update it immediately
                         if st.session_state.get("tenant_id") != new_id:
                             st.session_state["tenant_id"] = new_id
                             st.session_state["theme_color"] = tenant_map[chosen_name].get("brand_color", "#1E3A8A")
                             st.session_state["company"] = chosen_name
-                            st.cache_data.clear()  # Clear data from the old company context
+                            st.cache_data.clear()
                 except Exception:
-                    pass # Keep going if mapping isn't initialized yet
+                    pass
 
-            # Now safe to render the sidebar safely
+            # Sidebar (Get the selected page)
             raw_page = render_sidebar()
             
             # Theme
