@@ -7,15 +7,6 @@ from datetime import datetime
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
-# ==========================================import streamlit as st
-import pandas as pd
-import uuid
-import plotly.express as px
-from datetime import datetime
-
-# Core DB utilities
-from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
-
 # ==========================================
 # 📁 EXPENSE MANAGEMENT MODULE
 # ==========================================
@@ -118,16 +109,20 @@ def show_expenses():
                 ]
     
             st.write("Records After Tenant Filter:", len(df))
+            
+            # Formats data cleanly upon successful pipeline execution
+            df["id"] = df["id"].astype(str)
+            df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
+            date_col = "payment_date" if "payment_date" in df.columns else "date"
+            df["financial_year"] = df[date_col].apply(get_fy_label)
+        else:
+            df = pd.DataFrame(columns=[
+                "id", "category", "amount", "date", "description",
+                "payment_date", "receipt_no", "tenant_id", "financial_year"
+            ])
     
     except Exception as e:
         st.error(f"Expense Load Error: {e}")
-        df["id"] = df["id"].astype(str)
-        df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
-        
-        # Resolve target parsing date parameters dynamically
-        date_col = "payment_date" if "payment_date" in df.columns else "date"
-        df["financial_year"] = df[date_col].apply(get_fy_label)
-    else:
         df = pd.DataFrame(columns=[
             "id", "category", "amount", "date", "description",
             "payment_date", "receipt_no", "tenant_id", "financial_year"
@@ -288,7 +283,6 @@ def show_expenses():
     # ==========================================
     # ⚙️ TAB 3: MAINTENANCE LAYER (NO HTML)
     # ==========================================
-    
     with tab_manage:
     
         st.markdown("### 🛠️ Record Maintenance Engine")
@@ -300,6 +294,44 @@ def show_expenses():
             )
     
         else:
+            
+            # Decorator initialized isolated from structural form context loop scope
+            @st.dialog("⚠️ Confirm Permanent Deletion")
+            def confirm_delete_dialog(tid):
+                st.warning(
+                    "This action will permanently remove "
+                    "the selected transaction record."
+                )
+                
+                c1, c2 = st.columns(2)
+                
+                # CANCEL
+                with c1:
+                    if st.button(
+                        "❌ Cancel",
+                        use_container_width=True
+                    ):
+                        st.session_state["confirm_delete_expense"] = False
+                        st.rerun()
+                        
+                # CONFIRM DELETE
+                with c2:
+                    if st.button(
+                        "🔥 Yes, Delete",
+                        use_container_width=True,
+                        type="primary"
+                    ):
+                        if delete_data_saas(
+                            "expenses",
+                            tid
+                        ):
+                            st.session_state["confirm_delete_expense"] = False
+                            st.warning(
+                                "🗑️ Entry purged permanently "
+                                "from cloud storage arrays."
+                            )
+                            st.cache_data.clear()
+                            st.rerun()
     
             # ----------------------------------
             # BUILD SELECT LABELS
@@ -425,55 +457,4 @@ def show_expenses():
                 # DELETE CONFIRMATION POPUP
                 # ==================================
                 if show_delete_modal or st.session_state.get("confirm_delete_expense", False):
-    
-                    @st.dialog("⚠️ Confirm Permanent Deletion")
-                    def confirm_delete_dialog():
-    
-                        st.warning(
-                            "This action will permanently remove "
-                            "the selected transaction record."
-                        )
-    
-                        c1, c2 = st.columns(2)
-    
-                        # CANCEL
-                        with c1:
-    
-                            if st.button(
-                                "❌ Cancel",
-                                use_container_width=True
-                            ):
-    
-                                st.session_state[
-                                    "confirm_delete_expense"
-                                ] = False
-    
-                                st.rerun()
-    
-                        # CONFIRM DELETE
-                        with c2:
-    
-                            if st.button(
-                                "🔥 Yes, Delete",
-                                use_container_width=True,
-                                type="primary"
-                            ):
-    
-                                if delete_data_saas(
-                                    "expenses",
-                                    target_id
-                                ):
-    
-                                    st.session_state[
-                                        "confirm_delete_expense"
-                                    ] = False
-    
-                                    st.warning(
-                                        "🗑️ Entry purged permanently "
-                                        "from cloud storage arrays."
-                                    )
-    
-                                    st.cache_data.clear()
-                                    st.rerun()
-    
-                    confirm_delete_dialog()
+                    confirm_delete_dialog(target_id)
