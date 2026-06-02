@@ -10,17 +10,6 @@ import io
 from core.database import save_data_saas, get_cached_data
 import uuid
 
-# ==============================# ==========================================
-# VIEW BORROWERS PAGE (STREAMLIT VERSION)
-# ==========================================
-import streamlit as st
-import pandas as pd
-from datetime import datetime
-from core.database import supabase
-import io
-from core.database import save_data_saas, get_cached_data
-import uuid
-
 # ==============================
 # 🚀 borrowers ENGINE (PRODUCTION)
 # ==============================
