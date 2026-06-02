@@ -396,5 +396,9 @@ def show_borrowers():
                         "❌ Close Profile", 
                         use_container_width=True,
                         key=f"close_profile_{selected_id}",
+                        on_click=handle_close_profile
+                )
+
+                
                         on_click=handle_close_profile
                     )
