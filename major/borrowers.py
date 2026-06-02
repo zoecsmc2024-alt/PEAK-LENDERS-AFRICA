@@ -8,7 +8,7 @@ from core.database import supabase
 import io
 from core.database import save_data_saas, get_cached_data
 import uuid
-st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
+
 # ==============================
 # 🚀 borrowers ENGINE (PRODUCTION)
 # ==============================
