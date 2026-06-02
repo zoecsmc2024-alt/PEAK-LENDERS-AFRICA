@@ -4,7 +4,7 @@ import plotly.express as px
 
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
-
+st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
 # ==========================================
 # 1. CORE PAGE FUNCTIONS (RECONCILED GATEWAY)
 # ==========================================
