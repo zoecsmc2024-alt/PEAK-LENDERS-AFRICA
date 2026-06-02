@@ -341,7 +341,8 @@ def show_payroll():
     st.markdown("<h2 style='color:#4A90E2;'>🧾 Payroll</h2>", unsafe_allow_html=True)
 
     # Load Data
-    payroll_df = get_cached_data("payroll")
+    # CRITICAL SYSTEM ALIGNMENT: Passed tenant variable into caching hook structure
+    payroll_df = get_cached_data("payroll", tenant)
 
     if payroll_df is not None and not payroll_df.empty:
         payroll_df.columns = payroll_df.columns.astype(str).str.strip().str.replace(" ", "_")
@@ -576,6 +577,27 @@ def show_payroll():
                 st.error("Could not trace the unique record ID in the database.")
 
         st.markdown("---")
+        
+        # ==========================================
+        # 📄 REVENUE REPORT PREVIEW ARCHITECTURE LAYOUT
+        # ==========================================
+        # ADDED: Interactive Live Document Statement Preview Matrix UI Block before downloading
+        if not payroll_df.empty:
+            with st.expander("🔍 Preview Styled Statement Grid Structure Before Exporting", expanded=False):
+                st.markdown(f"### {datetime.now().strftime('%B %Y').upper()} PAYROLL REPORT PREVIEW")
+                st.markdown("**Company Context:** ZOE CONSULTS SMC LTD")
+                st.markdown(f"**Calculated Generation Date Anchor:** {datetime.now().strftime('%d %b %Y')}")
+                st.divider()
+                
+                # Display clean configuration table preview mapping directly to what is about to be sent out
+                preview_display_df = format_payroll_display(payroll_df)
+                st.dataframe(
+                    preview_display_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+                st.write("")
+
         # -----------------------------
         # 📄 DOWNLOADS
         # -----------------------------
