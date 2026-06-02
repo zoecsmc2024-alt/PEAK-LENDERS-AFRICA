@@ -1107,14 +1107,37 @@ if __name__ == "__main__":
         try:
             check_session_timeout()
 
-            # Sidebar (Get the selected page)
+            # ----------------------------------------------------
+            # 🔥 HARD SYNCHRONIZATION INTERCEPTOR
+            # ----------------------------------------------------
+            # If the user changed the company dropdown, Streamlit updates the 
+            # widget state key BEFORE running __main__. Let's catch it here!
+            if "sidebar_business_selector" in st.session_state and "tenants" in st.locals or True:
+                try:
+                    # Fetch fresh tenant mapping to resolve names to IDs immediately
+                    from __main__ import get_tenants
+                    tenants = get_tenants()
+                    tenant_map = {t["name"]: t for t in tenants}
+                    
+                    chosen_name = st.session_state["sidebar_business_selector"]
+                    if chosen_name in tenant_map:
+                        new_id = tenant_map[chosen_name].get("id")
+                        # If the dropdown state is ahead of our current active data context...
+                        if st.session_state.get("tenant_id") != new_id:
+                            st.session_state["tenant_id"] = new_id
+                            st.session_state["theme_color"] = tenant_map[chosen_name].get("brand_color", "#1E3A8A")
+                            st.session_state["company"] = chosen_name
+                            st.cache_data.clear()  # Clear data from the old company context
+                except Exception:
+                    pass # Keep going if mapping isn't initialized yet
+
+            # Now safe to render the sidebar safely
             raw_page = render_sidebar()
             
             # Theme
             apply_master_theme()
 
-            # 🔥 Clean the page string to ensure matching works perfectly
-            # This handles any accidental spaces or casing issues
+            # Clean the page string to ensure matching works perfectly
             page = str(raw_page).strip()
 
             # 4. 🗺️ NAVIGATION ROUTER
@@ -1147,6 +1170,7 @@ if __name__ == "__main__":
                 
             elif page == "Reports":
                 show_reports()
+                
             elif page == "Staff":
                 show_staff()
                 
@@ -1154,10 +1178,7 @@ if __name__ == "__main__":
                 show_settings()
 
             else:
-                # If it falls through here, we show what exactly was received
                 st.info(f"Module '{page}' is coming online soon.")
-                # Debugging help:
-                # st.write(f"DEBUG: Sidebar returned '{page}'")
 
         except Exception as e:
             st.error(f"🚨 Application Error: {e}")
