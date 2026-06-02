@@ -750,7 +750,7 @@ def build_logo_url(logo_val):
 
 
 # ============================================================
-# 🚦 SIDEBAR (ENTERPRISE VERSION)
+# 🚦 SIDEBAR (ENTERPRISE VERSION - RECONCILED)
 # ============================================================
 def render_sidebar():
 
@@ -761,6 +761,22 @@ def render_sidebar():
     tenant_map = {t["name"]: t for t in tenants}
 
     selected_page = "Overview"
+
+    # ----------------------------------------------------
+    # FIX: DROPDOWN STATE CHANGED CALLBACK
+    # ----------------------------------------------------
+    def on_business_change():
+        # Get what the user just picked from the bound selectbox key
+        chosen_name = st.session_state.sidebar_business_selector
+        if chosen_name in tenant_map:
+            company = tenant_map[chosen_name]
+            
+            # Commit the updates back into your global session metrics
+            st.session_state["tenant_id"] = company.get("id")
+            st.session_state["theme_color"] = company.get("theme_color", "#2B3F87")
+            
+            # Clear old cross-tenant records from Streamlit's runtime cache
+            st.cache_data.clear()
 
     with st.sidebar:
 
@@ -774,7 +790,6 @@ def render_sidebar():
             st.stop()
 
         options = list(tenant_map.keys())
-
         current_tenant_id = st.session_state.get("tenant_id")
 
         default_index = 0
@@ -783,37 +798,36 @@ def render_sidebar():
                 default_index = i
                 break
 
+        # ADDED: bound key and on_change callback routine
         selected_name = st.selectbox(
             "🏢 Business Portal",
             options,
             index=default_index,
-            key="sidebar_business_selector"
+            key="sidebar_business_selector",
+            on_change=on_business_change
         )
 
         active_company = tenant_map[selected_name]
+        
+        # Fallback initialization for first execution run
+        if st.session_state.get("tenant_id") is None:
+            st.session_state["tenant_id"] = active_company.get("id")
+            st.session_state["theme_color"] = active_company.get("theme_color", "#2B3F87")
 
         # ----------------------------------------------------
         # 3. UPDATE THEME (FAST STATE ONLY)
         # ----------------------------------------------------
-        # ==============================
-        # 🎨 GLOBAL BRAND COLOR
-        # ==============================
         brand_color = st.session_state.get(
             "theme_color",
             "#2B3F87"
         )
         
-        # ==============================
-        # 🎨 SIDEBAR BACKGROUND ONLY
-        # ==============================
         st.markdown(f"""
         <style>
-        
         /* MAIN SIDEBAR BACKGROUND */
         section[data-testid="stSidebar"] {{
             background-color: {brand_color} !important;
         }}
-        
         /* REMOVE INNER BLOCK COLORS */
         section[data-testid="stSidebar"] .stButton > button {{
             background: transparent !important;
@@ -821,14 +835,13 @@ def render_sidebar():
             box-shadow: none !important;
             color: white !important;
         }}
-        
         /* TEXT */
         section[data-testid="stSidebar"] * {{
             color: white !important;
         }}
-        
         </style>
         """, unsafe_allow_html=True)
+
         # ----------------------------------------------------
         # 4. LOGO + BRANDING
         # ----------------------------------------------------
@@ -881,7 +894,6 @@ def render_sidebar():
         }
 
         menu_options = [f"{v} {k}" for k, v in menu.items()]
-
         current_page = st.session_state.get("current_page", "Overview")
 
         try:
@@ -906,20 +918,16 @@ def render_sidebar():
         # 6. LOGOUT (SAFE + CLEAN)
         # ----------------------------------------------------
         if st.session_state.get("logged_in"):
-
             if st.button("🚪 Logout", use_container_width=True):
-
                 # clear session safely
                 for k in list(st.session_state.keys()):
                     del st.session_state[k]
 
                 st.session_state["logged_in"] = False
                 st.session_state["view"] = "login"
-
                 st.rerun()
 
     return selected_page
-
 
 
 
