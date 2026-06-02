@@ -6,7 +6,17 @@ from datetime import datetime
 
 # Core DB utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
-st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
+st.write("CURRENT TENANT:", current_tenant)
+
+debug = supabase.table("expenses").select("*").execute()
+
+st.write("ROWS IN SUPABASE:", len(debug.data))
+
+if len(debug.data):
+    temp = pd.DataFrame(debug.data)
+
+    st.write("TENANTS IN TABLE:")
+    st.write(temp["tenant_id"].unique())
 # ==========================================
 # 📁 EXPENSE MANAGEMENT MODULE
 # ==========================================
