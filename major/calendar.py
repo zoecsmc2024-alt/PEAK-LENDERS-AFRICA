@@ -3,7 +3,7 @@ import pandas as pd
 from datetime import datetime
 from streamlit_calendar import calendar
 from core.database import get_cached_data
-st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
+
 # ==========================================
 # 📅 COLLECTIONS CALENDAR (INDUSTRY STANDARD)
 # ==========================================
