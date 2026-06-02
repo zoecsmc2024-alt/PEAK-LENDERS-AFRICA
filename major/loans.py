@@ -7,7 +7,7 @@ from core.database import save_data_saas, get_cached_data
 
 # Ensure supabase connection client context is available globally
 from core.database import supabase 
-st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
+
 # ==============================
 # 🔐 SAAS TENANT CONTEXT (UUID SAFE)
 # ==============================
