@@ -45,11 +45,15 @@ def get_cached_data(table_name, tenant_id):
         if supabase is None:
             return pd.DataFrame()
         
-        res = supabase.table(table_name).select("*").eq("tenant_id", tenant_id).execute()
+        # Clean tenant_id to match db expectations
+        target_tenant = str(tenant_id).strip()
+        
+        res = supabase.table(table_name).select("*").eq("tenant_id", target_tenant).execute()
         
         if res.data:
             df = pd.DataFrame(res.data)
-            df.columns = df.columns.str.strip().str.lower()
+            # Normalize column text schemas immediately
+            df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
             return df
         return pd.DataFrame()
     except Exception as e:
@@ -62,18 +66,21 @@ def get_cached_data(table_name, tenant_id):
 def get_data(table_name):
     """Public data retrieval function that enforces tenant partitioning."""
     tenant_id = get_current_tenant()
+    
+    # 1. Fetch partitions scoped dynamically by the runtime token
     df = get_cached_data(table_name, tenant_id)
 
     if df is None or df.empty:
         return pd.DataFrame()
 
-    # Uniform column naming conversion
-    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
-
-    # Bulletproof fallback: Double-verify tenant isolation locally
+    # 2. Case-Insensitive, Bulletproof Fallback Multi-Tenant Filter
     if "tenant_id" in df.columns:
-        df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
-        df = df[df["tenant_id"] == tenant_id].copy()
+        # Cast both the dataset array and the state filter token to clean, matching types
+        df["tenant_id"] = df["tenant_id"].astype(str).str.strip().str.lower()
+        clean_tenant_match = str(tenant_id).strip().lower()
+        
+        # Filter rows safely
+        df = df[df["tenant_id"] == clean_tenant_match].copy()
 
     return df.reset_index(drop=True)
 
