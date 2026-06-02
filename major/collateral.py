@@ -3,7 +3,7 @@ import pandas as pd
 import os
 from datetime import datetime
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
-
+st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
 # ==========================================
 # 🛡️ COLLATERAL & SECURITY MANAGEMENT MODULE
 # ==========================================
