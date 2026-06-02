@@ -23,8 +23,9 @@ def show_collateral():
     # ==========================================
     # 📦 CACHE RETRIEVAL & NORMALIZATION LAYER
     # ==========================================
-    collateral_raw = get_cached_data("collateral") 
-    loans_raw = get_cached_data("loans")
+    # FIX: Added required current_tenant argument to prevent 'missing 1 required positional argument: tenant_id'
+    collateral_raw = get_cached_data("collateral", current_tenant) 
+    loans_raw = get_cached_data("loans", current_tenant)
 
     collateral_df = pd.DataFrame(collateral_raw).copy() if collateral_raw is not None else pd.DataFrame()
     loans_df = pd.DataFrame(loans_raw).copy() if loans_raw is not None else pd.DataFrame()
