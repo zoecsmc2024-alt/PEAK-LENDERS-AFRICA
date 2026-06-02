@@ -27,7 +27,9 @@ def get_current_tenant():
 # ==============================
 def get_data(table_name):
     tenant_id = str(get_current_tenant()).strip()
-    df = get_cached_data(table_name)
+    
+    # FIX: Pass tenant_id into the cached function so Streamlit tracks it as a cache key!
+    df = get_cached_data(table_name, tenant_id)
 
     if df is None:
         return pd.DataFrame()
@@ -39,7 +41,8 @@ def get_data(table_name):
 
     if "tenant_id" in df.columns:
         df["tenant_id"] = df["tenant_id"].astype(str).str.strip()
-
+        
+        # This local filtering acts as an excellent secondary security safety net
         df = df[df["tenant_id"] == tenant_id].copy()
 
     return df.reset_index(drop=True)
