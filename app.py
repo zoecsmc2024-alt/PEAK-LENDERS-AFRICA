@@ -763,28 +763,28 @@ def render_sidebar():
     selected_page = "Overview"
 
     # ----------------------------------------------------
-    # FIX: DROPDOWN STATE CHANGED CALLBACK
+    # 🔥 FIX 1: FORCE IMMEDIATE SYSTEM REBOOT ON CHANGE
     # ----------------------------------------------------
     def on_business_change():
-        # Get what the user just picked from the bound selectbox key
+        # Read directly from the widget's internal state pointer
         chosen_name = st.session_state.sidebar_business_selector
         if chosen_name in tenant_map:
             company = tenant_map[chosen_name]
             
-            # Commit the updates back into your global session metrics
+            # Write immediately to the globally monitored session state slots
             st.session_state["tenant_id"] = company.get("id")
-            st.session_state["theme_color"] = company.get("theme_color", "#2B3F87")
+            st.session_state["theme_color"] = company.get("brand_color", "#1E3A8A")
+            st.session_state["company"] = chosen_name
             
-            # Clear old cross-tenant records from Streamlit's runtime cache
+            # Wiping data caches completely guarantees old company data clears out
             st.cache_data.clear()
+            
+            # CRITICAL: Force Streamlit to stop executing right here and reboot the page!
+            st.rerun()
 
     with st.sidebar:
-
         st.markdown("")
 
-        # ----------------------------------------------------
-        # 2. BUSINESS SELECTOR
-        # ----------------------------------------------------
         if not tenant_map:
             st.warning("No businesses found")
             st.stop()
@@ -792,13 +792,16 @@ def render_sidebar():
         options = list(tenant_map.keys())
         current_tenant_id = st.session_state.get("tenant_id")
 
-        # 1. SMART INDEX MATCHING
+        # ----------------------------------------------------
+        # FIX 2: RECONCILE DROP-DOWN INDEX TO VALUE
+        # ----------------------------------------------------
         default_index = 0
         for i, name in enumerate(options):
             if tenant_map[name]["id"] == current_tenant_id:
                 default_index = i
                 break
 
+        # Render dropdown bound tightly to the change reboot handler
         selected_name = st.selectbox(
             "🏢 Business Portal",
             options,
@@ -807,36 +810,30 @@ def render_sidebar():
             on_change=on_business_change
         )
 
-        active_company = tenant_map[selected_name]
-        
-        # 2. 🔥 THE HARD CRITICAL GUARD: Only fallback if the user is NOT logged in!
-        # This prevents the app from wiping out an active user's session state on rerun.
-        if st.session_state.get("tenant_id") is None and not st.session_state.get("logged_in"):
+        # ----------------------------------------------------
+        # FIX 3: BULLETPROOF FALLBACK STABILIZER
+        # ----------------------------------------------------
+        # If tenant_id isn't established yet, lock it in based on selection
+        if not st.session_state.get("tenant_id"):
+            active_company = tenant_map[selected_name]
             st.session_state["tenant_id"] = active_company.get("id")
-            st.session_state["theme_color"] = active_company.get("theme_color", "#2B3F87")
+            st.session_state["theme_color"] = active_company.get("brand_color", "#1E3A8A")
+            st.session_state["company"] = selected_name
 
-        # ----------------------------------------------------
-        # 3. UPDATE THEME (FAST STATE ONLY)
-        # ----------------------------------------------------
-        brand_color = st.session_state.get(
-            "theme_color",
-            "#2B3F87"
-        )
+        # Grab current finalized colors for immediate container stylesheet injections
+        brand_color = st.session_state.get("theme_color", "#1E3A8A")
         
         st.markdown(f"""
         <style>
-        /* MAIN SIDEBAR BACKGROUND */
         section[data-testid="stSidebar"] {{
             background-color: {brand_color} !important;
         }}
-        /* REMOVE INNER BLOCK COLORS */
         section[data-testid="stSidebar"] .stButton > button {{
             background: transparent !important;
             border: none !important;
             box-shadow: none !important;
             color: white !important;
         }}
-        /* TEXT */
         section[data-testid="stSidebar"] * {{
             color: white !important;
         }}
@@ -844,9 +841,13 @@ def render_sidebar():
         """, unsafe_allow_html=True)
 
         # ----------------------------------------------------
-        # 4. LOGO + BRANDING
+        # 4. LOGO + BRANDING RENDERING
         # ----------------------------------------------------
-        logo_url = build_logo_url(active_company.get("logo_url"))
+        # Look up current verified active tenant profile details safely
+        current_company_name = st.session_state.get("company", selected_name)
+        active_company_profile = tenant_map.get(current_company_name, tenant_map[options[0]])
+        
+        logo_url = build_logo_url(active_company_profile.get("logo_url"))
 
         if logo_url:
             st.markdown(
@@ -865,7 +866,7 @@ def render_sidebar():
         st.markdown(
             f"""
             <div style='text-align:center; font-weight:600; color:white;'>
-                {selected_name}
+                {current_company_name}
             </div>
             <div style='text-align:center; font-size:10px; color:rgba(255,255,255,0.6);'>
                 FINANCE CORE
@@ -877,7 +878,7 @@ def render_sidebar():
         st.divider()
 
         # ----------------------------------------------------
-        # 5. NAVIGATION MENU (FAST STATE ONLY)
+        # 5. NAVIGATION MENU CONTROL SYSTEM
         # ----------------------------------------------------
         menu = {
             "Overview": "📈",
@@ -916,11 +917,10 @@ def render_sidebar():
         st.divider()
 
         # ----------------------------------------------------
-        # 6. LOGOUT (SAFE + CLEAN)
+        # 6. AUTH LOGOUT DE-PROVISIONING
         # ----------------------------------------------------
         if st.session_state.get("logged_in"):
             if st.button("🚪 Logout", use_container_width=True):
-                # clear session safely
                 for k in list(st.session_state.keys()):
                     del st.session_state[k]
 
