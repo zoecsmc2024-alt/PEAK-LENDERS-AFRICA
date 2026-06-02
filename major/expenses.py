@@ -89,26 +89,38 @@ def show_expenses():
             return f"FY{dt.year}-{dt.year+1}" if dt.month >= 7 else f"FY{dt.year-1}-{dt.year}"
         except:
             return "Unknown FY"
-    st.write("Current Tenant:", current_tenant)
 
-    st.write("Raw Expenses Retrieved:")
-    st.write(raw_expenses)
     # ==========================================
     # 📦 CACHE RETRIEVAL & DATA NORMALIZATION
     # ==========================================
     try:
-        # FIXED: Added current_tenant argument to fix silent context drops
-        raw_expenses = get_cached_data("expenses", current_tenant)
-    except:
-        raw_expenses = None
-
-    if raw_expenses is not None and len(raw_expenses) > 0:
-        df = pd.DataFrame(raw_expenses).copy()
-        df.columns = df.columns.str.lower().str.strip().str.replace(" ", "_")
-
-        if "tenant_id" in df.columns:
-            df = df[df["tenant_id"].astype(str) == str(current_tenant)].copy()
-
+        raw_expenses = get_cached_data("expenses")
+    
+        df = pd.DataFrame(raw_expenses or [])
+    
+        if not df.empty:
+            df.columns = (
+                df.columns
+                .str.lower()
+                .str.strip()
+                .str.replace(" ", "_")
+            )
+    
+            st.write("Current Tenant:", current_tenant)
+            st.write("Loaded Records:", len(df))
+    
+            if "tenant_id" in df.columns:
+                st.write("Tenant IDs:", df["tenant_id"].unique())
+    
+                df = df[
+                    df["tenant_id"].astype(str)
+                    == str(current_tenant)
+                ]
+    
+            st.write("Records After Tenant Filter:", len(df))
+    
+    except Exception as e:
+        st.error(f"Expense Load Error: {e}")
         df["id"] = df["id"].astype(str)
         df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
         
