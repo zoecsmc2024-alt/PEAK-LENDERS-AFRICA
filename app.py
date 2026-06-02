@@ -792,13 +792,13 @@ def render_sidebar():
         options = list(tenant_map.keys())
         current_tenant_id = st.session_state.get("tenant_id")
 
+        # 1. SMART INDEX MATCHING
         default_index = 0
         for i, name in enumerate(options):
             if tenant_map[name]["id"] == current_tenant_id:
                 default_index = i
                 break
 
-        # ADDED: bound key and on_change callback routine
         selected_name = st.selectbox(
             "🏢 Business Portal",
             options,
@@ -809,8 +809,9 @@ def render_sidebar():
 
         active_company = tenant_map[selected_name]
         
-        # Fallback initialization for first execution run
-        if st.session_state.get("tenant_id") is None:
+        # 2. 🔥 THE HARD CRITICAL GUARD: Only fallback if the user is NOT logged in!
+        # This prevents the app from wiping out an active user's session state on rerun.
+        if st.session_state.get("tenant_id") is None and not st.session_state.get("logged_in"):
             st.session_state["tenant_id"] = active_company.get("id")
             st.session_state["theme_color"] = active_company.get("theme_color", "#2B3F87")
 
