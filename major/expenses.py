@@ -88,7 +88,11 @@ def show_expenses():
         # FIXED: Added current_tenant as required by your utility function signature
         raw_expenses = get_cached_data("expenses", current_tenant)
     
-        df = pd.DataFrame(raw_expenses or [])
+        # FIXED: Handles raw data cleanly whether it returns a DataFrame or a list/None
+        if isinstance(raw_expenses, pd.DataFrame):
+            df = raw_expenses.copy()
+        else:
+            df = pd.DataFrame(raw_expenses or [])
     
         if not df.empty:
             df.columns = (
@@ -127,7 +131,6 @@ def show_expenses():
             "id", "category", "amount", "date", "description",
             "payment_date", "receipt_no", "tenant_id", "financial_year"
         ])
-
     EXPENSE_CATS = [
         "Rent", "Insurance", "Utilities", "Salaries", "Licence Expenses", 
         "Marketing", "Office Expenses", "Operating Expenses", 
