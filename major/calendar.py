@@ -8,11 +8,15 @@ from core.database import get_cached_data
 # 📅 COLLECTIONS CALENDAR (INDUSTRY STANDARD)
 # ==========================================
 def show_calendar():
+    # FIX: Retrieve tenant context from session state to pass down to data hooks
+    current_tenant = st.session_state.get('tenant_id')
+    
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
     # 1. FETCH DATA (SAFE ADAPTERS)
-    loans_df = get_cached_data("loans")
-    borrowers_df = get_cached_data("borrowers")
+    # FIX: Added required tenant arguments to resolve positional argument execution crashes
+    loans_df = get_cached_data("loans", current_tenant)
+    borrowers_df = get_cached_data("borrowers", current_tenant)
 
     if loans_df is None or loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
@@ -51,6 +55,7 @@ def show_calendar():
                 "end": r['end_date'].strftime("%Y-%m-%d"),
                 "color": ev_color,
                 "allDay": True,
+                "**id**": str(r.get('id', '')) # Kept all hidden structural dictionary bounds intact
             })
 
     calendar_options = {
@@ -101,10 +106,9 @@ def show_calendar():
             </tr>""" for _, r in due_today_df.iterrows()])
         st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
-    # 5. 🔴 OVERDUE FOLLOW-UP (Now safely inside the function)
+    # 5. 🔴 OVERDUE FOLLOW-UP
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
     try:
-        # Re-using the active_loans we already filtered at the top of the function
         overdue_df = active_loans[active_loans["end_date"] < today].copy()
 
         if not overdue_df.empty:
@@ -126,4 +130,4 @@ def show_calendar():
         else:
             st.info("No overdue loans currently. Everything is on track! ✨")
     except Exception as e:
-        st.error(f"Error generating overdue table: {e}") 
+        st.error(f"Error generating overdue table: {e}")
