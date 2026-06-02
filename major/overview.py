@@ -6,8 +6,11 @@ import plotly.express as px
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
 
 # ==========================================
-# 1. CORE PAGE FUNCTIONS (BRANDING & WIDE LAYOUT)
+# 1. CORE PAGE FUNCTIONS (RECONCILED GATEWAY)
 # ==========================================
+
+# Import the correct public engine function along with your others
+from core.database import supabase, get_data, save_data_saas, delete_data_saas
 
 st.set_page_config(layout="wide")
 
@@ -23,17 +26,20 @@ def get_Active_color():
     return st.session_state.get("theme_color", "#1E3A8A")
 
 
-@st.cache_data(ttl=60, show_spinner=False)
 def load_cached(name, tenant_id):
+    """
+    Queries the public get_data layer. Since get_data dynamically handles 
+    tenant_id tracking and string cleaning, this keeps everything synchronized.
+    """
     try:
-        raw_data = get_cached_data(name, tenant_id)
+        # FIX: Point directly to your clean database adapter gateway
+        raw_data = get_data(name)
         if raw_data is None:
             return pd.DataFrame()
         return raw_data if isinstance(raw_data, pd.DataFrame) else pd.DataFrame(raw_data)
     except Exception as e:
         st.sidebar.error(f"⚠️ Cache Load Fail ({name}): {str(e)}")
         return pd.DataFrame()
-
 
 # =========================================================
 # HELPERS
