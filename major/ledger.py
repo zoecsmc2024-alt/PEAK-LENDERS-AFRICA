@@ -146,7 +146,7 @@ def show_ledger():
                 color: #2B3F87;
                 font-weight: 700;
                 letter-spacing: -0.5px;
-            }}
+                }}
             .snapshot-text {{
                 font-family: 'Inter', sans-serif;
                 font-weight: 600;
@@ -157,9 +157,11 @@ def show_ledger():
     """, unsafe_allow_html=True)
 
     # 📥 DATA PIPELINE FETCH LAYER
-    loans_raw = get_cached_data("loans")
-    payments_raw = get_cached_data("payments")
-    borrowers_raw = get_cached_data("borrowers")
+    # FIX: Added tenant variable allocation tracking to catch multi-tenant criteria explicitly
+    current_tenant = st.session_state.get('tenant_id')
+    loans_raw = get_cached_data("loans", current_tenant)
+    payments_raw = get_cached_data("payments", current_tenant)
+    borrowers_raw = get_cached_data("borrowers", current_tenant)
 
     if loans_raw is None or (isinstance(loans_raw, pd.DataFrame) and loans_raw.empty) or len(loans_raw) == 0:
         st.info("💡 Portfolio Clear: There are currently no active system loan accounts found.")
@@ -287,7 +289,7 @@ def show_ledger():
     st.divider()
 
     # ==========================================
-    # 📄 EXPORT PLATFORM PORTAL
+    # 📄 EXPORT PLATFORM PORTAL WITH PREVIEW LAYER
     # ==========================================
     st.markdown(f"""
         <div style="border: 1px solid {baby_blue}77; padding: 1.5rem; border-radius: 14px; background-color: {baby_blue}15;">
@@ -299,10 +301,32 @@ def show_ledger():
     """, unsafe_allow_html=True)
     st.markdown("<br>", unsafe_allow_html=True)
 
-    if st.button("✨ Compile Formal PDF Statement", use_container_width=True):
-        client_name = loan_info.get("borrower", "Unknown Account Holder")
-        client_loans = loans_df[loans_df["borrower"] == client_name]
+    client_name = loan_info.get("borrower", "Unknown Account Holder")
+    client_loans = loans_df[loans_df["borrower"] == client_name]
 
+    # ADDED: Interactive Live Document Statement Preview Matrix UI Block
+    with st.expander("🔍 Preview Statement Document Structure Before Compiling", expanded=False):
+        company_title_preview = st.session_state.get('company_name', 'ZOE CONSULTS').upper()
+        st.markdown(f"### {company_title_preview}")
+        st.markdown(f"**Client Statement Account Target:** {client_name}")
+        st.markdown(f"**Generated On:** {datetime.now().strftime('%d %b %Y')}")
+        st.divider()
+        
+        # Build out a mirrored, clean presentation breakdown of all metrics bound to this client's profile
+        preview_data = []
+        for _, c_loan in client_loans.iterrows():
+            st.markdown(f"📄 **Loan Reference Protocol Block:** {c_loan.get('loan_id_label', c_loan['id'])}")
+            c_p = float(c_loan.get("principal", 0.0))
+            c_i = float(c_loan.get("interest", 0.0))
+            c_paid = float(c_loan.get("amount_paid", 0.0))
+            c_bal = float(c_loan.get("balance", 0.0))
+            
+            st.text(f"   • Principal Balance: UGX {c_p:,.0f} | Interest Balance: UGX {c_i:,.0f}")
+            st.text(f"   • Total Disbursed Matrix: UGX {(c_p + c_i):,.0f} | Amount Paid: UGX {c_paid:,.0f}")
+            st.markdown(f"   • **Outstanding Allocation Net Due: UGX {c_bal:,.0f}**")
+            st.write("")
+
+    if st.button("✨ Compile Formal PDF Statement", use_container_width=True):
         with st.spinner("Compiling cryptographic ledger data rows..."):
             pdf_report = generate_pdf_statement(client_name, client_loans, payments_df)
 
