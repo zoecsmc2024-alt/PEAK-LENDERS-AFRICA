@@ -35,27 +35,30 @@ supabase = init_supabase()
 if supabase is None:
     st.warning("⚠️ Supabase not connected (some features may not work)")
 
-# -----------------------------
-# 🧠 Core Data Engine (Isolated Cache Keys)
-# -----------------------------
+# ==============================
+# ⚡ CORE DATA ENGINE
+# ==============================
 @st.cache_data(ttl=600, show_spinner=False)
-def get_cached_data(table_name, tenant_id):
-    """Fetches data scoped by tenant_id to partition the Streamlit cache."""
+def get_cached_data(table_name):
     try:
         if supabase is None:
             return pd.DataFrame()
-        
-        # Clean tenant_id to match db expectations
-        target_tenant = str(tenant_id).strip()
-        
-        res = supabase.table(table_name).select("*").eq("tenant_id", target_tenant).execute()
-        
+
+        require_tenant()
+        tenant_id = get_tenant_id()
+
+        res = supabase.table(table_name)\
+            .select("*")\
+            .eq("tenant_id", tenant_id)\
+            .execute()
+
         if res.data:
             df = pd.DataFrame(res.data)
-            # Normalize column text schemas immediately
-            df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
+            df.columns = df.columns.str.strip().str.lower()
             return df
+
         return pd.DataFrame()
+
     except Exception as e:
         st.error(f"Database Fetch Error [{table_name}]: {e}")
         return pd.DataFrame()
