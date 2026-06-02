@@ -720,15 +720,17 @@ import pandas as pd
 # ============================================================
 # 🧠 CACHE: TENANTS (CRITICAL SPEED FIX)
 # ============================================================
-@st.cache_data(ttl=600, show_spinner=False)
-def get_tenants():
-    try:
-        res = supabase.table("tenants")\
-            .select("id, name, brand_color, logo_url")\
-            .execute()
-        return res.data or []
-    except:
-        return []
+@st.cache_data(ttl=600)
+def get_cached_data(table_name, tenant_id):
+
+    res = (
+        supabase.table(table_name)
+        .select("*")
+        .eq("tenant_id", tenant_id)
+        .execute()
+    )
+
+    return pd.DataFrame(res.data or [])
 
 
 # ============================================================
