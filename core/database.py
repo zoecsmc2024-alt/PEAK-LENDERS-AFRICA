@@ -36,15 +36,14 @@ if supabase is None:
 # Core Data Engine
 # -----------------------------
 @st.cache_data(ttl=600, show_spinner=False)
-def get_cached_data(table_name):
+def get_cached_data(table_name, tenant_id): # 👈 ADD tenant_id HERE as an argument
     try:
         if supabase is None:
             return pd.DataFrame()
         
-        # FIX: Call the correct helper function that checks and returns the tenant ID
-        tenant_id = get_current_tenant() 
-        
+        # Streamlit now registers tenant_id as part of the cache signature
         res = supabase.table(table_name).select("*").eq("tenant_id", tenant_id).execute()
+        
         if res.data:
             df = pd.DataFrame(res.data)
             df.columns = df.columns.str.strip().str.lower()
@@ -53,7 +52,6 @@ def get_cached_data(table_name):
     except Exception as e:
         st.error(f"Database Fetch Error [{table_name}]: {e}")
         return pd.DataFrame()
-
 # -----------------------------
 # Data Persistence
 # -----------------------------
