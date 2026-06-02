@@ -50,17 +50,25 @@ def generate_receipt_no(supabase, tenant_id):
 def show_payments():
     st.markdown("## 💵 Payments Management")
 
+    # Get active session tenant token
+    tenant_id = st.session_state.get("tenant_id")
+    if not tenant_id:
+        st.error("🔐 Session expired. Please log in.")
+        return
+
     try:
-        loans_raw = get_cached_data("loans")
-        payments_raw = get_cached_data("payments")
-        borrowers_raw = get_cached_data("borrowers")
+        # FIXED: Added tenant_id positional parameter across all three target caches
+        loans_raw = get_cached_data("loans", tenant_id)
+        payments_raw = get_cached_data("payments", tenant_id)
+        borrowers_raw = get_cached_data("borrowers", tenant_id)
     except Exception as e:
         st.error(f"❌ Data load error: {e}")
         return
 
-    loans_df = pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame()
-    payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
-    borrowers_df = pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame()
+    # FIXED: Handles raw data cleanly whether it returns a DataFrame directly or a raw collection list
+    loans_df = loans_raw.copy() if isinstance(loans_raw, pd.DataFrame) else (pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame())
+    payments_df = payments_raw.copy() if isinstance(payments_raw, pd.DataFrame) else (pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame())
+    borrowers_df = borrowers_raw.copy() if isinstance(borrowers_raw, pd.DataFrame) else (pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame())
 
     if loans_df.empty:
         st.info("ℹ️ No loans available.")
@@ -179,8 +187,6 @@ def show_payments():
                 return
 
             try:
-                tenant_id = st.session_state.get("tenant_id")
-
                 # ✅ SINGLE SOURCE OF TRUTH
                 receipt_no = generate_receipt_no(supabase, tenant_id)
 
