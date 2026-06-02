@@ -11,9 +11,6 @@ from core.database import supabase, get_cached_data, save_data_saas, delete_data
 
 st.set_page_config(layout="wide")
 
-# ------------------------------
-# AUTO REFRESH EVERY 60 SECONDS
-# ------------------------------
 if "auto_refresh_tick" not in st.session_state:
     st.session_state.auto_refresh_tick = 0
 
@@ -22,27 +19,18 @@ def soft_refresh():
     st.session_state.auto_refresh_tick += 1
 
 
-# ------------------------------
-# THEME COLOR
-# ------------------------------
 def get_Active_color():
     return st.session_state.get("theme_color", "#1E3A8A")
 
 
-# ------------------------------
-# SAFE CACHE LAYER
-# ------------------------------
-# FIXED: Updated cache layer to accept tenant_id to match backend positional rules
 @st.cache_data(ttl=60, show_spinner=False)
 def load_cached(name, tenant_id):
     try:
         raw_data = get_cached_data(name, tenant_id)
         if raw_data is None:
             return pd.DataFrame()
-        # Ensure conversion to DataFrame if it comes back as a raw list or dictionary collection
         return raw_data if isinstance(raw_data, pd.DataFrame) else pd.DataFrame(raw_data)
     except Exception as e:
-        # Avoid silent failures during critical configuration debug tasks
         st.sidebar.error(f"⚠️ Cache Load Fail ({name}): {str(e)}")
         return pd.DataFrame()
 
@@ -124,25 +112,18 @@ def show_overview():
         transition: all 0.22s ease;
         overflow: hidden;
     }
-    
-    .metric-box * {
-        color: #F9FAFB !important;
-    }
-    
+    .metric-box * { color: #F9FAFB !important; }
     .blue-card { background: linear-gradient(135deg, #5B6B8C, #3E4C68) !important; }
     .green-card { background: linear-gradient(135deg, #5E7C6B, #3E5A4C) !important; }
     .red-card { background: linear-gradient(135deg, #8B5E5E, #5E3E3E) !important; }
     .orange-card { background: linear-gradient(135deg, #9A7B5F, #6B523E) !important; }
-    
-    div[data-testid="stMarkdownContainer"] {
-        background: transparent !important;
-    }
+    div[data-testid="stMarkdownContainer"] { background: transparent !important; }
     </style>
     """, unsafe_allow_html=True)
     
     brand_color = get_Active_color()
 
-    # Verify session token security state before initializing rendering pipelines
+    # 1. Verify Active Tenant Session Token
     tenant_id = st.session_state.get("tenant_id")
     if not tenant_id:
         st.error("🔐 Access Denied: No active session tenant token located. Please sign in.")
@@ -161,14 +142,30 @@ def show_overview():
         )
 
         # --- DATA INGESTION ---
-        # FIXED: Injected required multi-tenant positional arguments securely across all loaders
         loans_df = normalize(load_cached("loans", tenant_id))
         payments_df = normalize(load_cached("payments", tenant_id))
         expenses_df = normalize(load_cached("expenses", tenant_id))
 
-        # ==============================
-        # SMART STATUS LOGIC
-        # ==============================
+        # =========================================================
+        # CRITICAL FIX: EXPLICIT TENANT ISOLATION FILTERING
+        # =========================================================
+        # This guarantees that calculations only run on data belonging to the selected client
+        str_tenant = str(tenant_id).strip().lower()
+
+        if not loans_df.empty and "tenant_id" in loans_df.columns:
+            loans_df["tenant_id"] = loans_df["tenant_id"].astype(str).str.strip().str.lower()
+            loans_df = loans_df[loans_df["tenant_id"] == str_tenant]
+
+        if not payments_df.empty and "tenant_id" in payments_df.columns:
+            payments_df["tenant_id"] = payments_df["tenant_id"].astype(str).str.strip().str.lower()
+            payments_df = payments_df[payments_df["tenant_id"] == str_tenant]
+
+        if not expenses_df.empty and "tenant_id" in expenses_df.columns:
+            expenses_df["tenant_id"] = expenses_df["tenant_id"].astype(str).str.strip().str.lower()
+            expenses_df = expenses_df[expenses_df["tenant_id"] == str_tenant]
+        # =========================================================
+
+        # --- SMART STATUS LOGIC ---
         if not loans_df.empty and "sn" in loans_df.columns:
             loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
             bal_col = first_existing(loans_df, ["balance", "total_repayable"])
@@ -189,9 +186,7 @@ def show_overview():
                 loans_df.loc[((loans_df["tmp_bal"] <= 0) & (loans_df["status"] != "BCF")), "status"] = "CLEARED"
                 loans_df.drop(columns=["tmp_bal"], inplace=True)
 
-        # ==============================
-        # DATA ALIGNMENT & METRIC PREP
-        # ==============================
+        # --- DATA ALIGNMENT & METRIC PREP ---
         if not loans_df.empty:
             loans_df["principal_n"] = safe_numeric(loans_df, ["principal", "amount"])
             loans_df["interest_n"] = safe_numeric(loans_df, ["interest", "interest_amount"])
@@ -206,14 +201,12 @@ def show_overview():
         else:
             total_principal = 0.0
 
-        # Operational costs
         if not expenses_df.empty:
             expenses_df["amount"] = safe_numeric(expenses_df, ["amount"])
             total_expenses = float(expenses_df["amount"].sum())
         else:
             total_expenses = 0.0
 
-        # Overdue Calculation Engine
         overdue_count = 0
         if not loans_df.empty:
             today = pd.Timestamp.now().normalize()
@@ -231,7 +224,6 @@ def show_overview():
             )
             overdue_count = int(overdue_mask.sum())
 
-        # Proportional Realized Interest Engine
         def compute_interest_earned(l_df, p_df):
             if l_df.empty or p_df.empty or "id" not in l_df.columns:
                 return 0.0
@@ -385,7 +377,7 @@ def show_overview():
             except Exception as e:
                 st.info(f"Breakdown slice hidden: {e}")
 
-        # --- 5. ACTIVITY TIMELINES ---
+        # --- ACTIVITY TIMELINES ---
         st.write("---")
         t1, t2 = st.columns(2)
 
