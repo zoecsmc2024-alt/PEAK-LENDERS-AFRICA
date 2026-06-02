@@ -12,13 +12,13 @@ from core.database import supabase, get_cached_data, save_data_saas, delete_data
 # ==========================================
 def show_expenses():
     # ==============================
-    # 🎨 1. MASTER BUTTON STYLING (ISOLATED WORKSPACE SCOPE)
+    # 🎨 1. MASTER BUTTON STYLING (GLOBAL OVERRIDE)
     # ==============================
     st.markdown("""
     <style>
-    /* MASTER BUTTON SELECTOR - Scoped to avoid bleeding onto other application workspaces */
-    .expense-scope div.stButton > button,
-    .expense-scope div.stFormSubmitButton > button {
+    /* MASTER BUTTON SELECTOR - Uniform look across the entire application workspace */
+    div.stButton > button,
+    div.stFormSubmitButton > button {
         background: linear-gradient(135deg, #1d4ed8 0%, #1e3a8a 100%) !important;
         color: white !important;
         border: none !important;
@@ -36,21 +36,21 @@ def show_expenses():
         width: auto;
     }
     
-    .expense-scope div.stButton > button[width="100%"] {
+    div.stButton > button[width="100%"] {
         width: 100% !important;
     }
 
     /* HOVER STATE (FLOAT EFFECT) */
-    .expense-scope div.stButton > button:hover,
-    .expense-scope div.stFormSubmitButton > button:hover {
+    div.stButton > button:hover,
+    div.stFormSubmitButton > button:hover {
         transform: translateY(-2px) !important;
         box-shadow: 0 8px 25px rgba(30, 58, 138, 0.35) !important;
         background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%) !important;
     }
     
     /* ACTIVE/CLICK STATE */
-    .expense-scope div.stButton > button:active,
-    .expense-scope div.stFormSubmitButton > button:active {
+    div.stButton > button:active,
+    div.stFormSubmitButton > button:active {
         transform: translateY(1px) !important;
         box-shadow: 0 2px 8px rgba(30, 58, 138, 0.15) !important;
     }
@@ -62,9 +62,6 @@ def show_expenses():
     </style>
     """, unsafe_allow_html=True)
 
-    # Open UI isolation markup container wrapper
-    st.markdown('<div class="expense-scope">', unsafe_allow_html=True)
-
     # ==============================
     # 🎨 BRANDING & THEME
     # ==============================
@@ -74,7 +71,6 @@ def show_expenses():
     current_tenant = st.session_state.get('tenant_id')
     if not current_tenant:
         st.error("🔐 Session expired. Please log in.")
-        st.markdown('</div>', unsafe_allow_html=True)  # Close scope safely before exit execution path
         st.stop()
 
     # Dynamic July-to-June financial year logic handler
@@ -163,7 +159,6 @@ def show_expenses():
                         if save_data_saas("expenses", new_row_df):
                             st.success(f"✅ Transaction Secure: Expense tracked safely for {formatted_date}")
                             st.cache_data.clear()
-                            st.markdown('</div>', unsafe_allow_html=True)
                             st.rerun()
                     except Exception as e:
                         st.error(f"🚨 Mutation Pipeline Failure: {e}")
@@ -315,8 +310,8 @@ def show_expenses():
     
                 target_id = target_record["id"]
     
-                # Initialize modal execution variables outside block scope safely
-                execute_deletion_dialog = False
+                # Initialize state variables to prevent form dialogue intersection bugs
+                show_delete_modal = False
     
                 # ==================================
                 # EDIT FORM
@@ -364,7 +359,7 @@ def show_expenses():
     
                         if adjusted_amount > 0 and adjusted_desc.strip():
     
-                            # Preserves non-editable properties safely to prevent row data drop on UPSERT operations
+                            # Uses case-normalized keys from df to maintain historical metadata fields safely
                             mutation_payload = pd.DataFrame([{
                                 "id": str(target_id),
                                 "category": target_record.get("category"),
@@ -387,7 +382,6 @@ def show_expenses():
                                 )
     
                                 st.cache_data.clear()
-                                st.markdown('</div>', unsafe_allow_html=True)
                                 st.rerun()
     
                         else:
@@ -398,16 +392,16 @@ def show_expenses():
                             )
     
                     # ==================================
-                    # DELETE EVENT TRIGGER
+                    # DELETE EVENT
                     # ==================================
                     if action_delete:
-                        execute_deletion_dialog = True
+                        show_delete_modal = True
                         st.session_state["confirm_delete_expense"] = True
     
                 # ==================================
-                # DIALOG SCHEDULER BLOCK (OUTSIDE FORM STATE RERUN BUGS)
+                # DELETE CONFIRMATION POPUP (OUTSIDE FORM SCOPE)
                 # ==================================
-                if execute_deletion_dialog or st.session_state.get("confirm_delete_expense", False):
+                if show_delete_modal or st.session_state.get("confirm_delete_expense", False):
     
                     @st.dialog("⚠️ Confirm Permanent Deletion")
                     def confirm_delete_dialog():
@@ -460,6 +454,3 @@ def show_expenses():
                                     st.rerun()
     
                     confirm_delete_dialog()
-
-    # Safely close HTML style injection scope context block
-    st.markdown('</div>', unsafe_allow_html=True)
