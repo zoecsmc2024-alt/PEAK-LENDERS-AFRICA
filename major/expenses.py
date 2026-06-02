@@ -102,18 +102,12 @@ def show_expenses():
                 .str.replace(" ", "_")
             )
     
-            st.write("Current Tenant:", current_tenant)
-            st.write("Loaded Records:", len(df))
-    
+            # Kept the background processing logic intact, removed the noisy st.write UI elements
             if "tenant_id" in df.columns:
-                st.write("Tenant IDs:", df["tenant_id"].unique())
-    
                 df = df[
                     df["tenant_id"].astype(str)
                     == str(current_tenant)
                 ]
-    
-            st.write("Records After Tenant Filter:", len(df))
             
             df["id"] = df["id"].astype(str)
             df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
