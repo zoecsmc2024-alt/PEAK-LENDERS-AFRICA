@@ -85,7 +85,8 @@ def show_expenses():
     # 📦 CACHE RETRIEVAL & DATA NORMALIZATION
     # ==========================================
     try:
-        raw_expenses = get_cached_data("expenses")
+        # FIXED: Added current_tenant as required by your utility function signature
+        raw_expenses = get_cached_data("expenses", current_tenant)
     
         df = pd.DataFrame(raw_expenses or [])
     
@@ -110,7 +111,6 @@ def show_expenses():
     
             st.write("Records After Tenant Filter:", len(df))
             
-            # Formats data cleanly upon successful pipeline execution
             df["id"] = df["id"].astype(str)
             df["amount"] = pd.to_numeric(df["amount"], errors="coerce").fillna(0.0)
             date_col = "payment_date" if "payment_date" in df.columns else "date"
@@ -120,7 +120,7 @@ def show_expenses():
                 "id", "category", "amount", "date", "description",
                 "payment_date", "receipt_no", "tenant_id", "financial_year"
             ])
-    
+            
     except Exception as e:
         st.error(f"Expense Load Error: {e}")
         df = pd.DataFrame(columns=[
@@ -295,7 +295,7 @@ def show_expenses():
     
         else:
             
-            # Decorator initialized isolated from structural form context loop scope
+            # Structural form context loop scope safe configuration
             @st.dialog("⚠️ Confirm Permanent Deletion")
             def confirm_delete_dialog(tid):
                 st.warning(
