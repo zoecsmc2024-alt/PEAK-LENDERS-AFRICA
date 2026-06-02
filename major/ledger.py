@@ -11,7 +11,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 
 # Core DB Utilities
 from core.database import supabase, get_cached_data, save_data_saas, delete_data_saas
-st.write("SESSION TENANT:", st.session_state.get("tenant_id"))
+
 # ==========================================
 # 📄 PREMIUM PDF STATEMENT GENERATION ENGINE
 # ==========================================
