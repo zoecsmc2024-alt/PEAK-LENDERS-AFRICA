@@ -1079,7 +1079,7 @@ if __name__ == "__main__":
 
             # 4. 🗺️ NAVIGATION ROUTER
             if page == "Overview":
-                show_dashboard_view()
+                show_overview()
                 
             elif page == "loans":
                 show_loans()
