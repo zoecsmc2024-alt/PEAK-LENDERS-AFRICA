@@ -32,11 +32,18 @@ def get_Active_color():
 # ------------------------------
 # SAFE CACHE LAYER
 # ------------------------------
+# FIXED: Updated cache layer to accept tenant_id to match backend positional rules
 @st.cache_data(ttl=60, show_spinner=False)
-def load_cached(name):
+def load_cached(name, tenant_id):
     try:
-        return get_cached_data(name)
-    except:
+        raw_data = get_cached_data(name, tenant_id)
+        if raw_data is None:
+            return pd.DataFrame()
+        # Ensure conversion to DataFrame if it comes back as a raw list or dictionary collection
+        return raw_data if isinstance(raw_data, pd.DataFrame) else pd.DataFrame(raw_data)
+    except Exception as e:
+        # Avoid silent failures during critical configuration debug tasks
+        st.sidebar.error(f"⚠️ Cache Load Fail ({name}): {str(e)}")
         return pd.DataFrame()
 
 
@@ -135,6 +142,12 @@ def show_overview():
     
     brand_color = get_Active_color()
 
+    # Verify session token security state before initializing rendering pipelines
+    tenant_id = st.session_state.get("tenant_id")
+    if not tenant_id:
+        st.error("🔐 Access Denied: No active session tenant token located. Please sign in.")
+        return
+
     try:
         # --- UI HEADER ---
         st.markdown(
@@ -148,9 +161,10 @@ def show_overview():
         )
 
         # --- DATA INGESTION ---
-        loans_df = normalize(load_cached("loans"))
-        payments_df = normalize(load_cached("payments"))
-        expenses_df = normalize(load_cached("expenses"))
+        # FIXED: Injected required multi-tenant positional arguments securely across all loaders
+        loans_df = normalize(load_cached("loans", tenant_id))
+        payments_df = normalize(load_cached("payments", tenant_id))
+        expenses_df = normalize(load_cached("expenses", tenant_id))
 
         # ==============================
         # SMART STATUS LOGIC
