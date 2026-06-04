@@ -377,7 +377,7 @@ def login_page():
 # ============================================================
 # 🌐 9. APPLICATION ROUTER GATEWAY
 # ============================================================
-def run_auth_ui():
+def run_auth_ui(supabase_client): # Add the parameter here
     check_session_timeout()
     
     view = st.session_state.get("view", "login")
@@ -387,10 +387,8 @@ def run_auth_ui():
         st.rerun()
 
     if view == "login":
-        login_page()
-    elif view == "main":
-        st.empty() # Hands control context window off cleanly to page file modules
-
+        login_page() # If login_page accesses global client
+   
 # ============================================================
 # ⚡ ENTERPRISE SIDEBAR (FAST + CLEAN + SAFE)
 # ============================================================
