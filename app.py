@@ -2134,6 +2134,7 @@ def show_payments(supabase):
         if payments_df.empty:
             st.info("No localized accounting receipts currently matched inside this ledger profile.")
         else:
+            # Create a clean, separate copy for layout mutations to prevent indexing side-effects
             display_df = payments_df.copy()
             display_df["amount_display"] = display_df["amount"].apply(lambda x: f"UGX {x:,.0f}")
             display_df["receipt_no"] = display_df["receipt_no"].fillna("Pending Log Ref")
@@ -2150,6 +2151,7 @@ def show_payments(supabase):
             st.markdown("---")
             st.markdown("### ⚙️ Ledger Log Maintenance Modality")
 
+            # Map selection using unique string IDs
             pay_map = {
                 f"{row['receipt_no']} | {row['borrower']} | {row['amount_display']}": str(row['id'])
                 for _, row in display_df.iterrows()
@@ -2157,77 +2159,97 @@ def show_payments(supabase):
 
             selected_pay_label = st.selectbox("Choose Targeted Transaction Allocation", list(pay_map.keys()))
             target_pay_id = pay_map[selected_pay_label]
-            target_pay = display_df[display_df['id'].astype(str) == target_pay_id].iloc[0]
+            
+            # SAFE FILTERING LAYER: Avoid layout index crashes
+            matched_rows = display_df[display_df['id'].astype(str) == str(target_pay_id)]
+            
+            if matched_rows.empty:
+                st.error("⚠️ Selected payment records could not be resolved from the current data frame.")
+            else:
+                # Safely extract target sequence without using rigid positional index assumptions
+                target_pay = matched_rows.iloc[0]
 
-            p_col1, p_col2 = st.columns(2)
+                p_col1, p_col2 = st.columns(2)
 
-            if p_col1.button("🗑️ Purge Payment From Records", use_container_width=True):
-                try:
-                    supabase.table("payments").delete().eq("id", target_pay_id).execute()
-                    
-                    loan_id = target_pay["loan_id"]
-                    affected_loan = loans_df[loans_df["id"] == loan_id].iloc[0]
-                    
-                    loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] -= float(target_pay["amount"])
-                    loans_df.loc[loans_df["id"] == loan_id, "balance"] = (
-                        loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
-                    )
-                    
-                    cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
-                    save_data_saas("loans", loans_df)
-                    
-                    st.cache_data.clear()
-                    st.warning(f"Payment reference key {target_pay['receipt_no']} dropped from backend.")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Execution aborted: {e}")
-
-            if p_col2.button("📝 Edit Asset Metrics", use_container_width=True):
-                st.session_state["edit_pay_mode"] = True
-
-            if st.session_state.get("edit_pay_mode"):
-                with st.form("edit_payment_form"):
-                    st.info(f"Modifying Entry Core Attributes: {target_pay['receipt_no']}")
-                    
-                    # 🛡️ THE FIX: Float values matched explicitly with Float steps to prevent type crashes
-                    new_amt = st.number_input("Revised Amount Allocation (UGX)", value=float(target_pay['amount']), step=5000.0)
-                    
-                    current_method = target_pay['method']
-                    method_options = ["Cash", "Mobile Money", "Bank"]
-                    method_idx = method_options.index(current_method) if current_method in method_options else 0
-                    new_method = st.selectbox("Revised Collection Channel", method_options, index=method_idx)
-                    
-                    eb1, eb2 = st.columns(2)
-
-                    if eb1.form_submit_button("💾 Save Adjustment Matrices", use_container_width=True):
-                        try:
-                            supabase.table("payments").update({
-                                "amount": new_amt,
-                                "method": new_method
-                            }).eq("id", target_pay_id).execute()
+                if p_col1.button("🗑️ Purge Payment From Records", use_container_width=True):
+                    try:
+                        # 1️⃣ Execute Supabase backend mutation drop
+                        supabase.table("payments").delete().eq("id", target_pay_id).execute()
+                        
+                        loan_id = str(target_pay["loan_id"])
+                        
+                        # Guard against downstream lookups failing if loan object metadata structure is modified
+                        matching_loans = loans_df[loans_df["id"].astype(str) == loan_id]
+                        if not matching_loans.empty:
+                            affected_loan = matching_loans.iloc[0]
                             
-                            loan_id = target_pay["loan_id"]
-                            affected_loan = loans_df[loans_df["id"] == loan_id].iloc[0]
-                            
-                            diff = new_amt - float(target_pay["amount"])
-                            loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] += diff
-                            loans_df.loc[loans_df["id"] == loan_id, "balance"] = (
-                                loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
+                            # 2️⃣ Readjust running balance calculations locally
+                            loans_df.loc[loans_df["id"].astype(str) == loan_id, "amount_paid"] -= float(target_pay["amount"])
+                            loans_df.loc[loans_df["id"].astype(str) == loan_id, "balance"] = (
+                                loans_df.loc[loans_df["id"].astype(str) == loan_id, "total_repayable"] - 
+                                loans_df.loc[loans_df["id"].astype(str) == loan_id, "amount_paid"]
                             )
                             
+                            # 3️⃣ Cascade interest structural sequences down-chain
                             cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
                             save_data_saas("loans", loans_df)
-                            
-                            st.session_state["edit_pay_mode"] = False
-                            st.cache_data.clear()
-                            st.success("Changes committed.")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Update failed: {e}")
-
-                    if eb2.form_submit_button("❌ Drop Corrections", use_container_width=True):
-                        st.session_state["edit_pay_mode"] = False
+                        
+                        st.cache_data.clear()
+                        st.warning(f"Payment reference key {target_pay['receipt_no']} dropped from backend successfully.")
                         st.rerun()
+                    except Exception as e:
+                        st.error(f"Execution aborted: {e}")
+
+                if p_col2.button("📝 Edit Asset Metrics", use_container_width=True):
+                    st.session_state["edit_pay_mode"] = True
+
+                if st.session_state.get("edit_pay_mode"):
+                    with st.form("edit_payment_form"):
+                        st.info(f"Modifying Entry Core Attributes: {target_pay['receipt_no']}")
+                        
+                        # Float value types calibrated with explicit steps to bypass number input crash risks
+                        new_amt = st.number_input("Revised Amount Allocation (UGX)", value=float(target_pay['amount']), step=5000.0)
+                        
+                        current_method = target_pay['method']
+                        method_options = ["Cash", "Mobile Money", "Bank"]
+                        method_idx = method_options.index(current_method) if current_method in method_options else 0
+                        new_method = st.selectbox("Revised Collection Channel", method_options, index=method_idx)
+                        
+                        eb1, eb2 = st.columns(2)
+
+                        if eb1.form_submit_button("💾 Save Adjustment Matrices", use_container_width=True):
+                            try:
+                                supabase.table("payments").update({
+                                    "amount": new_amt,
+                                    "method": new_method
+                                }).eq("id", target_pay_id).execute()
+                                
+                                loan_id = str(target_pay["loan_id"])
+                                matching_loans = loans_df[loans_df["id"].astype(str) == loan_id]
+                                
+                                if not matching_loans.empty:
+                                    affected_loan = matching_loans.iloc[0]
+                                    
+                                    diff = new_amt - float(target_pay["amount"])
+                                    loans_df.loc[loans_df["id"].astype(str) == loan_id, "amount_paid"] += diff
+                                    loans_df.loc[loans_df["id"].astype(str) == loan_id, "balance"] = (
+                                        loans_df.loc[loans_df["id"].astype(str) == loan_id, "total_repayable"] - 
+                                        loans_df.loc[loans_df["id"].astype(str) == loan_id, "amount_paid"]
+                                    )
+                                    
+                                    cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
+                                    save_data_saas("loans", loans_df)
+                                
+                                st.session_state["edit_pay_mode"] = False
+                                st.cache_data.clear()
+                                st.success("Changes committed.")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Update failed: {e}")
+
+                        if eb2.form_submit_button("❌ Drop Corrections", use_container_width=True):
+                            st.session_state["edit_pay_mode"] = False
+                            st.rerun()
 
 import streamlit as st
 import pandas as pd
