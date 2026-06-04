@@ -4410,7 +4410,7 @@ if __name__ == "__main__":
                 show_ledger()
                 
             elif page == "Payments":
-                show_payments()
+                show_payments(supabase)
                 
             elif page == "Expenses":
                 show_expenses()
