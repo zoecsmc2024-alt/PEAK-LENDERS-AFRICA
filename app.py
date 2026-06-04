@@ -3123,91 +3123,96 @@ def show_loans():
     # TAB MANAGE
     # ==============================
     with tab_manage:
-
+    
         if not loans_df.empty:
-
+    
             edit_map = {
-                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}":
-                row["id"]
+                f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}": row[
+                    "id"
+                ]
                 for _, row in loans_df.iterrows()
             }
-
-            selected = st.selectbox(
-                "Select Loan to Edit",
-                list(edit_map.keys())
-            )
-
+    
+            selected = st.selectbox("Select Loan to Edit", list(edit_map.keys()))
+    
             target_id = edit_map[selected]
-
-            loan_match = loans_df[
-                loans_df["id"] == target_id
-            ]
-
+    
+            loan_match = loans_df[loans_df["id"] == target_id]
+    
             if loan_match.empty:
                 st.error("Loan not found.")
                 st.stop()
-
+    
             loan_to_edit = loan_match.iloc[0]
-
+    
             with st.form(f"edit_form_{target_id}"):
-
-                e_princ = st.number_input(
-                    "Principal",
-                    value=float(
-                        loan_to_edit["principal"]
+    
+                # 💵 Principal & Interest
+                col1, col2 = st.columns(2)
+                with col1:
+                    e_princ = st.number_input(
+                        "Principal", value=float(loan_to_edit["principal"])
                     )
-                )
-
-                status_options = [
-                    "ACTIVE",
-                    "PENDING",
-                    "CLEARED",
-                    "BCF",
-                    "CLOSED"
-                ]
-
-                current_stat = str(
-                    loan_to_edit["status"]
-                ).upper()
-
+                with col2:
+                    # Fallback to 0.0 if interest is missing/NaN
+                    current_interest = (
+                        float(loan_to_edit["interest"])
+                        if pd.notna(loan_to_edit["interest"])
+                        else 0.0
+                    )
+                    e_interest = st.number_input("Interest Amount", value=current_interest)
+    
+                # 📅 Start & End Dates
+                col3, col4 = st.columns(2)
+                with col3:
+                    # Convert string/timestamp to Python date object safely
+                    current_start_date = (
+                        pd.to_datetime(loan_to_edit["start_date"]).date()
+                        if pd.notna(loan_to_edit["start_date"])
+                        else pd.Timestamp.now().date()
+                    )
+                    e_start_date = st.date_input("Start Date", value=current_start_date)
+    
+                with col4:
+                    current_end_date = (
+                        pd.to_datetime(loan_to_edit["end_date"]).date()
+                        if pd.notna(loan_to_edit["end_date"])
+                        else pd.Timestamp.now().date()
+                    )
+                    e_end_date = st.date_input("End Date", value=current_end_date)
+    
+                # 🔄 Status Setup
+                status_options = ["ACTIVE", "PENDING", "CLEARED", "BCF", "CLOSED"]
+                current_stat = str(loan_to_edit["status"]).upper()
                 idx = (
                     status_options.index(current_stat)
                     if current_stat in status_options
                     else 0
                 )
-
-                e_stat = st.selectbox(
-                    "Status",
-                    status_options,
-                    index=idx
-                )
-
-                if st.form_submit_button(
-                    "💾 Save Changes"
-                ):
-
-                    supabase.table("loans").update({
-                        "principal": e_princ,
-                        "status": e_stat
-                    }).eq(
-                        "id",
-                        target_id
-                    ).execute()
-
+    
+                e_stat = st.selectbox("Status", status_options, index=idx)
+    
+                # 💾 Save Changes
+                if st.form_submit_button("💾 Save Changes"):
+    
+                    supabase.table("loans").update(
+                        {
+                            "principal": e_princ,
+                            "interest": e_interest,
+                            "start_date": e_start_date.isoformat(),  # Database friendly format
+                            "end_date": e_end_date.isoformat(),  # Database friendly format
+                            "status": e_stat,
+                        }
+                    ).eq("id", target_id).execute()
+    
                     st.success("✅ Updated!")
                     st.cache_data.clear()
                     st.rerun()
-
-            if st.button(
-                "🗑️ Delete Loan Permanently",
-                use_container_width=True
-            ):
-
-                supabase.table("loans").delete().eq(
-                    "id",
-                    target_id
-                ).execute()
-
+    
+            if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
+    
+                supabase.table("loans").delete().eq("id", target_id).execute()
+    
                 st.warning("Loan Deleted.")
                 st.cache_data.clear()
                 st.rerun()
