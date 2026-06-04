@@ -317,22 +317,28 @@ def login_page():
             st.divider()
 
             with st.form("login_form"):
-                company_code = st.text_input("Company Code", placeholder="e.g., PEA123").strip().upper()
+                # 🏢 Switched from Company Code back to Business Name
+                company_name_input = st.text_input(
+                    "Business Name", 
+                    placeholder="e.g., Peak-Lenders Africa"
+                ).strip()
+                
                 email = st.text_input("Email Address", placeholder="Enter email").strip().lower()
                 pwd = st.text_input("Password", type="password", placeholder="Enter password")
                 submit = st.form_submit_button("🔓 Access Dashboard", use_container_width=True)
 
-            # 🔥 CRITICAL FIX: Form processing logic is safely inside login_page scope
             if submit:
-                if not all([company_code, email, pwd]):
+                if not all([company_name_input, email, pwd]):
                     st.error("All input fields are required.")
                 else:
                     try:
+                        # Step 1: Attempt normal Supabase authentication
                         res = supabase.auth.sign_in_with_password({"email": email, "password": pwd})
                         if not res or not res.user:
                             st.error("Invalid credentials")
                             return
 
+                        # Step 2: Fetch the user profile along with the linked tenant data
                         user_query = supabase.table("users").select("*, tenants(*)").eq("id", res.user.id).execute()
                         if not user_query.data:
                             st.error("Profile matching registration missing.")
@@ -340,18 +346,22 @@ def login_page():
 
                         user_profile = user_query.data[0]
                         tenant_data = user_profile.get("tenants") or {}
+                        
+                        # Extract the exact company name from the DB
+                        db_company_name = tenant_data.get("name", "").strip()
 
-                        if tenant_data.get("company_code", "").strip().upper() != company_code:
-                            st.error("Access Denied: This account is not verified for this company code.")
+                        # Step 3: Case-insensitive match on the clean Business Name string
+                        if db_company_name.lower() != company_name_input.lower():
+                            st.error(f"Access Denied: This account is not verified under '{company_name_input}'.")
                             return
 
-                        # Establish verified application session states
+                        # Step 4: Establish verified session states
                         st.session_state["logged_in"] = True
                         st.session_state["authenticated"] = True
                         st.session_state["user_id"] = user_profile["id"]
                         st.session_state["tenant_id"] = user_profile["tenant_id"]
                         st.session_state["role"] = user_profile.get("role", "Staff")
-                        st.session_state["company"] = tenant_data.get("name", "Unknown Business")
+                        st.session_state["company"] = db_company_name
                         st.session_state["last_activity"] = datetime.now()
                         st.session_state["view"] = "main"
 
@@ -373,7 +383,6 @@ def login_page():
             with col3:
                 if st.button("🔑 Reset", use_container_width=True):
                     forgot_password_page()
-
 # ============================================================
 # 🌐 9. APPLICATION ROUTER GATEWAY
 # ============================================================
