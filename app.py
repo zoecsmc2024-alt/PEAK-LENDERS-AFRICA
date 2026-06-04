@@ -2908,23 +2908,22 @@ def show_reports():
 
             
 # ==========================================================
-# 🚨 OVERDUE TRACKER & ACTIVITY CALENDAR ENGINE
+# 🚨 OVERDUE TRACKER & ACTIVITY CALENDAR ENGINE (WITH NAMES)
 # ==========================================================
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Safe import wrapper for the custom Streamlit calendar component
 try:
     from streamlit_calendar import calendar as st_calendar
 except ImportError:
-    # Fallback to prevent hard crash if package isn't added to requirements.txt yet
     def st_calendar(*args, **kwargs):
         st.warning("⚠️ 'streamlit-calendar' library missing. Please install it.")
 
 def show_overdue_tracker():
     """
-    Tracks overdue loans with AI-style risk scoring and tenant isolation.
+    Tracks overdue loans with AI-style risk scoring, tenant isolation,
+    and clear borrower naming context.
     """
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
@@ -2958,18 +2957,18 @@ def show_overdue_tracker():
     st.markdown(f"<h2 style='color:{brand_color};'>🚨 AI Overdue Intelligence</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # 📥 FETCH & PROTECT DATA
+    # 📥 FETCH & UNIFY DATA
     # ==============================
     loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
     
     if loans_df is None or loans_df.empty:
         st.info("📅 No loan records found in the system.")
         return
 
-    # 🛡️ Tenant Isolation & Normalization
+    # 🛡️ Tenant Isolation
     loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
     
-    # Unify on 'due_date' fallback if schema names vary across models
     if "due_date" not in loans_df.columns and "end_date" in loans_df.columns:
         loans_df["due_date"] = loans_df["end_date"]
 
@@ -2980,7 +2979,16 @@ def show_overdue_tracker():
     loans_df["amount"] = pd.to_numeric(loans_df["amount"], errors="coerce").fillna(0)
     loans_df["due_date"] = pd.to_datetime(loans_df["due_date"], errors="coerce")
     
-    # Filter for unpaid loans only
+    # 👤 MAPPED NAMES INTELLIGENCE
+    if borrowers_df is not None and not borrowers_df.empty:
+        borrowers_df['id'] = borrowers_df['id'].astype(str)
+        loans_df['borrower_id'] = loans_df['borrower_id'].astype(str)
+        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
+        loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown Borrower")
+    else:
+        loans_df['borrower'] = "Unknown Borrower"
+
+    # Filter out finalized accounts
     active_df = loans_df[~loans_df["status"].astype(str).str.upper().isin(["PAID", "CLOSED", "CLEARED"])].copy()
 
     if active_df.empty:
@@ -2992,8 +3000,6 @@ def show_overdue_tracker():
     # ==============================
     today = pd.Timestamp.today().normalize()
     active_df["days_overdue"] = (today - active_df["due_date"]).dt.days
-    
-    # Only keep loans that are actually overdue
     overdue_df = active_df[active_df["days_overdue"] > 0].copy()
 
     if overdue_df.empty:
@@ -3002,11 +3008,11 @@ def show_overdue_tracker():
 
     def compute_risk_score(row):
         score = 0
-        score += min(row["days_overdue"] * 1.5, 50) # Time Component (Max 50 pts)
-        if row["amount"] > 1000000: score += 30      # Value Component (Max 30 pts)
+        score += min(row["days_overdue"] * 1.5, 50) 
+        if row["amount"] > 1000000: score += 30      
         elif row["amount"] > 500000: score += 20
         elif row["amount"] > 100000: score += 10
-        if row["days_overdue"] > 30: score += 20    # Critical Thresholds
+        if row["days_overdue"] > 30: score += 20    
         return min(score, 100)
 
     overdue_df["risk_score"] = overdue_df.apply(compute_risk_score, axis=1)
@@ -3042,21 +3048,21 @@ def show_overdue_tracker():
     if risk_filter != "All Levels":
         display_df = display_df[display_df["risk_level"] == risk_filter]
     if search:
-        # FIX: Safe row-wise string cast comparison to avoid object alignment exceptions
         display_df = display_df[display_df.astype(str).apply(lambda row: row.str.lower().str.contains(search.lower()).any(), axis=1)]
 
     # ==============================
-    # 🎨 AI RANKED TABLE
+    # 🎨 AI RANKED TABLE (NOW WITH NAMES)
     # ==============================
     st.markdown("### 🔥 Collection Priority List")
     
     if not display_df.empty:
         st.dataframe(
             display_df.sort_values("risk_score", ascending=False)[
-                ["days_overdue", "amount", "risk_level", "risk_score", "id"]
+                ["borrower", "days_overdue", "amount", "risk_level", "risk_score", "id"]
             ].rename(columns={
+                "borrower": "Borrower Name",  # Added Context
                 "days_overdue": "Days Late",
-                "amount": "balance (UGX)",
+                "amount": "Balance (UGX)",
                 "risk_level": "Risk Level",
                 "risk_score": "Score/100",
                 "id": "Loan ID"
@@ -3068,7 +3074,7 @@ def show_overdue_tracker():
         st.info("No records match the current filters.")
 
     # ==============================
-    # 🧠 SMART INSIGHT PANEL
+    # 🧠 SMART INSIGHT PANEL (NOW WITH NAMES)
     # ==============================
     st.markdown("<br>", unsafe_allow_html=True)
     try:
@@ -3076,7 +3082,7 @@ def show_overdue_tracker():
         st.markdown(f"""
         <div class="glass-card" style="border-left: 5px solid #EF4444;">
             <span class="ai-badge">AI ANALYTICS</span><br><br>
-            <b>Priority Alert:</b> Loan <b>#{worst_case['id']}</b> requires immediate legal or field intervention.<br>
+            <b>Priority Alert:</b> Account <b>{worst_case['borrower']}</b> (Loan #{worst_case['id']}) requires immediate field intervention.<br>
             It is <b>{int(worst_case['days_overdue'])} days</b> overdue with a risk score of <b>{worst_case['risk_score']:.0f}/100</b>.<br>
             <p style="font-size:12px; color:#666; margin-top:10px;"><i>Strategy: Debt has entered the critical recovery phase. Check collateral status immediately.</i></p>
         </div>
@@ -3085,29 +3091,160 @@ def show_overdue_tracker():
         pass
 
     # ==============================
-    # ⚙️ QUICK ACTIONS
+    # ⚙️ QUICK ACTIONS (NOW WITH NAMES)
     # ==============================
     with st.expander("⚙️ Recovery Actions"):
-        # FIX: Build safety array fallback to prevent selectbox instantiation errors on empty returns
-        action_options = overdue_df.apply(lambda x: f"ID: {x['id']} | Late: {x['days_overdue']} days", axis=1).tolist()
+        # Format the selection row to instantly communicate who the human borrower is
+        action_options = overdue_df.apply(lambda x: f"Name: {x['borrower']} | ID: {x['id']} | Late: {x['days_overdue']} days", axis=1).tolist()
         
         if action_options:
             target_loan = st.selectbox("Select Loan to Action", action_options)
-            sel_id = target_loan.split(" | ")[0].replace("ID: ", "")
+            
+            # Extract out the ID correctly by capturing everything between "ID: " and the following break pipeline
+            sel_id = target_loan.split(" | ID: ")[1].split(" | ")[0]
+            sel_name = target_loan.split("Name: ")[1].split(" | ")[0]
             
             act1, act2 = st.columns(2)
             if act1.button("📞 Log Contact Made", use_container_width=True):
-                st.toast(f"Contact log updated for Loan #{sel_id}")
+                st.toast(f"Contact log updated for {sel_name} (Loan #{sel_id})")
                 
             if act2.button("✅ Mark Fully Recovered", use_container_width=True):
                 update_data = pd.DataFrame([{"id": sel_id, "status": "Paid", "tenant_id": str(current_tenant)}])
                 if save_data_saas("loans", update_data):
-                    st.success(f"Loan #{sel_id} moved to Paid status.")
+                    st.success(f"Loan #{sel_id} for {sel_name} moved to Paid status.")
                     st.cache_data.clear()
                     st.rerun()
         else:
             st.info("No overdue loans to process.")
 
+
+def show_calendar():
+    st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
+    current_tenant = st.session_state.get('tenant_id')
+
+    # 1. FETCH DATA (SAFE ADAPTERS)
+    loans_df = get_cached_data("loans")
+    borrowers_df = get_cached_data("borrowers")
+
+    if loans_df is None or loans_df.empty:
+        st.info("📅 Calendar is clear! No active loans to track.")
+        return
+
+    # 🛡️ Tenant Isolation Protection
+    loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
+
+    # --- 👤 INJECT BORROWER NAMES (MAPPING) ---
+    if borrowers_df is not None and not borrowers_df.empty:
+        borrowers_df['id'] = borrowers_df['id'].astype(str)
+        if 'borrower_id' in loans_df.columns:
+            loans_df['borrower_id'] = loans_df['borrower_id'].astype(str)
+            bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
+            loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown borrower")
+        else:
+            loans_df['borrower'] = "Unknown borrower"
+    else:
+        loans_df['borrower'] = "Unknown borrower"
+
+    # --- 🛡️ STANDARDIZATION ---
+    date_col = "due_date" if "due_date" in loans_df.columns else "end_date"
+    loans_df[date_col] = pd.to_datetime(loans_df[date_col], errors="coerce")
+    loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", loans_df.get("amount", 0)), errors="coerce").fillna(0)
+    
+    today = pd.Timestamp.today().normalize()
+    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["PAID", "CLEARED", "CLOSED"])].copy()
+
+    if active_loans.empty:
+        st.info("📅 No active milestones scheduled for tracking this month.")
+        return
+
+    # --- 🎨 VISUAL CALENDAR WIDGET ---
+    calendar_events = []
+    for _, r in active_loans.iterrows():
+        if pd.notna(r[date_col]):
+            is_overdue = r[date_col].date() < today.date()
+            ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
+            
+            amount_fmt = f"UGX {float(r['total_repayable']):,.0f}"
+            calendar_events.append({
+                "title": f"{amount_fmt} - {r['borrower']}",
+                "start": r[date_col].strftime("%Y-%m-%d"),
+                "end": r[date_col].strftime("%Y-%m-%d"),
+                "color": ev_color,
+                "allDay": True,
+            })
+
+    calendar_options = {
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"},
+        "initialView": "dayGridMonth",
+        "selectable": True,
+    }
+
+    st_calendar(events=calendar_events, options=calendar_options, key="collection_cal")
+    st.markdown("---")
+
+    # 2. 📊 DAILY WORKLOAD METRICS
+    due_today_df = active_loans[active_loans[date_col].dt.date == today.date()]
+    upcoming_df = active_loans[
+        (active_loans[date_col] > today) & 
+        (active_loans[date_col] <= today + pd.Timedelta(days=7))
+    ]
+    overdue_count = active_loans[active_loans[date_col] < today].shape[0]
+
+    m1, m2, m3 = st.columns(3)
+    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">DUE TODAY |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{len(due_today_df)} Accounts</p></div>""", unsafe_allow_html=True)
+    m2.markdown(f"""<div style="background-color:#F0F8FF;padding:20px;border-radius:15px;border-left:5px solid #2B3F87;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#666;font-weight:bold;">UPCOMING (7 DAYS) |</p><p style="margin:0;font-size:18px;color:#2B3F87;font-weight:bold;">{len(upcoming_df)} Accounts</p></div>""", unsafe_allow_html=True)
+    m3.markdown(f"""<div style="background-color:#FFF5F5;padding:20px;border-radius:15px;border-left:5px solid #D32F2F;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:12px;color:#D32F2F;font-weight:bold;">TOTAL OVERDUE |</p><p style="margin:0;font-size:18px;color:#D32F2F;font-weight:bold;">{overdue_count} Accounts</p></div>""", unsafe_allow_html=True)
+
+    # 3. 📈 REVENUE FORECAST
+    st.markdown("---")
+    st.markdown("<h4 style='color: #2B3F87;'>📊 Revenue Forecast (This Month)</h4>", unsafe_allow_html=True)
+    this_month_df = active_loans[active_loans[date_col].dt.month == today.month]
+    total_expected = this_month_df["total_repayable"].sum()
+    f1, f2 = st.columns(2)
+    f1.metric("Expected Collections", f"{total_expected:,.0f} UGX")
+    f2.metric("Deadlines This Month", len(this_month_df))
+
+    # 4. 📌 ACTION ITEMS
+    st.markdown("<h4 style='color: #2B3F87;'>📌 Action Items for Today</h4>", unsafe_allow_html=True)
+    if due_today_df.empty:
+        st.success("✨ No collection deadlines for today.")
+    else:
+        today_rows = "".join([f"""
+            <tr style="background:#F0F8FF;">
+                <td style="padding:10px;"><b>#{r.get('loan_id_label', str(r['id'])[:8])}</b></td>
+                <td style="padding:10px;">{r['borrower']}</td>
+                <td style="padding:10px;text-align:right;">{r['total_repayable']:,.0f}</td>
+                <td style="padding:10px;text-align:center;">
+                    <span style="background:#2B3F87;color:white;padding:2px 8px;border-radius:10px;font-size:10px;">💰 COLLECT NOW</span>
+                </td>
+            </tr>""" for _, r in due_today_df.iterrows()])
+        st.markdown(f"""<div style="border:2px solid #2B3F87;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><tr style="background:#2B3F87;color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">borrower</th><th style="padding:10px;text-align:right;">amount</th><th style="padding:10px;text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
+
+    # 5. 🔴 OVERDUE FOLLOW-UP
+    st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Overdue Follow-up</h4>", unsafe_allow_html=True)
+    try:
+        overdue_df = active_loans[active_loans[date_col] < today].copy()
+
+        if not overdue_df.empty:
+            overdue_df["days_late"] = (today - overdue_df[date_col]).dt.days
+            od_rows = ""
+            for _, r in overdue_df.iterrows():
+                late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
+                label = r.get('loan_id_label') if pd.notna(r.get('loan_id_label')) else str(r['id'])[:8]
+                od_rows += f"""
+                    <tr style="background:#FFF5F5;">
+                        <td style="padding:10px; border-bottom:1px solid #eee;"><b>#{label}</b></td>
+                        <td style="padding:10px; border-bottom:1px solid #eee;">{r['borrower']}</td>
+                        <td style="padding:10px; border-bottom:1px solid #eee; color:{late_color}; font-weight:bold;">{r['days_late']} Days</td>
+                        <td style="padding:10px; border-bottom:1px solid #eee; text-align:center;">
+                            <span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span>
+                        </td>
+                    </tr>"""
+            st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px; text-align:left;">Loan ID</th><th style="padding:10px; text-align:left;">borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+        else:
+            st.info("No overdue loans currently. Everything is on track! ✨")
+    except Exception as e:
+        st.error(f"Error generating overdue table: {e}")
 
 def show_calendar():
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
