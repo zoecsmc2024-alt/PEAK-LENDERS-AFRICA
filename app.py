@@ -3819,7 +3819,7 @@ def show_expenses():
 # ==========================================================
 # 🛡️ THE ROUTER FIX (For page routing framework context)
 # ==========================================================
-def show_payments supabase:
+def show_payments(supabase):
     """
     Patched entry placeholder to align function signatures across your 
     Streamlit architecture mapping.
