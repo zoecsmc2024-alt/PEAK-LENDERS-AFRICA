@@ -192,30 +192,43 @@ def upload_image(file, bucket="collateral-photos"):
 # 🎨 6. THEME CUSTOMIZATION ENGINE
 # ============================================================
 def apply_master_theme():
-    brand_color = st.session_state.get("theme_color", "#1E3A8A")
+    # 🎨 Read the brand color actively set via the settings panel color picker
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
     
+    # Helper: Convert clean Hex strings into functional translucent RGB arrays for glass layouts
+    hex_color = brand_color.lstrip('#')
+    try:
+        rgb = tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+    except Exception:
+        rgb = (43, 63, 135) # Fallback to core Slate Blue state
+
     st.markdown(f"""
     <style>
-    /* 1. Base Main Canvas App Background */
+    /* 1. Base Workspace Canvas Background */
     .stApp {{
         background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
     }}
 
-    /* 2. Light Glassmorphism Sidebar Container Configuration */
+    /* 2. DYNAMIC SIDEBAR TINT WITH GLASSMORPHISM ENGINE */
+    /* Mixes 85% pure white with 15% of your customized settings brand color tint */
     [data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.45) !important;
+        background-color: rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.08) !important;
+        background-image: linear-gradient(
+            180deg, 
+            rgba(255, 255, 255, 0.65) 0%, 
+            rgba(255, 255, 255, 0.45) 100%
+        ) !important;
         backdrop-filter: blur(25px) saturate(180%) !important;
         -webkit-backdrop-filter: blur(25px) saturate(180%) !important;
-        border-right: 1px solid rgba(15, 23, 42, 0.08) !important;
-        box-shadow: 4px 0 30px 0 rgba(15, 23, 42, 0.04) !important;
+        border-right: 1px solid rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.12) !important;
+        box-shadow: 4px 0 30px 0 rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.05) !important;
     }}
     
     [data-testid="stSidebar"] > div:first-child {{
         background: transparent !important;
     }}
 
-    /* 3. TYPOGRAPHY CORRECTION (Fixes the washed out white text) */
-    /* Force headings, markdown blocks, radio options, and widget controls to use highly readable deep slate */
+    /* 3. Typography Realignment with High-Contrast Slate Elements */
     [data-testid="stSidebar"] .stMarkdown p, 
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] span,
@@ -225,76 +238,60 @@ def apply_master_theme():
     [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
         color: #0F172A !important;
         font-weight: 500 !important;
-        text-shadow: none !important;
     }}
 
-    /* Muted sub-text and captions styling */
     [data-testid="stSidebar"] p[data-testid="stCaptionText"],
-    [data-testid="stSidebar"] .stMarkdown caption,
-    [data-testid="stSidebar"] .stMarkdown small {{
+    [data-testid="stSidebar"] .stMarkdown caption {{
         color: #475569 !important;
-        font-weight: 400 !important;
     }}
 
-    /* 4. Dropdown Selectbox Enhancements */
+    /* 4. Selectbox Input Structural Modifications */
     div[data-baseweb="select"] > div {{
-        background: rgba(255, 255, 255, 0.75) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(15, 23, 42, 0.12) !important;
+        background: rgba(255, 255, 255, 0.85) !important;
+        border: 1px solid rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15) !important;
         border-radius: 12px !important;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
     }}
     
-    /* Ensure targeted dropdown text values display sharply */
     div[data-baseweb="select"] span {{
         color: #0F172A !important;
-        font-weight: 500 !important;
     }}
 
-    /* 5. Navigation Items Wrapper (Radio Group Structure) */
+    /* 5. Navigation Items Radio Group Styling */
     [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {{
-        background: rgba(255, 255, 255, 0.3) !important;
+        background: rgba(255, 255, 255, 0.4) !important;
         border-radius: 16px !important;
-        padding: 8px !important;
-        border: 1px solid rgba(15, 23, 42, 0.05) !important;
+        padding: 6px !important;
+        border: 1px solid rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.06) !important;
     }}
 
-    /* Nav items hover states */
     [data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] {{
         background: transparent;
         transition: all 0.2s ease-in-out;
         padding: 8px 12px !important;
         border-radius: 10px !important;
-        margin-bottom: 4px !important;
+        margin-bottom: 3px !important;
         width: 100% !important;
     }}
 
     [data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"]:hover {{
-        background: rgba(255, 255, 255, 0.6) !important;
+        background: rgba(255, 255, 255, 0.75) !important;
     }}
 
-    /* 6. Active Radio Button Accent (Matches your active red selection pill safely) */
-    [data-testid="stSidebar"] [data-testid="stRadio"] div[data-checked="true"] {{
-        background-color: transparent !important;
-    }}
-
-    /* 7. Action Button Overhaul (Logout Button Style Alignment) */
+    /* 6. Action Button Syncing (Matches your dynamic hex code perfectly) */
     [data-testid="stSidebar"] button {{
-        background: rgba(255, 255, 255, 0.7) !important;
+        background: rgba(255, 255, 255, 0.75) !important;
         color: #0F172A !important;
         backdrop-filter: blur(8px) !important;
-        border: 1px solid rgba(15, 23, 42, 0.1) !important;
+        border: 1px solid rgba({rgb[0]}, {rgb[1]}, {rgb[2]}, 0.15) !important;
         border-radius: 12px !important;
         font-weight: 500 !important;
         transition: all 0.2s ease !important;
-        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
     }}
 
     [data-testid="stSidebar"] button:hover {{
         background: #FFFFFF !important;
-        border-color: rgba(15, 23, 42, 0.2) !important;
+        border-color: {brand_color} !important;
         color: {brand_color} !important;
-        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
         transform: translateY(-0.5px);
     }}
     </style>
@@ -541,7 +538,6 @@ def render_sidebar():
     selected_page = "Overview"
 
     with st.sidebar:
-
         st.markdown("")
 
         # ----------------------------------------------------
@@ -552,7 +548,6 @@ def render_sidebar():
             st.stop()
 
         options = list(tenant_map.keys())
-
         current_tenant_id = st.session_state.get("tenant_id")
 
         default_index = 0
@@ -569,6 +564,16 @@ def render_sidebar():
         )
 
         active_company = tenant_map[selected_name]
+        new_tenant_id = active_company.get("id")
+
+        # 🔥 CRITICAL FIX: If the tenant changed, sync IDs and flush cached calculations
+        if current_tenant_id != new_tenant_id:
+            st.session_state["tenant_id"] = new_tenant_id
+            st.session_state["company"] = selected_name
+            # Clear data cache pools so the next page render is forced to read fresh DB values
+            if hasattr(st, "cache_data"):
+                st.cache_data.clear()
+            st.rerun()
 
         # ----------------------------------------------------
         # 3. UPDATE THEME (FAST STATE ONLY)
@@ -584,25 +589,26 @@ def render_sidebar():
         logo_url = build_logo_url(active_company.get("logo_url"))
 
         if logo_url:
+            # Removed border-radius: 50% to show your natural wide logo cleanly
             st.markdown(
                 f"""
-                <div style="display:flex; justify-content:center;">
+                <div style="display:flex; justify-content:center; margin-bottom:10px;">
                     <img src="{logo_url}?t={int(time.time())}"
-                        width="80"
-                        style="border-radius:50%; object-fit:cover;" />
+                        style="max-width:180px; max-height:80px; object-fit:contain;" />
                 </div>
                 """,
                 unsafe_allow_html=True
             )
         else:
-            st.markdown("### 🏢")
+            st.markdown("<h3 style='text-align:center;'>🏢</h3>", unsafe_allow_html=True)
 
+        # Added dynamic classes matching our slate glass theme rules
         st.markdown(
             f"""
-            <div style='text-align:center; font-weight:600; color:white;'>
+            <div class="sidebar-company-title" style='text-align:center; font-weight:600; font-size:16px; margin-top:5px;'>
                 {selected_name}
             </div>
-            <div style='text-align:center; font-size:10px; color:rgba(255,255,255,0.6);'>
+            <div class="sidebar-company-sub" style='text-align:center; font-size:11px; letter-spacing:1px; margin-bottom:10px;'>
                 FINANCE CORE
             </div>
             """,
@@ -630,7 +636,6 @@ def render_sidebar():
         }
 
         menu_options = [f"{v} {k}" for k, v in menu.items()]
-
         current_page = st.session_state.get("current_page", "Overview")
 
         try:
@@ -655,16 +660,13 @@ def render_sidebar():
         # 6. LOGOUT (SAFE + CLEAN)
         # ----------------------------------------------------
         if st.session_state.get("logged_in"):
-
             if st.button("🚪 Logout", use_container_width=True):
-
-                # clear session safely
+                # Clear session safely
                 for k in list(st.session_state.keys()):
                     del st.session_state[k]
 
                 st.session_state["logged_in"] = False
                 st.session_state["view"] = "login"
-
                 st.rerun()
 
     return selected_page
