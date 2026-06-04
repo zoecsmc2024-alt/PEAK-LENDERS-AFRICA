@@ -2532,140 +2532,123 @@ def show_loans():
     # SERIAL ENGINE (MOVE UP)
     # ==============================
     existing_nums = []
-    
+   
     # ------------------------------
-    # 🔒 NORMALIZE EXISTING SNs
+    # 🔒 1. INITIALIZE & NORMALIZE EXISTING SNs
     # ------------------------------
     loans_df["sn"] = loans_df["sn"].astype(str).str.strip()
     
-    # Map existing SNs (immutability protection)
-    existing_sn_map = dict(zip(loans_df["id"], loans_df["sn"]))
-    
+    # Safely track existing serial numbers
+    existing_nums = []
     for val in loans_df["sn"]:
-        val = val.strip()
         if val.startswith("LN-"):
             try:
                 existing_nums.append(int(val.replace("LN-", "")))
-            except:
+            except ValueError:
                 pass
     
     next_sn_val = max(existing_nums, default=0)
     
+    # Create high-speed lookup maps instead of filtering dataframes in loops
+    id_to_sn = dict(zip(loans_df["id"], loans_df["sn"]))
+    id_to_parent = dict(
+        zip(loans_df["id"], loans_df["parent_loan_id"].fillna("").astype(str).str.strip())
+    )
+    
     # ------------------------------
-    # 🔁 SAFE SN ASSIGNMENT
+    # 🔁 2. SAFE SN ASSIGNMENT (Lineage Walk)
     # ------------------------------
     for i in loans_df.index:
-    
         current_id = loans_df.at[i, "id"]
     
-        # 🔒 NEVER touch already valid SN
-        existing_sn = str(existing_sn_map.get(current_id, "")).strip()
-        if existing_sn.startswith("LN-"):
+        # 🔒 NEVER touch an already valid SN
+        if id_to_sn.get(current_id, "").startswith("LN-"):
             continue
     
-        parent_id = str(loans_df.at[i, "parent_loan_id"]).strip()
-    
+        # 🔗 WALK FULL LINEAGE WITH CYCLE/LOOP PROTECTION
+        visited = set()
+        parent_id = id_to_parent.get(current_id, "")
         inherited_sn = ""
     
-        # 🔗 WALK FULL LINEAGE (not just direct parent)
-        while parent_id != "":
-            parent_match = loans_df[loans_df["id"] == parent_id]
-    
-            if parent_match.empty:
+        while parent_id and parent_id not in ("nan", ""):
+            # Infinite loop protection
+            if parent_id in visited:
                 break
+            visited.add(parent_id)
     
-            parent_row = parent_match.iloc[0]
-            parent_sn = str(parent_row["sn"]).strip()
-    
+            # Check if parent has an SN
+            parent_sn = id_to_sn.get(parent_id, "")
             if parent_sn.startswith("LN-"):
                 inherited_sn = parent_sn
                 break
     
-            parent_id = str(parent_row["parent_loan_id"]).strip()
+            # Move up the family tree
+            parent_id = id_to_parent.get(parent_id, "")
     
-        # ✅ APPLY INHERITED SN
+        # ✅ APPLY INHERITED OR GENERATE NEW
         if inherited_sn:
             loans_df.at[i, "sn"] = inherited_sn
-    
-        # 🆕 CREATE NEW SN ONLY IF STILL MISSING
-        if not str(loans_df.at[i, "sn"]).startswith("LN-"):
+            id_to_sn[current_id] = inherited_sn  # Update map dynamically for down-stream children
+        else:
             next_sn_val += 1
-            loans_df.at[i, "sn"] = f"LN-{next_sn_val:04d}"
+            new_sn = f"LN-{next_sn_val:04d}"
+            loans_df.at[i, "sn"] = new_sn
+            id_to_sn[current_id] = new_sn
     
-    # ✅ SORT BEFORE ASSIGNING CYCLES (Ensures Parent is Cycle 1)
+    # ------------------------------
+    # 📅 3. CALCULATE CYCLE NUMBERS
+    # ------------------------------
+    # Normalize SN casing
+    loans_df["sn"] = loans_df["sn"].str.upper()
+    
+    # Sort to guarantee correct sequence assignment
     loans_df = loans_df.sort_values(by=["sn", "start_date", "id"])
-    
-    loans_df["cycle_no"] = (
-        loans_df.groupby("sn").cumcount() + 1
-    )
+    loans_df["cycle_no"] = loans_df.groupby("sn").cumcount() + 1
     
     # ------------------------------
-    # REVISED SMART STATUS LOGIC (V2)
+    # 🔄 4. SMART STATUS LOGIC
     # ------------------------------
-    
-    loans_df["sn"] = loans_df["sn"].astype(str).str.strip().str.upper()
-    
-    # 1. Sort to ensure chronological order
+    # Ensure perfect chronological sorting per loan family
     loans_df = loans_df.sort_values(by=["sn", "cycle_no", "start_date"])
     
-    # 2. Process each loan family
+    # Pre-initialize status column
+    loans_df["status"] = ""
+    
     for sn_val, grp in loans_df.groupby("sn"):
-        
         indices = grp.index.tolist()
         latest_idx = indices[-1]
-        
-        # 3. Mark all rows EXCEPT the last one as BCF
-        # (Because a newer cycle exists, these are inherently "Brought Forward")
+    
+        # Mark older cycles as BCF (Brought Forward)
         if len(indices) > 1:
             loans_df.loc[indices[:-1], "status"] = "BCF"
-        
-        # 4. Handle the Latest Cycle
+    
+        # Evaluate the latest cycle row
         latest_row = loans_df.loc[latest_idx]
-        
-        # Check if balance is effectively zero (handling float rounding)
-        if abs(latest_row["balance"]) < 1.0: 
+    
+        if abs(latest_row["balance"]) < 1.0:
             loans_df.at[latest_idx, "status"] = "CLEARED"
         else:
-            # If there's a balance, determine if it's a fresh loan or a rollover
             if int(latest_row["cycle_no"]) == 1:
                 loans_df.at[latest_idx, "status"] = "ACTIVE"
             else:
                 loans_df.at[latest_idx, "status"] = "PENDING"
     
     # ------------------------------
-    # FINAL SAFETY OVERRIDE
+    # 🛡️ 5. FINAL SAFETY OVERRIDES
     # ------------------------------
-    # If ANY row (even a middle one) has 0 balance, it cannot be PENDING or ACTIVE.
-    # It's either BCF (if a newer cycle exists) or CLEARED.
-    # This rule forces any 0 balance "Pending" rows to "Cleared".
+    # CRITICAL FIX: Only force CLEARED if it isn't an older, passed-forward cycle (BCF)
+    mask_zero_balance = loans_df["balance"] <= 0
+    mask_not_bcf = loans_df["status"] != "BCF"
     
-    mask_zero = (loans_df["balance"] <= 0) & (loans_df["status"] != "BCF")
-    loans_df.loc[mask_zero, "status"] = "CLEARED"
-    
-    # ------------------------------
-    # FINAL RULE: FORCE CLEARED STATE
-    # ------------------------------
-    # Any loan with balance = 0 is ALWAYS CLEARED
-    loans_df.loc[
-        loans_df["balance"] <= 0,
-        "status"
-    ] = "CLEARED"
+    loans_df.loc[mask_zero_balance & mask_not_bcf, "status"] = "CLEARED"
     
     # ------------------------------
-    # FINAL SORT
+    # 🏷️ FINAL SORT & LABELS
     # ------------------------------
-    loans_df = loans_df.sort_values(
-        by=["sn", "cycle_no"],
-        ascending=[True, True]
-    ).reset_index(drop=True)
+    loans_df = loans_df.sort_values(by=["sn", "cycle_no"]).reset_index(drop=True)
     
-    # ------------------------------
-    # LABELS
-    # ------------------------------
     loans_df["loan_id_label"] = (
-        loans_df["sn"]
-        .str.replace("LN-", "", regex=False)
-        .str.zfill(4)
+        loans_df["sn"].str.replace("LN-", "", regex=False).str.zfill(4)
     )
     
 
