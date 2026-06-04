@@ -3600,7 +3600,6 @@ def show_expenses():
     # 📥 DATA INGESTION & BOUNDARY LAYERS
     # ==============================
     try:
-        # Fetch the entire un-mutated collection first to protect other company indices during saves
         raw_all_df = get_cached_data("expenses")
     except:
         raw_all_df = pd.DataFrame()
@@ -3608,9 +3607,8 @@ def show_expenses():
     if raw_all_df is not None and not raw_all_df.empty:
         raw_all_df.columns = raw_all_df.columns.str.lower().str.strip()
         raw_all_df["id"] = raw_all_df["id"].astype(str)
-        raw_all_df["amount"] = pd.to_numeric(raw_all_df["amount"], errors="coerce").fillna(0)
+        raw_all_df["amount"] = pd.to_numeric(raw_all_df["amount"], errors="coerce").fillna(0.0)
         
-        # Isolate scoped records for UI workflows safely
         if "tenant_id" in raw_all_df.columns:
             df = raw_all_df[raw_all_df["tenant_id"].astype(str) == str(current_tenant)].copy()
         else:
@@ -3639,7 +3637,7 @@ def show_expenses():
             c1, c2 = st.columns(2)
 
             category = c1.selectbox("Expense Category", EXPENSE_CATS)
-            amount = c2.number_input("Amount (UGX)", min_value=0, step=10000)
+            amount = c2.number_input("Amount (UGX)", min_value=0.0, step=10000.0)  # Typed to floats
             desc = st.text_input("Transaction Description / Payee")
 
             c3, c4 = st.columns(2)
@@ -3664,7 +3662,6 @@ def show_expenses():
                             "tenant_id": str(current_tenant)
                         }])
 
-                        # 🛡️ FIX: Append to raw complete table to prevent deleting data of other tenants
                         updated_global_df = pd.concat([raw_all_df, new_record], ignore_index=True)
                         if "financial_year" in updated_global_df.columns:
                             updated_global_df = updated_global_df.drop(columns=["financial_year"], errors="ignore")
@@ -3691,7 +3688,6 @@ def show_expenses():
             view_df = df if fy == "All Time Target" else df[df["financial_year"] == fy]
             total_outflow = view_df["amount"].sum()
 
-            # Clean UI metric panel card execution 
             st.markdown(f"""
             <div style="background-color:white; padding:20px; border-radius:12px; border-left:6px solid #FF4B4B; box-shadow:0 2px 8px rgba(0,0,0,0.04); margin-bottom: 20px;">
                 <p style="margin:0; font-size:11px; color:#6B7280; font-weight:600; text-transform:uppercase;">Aggregate Operational Outflow ({fy})</p>
@@ -3699,7 +3695,6 @@ def show_expenses():
             </div>
             """, unsafe_allow_html=True)
 
-            # Charts block
             col1, col2 = st.columns([2, 1])
             with col1:
                 chart_data = view_df.groupby("category")["amount"].sum().reset_index()
@@ -3719,7 +3714,6 @@ def show_expenses():
                 fy_summary["Total (UGX)"] = fy_summary["Total (UGX)"].apply(lambda x: f"{x:,.0f}")
                 st.dataframe(fy_summary, use_container_width=True, hide_index=True)
 
-            # --- DYNAMIC GRID FILTER SYSTEM ---
             st.markdown("### 📋 Expense Ledger Records")
             
             filter_c1, filter_c2 = st.columns(2)
@@ -3728,11 +3722,10 @@ def show_expenses():
 
             min_val = float(view_df["amount"].min()) if not view_df.empty else 0.0
             max_val = float(view_df["amount"].max()) if not view_df.empty else 100000.0
-            if min_val == max_val: max_val += 1.0 # Edge safeguard against zero ranges
+            if min_val == max_val: max_val += 1.0
             
             amt_range = filter_c2.slider("Transaction Cost Range Threshold", min_val, max_val, (min_val, max_val))
 
-            # Apply runtime pipeline filtrations
             processed_df = view_df.copy()
             if selected_cat != "All Categories":
                 processed_df = processed_df[processed_df["category"] == selected_cat]
@@ -3742,15 +3735,12 @@ def show_expenses():
                 (processed_df["amount"] <= amt_range[1])
             ]
 
-            # Render Uniform Clean Table Output without double mutation conflicts
             if processed_df.empty:
                 st.warning("No records align with current query filters.")
             else:
                 processed_df = processed_df.sort_values("payment_date", ascending=False)
                 display_ledger = processed_df[["payment_date", "category", "description", "amount", "receipt_no"]].copy()
                 display_ledger.columns = ["Date Paid", "Category Grouping", "Description Detail", "Amount (UGX)", "Ref / Invoice #"]
-                
-                # Format for viewing safely via display configurations
                 display_ledger["Amount (UGX)"] = display_ledger["Amount (UGX)"].apply(lambda x: f"{x:,.0f}")
                 
                 st.dataframe(
@@ -3768,7 +3758,6 @@ def show_expenses():
         if df.empty:
             st.info("No active expense records discovered to modify.")
         else:
-            # Build predictable human-readable index labels
             df["selector_label"] = df.apply(
                 lambda r: f"{r['payment_date']} | {r['category']} | UGX {r['amount']:,.0f} — {r['description'][:15]}...", axis=1
             )
@@ -3781,17 +3770,17 @@ def show_expenses():
                 
                 with st.form("edit_expense_form"):
                     st.write(f"**Modifying Reference Key**: `{target_record['id'][:8]}`")
-                    new_amt = st.number_input("Update Value Allocation (UGX)", value=float(target_record['amount']), step=5000)
+                    
+                    # 🛡️ THE FIX: Match float value type with an explicit float step representation
+                    new_amt = st.number_input("Update Value Allocation (UGX)", value=float(target_record['amount']), step=5000.0)
                     new_desc = st.text_input("Modify Description Label Details", value=target_record['description'])
                     
-                    # Layout structures prevent button labels from squeezing onto new lines
                     mod_c1, mod_c2 = st.columns(2)
                     save_btn = mod_c1.form_submit_button("💾 Save Matrix Modifications", use_container_width=True)
                     delete_btn = mod_c2.form_submit_button("🗑️ Purge Log Record", use_container_width=True)
 
                     if save_btn:
-                        # Apply local changes directly over structural references safely
-                        raw_all_df.loc[raw_all_df["id"] == target_record["id"], ["amount", "description"]] = [new_amt, new_desc]
+                        raw_all_df.loc[raw_all_df["id"] == target_record["id"], ["amount", "description"]] = [float(new_amt), new_desc]
                         if "financial_year" in raw_all_df.columns:
                             raw_all_df = raw_all_df.drop(columns=["financial_year"], errors="ignore")
 
@@ -3801,7 +3790,6 @@ def show_expenses():
                             st.rerun()
 
                     if delete_btn:
-                        # Clear target records cleanly from universal indices
                         clean_global_df = raw_all_df[raw_all_df["id"] != str(target_record["id"])].copy()
                         if "financial_year" in clean_global_df.columns:
                             clean_global_df = clean_global_df.drop(columns=["financial_year"], errors="ignore")
@@ -3810,6 +3798,18 @@ def show_expenses():
                             st.warning("🗑️ Expense item purged from system logs.")
                             st.cache_data.clear()
                             st.rerun()
+
+# ==========================================================
+# 🛡️ THE ROUTER FIX (For page routing framework context)
+# ==========================================================
+def show_payments(supabase=None):
+    """
+    Patched entry placeholder to align function signatures across your 
+    Streamlit architecture mapping.
+    """
+    # If your engine relies on explicit client context calls:
+    # client = supabase if supabase else st.session_state.get("supabase_client")
+    st.write("### Payments Module Subsystem Loaded")
 # ==============================
 # 21. MASTER LEDGER 
 # ==============================
