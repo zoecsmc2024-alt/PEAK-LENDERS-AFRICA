@@ -2658,7 +2658,6 @@ def show_reports():
     loans = safe_tenant_filter("loans")
     payments = safe_tenant_filter("payments")
     expenses = safe_tenant_filter("expenses")
-    petty = safe_tenant_filter("petty_cash")
     borrowers = safe_tenant_filter("borrowers")
 
     if loans.empty:
