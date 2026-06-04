@@ -2799,7 +2799,6 @@ def show_reports():
     loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
     payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
     expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
-    petty["date"] = pd.to_datetime(petty.get("date"), errors="coerce")
     
     loans["fiscal_year"] = loans["start_date"].apply(fiscal_year)
     payments["fiscal_year"] = payments["date"].apply(fiscal_year)
