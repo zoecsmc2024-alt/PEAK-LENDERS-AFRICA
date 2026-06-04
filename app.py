@@ -3816,18 +3816,6 @@ def show_expenses():
                             st.cache_data.clear()
                             st.rerun()
 
-# ==========================================================
-# 🛡️ THE ROUTER FIX (For page routing framework context)
-# ==========================================================
-def show_payments(supabase):
-    """
-    Patched entry placeholder to align function signatures across your 
-    Streamlit architecture mapping.
-    """
-    # If your engine relies on explicit client context calls:
-    # client = supabase if supabase else st.session_state.get("supabase_client")
-    st.write("### Payments Module Subsystem Loaded")
-
 
     
 import streamlit as st
