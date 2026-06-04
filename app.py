@@ -1914,16 +1914,26 @@ from datetime import datetime
 import pandas as pd
 import streamlit as st
 
-def generate_receipt_pdf(data, filename):
-    doc = SimpleDocTemplate(filename, pagesize=A4)
+def generate_receipt_pdf(data):
+    """
+    Renders receipt documents directly to an in-memory buffer 
+    to maximize transaction safety and performance across sessions.
+    """
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=40, leftMargin=40, topMargin=40, bottomMargin=40)
     styles = getSampleStyleSheet()
     content = []
+    
     content.append(Paragraph("<b>PAYMENT RECEIPT</b>", styles["Title"]))
-    content.append(Spacer(1, 12))
+    content.append(Spacer(1, 15))
+    
     for k, v in data.items():
         content.append(Paragraph(f"<b>{k}:</b> {v}", styles["Normal"]))
-        content.append(Spacer(1, 8))
+        content.append(Spacer(1, 10))
+        
     doc.build(content)
+    buffer.seek(0)
+    return buffer
 
 # ✅ SINGLE SOURCE OF TRUTH (RPC)
 def generate_receipt_no(supabase, tenant_id):
@@ -1933,14 +1943,20 @@ def generate_receipt_no(supabase, tenant_id):
             return res.data
         return f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
     except Exception as e:
-        # Avoid crashing if rendering context is unstable
         return f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
 # ==============================
 # 💵 PAYMENTS MODULE (CYCLE-AWARE)
 # ==============================
 def show_payments(supabase):
-    st.markdown("## 💵 Payments Management")
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    current_tenant = st.session_state.get('tenant_id')
+
+    if not current_tenant:
+        st.error("🔐 Session expired. Please log in.")
+        st.stop()
+
+    st.markdown(f"<h2 style='color: {brand_color}; margin-bottom: 20px;'>💵 Payments Management</h2>", unsafe_allow_html=True)
 
     try:
         loans_raw = get_cached_data("loans")
@@ -1950,32 +1966,46 @@ def show_payments(supabase):
         st.error(f"❌ Data load error: {e}")
         return
 
-    loans_df = pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame()
-    payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
-    borrowers_df = pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame()
+    # Structure dataframes safely
+    raw_loans_df = pd.DataFrame(loans_raw) if loans_raw is not None else pd.DataFrame()
+    raw_payments_df = pd.DataFrame(payments_raw) if payments_raw is not None else pd.DataFrame()
+    raw_borrowers_df = pd.DataFrame(borrowers_raw) if borrowers_raw is not None else pd.DataFrame()
 
-    if loans_df.empty:
-        st.info("ℹ️ No loans available.")
+    # Normalize column schemas early
+    for dataframe in [raw_loans_df, raw_payments_df, raw_borrowers_df]:
+        if not dataframe.empty:
+            dataframe.columns = dataframe.columns.str.lower().str.strip().str.replace(" ", "_")
+
+    if raw_loans_df.empty:
+        st.info("ℹ️ No active corporate loan records discoverable on the network.")
         return
 
-    # Normalize column names cleanly
-    for df in [loans_df, payments_df, borrowers_df]:
-        if not df.empty:
-            df.columns = df.columns.str.lower().str.strip().str.replace(" ", "_")
+    # 🛡️ TENANT FILTER BOUNDARY: Ensure strict company isolation
+    if "tenant_id" in raw_loans_df.columns:
+        loans_df = raw_loans_df[raw_loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
+    else:
+        loans_df = raw_loans_df.copy()
+
+    if loans_df.empty:
+        st.info("ℹ️ No active loan parameters logged under this profile.")
+        return
+
+    payments_df = raw_payments_df if "tenant_id" not in raw_payments_df.columns else raw_payments_df[raw_payments_df["tenant_id"].astype(str) == str(current_tenant)].copy()
+    borrowers_df = raw_borrowers_df if "tenant_id" not in raw_borrowers_df.columns else raw_borrowers_df[raw_borrowers_df["tenant_id"].astype(str) == str(current_tenant)].copy()
 
     # Ensure clean string casting for relationship keys
     for df, col in [(borrowers_df, "id"), (loans_df, "borrower_id"), (loans_df, "id"), (payments_df, "loan_id")]:
         if col in df.columns:
             df[col] = df[col].astype(str)
 
-    # Borrower mapping
+    # Borrower profile transformations
     if not borrowers_df.empty and "name" in borrowers_df.columns:
         borrower_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
-        loans_df["borrower"] = loans_df["borrower_id"].map(borrower_map).fillna("Unknown")
+        loans_df["borrower"] = loans_df["borrower_id"].map(borrower_map).fillna("Unknown Profile")
     else:
-        loans_df["borrower"] = "Unknown"
+        loans_df["borrower"] = "Unknown Profile"
 
-    # Strict numeric coercion to prevent calculation blowups
+    # Numeric Coercion
     numeric_cols = ["total_repayable", "amount_paid", "balance", "principal", "interest"]
     for col in numeric_cols:
         if col in loans_df.columns:
@@ -1984,35 +2014,27 @@ def show_payments(supabase):
     if not payments_df.empty and "amount" in payments_df.columns:
         payments_df["amount"] = pd.to_numeric(payments_df["amount"].fillna(0), errors="coerce")
 
-    # Dynamic Aggregation Map to determine actual paid statuses
+    # Aggregate dynamically across matching ledgers
     if not payments_df.empty:
         payment_sums = payments_df.groupby("loan_id")["amount"].sum()
         loans_df["amount_paid"] = loans_df["id"].map(payment_sums).fillna(0)
     else:
         loans_df["amount_paid"] = 0
 
-    # Ensure early local calculation for initial balance safety
     loans_df["balance"] = loans_df["total_repayable"] - loans_df["amount_paid"]
 
-    # ------------------------------
-    # RECALCULATE & CASCADE LOGIC
-    # ------------------------------
+    # Business Logic Utilities
     def cascade_payment(df_target, sn, changed_cycle_no):
-        # Extract and isolate targeted structural sequences
         cycles = df_target[df_target["sn"] == sn].sort_values("cycle_no").copy()
-        
         for idx, row in cycles.iterrows():
             if int(row["cycle_no"]) <= int(changed_cycle_no):
                 continue
-            
-            # Identify current positional context relative to the array
             pos = cycles.index.get_loc(idx)
             prev_idx = cycles.index[pos - 1]
             
             prev_balance = df_target.loc[prev_idx, "balance"]
             current_interest = row["interest"]
             
-            # Apply down-chain modifications directly back to core mutated reference frame
             df_target.loc[idx, "principal"] = prev_balance
             df_target.loc[idx, "total_repayable"] = prev_balance + current_interest
             df_target.loc[idx, "balance"] = df_target.loc[idx, "total_repayable"] - df_target.loc[idx, "amount_paid"]
@@ -2031,49 +2053,39 @@ def show_payments(supabase):
         return current
 
     # ==============================
-    # 📑 TABS INTERFACE
+    # 📑 INTERFACE NAVIGATION TABS
     # ==============================
-    tab1, tab2 = st.tabs(["➕ Record Payment", "📜 History"])
+    tab1, tab2 = st.tabs(["➕ Record Payment Collection", "📜 Repayment History Logs"])
 
     with tab1:
         active_loans = loans_df.copy()
-        
-        def format_loan(row):
-            bal = row["total_repayable"] - row["amount_paid"]
-            sn_val = row.get("loan_id_label") or row.get("sn") or "N/A"
-            return f"{row['borrower']} | SN: {sn_val} | BAL: UGX {bal:,.0f}"
-
-        active_loans["label"] = active_loans.apply(format_loan, axis=1)
-
-        selected_index = st.selectbox(
-            "Select Loan",
-            active_loans.index,
-            format_func=lambda i: active_loans.loc[i, "label"]
+        active_loans["label"] = active_loans.apply(
+            lambda r: f"{r['borrower']} | Ref: {r.get('loan_id_label', r['id'][:8])} | Owed: UGX {r['balance']:,.0f}", axis=1
         )
 
+        selected_index = st.selectbox("🎯 Choose Target Active Account Line", active_loans.index, format_func=lambda i: active_loans.loc[i, "label"])
         loan = active_loans.loc[selected_index]
         active_loan = get_active_loan(loans_df, loan)
         loan_id = active_loan["id"]
         current_bal = active_loan["total_repayable"] - active_loan["amount_paid"]
 
-        st.info(f"Active Loan Used: {active_loan['borrower']} (ID: {loan_id[:6]})")
-        st.metric("Balance", f"UGX {current_bal:,.0f}")
+        st.info(f"Targeting Account Pipeline: {active_loan['borrower']} (Ref ID: {loan_id[:8]})")
+        st.metric("Verified Balance Position", f"UGX {current_bal:,.0f}")
 
         with st.form("payment_form"):
-            amount = st.number_input("Amount", min_value=0.0, step=1000.0)
-            method = st.selectbox("Method", ["Cash", "Mobile Money", "Bank"])
-            date = st.date_input("Date", datetime.now())
-            submit = st.form_submit_button("Post Payment")
+            amount = st.number_input("Transaction Amount Received (UGX)", min_value=0.0, step=10000.0) # Matched floating signatures
+            method = st.selectbox("Collection Channel / Method", ["Cash", "Mobile Money", "Bank"])
+            date = st.date_input("Processing Settlement Date", datetime.now())
+            submit = st.form_submit_button("🚀 Post Repayment Entry", use_container_width=True)
 
         if submit:
             if amount <= 0:
-                st.warning("⚠️ Enter a valid payment amount.")
+                st.warning("⚠️ Transaction entries require a positive value contribution.")
             else:
                 try:
-                    tenant_id = st.session_state.get("tenant_id")
-                    receipt_no = generate_receipt_no(supabase, tenant_id)
+                    receipt_no = generate_receipt_no(supabase, current_tenant)
 
-                    # 1️⃣ Insert payment record securely
+                    # 1️⃣ Insert backend payment transaction
                     supabase.table("payments").insert({
                         "receipt_no": receipt_no,
                         "loan_id": loan_id,
@@ -2081,105 +2093,113 @@ def show_payments(supabase):
                         "amount": float(amount),
                         "date": date.strftime("%Y-%m-%d"),
                         "method": method,
-                        "tenant_id": tenant_id
+                        "tenant_id": current_tenant
                     }).execute()
 
-                    # 2️⃣ Mutate local state accurately before cascading
+                    # 2️⃣ Update state matrices
                     loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] += amount
                     loans_df.loc[loans_df["id"] == loan_id, "balance"] = (
-                        loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - 
-                        loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
+                        loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
                     )
 
-                    # 3️⃣ Execute down-stream chain cascade modifications
+                    # 3️⃣ Cascade interest balance implications
                     cascade_payment(loans_df, active_loan["sn"], int(active_loan["cycle_no"]))
-
-                    # 4️⃣ Commit updated structures to local storage/SaaS engine
                     save_data_saas("loans", loans_df)
 
-                    # 5️⃣ Generate and expose dynamic documents
-                    file_path = f"/tmp/{receipt_no}.pdf"
-                    generate_receipt_pdf({
-                        "Receipt No": receipt_no,
-                        "Borrower": active_loan["borrower"],
-                        "Amount": f"UGX {amount:,.0f}",
-                        "Method": method,
-                        "Date": date.strftime("%Y-%m-%d"),
-                    }, file_path)
+                    # 4️⃣ Generate memory-isolated receipts cleanly
+                    pdf_buffer = generate_receipt_pdf({
+                        "Receipt Number": receipt_no,
+                        "Borrower Entity": active_loan["borrower"],
+                        "Settlement Amount": f"UGX {amount:,.0f}",
+                        "Payment Framework": method,
+                        "Execution Date": date.strftime("%Y-%m-%d"),
+                    })
 
-                    with open(file_path, "rb") as f:
-                        st.download_button("📥 Download Receipt", f, file_name=f"{receipt_no}.pdf")
+                    st.download_button(
+                        label="📥 Download Formal Receipt Blueprint", 
+                        data=pdf_buffer, 
+                        file_name=f"Receipt_{receipt_no}.pdf",
+                        mime="application/pdf",
+                        use_container_width=True
+                    )
 
-                    st.success(f"✅ Payment posted. New Balance: UGX {loans_df.loc[loans_df['id'] == loan_id, 'balance'].values[0]:,.0f}")
+                    st.success(f"✅ Payment registered. Adjusted Owed Position: UGX {loans_df.loc[loans_df['id'] == loan_id, 'balance'].values[0]:,.0f}")
                     st.cache_data.clear()
                     st.rerun()
 
                 except Exception as e:
-                    st.error(f"❌ Error during posting sequence: {e}")
+                    st.error(f"❌ Post transaction sequence aborted: {e}")
 
     with tab2:
         if payments_df.empty:
-            st.info("No payment history found.")
+            st.info("No localized accounting receipts currently matched inside this ledger profile.")
         else:
-            payments_df["amount_display"] = payments_df["amount"].apply(lambda x: f"UGX {x:,.0f}")
-            payments_df["receipt_no"] = payments_df["receipt_no"].fillna("No Receipt")
+            display_df = payments_df.copy()
+            display_df["amount_display"] = display_df["amount"].apply(lambda x: f"UGX {x:,.0f}")
+            display_df["receipt_no"] = display_df["receipt_no"].fillna("Pending Log Ref")
             
-            display_cols = ["date", "borrower", "amount_display", "method", "receipt_no"]
-            st.dataframe(payments_df[display_cols], use_container_width=True, hide_index=True)
+            date_col = "date" if "date" in display_df.columns else "payment_date"
+            display_df = display_df.sort_values(by=date_col, ascending=False)
+            
+            st.dataframe(
+                display_df[[date_col, "borrower", "amount_display", "method", "receipt_no"]], 
+                use_container_width=True, 
+                hide_index=True
+            )
 
             st.markdown("---")
-            st.markdown("### ⚙️ Payment Maintenance")
+            st.markdown("### ⚙️ Ledger Log Maintenance Modality")
 
             pay_map = {
                 f"{row['receipt_no']} | {row['borrower']} | {row['amount_display']}": str(row['id'])
-                for _, row in payments_df.iterrows()
+                for _, row in display_df.iterrows()
             }
 
-            selected_pay_label = st.selectbox("Choose Payment to Modify", list(pay_map.keys()))
+            selected_pay_label = st.selectbox("Choose Targeted Transaction Allocation", list(pay_map.keys()))
             target_pay_id = pay_map[selected_pay_label]
-            target_pay = payments_df[payments_df['id'].astype(str) == target_pay_id].iloc[0]
+            target_pay = display_df[display_df['id'].astype(str) == target_pay_id].iloc[0]
 
             p_col1, p_col2 = st.columns(2)
 
-            if p_col1.button("🗑️ Delete Payment", use_container_width=True):
+            if p_col1.button("🗑️ Purge Payment From Records", use_container_width=True):
                 try:
                     supabase.table("payments").delete().eq("id", target_pay_id).execute()
                     
-                    # Recalculate context accurately by removing local balance implications
                     loan_id = target_pay["loan_id"]
                     affected_loan = loans_df[loans_df["id"] == loan_id].iloc[0]
                     
-                    # Correct state configuration alignment using freshly modified table bounds
                     loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] -= float(target_pay["amount"])
                     loans_df.loc[loans_df["id"] == loan_id, "balance"] = (
-                        loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - 
-                        loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
+                        loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
                     )
                     
                     cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
                     save_data_saas("loans", loans_df)
                     
                     st.cache_data.clear()
-                    st.warning(f"Payment {target_pay['receipt_no']} removed successfully.")
+                    st.warning(f"Payment reference key {target_pay['receipt_no']} dropped from backend.")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"Delete transaction aborted: {e}")
+                    st.error(f"Execution aborted: {e}")
 
-            if p_col2.button("📝 Edit Payment", use_container_width=True):
+            if p_col2.button("📝 Edit Asset Metrics", use_container_width=True):
                 st.session_state["edit_pay_mode"] = True
 
             if st.session_state.get("edit_pay_mode"):
                 with st.form("edit_payment_form"):
-                    st.info(f"Modifying Entry: {target_pay['receipt_no']}")
-                    new_amt = st.number_input("Revised Amount", value=float(target_pay['amount']))
+                    st.info(f"Modifying Entry Core Attributes: {target_pay['receipt_no']}")
+                    
+                    # 🛡️ THE FIX: Float values matched explicitly with Float steps to prevent type crashes
+                    new_amt = st.number_input("Revised Amount Allocation (UGX)", value=float(target_pay['amount']), step=5000.0)
+                    
                     current_method = target_pay['method']
                     method_options = ["Cash", "Mobile Money", "Bank"]
                     method_idx = method_options.index(current_method) if current_method in method_options else 0
-                    new_method = st.selectbox("Revised Method", method_options, index=method_idx)
+                    new_method = st.selectbox("Revised Collection Channel", method_options, index=method_idx)
                     
                     eb1, eb2 = st.columns(2)
 
-                    if eb1.form_submit_button("💾 Save Changes"):
+                    if eb1.form_submit_button("💾 Save Adjustment Matrices", use_container_width=True):
                         try:
                             supabase.table("payments").update({
                                 "amount": new_amt,
@@ -2189,12 +2209,10 @@ def show_payments(supabase):
                             loan_id = target_pay["loan_id"]
                             affected_loan = loans_df[loans_df["id"] == loan_id].iloc[0]
                             
-                            # Re-establish local data balance offsets dynamically
                             diff = new_amt - float(target_pay["amount"])
                             loans_df.loc[loans_df["id"] == loan_id, "amount_paid"] += diff
                             loans_df.loc[loans_df["id"] == loan_id, "balance"] = (
-                                loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - 
-                                loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
+                                loans_df.loc[loans_df["id"] == loan_id, "total_repayable"] - loans_df.loc[loans_df["id"] == loan_id, "amount_paid"]
                             )
                             
                             cascade_payment(loans_df, affected_loan["sn"], int(affected_loan["cycle_no"]))
@@ -2202,15 +2220,14 @@ def show_payments(supabase):
                             
                             st.session_state["edit_pay_mode"] = False
                             st.cache_data.clear()
-                            st.success("Payment entry changes committed and applied successfully.")
+                            st.success("Changes committed.")
                             st.rerun()
                         except Exception as e:
                             st.error(f"Update failed: {e}")
 
-                    if eb2.form_submit_button("❌ Cancel"):
+                    if eb2.form_submit_button("❌ Drop Corrections", use_container_width=True):
                         st.session_state["edit_pay_mode"] = False
                         st.rerun()
-
 
 import streamlit as st
 import pandas as pd
