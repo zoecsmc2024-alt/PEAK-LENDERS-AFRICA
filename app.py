@@ -196,94 +196,106 @@ def apply_master_theme():
     
     st.markdown(f"""
     <style>
-    /* 1. Global Setup for Main Canvas Background */
+    /* 1. Base Main Canvas App Background */
     .stApp {{
-        background: linear-gradient(135deg, #F1F5F9 0%, #E2E8F0 100%) !important;
+        background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%) !important;
     }}
 
-    /* 2. Transform the Sidebar into a Floating Glass Container */
+    /* 2. Light Glassmorphism Sidebar Container Configuration */
     [data-testid="stSidebar"] {{
-        background-color: rgba(255, 255, 255, 0.07) !important;
-        backdrop-filter: blur(20px) saturate(160%) !important;
-        -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
-        border-right: 1px solid rgba(255, 255, 255, 0.15) !important;
-        box-shadow: 4px 0 24px 0 rgba(0, 0, 0, 0.15) !important;
+        background-color: rgba(255, 255, 255, 0.45) !important;
+        backdrop-filter: blur(25px) saturate(180%) !important;
+        -webkit-backdrop-filter: blur(25px) saturate(180%) !important;
+        border-right: 1px solid rgba(15, 23, 42, 0.08) !important;
+        box-shadow: 4px 0 30px 0 rgba(15, 23, 42, 0.04) !important;
     }}
     
-    /* Ensure the structural inner sidebar wrapper remains transparent */
     [data-testid="stSidebar"] > div:first-child {{
         background: transparent !important;
     }}
 
-    /* 3. FIX TEXT COLORS FOR READABILITY (Addressing image_4fa233.png) */
-    /* Force all structural text labels, captions, and radio items inside the sidebar to remain sharp and highly visible */
+    /* 3. TYPOGRAPHY CORRECTION (Fixes the washed out white text) */
+    /* Force headings, markdown blocks, radio options, and widget controls to use highly readable deep slate */
     [data-testid="stSidebar"] .stMarkdown p, 
     [data-testid="stSidebar"] label, 
     [data-testid="stSidebar"] span,
+    [data-testid="stSidebar"] h1,
+    [data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3,
     [data-testid="stSidebar"] [data-testid="stWidgetLabel"] p {{
-        color: #FFFFFF !important;
-        text-shadow: 0px 1px 2px rgba(0, 0, 0, 0.2) !important;
+        color: #0F172A !important;
+        font-weight: 500 !important;
+        text-shadow: none !important;
+    }}
+
+    /* Muted sub-text and captions styling */
+    [data-testid="stSidebar"] p[data-testid="stCaptionText"],
+    [data-testid="stSidebar"] .stMarkdown caption,
+    [data-testid="stSidebar"] .stMarkdown small {{
+        color: #475569 !important;
+        font-weight: 400 !important;
+    }}
+
+    /* 4. Dropdown Selectbox Enhancements */
+    div[data-baseweb="select"] > div {{
+        background: rgba(255, 255, 255, 0.75) !important;
+        backdrop-filter: blur(10px) !important;
+        border: 1px solid rgba(15, 23, 42, 0.12) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02) !important;
+    }}
+    
+    /* Ensure targeted dropdown text values display sharply */
+    div[data-baseweb="select"] span {{
+        color: #0F172A !important;
         font-weight: 500 !important;
     }}
 
-    /* Mute sub-captions cleanly without making them completely invisible */
-    [data-testid="stSidebar"] .stMarkdown caption,
-    [data-testid="stSidebar"] p[data-testid="stCaptionText"] {{
-        color: rgba(255, 255, 255, 0.65) !important;
-    }}
-
-    /* 4. Style Selectboxes and Inputs for the Glass Theme */
-    div[data-baseweb="select"] > div {{
-        background: rgba(255, 255, 255, 0.15) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.25) !important;
-        border-radius: 12px !important;
-        color: #FFFFFF !important;
-    }}
-    
-    /* Ensure dropdown option texts are legible */
-    div[data-baseweb="select"] span {{
-        color: #FFFFFF !important;
-    }}
-
-    /* 5. Custom Styling for Navigation Radio Elements */
+    /* 5. Navigation Items Wrapper (Radio Group Structure) */
     [data-testid="stSidebar"] [data-testid="stRadio"] div[role="radiogroup"] {{
-        background: rgba(255, 255, 255, 0.05) !important;
-        border-radius: 14px !important;
+        background: rgba(255, 255, 255, 0.3) !important;
+        border-radius: 16px !important;
         padding: 8px !important;
-        border: 1px solid rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(15, 23, 42, 0.05) !important;
     }}
 
-    /* Individual Radio Choice Wrapper Hover Effect */
+    /* Nav items hover states */
     [data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"] {{
         background: transparent;
         transition: all 0.2s ease-in-out;
-        padding: 6px 10px !important;
-        border-radius: 8px !important;
+        padding: 8px 12px !important;
+        border-radius: 10px !important;
         margin-bottom: 4px !important;
         width: 100% !important;
     }}
 
     [data-testid="stSidebar"] [data-testid="stRadio"] label[data-baseweb="radio"]:hover {{
-        background: rgba(255, 255, 255, 0.12) !important;
+        background: rgba(255, 255, 255, 0.6) !important;
     }}
 
-    /* 6. Floating Action Glass Buttons (Logout Button) */
+    /* 6. Active Radio Button Accent (Matches your active red selection pill safely) */
+    [data-testid="stSidebar"] [data-testid="stRadio"] div[data-checked="true"] {{
+        background-color: transparent !important;
+    }}
+
+    /* 7. Action Button Overhaul (Logout Button Style Alignment) */
     [data-testid="stSidebar"] button {{
-        background: rgba(255, 255, 255, 0.15) !important;
-        color: #FFFFFF !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.25) !important;
+        background: rgba(255, 255, 255, 0.7) !important;
+        color: #0F172A !important;
+        backdrop-filter: blur(8px) !important;
+        border: 1px solid rgba(15, 23, 42, 0.1) !important;
         border-radius: 12px !important;
-        font-weight: 600 !important;
+        font-weight: 500 !important;
         transition: all 0.2s ease !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05) !important;
     }}
 
     [data-testid="stSidebar"] button:hover {{
-        background: rgba(255, 255, 255, 0.25) !important;
-        border-color: rgba(255, 255, 255, 0.4) !important;
-        transform: translateY(-1px);
+        background: #FFFFFF !important;
+        border-color: rgba(15, 23, 42, 0.2) !important;
+        color: {brand_color} !important;
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08) !important;
+        transform: translateY(-0.5px);
     }}
     </style>
     """, unsafe_allow_html=True)
