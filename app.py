@@ -3810,48 +3810,103 @@ def show_payments(supabase=None):
     # If your engine relies on explicit client context calls:
     # client = supabase if supabase else st.session_state.get("supabase_client")
     st.write("### Payments Module Subsystem Loaded")
-# ==============================
-# 21. MASTER LEDGER 
-# ==============================
+
+
+    
+import streamlit as st
+import pandas as pd
+from io import BytesIO
+from datetime import datetime
+# Ensure proper ReportLab styling imports are active
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
 def generate_pdf_statement(client_name, loans_df, payments_df):
+    """
+    Compiles a clean, multi-page financial ledger PDF statement safely 
+    wrapped inside Paragraph nodes to prevent text clipping.
+    """
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
+    
+    # Custom cell style to handle long text gracefully inside ReportLab cells
+    cell_style = ParagraphStyle(
+        'LedgerCell',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10
+    )
+    cell_bold = ParagraphStyle(
+        'LedgerCellBold',
+        parent=styles['Normal'],
+        fontSize=8,
+        leading=10,
+        fontName='Helvetica-Bold'
+    )
+
     elements = []
-    elements.append(Paragraph(f"<b>{st.session_state.get('company_name', 'ZOE CONSULTS').upper()}</b>", styles["Title"]))
-    elements.append(Paragraph(f"Client: {client_name}", styles["Normal"]))
-    elements.append(Paragraph(f"Statement date: {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
+    company_name = st.session_state.get('company_name', 'ZOE CONSULTS').upper()
+    elements.append(Paragraph(f"<b>{company_name}</b>", styles["Title"]))
+    elements.append(Paragraph(f"<b>Client Statement:</b> {client_name}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Statement Date:</b> {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
     elements.append(Spacer(1, 20))
-    grand_total = 0
+    
+    grand_total = 0.0
+    
     for _, loan in loans_df.iterrows():
         loan_id = str(loan["id"])
-        # We use a readable label if possible, or truncate the long UUID for the header
         display_id = str(loan.get("loan_id_label", loan_id)) 
         principal = float(loan.get("principal", 0))
         interest = float(loan.get("interest", 0))
         initial_amount = principal + interest
+        
+        # Scope payments safely to this unique loan iteration instance
         loan_payments = pd.DataFrame()
         if payments_df is not None and not payments_df.empty:
-            loan_payments = payments_df[
-                payments_df["loan_id"].astype(str) == loan_id
-            ].copy()
+            loan_payments = payments_df[payments_df["loan_id"].astype(str) == loan_id].copy()
+            
         if not loan_payments.empty:
             date_col = "payment_date" if "payment_date" in loan_payments.columns else "date"
             if date_col in loan_payments.columns:
                 loan_payments = loan_payments.sort_values(by=date_col)
+                
         balance = initial_amount
-        elements.append(Paragraph(f"<b>Loan Ref:</b> {display_id}", styles["Heading3"]))
-        data = [["date", "Description", "Debit", "Credit", "balance"]]
-        # Truncate dates to YYYY-MM-DD to prevent overwriting
+        elements.append(Paragraph(f"<b>Loan Account Ref:</b> {display_id}", styles["Heading3"]))
+        
+        # Table Headers
+        data = [[
+            Paragraph("<b>Date</b>", cell_bold),
+            Paragraph("<b>Description</b>", cell_bold),
+            Paragraph("<b>Debit (Due)</b>", cell_bold),
+            Paragraph("<b>Credit (Paid)</b>", cell_bold),
+            Paragraph("<b>Balance</b>", cell_bold)
+        ]]
+        
         start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
         clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
+        
         data.append([
-            clean_start_date,
-            "Loan Disbursement",
-            f"{initial_amount:,.0f}",
-            "0",
-            f"{balance:,.0f}"
+            Paragraph(clean_start_date, cell_style),
+            Paragraph("Loan Disbursement Base", cell_style),
+            Paragraph(f"{principal:,.0f}", cell_style),
+            Paragraph("0", cell_style),
+            Paragraph(f"{principal:,.0f}", cell_style)
         ])
+        
+        # Recalculate balance tracking pipeline safely
+        balance = principal
+        if interest > 0:
+            balance += interest
+            data.append([
+                Paragraph(clean_start_date, cell_style),
+                Paragraph("Initial Interest Cost Applied", cell_style),
+                Paragraph(f"{interest:,.0f}", cell_style),
+                Paragraph("0", cell_style),
+                Paragraph(f"{balance:,.0f}", cell_style)
+            ])
 
         if not loan_payments.empty:
             for _, p in loan_payments.iterrows():
@@ -3862,98 +3917,131 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
                 clean_pay_date = pay_date_raw[:10] if len(pay_date_raw) > 10 else pay_date_raw
 
                 data.append([
-                    clean_pay_date,
-                    "Repayment",
-                    "0",
-                    f"{amount:,.0f}",
-                    f"{balance:,.0f}"
+                    Paragraph(clean_pay_date, cell_style),
+                    Paragraph("Repayment Received", cell_style),
+                    Paragraph("0", cell_style),
+                    Paragraph(f"{amount:,.0f}", cell_style),
+                    Paragraph(f"{balance:,.0f}", cell_style)
                 ])
         else:
-            data.append(["-", "No payments", "-", "-", f"{balance:,.0f}"])
+            if interest == 0: # If it hadn't appended an interest tracking line item yet
+                data.append([Paragraph("-", cell_style), Paragraph("No repayments on file", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style), Paragraph(f"{balance:,.0f}", cell_style)])
 
         grand_total += balance
 
-        # Adjusted colWidths: widened the Description and balance columns
-        table = Table(data, repeatRows=1, colWidths=[75, 170, 85, 85, 100])
+        # Explicit safe column width mappings (Total width = 535 points, perfectly fitting A4)
+        table = Table(data, repeatRows=1, colWidths=[70, 195, 90, 90, 90])
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.darkblue),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2B3F87")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
             ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
-            ("ALIGN", (0, 0), (0, -1), "LEFT"),
-            ("FONTname", (0, 0), (-1, 0), "Helvetica-Bold"),
-            ("FONTSIZE", (0, 0), (-1, -1), 9), # Slightly smaller font for better fit
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
         ]))
 
         elements.append(table)
-        elements.append(Spacer(1, 20))
-    elements.append(Paragraph(f"<b>Total Outstanding: {grand_total:,.0f} UGX</b>", styles["Title"]))
+        elements.append(Spacer(1, 15))
+        
+    elements.append(Spacer(1, 10))
+    elements.append(Paragraph(f"<b>Aggregate Outstanding Position: {grand_total:,.0f} UGX</b>", styles["Heading2"]))
+    
     doc.build(elements)
     buffer.seek(0)
     return buffer
+
 # ==============================
-# MAIN LEDGER FUNCTION (BABY BLUE EDITION)
+# MAIN LEDGER FUNCTION
 # ==============================
 def show_ledger():
-    # 🎨 THEME COLORS & FONTS
-    baby_blue = "#89CFF0"
+    brand_color = st.session_state.get("theme_color", "#2B3F87")
+    current_tenant = st.session_state.get('tenant_id')
+
+    if not current_tenant:
+        st.error("🔐 Session expired. Please log in.")
+        st.stop()
+
     st.markdown(f"""
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
             .ledger-header {{
                 font-family: 'Inter', sans-serif;
-                color: {baby_blue};
+                color: {brand_color};
                 font-weight: 700;
-                letter-spacing: -0.5px;
+                margin-bottom: 20px;
             }}
             .snapshot-text {{
                 font-family: 'Inter', sans-serif;
                 font-weight: 600;
-                color: #555;
+                color: #374151;
+                margin-top: 15px;
             }}
         </style>
-        <h2 class='ledger-header'>📘 Master Ledger</h2>
+        <h2 class='ledger-header'>📘 Master Ledger Ledger Accounts</h2>
     """, unsafe_allow_html=True)
 
-    # 📥 LOAD DATA
-    loans_df = get_cached_data("loans")
-    payments_df = get_cached_data("payments")
-    borrowers_df = get_cached_data("borrowers")
+    # 📥 LOAD AND ISOLATE BY MULTI-TENANT BOUNDARY LAYERS
+    raw_loans = get_cached_data("loans")
+    raw_payments = get_cached_data("payments")
+    raw_borrowers = get_cached_data("borrowers")
 
-    if loans_df is None or loans_df.empty:
-        st.info("💡 Your system is clear! No active loans found.")
+    if raw_loans is None or raw_loans.empty:
+        st.info("💡 Complete clear! No active loan parameters tracked on database arrays.")
         return
 
-    loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
-    if payments_df is not None and not payments_df.empty:
-        payments_df.columns = payments_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    # Normalize data structures
+    raw_loans.columns = raw_loans.columns.str.strip().str.lower().str.replace(" ", "_")
+    
+    # 🛡️ TENANT FILTER LAYER: Prevent cross-company visibility leak
+    if "tenant_id" in raw_loans.columns:
+        loans_df = raw_loans[raw_loans["tenant_id"].astype(str) == str(current_tenant)].copy()
+    else:
+        loans_df = raw_loans.copy()
+
+    if loans_df.empty:
+        st.info("💡 No active profile accounts registered to this company portal.")
+        return
+
+    if raw_payments is not None and not raw_payments.empty:
+        raw_payments.columns = raw_payments.columns.str.strip().str.lower().str.replace(" ", "_")
+        payments_df = raw_payments if "tenant_id" not in raw_payments.columns else raw_payments[raw_payments["tenant_id"].astype(str) == str(current_tenant)].copy()
+    else:
+        payments_df = pd.DataFrame()
+
     bor_map = {}
-    if borrowers_df is not None and not borrowers_df.empty:
-        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    if raw_borrowers is not None and not raw_borrowers.empty:
+        raw_borrowers.columns = raw_borrowers.columns.str.strip().str.lower().str.replace(" ", "_")
+        borrowers_df = raw_borrowers if "tenant_id" not in raw_borrowers.columns else raw_borrowers[raw_borrowers["tenant_id"].astype(str) == str(current_tenant)]
         bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
+        
     if "borrower" not in loans_df.columns:
-        loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown")
+        if "borrower_id" in loans_df.columns:
+            loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown Profile")
+        else:
+            loans_df["borrower"] = "Unknown Profile"
 
     # ==============================
     # 🎯 SELECTION INTERFACE
     # ==============================
     loan_map = {
-        f"ID: {r.get('loan_id_label', r['id'])} - {r['borrower']}": str(r["id"])
+        f"Ref: {r.get('loan_id_label', r['id'][:8])} — {r['borrower']}": str(r["id"])
         for _, r in loans_df.iterrows()
     }
-    selected_label = st.selectbox("🎯 Select Loan Account", list(loan_map.keys()))
+    
+    selected_label = st.selectbox("🎯 Target Loan Account Filter", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
     filtered_loan = loans_df[loans_df["id"].astype(str) == raw_id]
+    
     if filtered_loan.empty:
-        st.error("Loan data not found.")
+        st.error("Target loan data vector unreadable.")
         return
     loan_info = filtered_loan.iloc[0]
 
     # ==============================
-    # 📊 STATEMENT PREVIEW (BABY BLUE SNAPSHOT)
+    # 📊 STATEMENT PREVIEW PANEL
     # ==============================
-    st.markdown("<h4 class='snapshot-text'>📑 Account Snapshot</h4>", unsafe_allow_html=True)
+    st.markdown("<h4 class='snapshot-text'>📑 Account Balance Breakdown</h4>", unsafe_allow_html=True)
     
     p = float(loan_info.get("principal", 0))
     i = float(loan_info.get("interest", 0))
@@ -3962,90 +4050,69 @@ def show_ledger():
     bal = float(loan_info.get("balance", 0))
     
     m1, m2, m3, m4 = st.columns(4)
-    
-    # 🟦 Principal (neutral blue feel via delta)
-    m1.metric(
-        "Principal",
-        f"UGX {p:,.0f}",
-        delta="Base loan",
-        delta_color="off"
-    )
-    
-    # 🟨 Interest (warning style via delta)
-    m2.metric(
-        "Total Interest",
-        f"UGX {i:,.0f}",
-        delta=f"{(i/total_due*100):.1f}% of total" if total_due > 0 else None,
-        delta_color="normal"
-    )
-    
-    # 🟢 Paid (good = positive green)
-    m3.metric(
-        "Total Paid",
-        f"UGX {paid:,.0f}",
-        delta=f"{paid/total_due:.1%}" if total_due > 0 else None,
-        delta_color="normal"
-    )
-    
-    # 🔴 Balance (inverse makes it red when high)
-    m4.metric(
-        "Current Balance",
-        f"UGX {bal:,.0f}",
-        delta=f"-{bal:,.0f}",
-        delta_color="inverse"
-    )
+    m1.metric("Principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
+    m2.metric("Interest Cost Accrued", f"UGX {i:,.0f}", delta=f"{(i/total_due*100):.1f}% Markup" if total_due > 0 else None, delta_color="normal")
+    m3.metric("Total Paid to Date", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%} Covered" if total_due > 0 else None, delta_color="normal")
+    m4.metric("Current Balance Owed", f"UGX {bal:,.0f}", delta=f"Outstanding Position", delta_color="inverse")
+
     # ==============================
-    # 📜 TRANSACTION HISTORY (LEDGER)
+    # 📜 TRANSACTION HISTORY (LEDGER RUNTIME)
     # ==============================
     ledger_data = []
-    running_bal = p + i
-
-    # Entry 1: Disbursement
+    
+    # Corrected Math Step 1: Principal entry starts at base principal
+    running_bal = p
+    start_date_string = str(loan_info.get("start_date", "-"))[:10]
+    
     ledger_data.append({
-        "date": str(loan_info.get("start_date", "-"))[:10],
-        "Description": "🏦 Loan Disbursement",
-        "Debit (Due)": p,
-        "Credit (Paid)": 0,
-        "balance": running_bal
+        "Date": start_date_string,
+        "Transaction Details": "🏦 Core Loan Disbursement",
+        "Debit (UGX)": p,
+        "Credit (UGX)": 0.0,
+        "Running Balance (UGX)": running_bal
     })
 
-    # Entry 2: interest Charge
+    # Corrected Math Step 2: Interest entry accurately aggregates balance tracking
     if i > 0:
+        running_bal += i
         ledger_data.append({
-            "date": str(loan_info.get("start_date", "-"))[:10],
-            "Description": "📈 Monthly interest Applied",
-            "Debit (Due)": i,
-            "Credit (Paid)": 0,
-            "balance": running_bal
+            "Date": start_date_string,
+            "Transaction Details": "📈 Fixed Capital Interest Applied",
+            "Debit (UGX)": i,
+            "Credit (UGX)": 0.0,
+            "Running Balance (UGX)": running_bal
         })
 
-    # Entry 3+: Repayments
-    if payments_df is not None and not payments_df.empty:
+    # Step 3: Parse real repayment streams explicitly mapping values
+    if not payments_df.empty:
         rel_payments = payments_df[payments_df["loan_id"].astype(str) == raw_id]
         if not rel_payments.empty:
+            # Sort by transaction date execution order explicitly
+            date_key = "date" if "date" in rel_payments.columns else "payment_date"
+            rel_payments = rel_payments.sort_values(by=date_key)
+            
             for _, p_row in rel_payments.iterrows():
                 amt = float(p_row.get("amount", 0))
                 running_bal -= amt
+                p_date_raw = str(p_row.get(date_key, "-"))[:10]
+                
                 ledger_data.append({
-                    "date": str(p_row.get("date", p_row.get("payment_date", "-")))[:10],
-                    "Description": "💰 Repayment Received",
-                    "Debit (Due)": 0,
-                    "Credit (Paid)": amt,
-                    "balance": running_bal
+                    "Date": p_date_raw,
+                    "Transaction Details": "💰 Repayment Entry Verified",
+                    "Debit (UGX)": 0.0,
+                    "Credit (UGX)": amt,
+                    "Running Balance (UGX)": running_bal
                 })
 
-    # Render Modern Styled Ledger
     st.markdown("<br>", unsafe_allow_html=True)
     st.dataframe(
         pd.DataFrame(ledger_data),
         use_container_width=True,
         hide_index=True,
         column_config={
-            "date": st.column_config.TextColumn("date"),
-            "Description": st.column_config.TextColumn("Transaction Details"),
-            "Debit (Due)": st.column_config.NumberColumn("Debit (UGX)", format="%,d"),
-            "Credit (Paid)": st.column_config.NumberColumn("Credit (UGX)", format="%,d"),
-            "balance": st.column_config.NumberColumn("Running balance (UGX)", format="%,d"),
+            "Debit (UGX)": st.column_config.NumberColumn("Debit", format="%,.0f"),
+            "Credit (UGX)": st.column_config.NumberColumn("Credit", format="%,.0f"),
+            "Running Balance (UGX)": st.column_config.NumberColumn("Running Balance", format="%,.0f"),
         }
     )
 
@@ -4054,27 +4121,26 @@ def show_ledger():
     # ==============================
     # 📄 PREMIUM DOWNLOAD SECTION
     # ==============================
-    # Container for Download Area with Baby Blue Border
     st.markdown(f"""
-        <div style="border: 1px solid {baby_blue}55; padding: 1.5rem; border-radius: 12px; background-color: {baby_blue}10;">
-            <p style="font-family: 'Inter', sans-serif; font-weight: 600; margin-bottom: 5px;">Ready to share this ledger?</p>
-            <p style="font-family: 'Inter', sans-serif; font-size: 0.9rem; color: #666; margin-bottom: 15px;">
-                The premium PDF statement includes full history, company letterhead, and a formal stamp section.
+        <div style="border: 1px solid {brand_color}33; padding: 1.5rem; border-radius: 12px; background-color: {brand_color}08; margin-bottom:15px;">
+            <p style="font-family: 'Inter', sans-serif; font-weight: 600; margin-bottom: 5px; color:{brand_color};">Export Premium Statement Artifact</p>
+            <p style="font-family: 'Inter', sans-serif; font-size: 0.88rem; color: #4B5563; margin-bottom: 0px;">
+                Generates audit-ready customer ledgers complete with formal registration letterhead blocks.
             </p>
         </div>
     """, unsafe_allow_html=True)
 
-    if st.button("✨ Generate PDF Statement", use_container_width=True):
-        client_name = loan_info.get("borrower", "Unknown")
+    if st.button("✨ Compile Formal PDF Statement", use_container_width=True):
+        client_name = loan_info.get("borrower", "Unknown Profile")
         client_loans = loans_df[loans_df["borrower"] == client_name]
 
-        with st.spinner("Compiling Ledger..."):
-            pdf = generate_pdf_statement(client_name, client_loans, payments_df)
+        with st.spinner("Rendering Document Architecture..."):
+            pdf_output = generate_pdf_statement(client_name, client_loans, payments_df)
 
         st.download_button(
-            label=f"⬇️ Download PDF for {client_name}",
-            data=pdf,
-            file_name=f"Statement_{client_name.replace(' ', '_')}.pdf",
+            label=f"⬇️ Download Verified Statement Document (.pdf)",
+            data=pdf_output,
+            file_name=f"Statement_{client_name.replace(' ', '_')}_{datetime.now().strftime('%Y%m%d')}.pdf",
             mime="application/pdf",
             use_container_width=True
         )
