@@ -5093,7 +5093,6 @@ def show_settings():
     # ==============================
     # BRANDING FALLBACK SAFETY
     # ==============================
-    # Priority: Session State -> Database -> Default Navy
     brand_color = st.session_state.get(
         "theme_color", 
         active_company.get("brand_color", "#2B3F87")
@@ -5161,23 +5160,28 @@ def show_settings():
         updated_data = {"brand_color": new_color}
 
         # ==============================
-        # LOGO UPLOAD SAFETY (STORAGE BUCKET)
+        # LOGO UPLOAD SAFETY (STORAGE BUCKET FIXED)
         # ==============================
         if logo_file:
             try:
                 bucket_name = "company-logos"
-                # Use tenant ID in file path to ensure uniqueness and security
                 file_path = f"logos/{active_company.get('id')}_logo.png"
+                file_bytes = logo_file.getvalue()
 
-                # Upload to Supabase Storage with upsert enabled
-                supabase.storage.from_(bucket_name).upload(
-                    path=file_path,
-                    file=logo_file.getvalue(),
-                    file_options={
-                        "x-upsert": "true",
-                        "content-type": "image/png"
-                    }
-                )
+                # Robust Upsert Logic: Try updating first; if it doesn't exist, execute an upload.
+                try:
+                    supabase.storage.from_(bucket_name).update(
+                        path=file_path,
+                        file=file_bytes,
+                        file_options={"content-type": "image/png"}
+                    )
+                except Exception:
+                    # Fallback to fresh file creation if the path didn't exist yet
+                    supabase.storage.from_(bucket_name).upload(
+                        path=file_path,
+                        file=file_bytes,
+                        file_options={"content-type": "image/png"}
+                    )
 
                 # Generate public URL for database storage
                 public_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
@@ -5188,7 +5192,7 @@ def show_settings():
                 st.stop()
 
         # ==============================
-        # DATABASE UPdate (PERSISTENCE)
+        # DATABASE UPDATE (PERSISTENCE)
         # ==============================
         try:
             supabase.table("tenants").update(updated_data).eq("id", active_company.get("id")).execute()
