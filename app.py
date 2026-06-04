@@ -2713,12 +2713,8 @@ def show_reports():
     # All operational tracking (Salaries, NSSF, PAYE, Rent, etc.) are already bundled here
     total_direct_expenses = col_sum(expenses, "amount")
     
-    petty_out = 0
-    if not petty.empty and "type" in petty.columns:
-        petty_out = col_sum(petty[petty["type"] == "Out"], "amount")
-    
     # Single source operational expense tracking
-    global_opex = total_direct_expenses + petty_out
+    global_opex = total_direct_expenses
     cash_profit = actual_collected - global_opex
     
     # ==============================
@@ -2808,7 +2804,6 @@ def show_reports():
     loans["fiscal_year"] = loans["start_date"].apply(fiscal_year)
     payments["fiscal_year"] = payments["date"].apply(fiscal_year)
     expenses["fiscal_year"] = expenses["date"].apply(fiscal_year)
-    petty["fiscal_year"] = petty["date"].apply(fiscal_year)
     
     fiscal_years = sorted([fy for fy in loans["fiscal_year"].dropna().unique() if fy != "Unknown"])
     
@@ -2821,7 +2816,6 @@ def show_reports():
     fy_loans = loans[loans["fiscal_year"] == selected_fy]
     fy_expenses = expenses[expenses["fiscal_year"] == selected_fy]
     fy_payments = payments[payments["fiscal_year"] == selected_fy]
-    fy_petty = petty[petty["fiscal_year"] == selected_fy]
     
     # ------------------------------
     # 💰 INCOME STATEMENT (P&L)
@@ -2839,9 +2833,8 @@ def show_reports():
         
         # Pulling unified calculations from expenses (Salaries + Tax already covered inside)
         fy_direct_exp = col_sum(fy_expenses, "amount")
-        fy_petty_out = col_sum(fy_petty[fy_petty["type"] == "Out"], "amount") if not fy_petty.empty else 0
         
-        fy_total_opex = fy_direct_exp + fy_petty_out
+        fy_total_opex = fy_direct_exp
         net_profit = int_revenue - fy_total_opex
         
         st.dataframe(pd.DataFrame({
