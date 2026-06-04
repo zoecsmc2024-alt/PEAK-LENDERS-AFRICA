@@ -3295,47 +3295,77 @@ def show_calendar():
         st.error(f"Error compiling recovery details: {e}")
 
 
-# ==============================                           
-# 🛡️ 15. COLLATERAL MANAGEMENT
-# ==============================
+# ==========================================================
+# 🛡️ COLLATERAL MANAGEMENT ENGINE
+# ==========================================================
+import streamlit as st
+import pandas as pd
+from datetime import datetime
 
 def show_collateral():
+    """
+    Manages asset security, verification tracking, and real-time status management
+    while respecting multi-tenant boundaries.
+    """
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
 
-    # ==============================
-    # 🔐 SAFETY CHECK
-    # ==============================
     if not current_tenant:
         st.error("🔐 Session expired. Please log in.")
         st.stop()
 
-    st.markdown(f"<h2 style='color: {brand_color};'>🛡️ Collateral & Security</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: {brand_color}; margin-bottom: 20px;'>🛡️ Collateral & Security Assets</h2>", unsafe_allow_html=True)
 
     # ==============================
-    # 📦 FETCH DATA
+    # 📦 DATA FETCH & UNIFICATION
     # ==============================
     collateral_df = get_data("collateral") 
     loans_df = get_data("loans")
+    borrowers_df = get_data("borrowers")  # Added to ensure fallback relational mapping works safely
 
-    # ==============================
-    # 🔍 FILTER ELIGIBLE LOANS
-    # ==============================
-    if loans_df is not None and not loans_df.empty:
-        # Clean column names: remove spaces and make lowercase
-        loans_df.columns = [str(c).strip().lower() for c in loans_df.columns]
+    # Protect against missing data collections
+    if loans_df is None: loans_df = pd.DataFrame()
+    if collateral_df is None: collateral_df = pd.DataFrame()
+    if borrowers_df is None: borrowers_df = pd.DataFrame()
+
+    # Tenant Isolation Filter
+    if not loans_df.empty and "tenant_id" in loans_df.columns:
+        loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
+    if not collateral_df.empty and "tenant_id" in collateral_df.columns:
+        collateral_df = collateral_df[collateral_df["tenant_id"].astype(str) == str(current_tenant)].copy()
+
+    # --- RELATIONAL BORROWER NAME LOOKUP ---
+    # Safely creates name mappings without breaking case conventions of the tables
+    name_map = {}
+    if not borrowers_df.empty:
+        b_id_col = next((c for c in borrowers_df.columns if c.lower() in ['id', 'borrower_id']), None)
+        b_nm_col = next((c for c in borrowers_df.columns if c.lower() in ['name', 'borrower_name', 'client_name']), None)
+        if b_id_col and b_nm_col:
+            name_map = dict(zip(borrowers_df[b_id_col].astype(str), borrowers_df[b_nm_col]))
+
+    # Add descriptive borrower labels inline to loans dataframe safely
+    if not loans_df.empty:
+        loans_df['id_str'] = loans_df['id'].astype(str)
+        if 'borrower_id' in loans_df.columns:
+            loans_df['borrower_name_resolved'] = loans_df['borrower_id'].astype(str).map(name_map)
+        else:
+            # Fallback inline string lookup if tables are denormalized
+            match_col = next((c for c in loans_df.columns if c.lower() in ['borrower', 'client', 'borrower_name']), None)
+            loans_df['borrower_name_resolved'] = loans_df[match_col] if match_col else "Unknown Borrower"
         
-        active_statuses = ["active", "overdue", "pending", "bcf"]
+        loans_df['borrower_name_resolved'] = loans_df['borrower_name_resolved'].fillna("Unknown Borrower")
         
-        # Safely filter by status if it exists
-        if 'status' in loans_df.columns:
-            available_loans = loans_df[loans_df["status"].str.lower().isin(active_statuses)].copy()
+        # Filter down to operational loans matching dynamic context
+        status_col = next((c for c in loans_df.columns if c.lower() == 'status'), None)
+        if status_col:
+            active_statuses = ["ACTIVE", "OVERDUE", "PENDING", "BCF"]
+            available_loans = loans_df[loans_df[status_col].astype(str).str.upper().isin(active_statuses)].copy()
         else:
             available_loans = loans_df.copy()
     else:
         available_loans = pd.DataFrame()
 
-    # --- TABS ---
+    # --- TABS CONTAINER ---
     tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
 
     # ==============================
@@ -3343,77 +3373,53 @@ def show_collateral():
     # ==============================
     with tab_reg:
         if available_loans.empty:
-            st.info("ℹ️ No Active or Overdue loans found to attach collateral to.")
+            st.info("ℹ️ No active context loans found to connect security collateral onto.")
         else:
-            # 1. FIND THE BORROWER COLUMN DYNAMICALLY
-            all_cols = [str(c).strip().lower() for c in loans_df.columns]
-            borrower_col = None
-            
-            # Look for any column that sounds like 'borrower' or 'client'
-            for col in loans_df.columns:
-                c_clean = str(col).strip().lower()
-                if c_clean in ['borrower', 'client', 'borrower_name', 'client_name']:
-                    borrower_col = col
-                    break
-            
-            # Fallback: if no name match, use the 3rd column (index 2) 
-            # based on your previous table screenshots
-            if borrower_col is None and len(loans_df.columns) >= 3:
-                borrower_col = loans_df.columns[2]
-
-            # 2. CREATE MASTER LOOKUP
-            if borrower_col:
-                name_lookup = dict(zip(loans_df['id'], loans_df[borrower_col]))
-            else:
-                name_lookup = {}
-
             with st.form("collateral_reg_form", clear_on_submit=True):
-                st.write("### Link Asset to Loan")
+                st.write("### Link Asset to Loan File")
                 c1, c2 = st.columns(2)
 
+                # Generate clean dropdown tracking options
                 loan_map = {}
                 for _, row in available_loans.iterrows():
-                    loan_id = row['id']
+                    loan_id = str(row['id'])
+                    b_name = str(row['borrower_name_resolved'])
+                    if b_name.lower() in ['nan', 'none', '']: b_name = "Unknown Customer"
                     
-                    # Pull name using our dynamic column discovery
-                    b_name = name_lookup.get(loan_id, "Unknown")
-                    
-                    # Double-check for 'nan' or empty strings
-                    if str(b_name).lower() in ['nan', 'none', '']:
-                        b_name = "Unknown"
+                    ref_label = row.get('loan_id_label', loan_id[:8])
+                    principal_amt = row.get('principal', row.get('amount', 0))
+                    try:
+                        amt_fmt = f"UGX {float(principal_amt):,.0f}"
+                    except Exception:
+                        amt_fmt = f"UGX {principal_amt}"
 
-                    ref = row.get('loan_id_label', 'N/A')
-                    amt = f"UGX {row.get('principal', 0):,.0f}"
-                    
-                    clean_label = f"{b_name} | {amt} (Ref: {ref})"
-                    loan_map[loan_id] = clean_label
+                    loan_map[loan_id] = f"{b_name} | {amt_fmt} (Ref: {ref_label})"
 
                 selected_loan_id = c1.selectbox(
-                    "Select Loan/Borrower",
+                    "Select Target Loan Profile",
                     options=list(loan_map.keys()),
-                    format_func=lambda x: loan_map.get(x, "Select Loan")
+                    format_func=lambda x: loan_map.get(x, "Select Profile")
                 )
-                # ----------------------------
 
                 asset_type = c2.selectbox(
-                    "Asset type",
+                    "Asset Classification Type",
                     ["Logbook (Car)", "Land Title", "Electronics", "House Deed", "Business Stock", "Other"]
                 )
 
-                desc = st.text_input("Detailed Asset Description (e.g. Plate No, Plot No)")
-                est_value = st.number_input("Estimated Market Value (UGX)", min_value=0, step=100000)
+                desc = st.text_input("Detailed Description (Asset Serial ID, Plate Number, Plot Location)")
+                est_value = st.number_input("Estimated Asset Market Value (UGX)", min_value=0, step=100000)
                 
-                st.markdown("---")
-                uploaded_photo = st.file_uploader("Upload Asset Photo (Verification)", type=["jpg", "png", "jpeg"])
+                st.markdown("<br>", unsafe_allow_html=True)
+                uploaded_photo = st.file_uploader("Upload Verification Documentation/Photo Asset", type=["jpg", "png", "jpeg"])
 
-                submit_save = st.form_submit_button("💾 Save & Secure Asset", use_container_width=True)
+                submit_save = st.form_submit_button("💾 Save Asset Registration Record", use_container_width=True)
 
             if submit_save:
                 if not desc or est_value <= 0:
-                    st.error("❌ Please provide a description and valid market value.")
+                    st.error("❌ Form Incomplete. Provide accurate structural evaluations and descriptions.")
                 else:
                     try:
-                        # Extract just the Name for the record
+                        # Safely compute borrower back-reference assignment details
                         full_label = loan_map[selected_loan_id]
                         borrower_for_db = full_label.split(" | ")[0]
 
@@ -3429,157 +3435,137 @@ def show_collateral():
                         }])
 
                         if save_data_saas("collateral", new_asset):
-                            st.success(f"✅ Asset secured for {borrower_for_db}!")
+                            st.success(f"✅ Asset registry successfully locked down for {borrower_for_db}!")
                             st.cache_data.clear()
                             st.rerun()
                     except Exception as e:
-                        st.error(f"❌ Save failed: {e}")
+                        st.error(f"❌ Security transaction failed to register: {e}")
 
     # ==============================
-    # 📋 TAB 2: INVENTORY & STATUS (INTERACTIVE)
+    # 📋 TAB 2: INVENTORY & LEDGER
     # ==============================
     with tab_view:
-    
-        if collateral_df is None or collateral_df.empty:
-            st.info("💡 No assets currently in the registry.")
-    
+        if collateral_df.empty:
+            st.info("💡 No securitized collateral structures found inside this workspace index.")
         else:
-    
-            # ==============================
-            # 📊 METRIC DASHBOARD
-            # ==============================
-            collateral_df["value"] = pd.to_numeric(collateral_df["value"], errors="coerce").fillna(0)
-    
-            total_value = collateral_df["value"].sum()
-            held_count = len(collateral_df[collateral_df["status"] == "In Custody"])
-    
+            # Clean and normalize asset value matrices safely
+            val_col = next((c for c in collateral_df.columns if c.lower() == 'value'), 'value')
+            collateral_df[val_col] = pd.to_numeric(collateral_df[val_col], errors="coerce").fillna(0)
+            
+            stat_col = next((c for c in collateral_df.columns if c.lower() == 'status'), 'status')
+            
+            # --- KPI DASHBOARD CARDS ---
+            total_value = collateral_df[val_col].sum()
+            held_count = len(collateral_df[collateral_df[stat_col].astype(str).str.upper() == "IN CUSTODY"])
+
             m1, m2 = st.columns(2)
-            m1.metric("Total Asset Value (Security)", f"UGX {total_value:,.0f}")
-            m2.metric("Items in Custody", held_count)
-    
-            st.divider()
-    
-            # ==============================
-            # 🔍 FILTERS (NEW INTERACTIVE LAYER)
-            # ==============================
+            m1.metric("Securitized Inventory Value", f"UGX {total_value:,.0f}")
+            m2.metric("Active Assets in Custody", held_count)
+            st.markdown("---")
+
+            # --- DYNAMIC FILTERS LAYER ---
             col1, col2 = st.columns(2)
-    
-            status_filter = col1.selectbox(
-                "Filter by Status",
-                ["All"] + sorted(collateral_df["status"].dropna().unique().tolist())
-            )
-    
-            borrower_filter = col2.text_input("Search borrower / description").lower()
-    
-            df = collateral_df.copy()
-    
-            # Apply filters
-            if status_filter != "All":
-                df = df[df["status"] == status_filter]
-    
-            if borrower_filter:
-                df = df[
-                    df["borrower"].str.lower().str.contains(borrower_filter, na=False) |
-                    df["description"].str.lower().str.contains(borrower_filter, na=False)
+            unique_statuses = sorted(collateral_df[stat_col].dropna().unique().tolist())
+            status_filter = col1.selectbox("Filter Inventory Status", ["All Asset Records"] + unique_statuses)
+            search_query = col2.text_input("🔍 Search Keyword / Borrower Reference").lower()
+
+            df_filtered = collateral_df.copy()
+            if status_filter != "All Asset Records":
+                df_filtered = df_filtered[df_filtered[stat_col] == status_filter]
+
+            if search_query:
+                b_match = next((c for c in df_filtered.columns if c.lower() == 'borrower'), 'borrower')
+                d_match = next((c for c in df_filtered.columns if c.lower() == 'description'), 'description')
+                
+                df_filtered = df_filtered[
+                    df_filtered[b_match].astype(str).str.lower().str.contains(search_query, na=False) |
+                    df_filtered[d_match].astype(str).str.lower().str.contains(search_query, na=False)
                 ]
-    
-            # ==============================
-            # 📊 INTERACTIVE TABLE (NO HTML)
-            # ==============================
-            st.markdown("### Asset Ledger")
-    
-            display_df = df.copy()
-    
-            display_df["Value (UGX)"] = display_df["value"].apply(lambda x: f"{x:,.0f}")
-            display_df = display_df.rename(columns={
-                "date_added": "date Registered",
-                "borrower": "Borrower",
-                "type": "type",
-                "description": "Description",
-                "status": "Status"
-            })
-    
-            table_df = display_df[[
-                "date Registered",
-                "Borrower",
-                "type",
-                "Description",
-                "Value (UGX)",
-                "Status"
-            ]]
-    
+
+            # --- RENDER UNIFORM JAVASCRIPT DATAFRAME ---
+            st.markdown("### Securitized Assets Ledger")
+            
+            display_ledger = df_filtered.copy()
+            # Remap columns neatly to standard clean headings
+            col_renames = {
+                "date_added": "Date Registered",
+                "borrower": "Borrower Profile",
+                "type": "Asset Type",
+                "description": "Asset Description",
+                "value": "Value (UGX)",
+                "status": "Tracking Status"
+            }
+            # Handle minor schema variances gracefully
+            display_ledger = display_ledger.rename(columns={k: v for k, v in col_renames.items() if k in display_ledger.columns})
+            
+            # Formats display currencies seamlessly 
+            tgt_val_col = "Value (UGX)"
+            if tgt_val_col in display_ledger.columns:
+                display_ledger[tgt_val_col] = display_ledger[tgt_val_col].apply(lambda x: f"{float(x):,.0f}" if pd.notna(x) else "0")
+
+            cols_to_show = [v for v in col_renames.values() if v in display_ledger.columns]
+            
             st.dataframe(
-                table_df,
+                display_ledger[cols_to_show],
                 use_container_width=True,
                 hide_index=True
             )
-    
-            st.divider()
-    
+            st.markdown("---")
+
             # ==============================
-            # ⚙️ ASSET MANAGEMENT & PHOTO VIEW
+            # ⚙️ SECURE LIFECYCLE MANAGEMENT
             # ==============================
-            st.markdown("### 🛠️ View Details & Manage Lifecycle")
-    
-            manageable = df.copy()
-    
-            if manageable.empty:
-                st.warning("No assets match your filters.")
+            st.markdown("### 🛠️ Strategic Asset Inspection & Audits")
+            
+            if df_filtered.empty:
+                st.warning("No records match configuration queries.")
             else:
-    
-                # Better labels (keeps your logic but cleaner UX)
-                manageable["label"] = manageable.apply(
-                    lambda x: f"{x['borrower']} — {x['description']}", axis=1
-                )
-    
-                selected_label = st.selectbox(
-                    "Select Asset",
-                    manageable["label"].tolist()
-                )
-    
-                selected_row = manageable[manageable["label"] == selected_label].iloc[0]
+                b_lbl = next((c for c in df_filtered.columns if c.lower() == 'borrower'), 'borrower')
+                d_lbl = next((c for c in df_filtered.columns if c.lower() == 'description'), 'description')
+                
+                df_filtered["ui_label"] = df_filtered[b_lbl].astype(str) + " — " + df_filtered[d_lbl].astype(str)
+                selected_label = st.selectbox("Choose Target Asset Inventory File", df_filtered["ui_label"].tolist())
+
+                selected_row = df_filtered[df_filtered["ui_label"] == selected_label].iloc[0]
                 asset_id = selected_row["id"]
-    
-                # ==============================
-                # 📸 PHOTO EVIDENCE
-                # ==============================
-                st.markdown("#### 📸 Photo Evidence")
-    
+
+                # --- PHOTO EVIDENCE STORAGE ---
+                st.markdown("#### 📸 Physical Asset Evidence")
                 asset_photo = selected_row.get("photo", selected_row.get("image_url", None))
-    
-                if asset_photo:
-                    st.image(asset_photo, caption=selected_row["description"], use_container_width=True)
+                if asset_photo and pd.notna(asset_photo):
+                    st.image(asset_photo, caption=str(selected_row[d_lbl]), use_container_width=True)
                 else:
-                    st.info("No photo uploaded for this asset.")
-    
-                st.divider()
-    
-                # ==============================
-                # 🔄 STATUS UPdate (INTERACTIVE IMPROVED)
-                # ==============================
-                st.markdown("#### 🔄 Update Status")
-    
+                    st.info("No visual photo documentation uploaded against this asset record.")
+                
+                st.markdown("<br>", unsafe_allow_html=True)
+
+                # --- LIFECYCLE OPERATION PANEL ---
+                st.markdown("#### 🔄 Asset State Custody Release")
                 status_options = ["In Custody", "Released", "Disposed (Auctioned)", "Held for Pickup"]
-    
-                col_stat, col_btn = st.columns([3, 1])
-    
+                
+                # Fixed layout alignment split to prevent text wrapping on operational buttons
+                col_stat, col_btn = st.columns([2, 1])
+                
+                current_status_val = str(selected_row[stat_col])
+                default_idx = status_options.index(current_status_val) if current_status_val in status_options else 0
+
                 new_status = col_stat.selectbox(
-                    "Change Status",
+                    "Transition Status State",
                     status_options,
-                    index=status_options.index(selected_row["status"])
-                    if selected_row["status"] in status_options else 0
+                    index=default_idx,
+                    label_visibility="collapsed"
                 )
-    
-                if col_btn.button("Update Status", use_container_width=True):
-    
+
+                # Standard button layout prevents regressions and aligns cleanly
+                if col_btn.button("Update Asset State", use_container_width=True):
                     update_row = pd.DataFrame([{
                         "id": asset_id,
                         "status": new_status,
                         "tenant_id": str(current_tenant)
                     }])
-    
+
                     if save_data_saas("collateral", update_row):
-                        st.success("✅ Asset status updated successfully!")
+                        st.success(f"✅ Custody updated to '{new_status}' successfully!")
                         st.cache_data.clear()
                         st.rerun()
 import streamlit as st
