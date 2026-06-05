@@ -3903,84 +3903,69 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
         elements.append(Paragraph(f"<b>Loan Account Ref: {display_id}</b>", styles["Heading3"]))
         
         data = [[
-            Paragraph("<b>Date</b>", cell_bold),
-            Paragraph("<b>Description</b>", cell_bold),
-            Paragraph("<b>Debit (Due)</b>", cell_bold),
-            Paragraph("<b>Credit (Paid)</b>", cell_bold),
-            Paragraph("<b>Balance</b>", cell_bold)
+            Paragraph("<b>Cycle Date</b>", cell_bold),
+            Paragraph("<b>Cycle</b>", cell_bold),
+            Paragraph("<b>Opening Balance</b>", cell_bold),
+            Paragraph("<b>Amount Due</b>", cell_bold),
+            Paragraph("<b>Amount Paid</b>", cell_bold),
+            Paragraph("<b>Balance</b>", cell_bold),
         ]]
         
-        # Pull true initial disbursement parameters
-        original_principal = float(origin_loan.get("principal", 0))
-        running_balance = original_principal
+        for _, row in sub_loans.iterrows():
         
-        start_date_raw = str(origin_loan.get("created_at", origin_loan.get("start_date", "")))
-        clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
+            cycle_date = str(
+                row.get(
+                    "start_date",
+                    row.get("created_at", "")
+                )
+            )[:10]
+        
+            opening_balance = float(
+                row.get(
+                    "principal",
+                    row.get("opening_balance", 0)
+                )
+            )
+        
+            amount_due = float(
+                row.get(
+                    "total_due",
+                    row.get("amount_due", 0)
+                )
+            )
+        
+            amount_paid = float(
+                row.get(
+                    "amount_paid",
+                    row.get("paid", 0)
+                )
+            )
+        
+            balance = float(
+                row.get(
+                    "balance",
+                    0
+                )
+            )
+        
+            data.append([
+                Paragraph(cycle_date, cell_style),
+                Paragraph(str(row.get("cycle", "")), cell_style),
+                Paragraph(f"{opening_balance:,.0f}", cell_style),
+                Paragraph(f"{amount_due:,.0f}", cell_style),
+                Paragraph(f"{amount_paid:,.0f}", cell_style),
+                Paragraph(f"{balance:,.0f}", cell_style),
+            ])
+        
+        final_balance = float(sub_loans.iloc[-1].get("balance", 0))
+        
+        grand_total += final_balance
 
-        # Add initial base row
-        data.append([
-            Paragraph(clean_start_date, cell_style),
-            Paragraph("🏦 Core Loan Disbursement", cell_style),
-            Paragraph(f"{original_principal:,.0f}", cell_style),
-            Paragraph("0", cell_style),
-            Paragraph(f"{running_balance:,.0f}", cell_style)
-        ])
-
-        all_transactions = []
-
-        # Track and apply tracking metrics across cycles without replicating original base values
-        for idx, (_, loan_row) in enumerate(sub_loans.iterrows()):
-            internal_id = loan_row["id_clean"]
-            interest = float(loan_row.get("interest", 0))
-            
-            row_date_raw = str(loan_row.get("created_at", loan_row.get("start_date", "")))
-            clean_row_date = row_date_raw[:10] if len(row_date_raw) > 10 else row_date_raw
-
-            if interest > 0:
-                all_transactions.append({
-                    "date": clean_row_date,
-                    "desc": "📈 Fixed Capital Interest Applied",
-                    "debit": interest,
-                    "credit": 0.0,
-                    "sort_priority": 2
-                })
-
-            if not processed_payments.empty:
-                loan_payments = processed_payments[
-                    (processed_payments["loan_id"] == internal_id) | 
-                    (processed_payments["loan_id"] == display_id)
-                ].copy()
-                
-                for _, p in loan_payments.iterrows():
-                    amount = float(p.get("amount", 0))
-                    pay_date_raw = str(p.get("payment_date", p.get("date", "")))
-                    clean_pay_date = pay_date_raw[:10] if len(pay_date_raw) > 10 else pay_date_raw
-
-                    all_transactions.append({
-                        "date": clean_pay_date,
-                        "desc": f"💰 Repayment Received [{p.get('receipt_no', 'Ref N/A')}]",
-                        "debit": 0.0,
-                        "credit": amount,
-                        "sort_priority": 3
-                    })
-
-        if all_transactions:
-            tx_df = pd.DataFrame(all_transactions).sort_values(by=["date", "sort_priority"])
-            for _, row in tx_df.iterrows():
-                running_balance += row["debit"]
-                running_balance -= row["credit"]
-                
-                data.append([
-                    Paragraph(str(row["date"]), cell_style),
-                    Paragraph(str(row["desc"]), cell_style),
-                    Paragraph(f"{row['debit']:,.0f}" if row['debit'] > 0 else "0", cell_style),
-                    Paragraph(f"{row['credit']:,.0f}" if row['credit'] > 0 else "0", cell_style),
-                    Paragraph(f"{running_balance:,.0f}", cell_style)
-                ])
-
-        grand_total += running_balance
-
-        table = Table(data, repeatRows=1, colWidths=[70, 195, 90, 90, 90])
+        table = Table(
+            data,
+            repeatRows=1,
+            colWidths=[65, 40, 85, 85, 85, 85]
+        )
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2B3F87")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
@@ -3991,6 +3976,33 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             ("TOPPADDING", (0, 0), (-1, -1), 6),
         ]))
         elements.append(table)
+        status_value = str(
+            sub_loans.iloc[-1].get(
+                "status",
+                "OUTSTANDING"
+            )
+        )
+        
+        final_balance = float(
+            sub_loans.iloc[-1].get(
+                "balance",
+                0
+            )
+        )
+        
+        if final_balance <= 0:
+            status_value = "CLEARED"
+        
+        elements.append(
+            Spacer(1, 5)
+        )
+        
+        elements.append(
+            Paragraph(
+                f"<b>Loan Status:</b> {status_value}",
+                styles["Normal"]
+            )
+        )
         elements.append(Spacer(1, 15))
         
     elements.append(Spacer(1, 10))
@@ -4114,10 +4126,30 @@ def show_ledger():
     latest_record = filtered_loans.iloc[-1]
 
     p = float(origin_record.get("principal", 0))
-    i = sum(float(row.get("interest", 0)) for _, row in filtered_loans.iterrows())
-    total_due = p + i
-    paid = sum(float(row.get("amount_paid", 0)) for _, row in filtered_loans.iterrows())
-    bal = float(latest_record.get("balance", 0))
+
+    total_due = float(
+        latest_record.get(
+            "total_due",
+            latest_record.get(
+                "amount_due",
+                0
+            )
+        )
+    )
+    
+    paid = filtered_loans["amount_paid"].fillna(0).astype(float).sum()
+    
+    bal = float(
+        latest_record.get(
+            "balance",
+            0
+        )
+    )
+    
+    i = max(
+        total_due - p,
+        0
+    )
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
@@ -4129,80 +4161,96 @@ def show_ledger():
     # 📜 CORRECTED TRANSACTION HISTORY (LEDGER RUNTIME)
     # ==============================
     ledger_data = []
-    running_bal = p
-    all_runtime_tx = []
 
-    start_date_string = str(origin_record.get("start_date", "-"))[:10]
-    all_runtime_tx.append({
-        "Date": start_date_string,
-        "Transaction Details": "🏦 Core Loan Disbursement",
-        "Debit (UGX)": p,
-        "Credit (UGX)": 0.0,
-        "sort": 1
-    })
-
-    for _, loan_info in filtered_loans.iterrows():
-        internal_id = loan_info["id_clean"]
-        li = float(loan_info.get("interest", 0))
-        row_date = str(loan_info.get("start_date", "-"))[:10]
-
-        if li > 0:
-            all_runtime_tx.append({
-                "Date": row_date,
-                "Transaction Details": "📈 Fixed Capital Interest Applied",
-                "Debit (UGX)": li,
-                "Credit (UGX)": 0.0,
-                "sort": 2
-            })
-
-        if not payments_df.empty:
-            rel_payments = payments_df[
-                (payments_df["loan_id"] == internal_id) | 
-                (payments_df["loan_id"] == target_label)
-            ]
-            if not rel_payments.empty:
-                date_key = "date" if "date" in rel_payments.columns else "payment_date"
-                for _, p_row in rel_payments.iterrows():
-                    amt = float(p_row.get("amount", 0))
-                    p_date_raw = str(p_row.get(date_key, "-"))[:10]
-                    
-                    all_runtime_tx.append({
-                        "Date": p_date_raw,
-                        "Transaction Details": f"💰 Repayment Entry Verified [{p_row.get('receipt_no', 'Ref N/A')}]",
-                        "Debit (UGX)": 0.0,
-                        "Credit (UGX)": amt,
-                        "sort": 3
-                    })
-
-    if all_runtime_tx:
-        runtime_tx_df = pd.DataFrame(all_runtime_tx)
-        # Separate base entry from other transactions to sort cleanly
-        base_tx = runtime_tx_df[runtime_tx_df["sort"] == 1]
-        other_tx = runtime_tx_df[runtime_tx_df["sort"] != 1].sort_values(by=["Date", "sort"])
-        runtime_tx_df = pd.concat([base_tx, other_tx])
-
-        running_bal = 0.0
-        for _, row in runtime_tx_df.iterrows():
-            running_bal += row["Debit (UGX)"]
-            running_bal -= row["Credit (UGX)"]
-            
-            ledger_data.append({
-                "Date": row["Date"],
-                "Transaction Details": row["Transaction Details"],
-                "Debit (UGX)": row["Debit (UGX)"],
-                "Credit (UGX)": row["Credit (UGX)"],
-                "Running Balance (UGX)": running_bal
-            })
-
-    st.markdown("<br>", unsafe_allow_html=True)
+    for _, row in filtered_loans.iterrows():
+    
+        ledger_data.append({
+    
+            "Cycle":
+                row.get("cycle", ""),
+    
+            "Date":
+                str(
+                    row.get(
+                        "start_date",
+                        row.get(
+                            "created_at",
+                            ""
+                        )
+                    )
+                )[:10],
+    
+            "Opening Balance":
+                float(
+                    row.get(
+                        "principal",
+                        row.get(
+                            "opening_balance",
+                            0
+                        )
+                    )
+                ),
+    
+            "Amount Due":
+                float(
+                    row.get(
+                        "total_due",
+                        row.get(
+                            "amount_due",
+                            0
+                        )
+                    )
+                ),
+    
+            "Amount Paid":
+                float(
+                    row.get(
+                        "amount_paid",
+                        0
+                    )
+                ),
+    
+            "Balance":
+                float(
+                    row.get(
+                        "balance",
+                        0
+                    )
+                ),
+    
+            "Status":
+                row.get(
+                    "status",
+                    ""
+                )
+        })
+    
+    ledger_df = pd.DataFrame(ledger_data)
+    
     st.dataframe(
-        pd.DataFrame(ledger_data),
+        ledger_df,
         use_container_width=True,
         hide_index=True,
         column_config={
-            "Debit (UGX)": st.column_config.NumberColumn("Debit", format="%,.0f"),
-            "Credit (UGX)": st.column_config.NumberColumn("Credit", format="%,.0f"),
-            "Running Balance (UGX)": st.column_config.NumberColumn("Running Balance", format="%,.0f"),
+            "Opening Balance":
+                st.column_config.NumberColumn(
+                    format="%,.0f"
+                ),
+    
+            "Amount Due":
+                st.column_config.NumberColumn(
+                    format="%,.0f"
+                ),
+    
+            "Amount Paid":
+                st.column_config.NumberColumn(
+                    format="%,.0f"
+                ),
+    
+            "Balance":
+                st.column_config.NumberColumn(
+                    format="%,.0f"
+                ),
         }
     )
 
