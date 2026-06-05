@@ -3895,9 +3895,30 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
         
         # 🔄 Sort by cycle or sequence key to trace the true initial entry
         seq_col = "cycle" if "cycle" in sub_loans.columns else "id"
-        sub_loans = sub_loans.sort_values(by=[seq_col])
+        sub_loans = working_loans[
+            working_loans["loan_id_label"] == display_id
+        ].copy()
         
-        # Extract the original contract snapshot (First appearance baseline)
+        date_col = (
+            "start_date"
+            if "start_date" in sub_loans.columns
+            else "created_at"
+        )
+        
+        sub_loans[date_col] = pd.to_datetime(
+            sub_loans[date_col],
+            errors="coerce"
+        )
+        
+        sub_loans = sub_loans.sort_values(
+            by=[date_col]
+        )
+        
+        sub_loans = sub_loans.drop_duplicates(
+            subset=[date_col, "balance"],
+            keep="last"
+        )
+        
         origin_loan = sub_loans.iloc[0]
         
         elements.append(Paragraph(f"<b>Loan Account Ref: {display_id}</b>", styles["Heading3"]))
@@ -3921,11 +3942,14 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             )[:10]
         
             opening_balance = float(
+            row.get(
+                "opening_balance",
                 row.get(
                     "principal",
-                    row.get("opening_balance", 0)
+                    0
                 )
             )
+        )
         
             amount_due = float(
                 row.get(
@@ -3959,7 +3983,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
         
         final_balance = float(sub_loans.iloc[-1].get("balance", 0))
         
-        grand_total += final_balance
+        grand_total += abs(final_balance)
 
         table = Table(
             data,
