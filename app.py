@@ -3883,17 +3883,35 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     
     grand_total = 0.0
     
-    for _, loan in loans_df.iterrows():
-        loan_id = str(loan["id"])
+    # 🧼 HARDEN RELATIONSHIP COERCIONS: Strip float decimals from strings safely
+    def clean_id_str(val):
+        if pd.isna(val):
+            return ""
+        s = str(val).strip()
+        if s.endswith(".0"):
+            return s[:-2]
+        return s
+
+    # Ensure clean matching states across the PDF loop
+    processed_payments = payments_df.copy() if payments_df is not None else pd.DataFrame()
+    if not processed_payments.empty and "loan_id" in processed_payments.columns:
+        processed_payments["loan_id"] = processed_payments["loan_id"].apply(clean_id_str)
+
+    # 🔄 FIX 2: Sort the loans sequentially by label or sequence number before iterating
+    sort_col = "loan_id_label" if "loan_id_label" in loans_df.columns else "id"
+    sorted_loans = loans_df.sort_values(by=[sort_col]).copy()
+    
+    for _, loan in sorted_loans.iterrows():
+        loan_id = clean_id_str(loan.get("id"))
         display_id = str(loan.get("loan_id_label", loan_id)) 
         principal = float(loan.get("principal", 0))
         interest = float(loan.get("interest", 0))
         initial_amount = principal + interest
         
-        # Scope payments safely to this unique loan iteration instance
+        # Scope payments safely using cleaned string formats
         loan_payments = pd.DataFrame()
-        if payments_df is not None and not payments_df.empty:
-            loan_payments = payments_df[payments_df["loan_id"].astype(str) == loan_id].copy()
+        if not processed_payments.empty:
+            loan_payments = processed_payments[processed_payments["loan_id"] == loan_id].copy()
             
         if not loan_payments.empty:
             date_col = "payment_date" if "payment_date" in loan_payments.columns else "date"
@@ -3923,7 +3941,6 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             Paragraph(f"{principal:,.0f}", cell_style)
         ])
         
-        # Recalculate balance tracking pipeline safely
         balance = principal
         if interest > 0:
             balance += interest
@@ -3951,12 +3968,11 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
                     Paragraph(f"{balance:,.0f}", cell_style)
                 ])
         else:
-            if interest == 0: # If it hadn't appended an interest tracking line item yet
+            if interest == 0:
                 data.append([Paragraph("-", cell_style), Paragraph("No repayments on file", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style), Paragraph(f"{balance:,.0f}", cell_style)])
 
         grand_total += balance
 
-        # Explicit safe column width mappings (Total width = 535 points, perfectly fitting A4)
         table = Table(data, repeatRows=1, colWidths=[70, 195, 90, 90, 90])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2B3F87")),
@@ -4005,10 +4021,9 @@ def show_ledger():
                 margin-top: 15px;
             }}
         </style>
-        <h2 class='ledger-header'>📘 Master Ledger Ledger Accounts</h2>
+        <h2 class='ledger-header'>📘 Master Ledger Accounts</h2>
     """, unsafe_allow_html=True)
 
-    # 📥 LOAD AND ISOLATE BY MULTI-TENANT BOUNDARY LAYERS
     raw_loans = get_cached_data("loans")
     raw_payments = get_cached_data("payments")
     raw_borrowers = get_cached_data("borrowers")
@@ -4017,10 +4032,8 @@ def show_ledger():
         st.info("💡 Complete clear! No active loan parameters tracked on database arrays.")
         return
 
-    # Normalize data structures
     raw_loans.columns = raw_loans.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # 🛡️ TENANT FILTER LAYER: Prevent cross-company visibility leak
     if "tenant_id" in raw_loans.columns:
         loans_df = raw_loans[raw_loans["tenant_id"].astype(str) == str(current_tenant)].copy()
     else:
@@ -4048,17 +4061,34 @@ def show_ledger():
         else:
             loans_df["borrower"] = "Unknown Profile"
 
+    # 🧼 CLEAN ID LOOKUPS: Strip decimal variations here too
+    def clean_id_str(val):
+        if pd.isna(val):
+            return ""
+        s = str(val).strip()
+        if s.endswith(".0"):
+            return s[:-2]
+        return s
+
+    loans_df["id_clean"] = loans_df["id"].apply(clean_id_str)
+    if not payments_df.empty and "loan_id" in payments_df.columns:
+        payments_df["loan_id"] = payments_df["loan_id"].apply(clean_id_str)
+
+    # 🔄 FIX 2: Apply sequential order tracking to the selection selectbox dropdown mapping
+    sort_col = "loan_id_label" if "loan_id_label" in loans_df.columns else "id_clean"
+    loans_df = loans_df.sort_values(by=[sort_col])
+
     # ==============================
     # 🎯 SELECTION INTERFACE
     # ==============================
     loan_map = {
-        f"Ref: {r.get('loan_id_label', r['id'][:8])} — {r['borrower']}": str(r["id"])
+        f"Ref: {r.get('loan_id_label', r['id_clean'])} — {r['borrower']}": r["id_clean"]
         for _, r in loans_df.iterrows()
     }
     
     selected_label = st.selectbox("🎯 Target Loan Account Filter", list(loan_map.keys()))
     raw_id = loan_map[selected_label]
-    filtered_loan = loans_df[loans_df["id"].astype(str) == raw_id]
+    filtered_loan = loans_df[loans_df["id_clean"] == raw_id]
     
     if filtered_loan.empty:
         st.error("Target loan data vector unreadable.")
@@ -4086,8 +4116,6 @@ def show_ledger():
     # 📜 TRANSACTION HISTORY (LEDGER RUNTIME)
     # ==============================
     ledger_data = []
-    
-    # Corrected Math Step 1: Principal entry starts at base principal
     running_bal = p
     start_date_string = str(loan_info.get("start_date", "-"))[:10]
     
@@ -4099,7 +4127,6 @@ def show_ledger():
         "Running Balance (UGX)": running_bal
     })
 
-    # Corrected Math Step 2: Interest entry accurately aggregates balance tracking
     if i > 0:
         running_bal += i
         ledger_data.append({
@@ -4110,11 +4137,9 @@ def show_ledger():
             "Running Balance (UGX)": running_bal
         })
 
-    # Step 3: Parse real repayment streams explicitly mapping values
     if not payments_df.empty:
-        rel_payments = payments_df[payments_df["loan_id"].astype(str) == raw_id]
+        rel_payments = payments_df[payments_df["loan_id"] == raw_id]
         if not rel_payments.empty:
-            # Sort by transaction date execution order explicitly
             date_key = "date" if "date" in rel_payments.columns else "payment_date"
             rel_payments = rel_payments.sort_values(by=date_key)
             
