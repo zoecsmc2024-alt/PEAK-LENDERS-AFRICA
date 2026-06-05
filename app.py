@@ -3863,7 +3863,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     cell_bold = ParagraphStyle('LedgerCellBold', parent=styles['Normal'], fontSize=8, leading=10, fontName='Helvetica-Bold')
 
     elements = []
-    company_name = st.session_state.get('company_name', 'ZOE CONSULTS').upper()
+    company_name = st.session_state.get('company_name', 'ZOE CONSULTS SMC LIMITED').upper()
     elements.append(Paragraph(f"<b>{company_name}</b>", styles["Title"]))
     elements.append(Paragraph(f"<b>Client Statement:</b> {client_name}", styles["Normal"]))
     elements.append(Paragraph(f"<b>Statement Date:</b> {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
@@ -3991,13 +3991,23 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             colWidths=[65, 40, 85, 85, 85, 85]
         )
         table.setStyle(TableStyle([
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2B3F87")),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#89CFF0")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+        
+            ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#D6EAF8")),
+        
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [
+                colors.white,
+                colors.HexColor("#F8FCFF")
+            ]),
+        
             ("ALIGN", (2, 1), (-1, -1), "RIGHT"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ("TOPPADDING", (0, 0), (-1, -1), 6),
+        
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
         ]))
         elements.append(table)
         status_value = str(
@@ -4025,10 +4035,16 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             Spacer(1, 5)
         )
         
+        loan_style = ParagraphStyle(
+            "LoanHeading",
+            parent=styles["Heading3"],
+            textColor=colors.HexColor("#89CFF0")
+        )
+        
         elements.append(
             Paragraph(
-                f"<b>Loan Status:</b> {status_value}",
-                styles["Normal"]
+                f"<b>Loan Account Ref: {display_id}</b>",
+                loan_style
             )
         )
         elements.append(Spacer(1, 15))
