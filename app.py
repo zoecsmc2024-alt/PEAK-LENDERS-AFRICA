@@ -3849,7 +3849,27 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+sub_loans = sub_loans.copy()
 
+date_col = (
+    "start_date"
+    if "start_date" in sub_loans.columns
+    else "created_at"
+)
+
+sub_loans[date_col] = pd.to_datetime(
+    sub_loans[date_col],
+    errors="coerce"
+)
+
+sub_loans = (
+    sub_loans
+    .sort_values(date_col)
+    .drop_duplicates(
+        subset=[date_col, "balance"],
+        keep="last"
+    )
+)
 def generate_pdf_statement(client_name, loans_df, payments_df):
     """
     Compiles a clean financial ledger PDF statement safely grouped by unique 
@@ -3983,15 +4003,19 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             )
         )
         
-        final_balance = float(
-            sub_loans.iloc[-1].get(
-                "balance",
-                0
+        final_balance = abs(
+            float(
+                sub_loans.iloc[-1].get(
+                    "balance",
+                    0
+                )
             )
         )
         
-        if final_balance <= 0:
+        if final_balance <= 1:
             status_value = "CLEARED"
+        else:
+            status_value = "PENDING"
         
         elements.append(
             Spacer(1, 5)
