@@ -3853,7 +3853,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 def generate_pdf_statement(client_name, loans_df, payments_df):
     """
     Compiles a clean, multi-page financial ledger PDF statement safely 
-    wrapped inside Paragraph nodes to prevent text clipping.
+    grouped into ONE consolidated statement table per unique Loan Ref ID.
     """
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
@@ -3897,31 +3897,25 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     if not processed_payments.empty and "loan_id" in processed_payments.columns:
         processed_payments["loan_id"] = processed_payments["loan_id"].apply(clean_id_str)
 
-    # 🔄 FIX 2: Sort the loans sequentially by label or sequence number before iterating
-    sort_col = "loan_id_label" if "loan_id_label" in loans_df.columns else "id"
-    sorted_loans = loans_df.sort_values(by=[sort_col]).copy()
+    # Clean loan tracking dimensions
+    working_loans = loans_df.copy()
+    working_loans["id_clean"] = working_loans["id"].apply(clean_id_str)
     
-    for _, loan in sorted_loans.iterrows():
-        loan_id = clean_id_str(loan.get("id"))
-        display_id = str(loan.get("loan_id_label", loan_id)) 
-        principal = float(loan.get("principal", 0))
-        interest = float(loan.get("interest", 0))
-        initial_amount = principal + interest
+    # Fill fallback display tags if missing
+    if "loan_id_label" not in working_loans.columns:
+        working_loans["loan_id_label"] = working_loans["id_clean"]
+    working_loans["loan_id_label"] = working_loans["loan_id_label"].fillna(working_loans["id_clean"]).astype(str)
+
+    # 🔄 GROUP BY LABEL REFERENCE: Collapses scattered rows into unified structural tracking profiles
+    grouped_loan_labels = sorted(working_loans["loan_id_label"].unique())
+
+    for display_id in grouped_loan_labels:
+        # Pull all items matching this human label identifier block
+        sub_loans = working_loans[working_loans["loan_id_label"] == display_id]
         
-        # Scope payments safely using cleaned string formats
-        loan_payments = pd.DataFrame()
-        if not processed_payments.empty:
-            loan_payments = processed_payments[processed_payments["loan_id"] == loan_id].copy()
-            
-        if not loan_payments.empty:
-            date_col = "payment_date" if "payment_date" in loan_payments.columns else "date"
-            if date_col in loan_payments.columns:
-                loan_payments = loan_payments.sort_values(by=date_col)
-                
-        balance = initial_amount
-        elements.append(Paragraph(f"<b>Loan Account Ref:</b> {display_id}", styles["Heading3"]))
+        elements.append(Paragraph(f"<b>Loan Account Ref: {display_id}</b>", styles["Heading3"]))
         
-        # Table Headers
+        # Build Single Table Rows Framework
         data = [[
             Paragraph("<b>Date</b>", cell_bold),
             Paragraph("<b>Description</b>", cell_bold),
@@ -3930,49 +3924,79 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             Paragraph("<b>Balance</b>", cell_bold)
         ]]
         
-        start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
-        clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
-        
-        data.append([
-            Paragraph(clean_start_date, cell_style),
-            Paragraph("Loan Disbursement Base", cell_style),
-            Paragraph(f"{principal:,.0f}", cell_style),
-            Paragraph("0", cell_style),
-            Paragraph(f"{principal:,.0f}", cell_style)
-        ])
-        
-        balance = principal
-        if interest > 0:
-            balance += interest
-            data.append([
-                Paragraph(clean_start_date, cell_style),
-                Paragraph("Initial Interest Cost Applied", cell_style),
-                Paragraph(f"{interest:,.0f}", cell_style),
-                Paragraph("0", cell_style),
-                Paragraph(f"{balance:,.0f}", cell_style)
-            ])
+        running_balance = 0.0
+        all_transactions = []
 
-        if not loan_payments.empty:
-            for _, p in loan_payments.iterrows():
-                amount = float(p.get("amount", 0))
-                balance -= amount
+        # 1️⃣ Collect and consolidate disbursements and interest line items
+        for _, loan in sub_loans.iterrows():
+            internal_id = loan["id_clean"]
+            principal = float(loan.get("principal", 0))
+            interest = float(loan.get("interest", 0))
+            
+            start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
+            clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
+
+            all_transactions.append({
+                "date": clean_start_date,
+                "desc": "🏦 Core Loan Disbursement",
+                "debit": principal,
+                "credit": 0.0,
+                "sort_priority": 1
+            })
+
+            if interest > 0:
+                all_transactions.append({
+                    "date": clean_start_date,
+                    "desc": "📈 Fixed Capital Interest Applied",
+                    "debit": interest,
+                    "credit": 0.0,
+                    "sort_priority": 2
+                })
+
+            # 2️⃣ Gather and pool all payments connected to this specific sub-loan row entry identity
+            if not processed_payments.empty:
+                # Match against EITHER internal technical ID or custom external display label mapping
+                loan_payments = processed_payments[
+                    (processed_payments["loan_id"] == internal_id) | 
+                    (processed_payments["loan_id"] == display_id)
+                ].copy()
                 
-                pay_date_raw = str(p.get("payment_date", p.get("date", "")))
-                clean_pay_date = pay_date_raw[:10] if len(pay_date_raw) > 10 else pay_date_raw
+                for _, p in loan_payments.iterrows():
+                    amount = float(p.get("amount", 0))
+                    pay_date_raw = str(p.get("payment_date", p.get("date", "")))
+                    clean_pay_date = pay_date_raw[:10] if len(pay_date_raw) > 10 else pay_date_raw
 
+                    all_transactions.append({
+                        "date": clean_pay_date,
+                        "desc": f"💰 Repayment Received [{p.get('receipt_no', 'Ref N/A')}]",
+                        "debit": 0.0,
+                        "credit": amount,
+                        "sort_priority": 3
+                    })
+
+        # Convert ledger stack to temporary DF to ensure perfect chronological sorting order execution
+        if all_transactions:
+            tx_df = pd.DataFrame(all_transactions)
+            # Sort chronologically by date first, then by priority (Disbursement -> Interest -> Payment)
+            tx_df = tx_df.sort_values(by=["date", "sort_priority"])
+            
+            for _, row in tx_df.iterrows():
+                running_balance += row["debit"]
+                running_balance -= row["credit"]
+                
                 data.append([
-                    Paragraph(clean_pay_date, cell_style),
-                    Paragraph("Repayment Received", cell_style),
-                    Paragraph("0", cell_style),
-                    Paragraph(f"{amount:,.0f}", cell_style),
-                    Paragraph(f"{balance:,.0f}", cell_style)
+                    Paragraph(str(row["date"]), cell_style),
+                    Paragraph(str(row["desc"]), cell_style),
+                    Paragraph(f"{row['debit']:,.0f}" if row['debit'] > 0 else "0", cell_style),
+                    Paragraph(f"{row['credit']:,.0f}" if row['credit'] > 0 else "0", cell_style),
+                    Paragraph(f"{running_balance:,.0f}", cell_style)
                 ])
         else:
-            if interest == 0:
-                data.append([Paragraph("-", cell_style), Paragraph("No repayments on file", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style), Paragraph(f"{balance:,.0f}", cell_style)])
+            data.append([Paragraph("-", cell_style), Paragraph("No active parameters logged", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style)])
 
-        grand_total += balance
+        grand_total += running_balance
 
+        # Compile Consolidated Table Design Grid
         table = Table(data, repeatRows=1, colWidths=[70, 195, 90, 90, 90])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2B3F87")),
@@ -4074,37 +4098,42 @@ def show_ledger():
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["loan_id"] = payments_df["loan_id"].apply(clean_id_str)
 
-    # 🔄 FIX 2: Apply sequential order tracking to the selection selectbox dropdown mapping
-    sort_col = "loan_id_label" if "loan_id_label" in loans_df.columns else "id_clean"
-    loans_df = loans_df.sort_values(by=[sort_col])
+    # Pre-fill label structures for alignment safely
+    if "loan_id_label" not in loans_df.columns:
+        loans_df["loan_id_label"] = loans_df["id_clean"]
+    loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id_clean"]).astype(str)
+
+    # 🔄 FIX: Sort the interface selection layout explicitly using natural alphanumeric rules
+    loans_df = loans_df.sort_values(by=["loan_id_label"])
 
     # ==============================
     # 🎯 SELECTION INTERFACE
     # ==============================
     loan_map = {
-        f"Ref: {r.get('loan_id_label', r['id_clean'])} — {r['borrower']}": r["id_clean"]
+        f"Ref: {r['loan_id_label']} — {r['borrower']}": r["loan_id_label"]
         for _, r in loans_df.iterrows()
     }
     
-    selected_label = st.selectbox("🎯 Target Loan Account Filter", list(loan_map.keys()))
-    raw_id = loan_map[selected_label]
-    filtered_loan = loans_df[loans_df["id_clean"] == raw_id]
+    selected_label = st.selectbox("🎯 Target Loan Account Filter", list(dict.fromkeys(loan_map.keys())))
+    target_label = loan_map[selected_label]
     
-    if filtered_loan.empty:
+    # Isolate all splits linked with chosen identity tag
+    filtered_loans = loans_df[loans_df["loan_id_label"] == target_label]
+    
+    if filtered_loans.empty:
         st.error("Target loan data vector unreadable.")
         return
-    loan_info = filtered_loan.iloc[0]
 
     # ==============================
-    # 📊 STATEMENT PREVIEW PANEL
+    # 📊 STATEMENT PREVIEW PANEL (Aggregated Overview Context)
     # ==============================
     st.markdown("<h4 class='snapshot-text'>📑 Account Balance Breakdown</h4>", unsafe_allow_html=True)
     
-    p = float(loan_info.get("principal", 0))
-    i = float(loan_info.get("interest", 0))
+    p = sum(float(row.get("principal", 0)) for _, row in filtered_loans.iterrows())
+    i = sum(float(row.get("interest", 0)) for _, row in filtered_loans.iterrows())
     total_due = p + i
-    paid = float(loan_info.get("amount_paid", 0))
-    bal = float(loan_info.get("balance", 0))
+    paid = sum(float(row.get("amount_paid", 0)) for _, row in filtered_loans.iterrows())
+    bal = sum(float(row.get("balance", 0)) for _, row in filtered_loans.iterrows())
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
@@ -4113,48 +4142,67 @@ def show_ledger():
     m4.metric("Current Balance Owed", f"UGX {bal:,.0f}", delta=f"Outstanding Position", delta_color="inverse")
 
     # ==============================
-    # 📜 TRANSACTION HISTORY (LEDGER RUNTIME)
+    # 📜 TRANSACTION HISTORY (LEDGER RUNTIME - Consolidated Table)
     # ==============================
     ledger_data = []
-    running_bal = p
-    start_date_string = str(loan_info.get("start_date", "-"))[:10]
-    
-    ledger_data.append({
-        "Date": start_date_string,
-        "Transaction Details": "🏦 Core Loan Disbursement",
-        "Debit (UGX)": p,
-        "Credit (UGX)": 0.0,
-        "Running Balance (UGX)": running_bal
-    })
+    running_bal = 0.0
+    all_runtime_tx = []
 
-    if i > 0:
-        running_bal += i
-        ledger_data.append({
+    for _, loan_info in filtered_loans.iterrows():
+        internal_id = loan_info["id_clean"]
+        lp = float(loan_info.get("principal", 0))
+        li = float(loan_info.get("interest", 0))
+        start_date_string = str(loan_info.get("start_date", "-"))[:10]
+
+        all_runtime_tx.append({
             "Date": start_date_string,
-            "Transaction Details": "📈 Fixed Capital Interest Applied",
-            "Debit (UGX)": i,
+            "Transaction Details": "🏦 Core Loan Disbursement",
+            "Debit (UGX)": lp,
             "Credit (UGX)": 0.0,
-            "Running Balance (UGX)": running_bal
+            "sort": 1
         })
 
-    if not payments_df.empty:
-        rel_payments = payments_df[payments_df["loan_id"] == raw_id]
-        if not rel_payments.empty:
-            date_key = "date" if "date" in rel_payments.columns else "payment_date"
-            rel_payments = rel_payments.sort_values(by=date_key)
+        if li > 0:
+            all_runtime_tx.append({
+                "Date": start_date_string,
+                "Transaction Details": "📈 Fixed Capital Interest Applied",
+                "Debit (UGX)": li,
+                "Credit (UGX)": 0.0,
+                "sort": 2
+            })
+
+        if not payments_df.empty:
+            rel_payments = payments_df[
+                (payments_df["loan_id"] == internal_id) | 
+                (payments_df["loan_id"] == target_label)
+            ]
+            if not rel_payments.empty:
+                date_key = "date" if "date" in rel_payments.columns else "payment_date"
+                for _, p_row in rel_payments.iterrows():
+                    amt = float(p_row.get("amount", 0))
+                    p_date_raw = str(p_row.get(date_key, "-"))[:10]
+                    
+                    all_runtime_tx.append({
+                        "Date": p_date_raw,
+                        "Transaction Details": f"💰 Repayment Entry Verified [{p_row.get('receipt_no', 'N/A')}]",
+                        "Debit (UGX)": 0.0,
+                        "Credit (UGX)": amt,
+                        "sort": 3
+                    })
+
+    if all_runtime_tx:
+        runtime_tx_df = pd.DataFrame(all_runtime_tx).sort_values(by=["Date", "sort"])
+        for _, row in runtime_tx_df.iterrows():
+            running_bal += row["Debit (UGX)"]
+            running_bal -= row["Credit (UGX)"]
             
-            for _, p_row in rel_payments.iterrows():
-                amt = float(p_row.get("amount", 0))
-                running_bal -= amt
-                p_date_raw = str(p_row.get(date_key, "-"))[:10]
-                
-                ledger_data.append({
-                    "Date": p_date_raw,
-                    "Transaction Details": "💰 Repayment Entry Verified",
-                    "Debit (UGX)": 0.0,
-                    "Credit (UGX)": amt,
-                    "Running Balance (UGX)": running_bal
-                })
+            ledger_data.append({
+                "Date": row["Date"],
+                "Transaction Details": row["Transaction Details"],
+                "Debit (UGX)": row["Debit (UGX)"],
+                "Credit (UGX)": row["Credit (UGX)"],
+                "Running Balance (UGX)": running_bal
+            })
 
     st.markdown("<br>", unsafe_allow_html=True)
     st.dataframe(
@@ -4183,7 +4231,7 @@ def show_ledger():
     """, unsafe_allow_html=True)
 
     if st.button("✨ Compile Formal PDF Statement", use_container_width=True):
-        client_name = loan_info.get("borrower", "Unknown Profile")
+        client_name = filtered_loans.iloc[0].get("borrower", "Unknown Profile")
         client_loans = loans_df[loans_df["borrower"] == client_name]
 
         with st.spinner("Rendering Document Architecture..."):
@@ -4196,7 +4244,6 @@ def show_ledger():
             mime="application/pdf",
             use_container_width=True
         )
-
 
 def show_settings():
     """
