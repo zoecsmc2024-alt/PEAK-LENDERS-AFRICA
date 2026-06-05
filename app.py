@@ -3893,11 +3893,11 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     for display_id in grouped_loan_labels:
         sub_loans = working_loans[working_loans["loan_id_label"] == display_id]
         
-        # 🔄 FIX: Sort by cycle sequence number to find the true origin entry
+        # 🔄 Sort by cycle or sequence key to trace the true initial entry
         seq_col = "cycle" if "cycle" in sub_loans.columns else "id"
         sub_loans = sub_loans.sort_values(by=[seq_col])
         
-        # Extract the original contract snapshot (Cycle 1 / First appearance)
+        # Extract the original contract snapshot (First appearance baseline)
         origin_loan = sub_loans.iloc[0]
         
         elements.append(Paragraph(f"<b>Loan Account Ref: {display_id}</b>", styles["Heading3"]))
@@ -3910,14 +3910,14 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             Paragraph("<b>Balance</b>", cell_bold)
         ]]
         
-        # Use initial principal from the starting cycle entry
+        # Pull true initial disbursement parameters
         original_principal = float(origin_loan.get("principal", 0))
         running_balance = original_principal
         
         start_date_raw = str(origin_loan.get("created_at", origin_loan.get("start_date", "")))
         clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
 
-        # Add base disbursement row
+        # Add initial base row
         data.append([
             Paragraph(clean_start_date, cell_style),
             Paragraph("🏦 Core Loan Disbursement", cell_style),
@@ -3928,16 +3928,14 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
 
         all_transactions = []
 
-        # Collect interest items and repayments without duplicating basic principals
-        for idx, loan in enumerate(sub_loans.iterrows()):
-            loan_row = loan[1]
+        # Track and apply tracking metrics across cycles without replicating original base values
+        for idx, (_, loan_row) in enumerate(sub_loans.iterrows()):
             internal_id = loan_row["id_clean"]
             interest = float(loan_row.get("interest", 0))
             
             row_date_raw = str(loan_row.get("created_at", loan_row.get("start_date", "")))
             clean_row_date = row_date_raw[:10] if len(row_date_raw) > 10 else row_date_raw
 
-            # Only append interest costs applied per step definition context
             if interest > 0:
                 all_transactions.append({
                     "date": clean_row_date,
@@ -4069,25 +4067,20 @@ def show_ledger():
         else:
             loans_df["borrower"] = "Unknown Profile"
 
-    # 🧼 CLEAN ID LOOKUPS: Strip decimal variations here too
     def clean_id_str(val):
-        if pd.isna(val):
-            return ""
+        if pd.isna(val): return ""
         s = str(val).strip()
-        if s.endswith(".0"):
-            return s[:-2]
+        if s.endswith(".0"): return s[:-2]
         return s
 
     loans_df["id_clean"] = loans_df["id"].apply(clean_id_str)
     if not payments_df.empty and "loan_id" in payments_df.columns:
         payments_df["loan_id"] = payments_df["loan_id"].apply(clean_id_str)
 
-    # Pre-fill label structures for alignment safely
     if "loan_id_label" not in loans_df.columns:
         loans_df["loan_id_label"] = loans_df["id_clean"]
     loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id_clean"]).astype(str)
 
-    # 🔄 FIX: Sort the interface selection layout explicitly using natural alphanumeric rules
     loans_df = loans_df.sort_values(by=["loan_id_label"])
 
     # ==============================
@@ -4101,23 +4094,30 @@ def show_ledger():
     selected_label = st.selectbox("🎯 Target Loan Account Filter", list(dict.fromkeys(loan_map.keys())))
     target_label = loan_map[selected_label]
     
-    # Isolate all splits linked with chosen identity tag
     filtered_loans = loans_df[loans_df["loan_id_label"] == target_label]
     
     if filtered_loans.empty:
         st.error("Target loan data vector unreadable.")
         return
 
+    # Sort chronological subsets to split initial entries vs rolling items correctly
+    seq_col = "cycle" if "cycle" in filtered_loans.columns else "id"
+    filtered_loans = filtered_loans.sort_values(by=[seq_col])
+
     # ==============================
-    # 📊 STATEMENT PREVIEW PANEL (Aggregated Overview Context)
+    # 📊 CORRECTED STATEMENT PREVIEW PANEL
     # ==============================
     st.markdown("<h4 class='snapshot-text'>📑 Account Balance Breakdown</h4>", unsafe_allow_html=True)
     
-    p = sum(float(row.get("principal", 0)) for _, row in filtered_loans.iterrows())
+    # 🔄 FIX: Isolate origin and endpoint records to get accurate, non-cumulative numbers
+    origin_record = filtered_loans.iloc[0]
+    latest_record = filtered_loans.iloc[-1]
+
+    p = float(origin_record.get("principal", 0))
     i = sum(float(row.get("interest", 0)) for _, row in filtered_loans.iterrows())
     total_due = p + i
     paid = sum(float(row.get("amount_paid", 0)) for _, row in filtered_loans.iterrows())
-    bal = sum(float(row.get("balance", 0)) for _, row in filtered_loans.iterrows())
+    bal = float(latest_record.get("balance", 0))
     
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
@@ -4126,29 +4126,29 @@ def show_ledger():
     m4.metric("Current Balance Owed", f"UGX {bal:,.0f}", delta=f"Outstanding Position", delta_color="inverse")
 
     # ==============================
-    # 📜 TRANSACTION HISTORY (LEDGER RUNTIME - Consolidated Table)
+    # 📜 CORRECTED TRANSACTION HISTORY (LEDGER RUNTIME)
     # ==============================
     ledger_data = []
-    running_bal = 0.0
+    running_bal = p
     all_runtime_tx = []
+
+    start_date_string = str(origin_record.get("start_date", "-"))[:10]
+    all_runtime_tx.append({
+        "Date": start_date_string,
+        "Transaction Details": "🏦 Core Loan Disbursement",
+        "Debit (UGX)": p,
+        "Credit (UGX)": 0.0,
+        "sort": 1
+    })
 
     for _, loan_info in filtered_loans.iterrows():
         internal_id = loan_info["id_clean"]
-        lp = float(loan_info.get("principal", 0))
         li = float(loan_info.get("interest", 0))
-        start_date_string = str(loan_info.get("start_date", "-"))[:10]
-
-        all_runtime_tx.append({
-            "Date": start_date_string,
-            "Transaction Details": "🏦 Core Loan Disbursement",
-            "Debit (UGX)": lp,
-            "Credit (UGX)": 0.0,
-            "sort": 1
-        })
+        row_date = str(loan_info.get("start_date", "-"))[:10]
 
         if li > 0:
             all_runtime_tx.append({
-                "Date": start_date_string,
+                "Date": row_date,
                 "Transaction Details": "📈 Fixed Capital Interest Applied",
                 "Debit (UGX)": li,
                 "Credit (UGX)": 0.0,
@@ -4168,14 +4168,20 @@ def show_ledger():
                     
                     all_runtime_tx.append({
                         "Date": p_date_raw,
-                        "Transaction Details": f"💰 Repayment Entry Verified [{p_row.get('receipt_no', 'N/A')}]",
+                        "Transaction Details": f"💰 Repayment Entry Verified [{p_row.get('receipt_no', 'Ref N/A')}]",
                         "Debit (UGX)": 0.0,
                         "Credit (UGX)": amt,
                         "sort": 3
                     })
 
     if all_runtime_tx:
-        runtime_tx_df = pd.DataFrame(all_runtime_tx).sort_values(by=["Date", "sort"])
+        runtime_tx_df = pd.DataFrame(all_runtime_tx)
+        # Separate base entry from other transactions to sort cleanly
+        base_tx = runtime_tx_df[runtime_tx_df["sort"] == 1]
+        other_tx = runtime_tx_df[runtime_tx_df["sort"] != 1].sort_values(by=["Date", "sort"])
+        runtime_tx_df = pd.concat([base_tx, other_tx])
+
+        running_bal = 0.0
         for _, row in runtime_tx_df.iterrows():
             running_bal += row["Debit (UGX)"]
             running_bal -= row["Credit (UGX)"]
