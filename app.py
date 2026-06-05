@@ -3852,27 +3852,15 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 def generate_pdf_statement(client_name, loans_df, payments_df):
     """
-    Compiles a clean, multi-page financial ledger PDF statement safely 
-    grouped into ONE consolidated statement table per unique Loan Ref ID.
+    Compiles a clean financial ledger PDF statement safely grouped by unique 
+    Loan Ref ID, pulling only the true original disbursement and subsequent actions.
     """
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     styles = getSampleStyleSheet()
     
-    # Custom cell style to handle long text gracefully inside ReportLab cells
-    cell_style = ParagraphStyle(
-        'LedgerCell',
-        parent=styles['Normal'],
-        fontSize=8,
-        leading=10
-    )
-    cell_bold = ParagraphStyle(
-        'LedgerCellBold',
-        parent=styles['Normal'],
-        fontSize=8,
-        leading=10,
-        fontName='Helvetica-Bold'
-    )
+    cell_style = ParagraphStyle('LedgerCell', parent=styles['Normal'], fontSize=8, leading=10)
+    cell_bold = ParagraphStyle('LedgerCellBold', parent=styles['Normal'], fontSize=8, leading=10, fontName='Helvetica-Bold')
 
     elements = []
     company_name = st.session_state.get('company_name', 'ZOE CONSULTS').upper()
@@ -3883,39 +3871,37 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     
     grand_total = 0.0
     
-    # 🧼 HARDEN RELATIONSHIP COERCIONS: Strip float decimals from strings safely
     def clean_id_str(val):
-        if pd.isna(val):
-            return ""
+        if pd.isna(val): return ""
         s = str(val).strip()
-        if s.endswith(".0"):
-            return s[:-2]
+        if s.endswith(".0"): s = s[:-2]
         return s
 
-    # Ensure clean matching states across the PDF loop
     processed_payments = payments_df.copy() if payments_df is not None else pd.DataFrame()
     if not processed_payments.empty and "loan_id" in processed_payments.columns:
         processed_payments["loan_id"] = processed_payments["loan_id"].apply(clean_id_str)
 
-    # Clean loan tracking dimensions
     working_loans = loans_df.copy()
     working_loans["id_clean"] = working_loans["id"].apply(clean_id_str)
     
-    # Fill fallback display tags if missing
     if "loan_id_label" not in working_loans.columns:
         working_loans["loan_id_label"] = working_loans["id_clean"]
     working_loans["loan_id_label"] = working_loans["loan_id_label"].fillna(working_loans["id_clean"]).astype(str)
 
-    # 🔄 GROUP BY LABEL REFERENCE: Collapses scattered rows into unified structural tracking profiles
     grouped_loan_labels = sorted(working_loans["loan_id_label"].unique())
 
     for display_id in grouped_loan_labels:
-        # Pull all items matching this human label identifier block
         sub_loans = working_loans[working_loans["loan_id_label"] == display_id]
+        
+        # 🔄 FIX: Sort by cycle sequence number to find the true origin entry
+        seq_col = "cycle" if "cycle" in sub_loans.columns else "id"
+        sub_loans = sub_loans.sort_values(by=[seq_col])
+        
+        # Extract the original contract snapshot (Cycle 1 / First appearance)
+        origin_loan = sub_loans.iloc[0]
         
         elements.append(Paragraph(f"<b>Loan Account Ref: {display_id}</b>", styles["Heading3"]))
         
-        # Build Single Table Rows Framework
         data = [[
             Paragraph("<b>Date</b>", cell_bold),
             Paragraph("<b>Description</b>", cell_bold),
@@ -3924,38 +3910,44 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             Paragraph("<b>Balance</b>", cell_bold)
         ]]
         
-        running_balance = 0.0
+        # Use initial principal from the starting cycle entry
+        original_principal = float(origin_loan.get("principal", 0))
+        running_balance = original_principal
+        
+        start_date_raw = str(origin_loan.get("created_at", origin_loan.get("start_date", "")))
+        clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
+
+        # Add base disbursement row
+        data.append([
+            Paragraph(clean_start_date, cell_style),
+            Paragraph("🏦 Core Loan Disbursement", cell_style),
+            Paragraph(f"{original_principal:,.0f}", cell_style),
+            Paragraph("0", cell_style),
+            Paragraph(f"{running_balance:,.0f}", cell_style)
+        ])
+
         all_transactions = []
 
-        # 1️⃣ Collect and consolidate disbursements and interest line items
-        for _, loan in sub_loans.iterrows():
-            internal_id = loan["id_clean"]
-            principal = float(loan.get("principal", 0))
-            interest = float(loan.get("interest", 0))
+        # Collect interest items and repayments without duplicating basic principals
+        for idx, loan in enumerate(sub_loans.iterrows()):
+            loan_row = loan[1]
+            internal_id = loan_row["id_clean"]
+            interest = float(loan_row.get("interest", 0))
             
-            start_date_raw = str(loan.get("created_at", loan.get("start_date", "")))
-            clean_start_date = start_date_raw[:10] if len(start_date_raw) > 10 else start_date_raw
+            row_date_raw = str(loan_row.get("created_at", loan_row.get("start_date", "")))
+            clean_row_date = row_date_raw[:10] if len(row_date_raw) > 10 else row_date_raw
 
-            all_transactions.append({
-                "date": clean_start_date,
-                "desc": "🏦 Core Loan Disbursement",
-                "debit": principal,
-                "credit": 0.0,
-                "sort_priority": 1
-            })
-
+            # Only append interest costs applied per step definition context
             if interest > 0:
                 all_transactions.append({
-                    "date": clean_start_date,
+                    "date": clean_row_date,
                     "desc": "📈 Fixed Capital Interest Applied",
                     "debit": interest,
                     "credit": 0.0,
                     "sort_priority": 2
                 })
 
-            # 2️⃣ Gather and pool all payments connected to this specific sub-loan row entry identity
             if not processed_payments.empty:
-                # Match against EITHER internal technical ID or custom external display label mapping
                 loan_payments = processed_payments[
                     (processed_payments["loan_id"] == internal_id) | 
                     (processed_payments["loan_id"] == display_id)
@@ -3974,12 +3966,8 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
                         "sort_priority": 3
                     })
 
-        # Convert ledger stack to temporary DF to ensure perfect chronological sorting order execution
         if all_transactions:
-            tx_df = pd.DataFrame(all_transactions)
-            # Sort chronologically by date first, then by priority (Disbursement -> Interest -> Payment)
-            tx_df = tx_df.sort_values(by=["date", "sort_priority"])
-            
+            tx_df = pd.DataFrame(all_transactions).sort_values(by=["date", "sort_priority"])
             for _, row in tx_df.iterrows():
                 running_balance += row["debit"]
                 running_balance -= row["credit"]
@@ -3991,12 +3979,9 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
                     Paragraph(f"{row['credit']:,.0f}" if row['credit'] > 0 else "0", cell_style),
                     Paragraph(f"{running_balance:,.0f}", cell_style)
                 ])
-        else:
-            data.append([Paragraph("-", cell_style), Paragraph("No active parameters logged", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style), Paragraph("0", cell_style)])
 
         grand_total += running_balance
 
-        # Compile Consolidated Table Design Grid
         table = Table(data, repeatRows=1, colWidths=[70, 195, 90, 90, 90])
         table.setStyle(TableStyle([
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2B3F87")),
@@ -4007,7 +3992,6 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
             ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
             ("TOPPADDING", (0, 0), (-1, -1), 6),
         ]))
-
         elements.append(table)
         elements.append(Spacer(1, 15))
         
