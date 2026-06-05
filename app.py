@@ -22,7 +22,7 @@ import extra_streamlit_components as stx
 
 # --- Page Config stays here ---
 st.set_page_config(
-    page_title="Lending Manager Pro",
+    page_title="Peak-Lenders Africa",
     page_icon="💰",
     layout="wide",
     initial_sidebar_state="expanded"
