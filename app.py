@@ -2771,21 +2771,7 @@ def show_calendar():
             .sort_values("end_date")
         )
 
-    # ==========================================================
-    # 11. OVERDUE TABLE
-    # ==========================================================
-    st.markdown("### 🔴 Overdue")
-
-    if overdue.empty:
-        st.success("Clean sheet 🎉 No overdue loans")
-    else:
-        overdue = overdue.copy()
-        overdue["days_late"] = (today - overdue["end_date"]).dt.days
-
-        st.dataframe(
-            overdue[["loan_id_label", "borrower", "days_late", "balance", "end_date"]]
-            .sort_values("days_late", ascending=False)
-        )
+    
 # ==========================================================
 # 🛡️ COLLATERAL MANAGEMENT ENGINE
 # ==========================================================
