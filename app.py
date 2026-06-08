@@ -576,7 +576,7 @@ def render_sidebar():
             st.rerun()
 
         # ----------------------------------------------------
-        # 3. UPDATE THEME (FAST STATE ONLY)
+        # 3. UPdate THEME (FAST STATE ONLY)
         # ----------------------------------------------------
         st.session_state["theme_color"] = active_company.get(
             "brand_color",
@@ -774,12 +774,12 @@ def show_dashboard_view():
         pay_rows = ""
         
         if pay_df is not None and not pay_df.empty:
-            recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
+            recent_pay = pay_df.sort_values(by="date", ascending=False).head(5)
             for i, (idx, r) in enumerate(recent_pay.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 p_borr = r.get('Borrower', 'Unknown')
                 p_val = float(r.get('Amount', 0))
-                p_date_raw = r.get('Date')
+                p_date_raw = r.get('date')
                 p_date = pd.to_datetime(p_date_raw).strftime('%d %b') if pd.notna(p_date_raw) else "-"
                 
                 pay_rows += f"""
@@ -795,7 +795,7 @@ def show_dashboard_view():
                     <tr style="background:#2E7D32; color:white;">
                         <th style="padding:10px;">Borrower</th>
                         <th style="padding:10px; text-align:right;">Amount</th>
-                        <th style="padding:10px; text-align:center;">Date</th>
+                        <th style="padding:10px; text-align:center;">date</th>
                     </tr>
                 </thead>
                 <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
@@ -817,14 +817,14 @@ def show_dashboard_view():
     with c_bar:
         # Combined Cashflow Chart (Income vs expenses)
         if pay_df is not None and not pay_df.empty and exp_df is not None and not exp_df.empty:
-            pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
-            exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
+            pay_df["date"] = pd.to_datetime(pay_df["date"], errors='coerce')
+            exp_df["date"] = pd.to_datetime(exp_df["date"], errors='coerce')
             
             # Formatting for grouping by Month-Year
-            inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
-            exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            inc_m = pay_df.groupby(pay_df["date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            exp_m = exp_df.groupby(exp_df["date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
             
-            m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
+            m_cash = pd.merge(inc_m, exp_m, on="date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
             m_cash.columns = ["Month", "Income", "expenses"]
             
             fig_bar = px.bar(m_cash, x="Month", y=["Income", "expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "expenses": "#FF4B4B"})
@@ -1073,7 +1073,7 @@ def show_borrowers():
                 user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy()
 
                 if not user_loans.empty:
-                    # Fix applied: capital 'D' on DateColumn
+                    # Fix applied: capital 'D' on dateColumn
                     st.dataframe(
                         user_loans, 
                         use_container_width=True,
@@ -1084,8 +1084,8 @@ def show_borrowers():
                             "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
                             "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
-                            "start_date": st.column_config.DateColumn("Date Issued"),
-                            "end_date": st.column_config.DateColumn("Due Date"),
+                            "start_date": st.column_config.dateColumn("date Issued"),
+                            "end_date": st.column_config.dateColumn("Due date"),
                         }
                     )
                     
@@ -1243,7 +1243,7 @@ def show_loans():
         payments_df["amount"] = pd.to_numeric(payments_df["amount"], errors="coerce").fillna(0)
 
     # ------------------------------
-    # DATE CLEANUP
+    # date CLEANUP
     # ------------------------------
     for col in ["start_date", "end_date"]:
         loans_df[col] = pd.to_datetime(loans_df[col], errors="coerce")
@@ -1622,11 +1622,11 @@ def show_loans():
                 col3, col4 = st.columns(2)
                 with col3:
                     current_start_date = pd.to_datetime(loan_to_edit["start_date"]).date() if pd.notna(loan_to_edit["start_date"]) else pd.Timestamp.now().date()
-                    e_start_date = st.date_input("Start Date", value=current_start_date)
+                    e_start_date = st.date_input("Start date", value=current_start_date)
     
                 with col4:
                     current_end_date = pd.to_datetime(loan_to_edit["end_date"]).date() if pd.notna(loan_to_edit["end_date"]) else pd.Timestamp.now().date()
-                    e_end_date = st.date_input("End Date", value=current_end_date)
+                    e_end_date = st.date_input("End date", value=current_end_date)
     
                 status_options = ["ACTIVE", "PENDING", "CLEARED", "BCF", "CLOSED"]
                 current_stat = str(loan_to_edit["status"]).upper()
@@ -1832,7 +1832,7 @@ def show_payments(supabase):
         with st.form("payment_form"):
             amount = st.number_input("Transaction Amount Received (UGX)", min_value=0.0, step=10000.0) # Matched floating signatures
             method = st.selectbox("Collection Channel / Method", ["Cash", "Mobile Money", "Bank"])
-            date = st.date_input("Processing Settlement Date", datetime.now())
+            date = st.date_input("Processing Settlement date", datetime.now())
             submit = st.form_submit_button("🚀 Post Repayment Entry", use_container_width=True)
 
         if submit:
@@ -1869,7 +1869,7 @@ def show_payments(supabase):
                         "Borrower Entity": active_loan["borrower"],
                         "Settlement Amount": f"UGX {amount:,.0f}",
                         "Payment Framework": method,
-                        "Execution Date": date.strftime("%Y-%m-%d"),
+                        "Execution date": date.strftime("%Y-%m-%d"),
                     })
 
                     st.download_button(
@@ -2035,7 +2035,7 @@ def show_payroll():
         "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
         "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
         "PAYE", "NSSF_5", "Advance_DRS", "Other_Deductions", "Net_Pay", 
-        "NSSF_10", "NSSF_15", "Date"
+        "NSSF_10", "NSSF_15", "date"
     ]
     
     if df.empty:
@@ -2101,7 +2101,7 @@ def show_payroll():
                         "Gross_Salary": calc['gross'], "LST": calc['lst'], "PAYE": calc['paye'],
                         "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], "NSSF_15": calc['n15'],
                         "Advance_DRS": f_adv, "Other_Deductions": f_other, "Net_Pay": calc['net'],
-                        "Date": datetime.now().strftime("%Y-%m-%d")
+                        "date": datetime.now().strftime("%Y-%m-%d")
                     }])
                     # --- THE CORRECTED SAVE LOGIC (Payroll Fix) ---
                     # 1. Combine the old data with the new record
@@ -2314,19 +2314,19 @@ def show_reports(tenant_id: str):
         if not payments.empty:
             pay_copy = payments.copy()
             pay_copy.columns = pay_copy.columns.str.strip().str.replace(" ", "_")
-            pay_copy["Date"] = pd.to_datetime(pay_copy.get("Date"), errors='coerce')
-            inc_trend = pay_copy.groupby(pay_copy["Date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
+            pay_copy["date"] = pd.to_datetime(pay_copy.get("date"), errors='coerce')
+            inc_trend = pay_copy.groupby(pay_copy["date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
             
-            exp_copy = expenses.copy() if not expenses.empty else pd.DataFrame(columns=["Amount", "Date"])
+            exp_copy = expenses.copy() if not expenses.empty else pd.DataFrame(columns=["Amount", "date"])
             if not exp_copy.empty:
                 exp_copy.columns = exp_copy.columns.str.strip().str.replace(" ", "_")
-                exp_copy["Date"] = pd.to_datetime(exp_copy.get("Date"), errors='coerce')
-                exp_trend = exp_copy.groupby(exp_copy["Date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
+                exp_copy["date"] = pd.to_datetime(exp_copy.get("date"), errors='coerce')
+                exp_trend = exp_copy.groupby(exp_copy["date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
             else:
-                exp_trend = pd.DataFrame(columns=["Date", "Amount"])
+                exp_trend = pd.DataFrame(columns=["date", "Amount"])
 
             # Merge trends for comparison bar chart
-            merged = pd.merge(inc_trend, exp_trend, on="Date", how="outer").fillna(0)
+            merged = pd.merge(inc_trend, exp_trend, on="date", how="outer").fillna(0)
             merged.columns = ["Month", "Income", "expenses"]
             
             fig_bar = px.bar(merged, x="Month", y=["Income", "expenses"], barmode="group",
@@ -2448,8 +2448,8 @@ def show_overdue_tracker():
         ledger_work = ledger.copy()
         ledger_work.columns = ledger_work.columns.str.strip().str.replace(" ", "_")
         if "Loan_ID" in ledger_work.columns:
-            ledger_work['Date'] = pd.to_datetime(ledger_work.get('Date'), errors='coerce')
-            latest_ledger = ledger_work.sort_values('Date').groupby("Loan_ID").tail(1)
+            ledger_work['date'] = pd.to_datetime(ledger_work.get('date'), errors='coerce')
+            latest_ledger = ledger_work.sort_values('date').groupby("Loan_ID").tail(1)
 
     # 8. --- ROLLOVER BUTTON (The History-Building Engine) ---
     st.markdown("---") 
@@ -2489,14 +2489,14 @@ def show_overdue_tracker():
                         # Final Balance = 529,420
                         compounded_balance = new_basis + new_month_interest
                         
-                        # Date Math
+                        # date Math
                         orig_end = pd.to_datetime(r['end_date'], errors='coerce')
                         new_start = orig_end if pd.notna(orig_end) else datetime.now()
-                        new_end = new_start + pd.DateOffset(months=1)
+                        new_end = new_start + pd.dateOffset(months=1)
 
                         # 3. Create New Cycle Row
                         new_row = r.copy()
-                        new_row['Start_Date'] = new_start.strftime('%Y-%m-%d')
+                        new_row['Start_date'] = new_start.strftime('%Y-%m-%d')
                         new_row['end_date'] = new_end.strftime('%Y-%m-%d')
                         new_row['Principal'] = new_basis
                         new_row['Interest'] = new_month_interest
@@ -2513,7 +2513,7 @@ def show_overdue_tracker():
                     new_entries_df = pd.DataFrame(new_rows_list)
                     combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
                     id_col = 'Loan_ID' if 'Loan_ID' in combined_df.columns else 'Loan ID'
-                    updated_df = combined_df.sort_values(by=[id_col, 'Start_Date'], ascending=[True, True])
+                    updated_df = combined_df.sort_values(by=[id_col, 'Start_date'], ascending=[True, True])
 
                 # 6. --- THE CORRECTED SAVE BLOCK ---
                 # We use .fillna(0) to ensure Google Sheets doesn't crash on empty numbers
@@ -2700,7 +2700,7 @@ def show_calendar(tenant_id: str):
             bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
             display_amt = float(r.get('Total_Repayable', 0)) or (float(r.get('Principal', 0)) + float(r.get('Interest', 0)))
             up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['end_date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('Loan_ID', 'N/A')}</td></tr>"""
-        st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due Date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
+        st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
 
     # --- SECTION: IMMEDIATE FOLLOW-UP ---
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
@@ -2909,7 +2909,7 @@ def show_collateral():
             display_ledger = df_filtered.copy()
             # Remap columns neatly to standard clean headings
             col_renames = {
-                "date_added": "Date Registered",
+                "date_added": "date Registered",
                 "borrower": "Borrower Profile",
                 "type": "Asset Type",
                 "description": "Asset Description",
@@ -3062,7 +3062,7 @@ def show_expenses():
             desc = st.text_input("Transaction Description / Payee")
 
             c3, c4 = st.columns(2)
-            p_date = c3.date_input("Payment Date", value=datetime.now())
+            p_date = c3.date_input("Payment date", value=datetime.now())
             receipt_no = c4.text_input("Receipt / Invoice Number Reference")
 
             submit_new = st.form_submit_button("🚀 Save Expense Record", use_container_width=True)
@@ -3161,7 +3161,7 @@ def show_expenses():
             else:
                 processed_df = processed_df.sort_values("payment_date", ascending=False)
                 display_ledger = processed_df[["payment_date", "category", "description", "amount", "receipt_no"]].copy()
-                display_ledger.columns = ["Date Paid", "Category Grouping", "Description Detail", "Amount (UGX)", "Ref / Invoice #"]
+                display_ledger.columns = ["date Paid", "Category Grouping", "Description Detail", "Amount (UGX)", "Ref / Invoice #"]
                 display_ledger["Amount (UGX)"] = display_ledger["Amount (UGX)"].apply(lambda x: f"{x:,.0f}")
                 
                 st.dataframe(
@@ -3248,7 +3248,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
     company_name = st.session_state.get('company_name', 'ZOE CONSULTS SMC LIMITED').upper()
     elements.append(Paragraph(f"<b>{company_name}</b>", styles["Title"]))
     elements.append(Paragraph(f"<b>Client Statement:</b> {client_name}", styles["Normal"]))
-    elements.append(Paragraph(f"<b>Statement Date:</b> {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
+    elements.append(Paragraph(f"<b>Statement date:</b> {datetime.now().strftime('%d %b %Y')}", styles["Normal"]))
     elements.append(Spacer(1, 20))
     
     grand_total = 0.0
@@ -3306,7 +3306,7 @@ def generate_pdf_statement(client_name, loans_df, payments_df):
         elements.append(Paragraph(f"<b>Loan Account Ref: {display_id}</b>", styles["Heading3"]))
         
         data = [[
-            Paragraph("<b>Cycle Date</b>", cell_bold),
+            Paragraph("<b>Cycle date</b>", cell_bold),
             Paragraph("<b>Cycle</b>", cell_bold),
             Paragraph("<b>Opening Balance</b>", cell_bold),
             Paragraph("<b>Amount Due</b>", cell_bold),
@@ -3580,7 +3580,7 @@ def show_ledger():
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
     m2.metric("Interest Cost Accrued", f"UGX {i:,.0f}", delta=f"{(i/total_due*100):.1f}% Markup" if total_due > 0 else None, delta_color="normal")
-    m3.metric("Total Paid to Date", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%} Covered" if total_due > 0 else None, delta_color="normal")
+    m3.metric("Total Paid to date", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%} Covered" if total_due > 0 else None, delta_color="normal")
     m4.metric("Current Balance Owed", f"UGX {bal:,.0f}", delta=f"Outstanding Position", delta_color="inverse")
 
     # ==============================
@@ -3595,7 +3595,7 @@ def show_ledger():
             "Cycle":
                 row.get("cycle", ""),
     
-            "Date":
+            "date":
                 str(
                     row.get(
                         "start_date",
@@ -3842,7 +3842,7 @@ def show_settings():
                 st.stop()
 
         # ==============================
-        # DATABASE UPDATE (PERSISTENCE)
+        # DATABASE UPdate (PERSISTENCE)
         # ==============================
         try:
             supabase.table("tenants").update(updated_data).eq("id", active_company.get("id")).execute()
