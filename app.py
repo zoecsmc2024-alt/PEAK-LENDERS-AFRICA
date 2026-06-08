@@ -724,7 +724,7 @@ def show_dashboard_view():
     # 5. METRICS ROW (Zoe Soft Blue Style)
     m1, m2, m3, m4 = st.columns(4)
     
-    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE principal</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
@@ -742,7 +742,7 @@ def show_dashboard_view():
             for i, (idx, r) in enumerate(recent_loans.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 b_name = r.get('Borrower', 'Unknown')
-                p_amt = float(r.get('Principal', 0))
+                p_amt = float(r.get('principal', 0))
                 b_stat = r.get('status', 'Active')
                 e_date_raw = r.get('end_date')
                 e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
@@ -760,7 +760,7 @@ def show_dashboard_view():
                 <thead>
                     <tr style="background:#4A90E2; color:white;">
                         <th style="padding:10px;">Borrower</th>
-                        <th style="padding:10px; text-align:right;">Principal</th>
+                        <th style="padding:10px; text-align:right;">principal</th>
                         <th style="padding:10px; text-align:center;">status</th>
                         <th style="padding:10px; text-align:center;">Due</th>
                     </tr>
@@ -1080,7 +1080,7 @@ def show_borrowers():
                         hide_index=True,
                         column_config={
                             "id": None, "tenant_id": None, "borrower_id": None, "borrower": None,
-                            "principal": st.column_config.NumberColumn("Principal", format="%d UGX"),
+                            "principal": st.column_config.NumberColumn("principal", format="%d UGX"),
                             "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
                             "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
@@ -1439,7 +1439,7 @@ def show_loans():
 
             col1, col2, col3, col4 = st.columns(4)
             col1.markdown(f'<div style="background: linear-gradient(135deg, #3b82f6, #1e3a8a); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">📄 Total loans</div><div style="font-size:22px;font-weight:bold;">{total_loans}</div></div>', unsafe_allow_html=True)
-            col2.markdown(f'<div style="background: linear-gradient(135deg, #10b981, #065f46); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">💰 Principal</div><div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div></div>', unsafe_allow_html=True)
+            col2.markdown(f'<div style="background: linear-gradient(135deg, #10b981, #065f46); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">💰 principal</div><div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div></div>', unsafe_allow_html=True)
             col3.markdown(f'<div style="background: linear-gradient(135deg, #f59e0b, #92400e); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">💳 Paid</div><div style="font-size:22px;font-weight:bold;">{total_paid:,.0f}</div></div>', unsafe_allow_html=True)
             col4.markdown(f'<div style="background: linear-gradient(135deg, #ef4444, #991b1b); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">⏳ Total Pending</div><div style="font-size:22px;font-weight:bold;">{total_pending:,.0f}</div></div>', unsafe_allow_html=True)
 
@@ -1490,7 +1490,7 @@ def show_loans():
                 selected_name = col1.selectbox("Select borrower", list(borrower_map.keys()))
                 selected_id = str(borrower_map[selected_name]).strip()
 
-                amount = col1.number_input("Principal amount (UGX)", min_value=0, step=50000)
+                amount = col1.number_input("principal amount (UGX)", min_value=0, step=50000)
                 date_issued = col1.date_input("Start date", value=datetime.now())
 
                 loan_type = col2.selectbox("Loan type", ["Business", "Personal", "Emergency", "Other"])
@@ -1614,7 +1614,7 @@ def show_loans():
             with st.form(f"edit_form_{target_id}"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    e_princ = st.number_input("Principal", value=float(loan_to_edit["principal"]))
+                    e_princ = st.number_input("principal", value=float(loan_to_edit["principal"]))
                 with col2:
                     current_interest = float(loan_to_edit["interest"]) if pd.notna(loan_to_edit["interest"]) else 0.0
                     e_interest = st.number_input("Interest amount", value=current_interest)
@@ -2276,8 +2276,8 @@ def show_reports(tenant_id: str):
     # Standardize column headers for math logic
     loans.columns = loans.columns.str.strip().str.replace(" ", "_")
     
-    # Safe Principal Lookup
-    l_amt_col = "Principal" if "Principal" in loans.columns else "Amount"
+    # Safe principal Lookup
+    l_amt_col = "principal" if "principal" in loans.columns else "Amount"
     l_amt = pd.to_numeric(loans.get(l_amt_col, 0), errors="coerce").fillna(0).sum()
     
     # Other Metric Totals
@@ -2339,8 +2339,8 @@ def show_reports(tenant_id: str):
     with col_right:
         st.write("**🛡️ Portfolio Weight (Top 5)**")
         if not loans.empty:
-            # Safe Principal/Amount lookup based on normalized column names
-            val_col = "Principal" if "Principal" in loans.columns else "Amount"
+            # Safe principal/Amount lookup based on normalized column names
+            val_col = "principal" if "principal" in loans.columns else "Amount"
             top_borrowers = loans.groupby("Borrower")[val_col].sum().sort_values(ascending=False).head(5).reset_index()
             top_borrowers.columns = ["Borrower", "Total_Loaned"]
             
@@ -2355,7 +2355,7 @@ def show_reports(tenant_id: str):
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
     
-    val_col = "Principal" if "Principal" in loans.columns else "Amount"
+    val_col = "principal" if "principal" in loans.columns else "Amount"
     overdue_mask = loans["status"].isin(["Overdue", "Rolled/Overdue"])
     overdue_val = pd.to_numeric(loans.loc[overdue_mask, val_col], errors="coerce").fillna(0).sum()
     
@@ -2460,7 +2460,7 @@ def show_overdue_tracker():
         
         try: 
             # FORCE NUMERIC: This kills the "stubborn balance" issue
-            money_cols = ['Principal', 'Interest', 'Balance', 'Total_Repayable', 'Amount_Paid']
+            money_cols = ['principal', 'Interest', 'Balance', 'Total_Repayable', 'Amount_Paid']
             for col in money_cols:
                 if col in updated_df.columns:
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
@@ -2479,7 +2479,7 @@ def show_overdue_tracker():
                         updated_df.at[i, 'status'] = "BCF"
 
                         # 2. THE ULTIMATE MATH FIX
-                        old_p = float(r.get('Principal', 0))
+                        old_p = float(r.get('principal', 0))
                         old_i = float(r.get('Interest', 0))
                         
                         # New Basis = 514,000 (Old P + Old I)
@@ -2498,7 +2498,7 @@ def show_overdue_tracker():
                         new_row = r.copy()
                         new_row['Start_date'] = new_start.strftime('%Y-%m-%d')
                         new_row['end_date'] = new_end.strftime('%Y-%m-%d')
-                        new_row['Principal'] = new_basis
+                        new_row['principal'] = new_basis
                         new_row['Interest'] = new_month_interest
                         new_row['Balance'] = compounded_balance 
                         new_row['Total_Repayable'] = compounded_balance
@@ -2548,7 +2548,7 @@ def show_overdue_tracker():
             display_df = display_df[cols]
 
         fmt_dict = {
-            "Principal": "{:,.0f}", "Balance": "{:,.0f}", "Interest": "{:,.0f}",
+            "principal": "{:,.0f}", "Balance": "{:,.0f}", "Interest": "{:,.0f}",
             "Total_Repayable": "{:,.0f}", "Amount_Paid": "{:,.0f}", "Balance_B/F": "{:,.0f}"
         }
         actual_fmt = {k: v for k, v in fmt_dict.items() if k in display_df.columns}
@@ -2587,10 +2587,10 @@ def show_calendar(tenant_id: str):
 
     loans_df.columns = loans_df.columns.str.strip().str.replace(" ", "_")
 
-    required_keys = ["end_date", "Total_Repayable", "status", "Borrower", "Loan_ID", "Principal", "Interest"]
+    required_keys = ["end_date", "Total_Repayable", "status", "Borrower", "Loan_ID", "principal", "Interest"]
     for col in required_keys:
         if col not in loans_df.columns:
-            loans_df[col] = 0 if col in ["Total_Repayable", "Principal", "Interest"] else "Unknown"
+            loans_df[col] = 0 if col in ["Total_Repayable", "principal", "Interest"] else "Unknown"
             
     # Convert to proper types for logic
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
@@ -2611,7 +2611,7 @@ def show_calendar(tenant_id: str):
             ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
             
             # Auto-Recovery for display amount if Total_Repayable is zero
-            disp_amt = float(r['Total_Repayable']) if r['Total_Repayable'] > 0 else (float(r['Principal']) + float(r['Interest']))
+            disp_amt = float(r['Total_Repayable']) if r['Total_Repayable'] > 0 else (float(r['principal']) + float(r['Interest']))
             
             calendar_events.append({
                 "title": f"UGX {disp_amt:,.0f} - {r['Borrower']}",
@@ -2698,7 +2698,7 @@ def show_calendar(tenant_id: str):
         up_rows = ""
         for i, r in upcoming_display.iterrows():
             bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-            display_amt = float(r.get('Total_Repayable', 0)) or (float(r.get('Principal', 0)) + float(r.get('Interest', 0)))
+            display_amt = float(r.get('Total_Repayable', 0)) or (float(r.get('principal', 0)) + float(r.get('Interest', 0)))
             up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['end_date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('Loan_ID', 'N/A')}</td></tr>"""
         st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
 
@@ -3578,7 +3578,7 @@ def show_ledger():
     )
     
     m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
+    m1.metric("principal Allocation", f"UGX {p:,.0f}", delta="Disbursement Base", delta_color="off")
     m2.metric("Interest Cost Accrued", f"UGX {i:,.0f}", delta=f"{(i/total_due*100):.1f}% Markup" if total_due > 0 else None, delta_color="normal")
     m3.metric("Total Paid to date", f"UGX {paid:,.0f}", delta=f"{paid/total_due:.1%} Covered" if total_due > 0 else None, delta_color="normal")
     m4.metric("Current Balance Owed", f"UGX {bal:,.0f}", delta=f"Outstanding Position", delta_color="inverse")
