@@ -2015,7 +2015,7 @@ def show_payments(supabase):
 # 20. PAYROLL MANAGEMENT PAGE
 # ==============================
 
-def show_payroll:
+def show_payroll():
     """
     Handles employee compensation, tax compliance (PAYE/LST), 
     and NSSF contributions. Includes a professional printable report.
