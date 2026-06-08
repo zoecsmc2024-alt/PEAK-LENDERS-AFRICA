@@ -686,7 +686,7 @@ def show_dashboard_view():
 
     st.markdown("## 📊 Financial Dashboard")
 
-    df = get_cached_data("Loans")
+    df = get_cached_data("loans")
     pay_df = get_cached_data("Payments")
     exp_df = get_cached_data("Expenses")
     if df is None or df.empty:
@@ -1175,11 +1175,11 @@ def save_data_saas(table_name, df):
 
 
 # ==============================
-# 13. LOANS MANAGEMENT PAGE
+# 13. loans MANAGEMENT PAGE
 # ==============================
 def show_loans():
     st.markdown(
-        "<h2 style='color: #0A192F;'>💵 Loans Management</h2>",
+        "<h2 style='color: #0A192F;'>💵 loans Management</h2>",
         unsafe_allow_html=True
     )
 
@@ -1438,7 +1438,7 @@ def show_loans():
             total_pending = filtered_loans[filtered_loans["status"] == "PENDING"]["total_repayable"].sum()
 
             col1, col2, col3, col4 = st.columns(4)
-            col1.markdown(f'<div style="background: linear-gradient(135deg, #3b82f6, #1e3a8a); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">📄 Total Loans</div><div style="font-size:22px;font-weight:bold;">{total_loans}</div></div>', unsafe_allow_html=True)
+            col1.markdown(f'<div style="background: linear-gradient(135deg, #3b82f6, #1e3a8a); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">📄 Total loans</div><div style="font-size:22px;font-weight:bold;">{total_loans}</div></div>', unsafe_allow_html=True)
             col2.markdown(f'<div style="background: linear-gradient(135deg, #10b981, #065f46); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">💰 Principal</div><div style="font-size:22px;font-weight:bold;">{total_principal:,.0f}</div></div>', unsafe_allow_html=True)
             col3.markdown(f'<div style="background: linear-gradient(135deg, #f59e0b, #92400e); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">💳 Paid</div><div style="font-size:22px;font-weight:bold;">{total_paid:,.0f}</div></div>', unsafe_allow_html=True)
             col4.markdown(f'<div style="background: linear-gradient(135deg, #ef4444, #991b1b); padding:15px; border-radius:10px; color:white; text-align:center;"><div style="font-size:14px;">⏳ Total Pending</div><div style="font-size:22px;font-weight:bold;">{total_pending:,.0f}</div></div>', unsafe_allow_html=True)
@@ -2247,7 +2247,7 @@ def show_reports(tenant_id: str):
     st.markdown("<h2 style='color: #4A90E2;'>📊 Advanced Analytics & Reports</h2>", unsafe_allow_html=True)
     
     # 1. FETCH DATA (Scoped by tenant_id)
-    loans = get_cached_data("Loans", tenant_id=tenant_id)
+    loans = get_cached_data("loans", tenant_id=tenant_id)
     payments = get_cached_data("Payments", tenant_id=tenant_id)
     expenses = get_cached_data("Expenses", tenant_id=tenant_id)
     payroll = get_cached_data("Payroll", tenant_id=tenant_id)
@@ -2399,7 +2399,7 @@ def show_overdue_tracker():
     if st.button("🔄 Refresh Data from Sheets", use_container_width=True):
         with st.spinner("🧹 Clearing cache and re-syncing..."):
             st.cache_data.clear() 
-            st.session_state.loans = get_cached_data("Loans", tenant_id=tenant_id)
+            st.session_state.loans = get_cached_data("loans", tenant_id=tenant_id)
             st.session_state.ledger = get_cached_data("Ledger", tenant_id=tenant_id)
             st.rerun()
 
@@ -2407,7 +2407,7 @@ def show_overdue_tracker():
     # Attempt to pull from session state; if empty or missing, explicitly fetch using tenant context
     loans = st.session_state.get("loans", pd.DataFrame())
     if loans.empty:
-        loans = get_cached_data("Loans", tenant_id=tenant_id)
+        loans = get_cached_data("loans", tenant_id=tenant_id)
         if loans is not None and not loans.empty:
             st.session_state.loans = loans
         else:
@@ -2521,10 +2521,10 @@ def show_overdue_tracker():
                 save_ready_df.columns = [col.replace("_", " ") for col in save_ready_df.columns]
                 
                 # Critical: Save back using the isolated tenant context
-                if save_data("Loans", save_ready_df, tenant_id=tenant_id):
+                if save_data("loans", save_ready_df, tenant_id=tenant_id):
                     st.success(f"✅ Compounding Successful! Added {count} rows.")
                     st.cache_data.clear() 
-                    st.session_state.loans = get_cached_data("Loans", tenant_id=tenant_id)
+                    st.session_state.loans = get_cached_data("loans", tenant_id=tenant_id)
                     st.rerun()
         except Exception as e:
             st.error(f"🚨 Rollover Error: {str(e)}")
@@ -2579,7 +2579,7 @@ def show_calendar(tenant_id: str):
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
     # 1. LOAD DATA SPECIFIC TO ACTIVE TENANT
-    loans_df = get_cached_data("Loans", tenant_id=tenant_id)
+    loans_df = get_cached_data("loans", tenant_id=tenant_id)
 
     if loans_df is None or loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
