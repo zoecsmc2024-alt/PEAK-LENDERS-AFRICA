@@ -2726,9 +2726,12 @@ def show_calendar():
         (active_loans["end_date"] <= today + pd.Timedelta(days=7))
     ]
 
-    # ✅ Fix: Pull overdue directly out of your active_loans balance matrix
-    overdue_loans = active_loans[active_loans["end_date"] < today]
-
+    # 🎯 Balance is truth! If the balance is 0, it CANNOT be overdue.
+    active_loans = loans_df[loans_df["balance"] > 0].copy()
+    
+    # ⏱️ Now we look for overdue files strictly inside loans that STILL owe money
+    overdue_loans = active_loans[active_loans["active_loans"]["end_date"] < today]
+    overdue_count = len(overdue_loans)
     m1, m2, m3 = st.columns(3)
 
     m1.metric("Due Today", len(due_today))
