@@ -675,7 +675,7 @@ def render_sidebar():
 # 1. CORE PAGE FUNCTIONS & LAYOUT
 # ==========================================
 
-def show_overview():
+def show_overview(tenant_id: str):
     """
     Main Multi-Tenant Dashboard view. 
     Calculates portfolio metrics and renders visual analytics isolated by tenant_id.
