@@ -3164,7 +3164,7 @@ from datetime import datetime
 def show_calendar():
     """
     Displays the modern enterprise operation activity center, workload forecasts,
-    and precise execution deadlines.
+    and precise execution deadlines due today.
     """
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
@@ -3180,7 +3180,6 @@ def show_calendar():
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
             
-            /* Root adjustments */
             .main-title {{
                 font-family: 'Plus Jakarta Sans', sans-serif;
                 font-weight: 700;
@@ -3195,18 +3194,12 @@ def show_calendar():
                 font-size: 14px;
                 margin-bottom: 24px;
             }}
-            
-            /* High-end Dashboard Cards */
             .kpi-container {{
                 background: #FFFFFF;
                 border: 1px solid #E5E7EB;
                 border-radius: 16px;
                 padding: 20px;
                 box-shadow: 0px 1px 3px rgba(16, 24, 40, 0.1), 0px 1px 2px rgba(16, 24, 40, 0.06);
-                transition: transform 0.2s ease, box-shadow 0.2s ease;
-            }}
-            .kpi-container:hover {{
-                box-shadow: 0px 4px 6px -1px rgba(16, 24, 40, 0.1), 0px 2px 4px -1px rgba(16, 24, 40, 0.06);
             }}
             .kpi-label {{
                 font-family: 'Plus Jakarta Sans', sans-serif;
@@ -3224,17 +3217,6 @@ def show_calendar():
                 color: #111827;
                 line-height: 1;
             }}
-            
-            /* Inline Alert Micro-banners */
-            .status-pill-green {{
-                background-color: #F0FDF4;
-                color: #166534;
-                padding: 4px 10px;
-                border-radius: 9999px;
-                font-size: 12px;
-                font-weight: 600;
-                display: inline-block;
-            }}
         </style>
     """, unsafe_allow_html=True)
 
@@ -3248,10 +3230,8 @@ def show_calendar():
         st.info("📅 Workspace clean. There are currently no loan records present on your corporate network.")
         return
 
-    # Normalize Column Naming Layouts safely
     raw_loans.columns = raw_loans.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # Apply tenant strict data boundaries
     if "tenant_id" in raw_loans.columns:
         loans_df = raw_loans[raw_loans["tenant_id"].astype(str) == str(current_tenant)].copy()
     else:
@@ -3261,7 +3241,6 @@ def show_calendar():
         st.info("💡 No loans linked to this workspace registration profiles yet.")
         return
 
-    # Dynamic Borrower Identity Linking
     if raw_borrowers is not None and not raw_borrowers.empty:
         raw_borrowers.columns = raw_borrowers.columns.str.strip().str.lower().str.replace(" ", "_")
         borrowers_df = raw_borrowers if "tenant_id" not in raw_borrowers.columns else raw_borrowers[raw_borrowers["tenant_id"].astype(str) == str(current_tenant)]
@@ -3272,7 +3251,6 @@ def show_calendar():
     if "borrower" not in loans_df.columns:
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown Profile") if "borrower_id" in loans_df.columns else "Unknown Profile"
 
-    # ID Mapping & De-duplication Sanitizer
     def clean_id_str(val):
         if pd.isna(val): return ""
         s = str(val).strip()
@@ -3284,19 +3262,16 @@ def show_calendar():
         loans_df["loan_id_label"] = loans_df["id_clean"]
     loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id_clean"]).astype(str)
 
-    # Parse and safely align structural financial numbers & chronological deadlines
     date_col = "due_date" if "due_date" in loans_df.columns else "end_date"
     loans_df[date_col] = pd.to_datetime(loans_df[date_col], errors="coerce")
     loans_df["balance"] = pd.to_numeric(loans_df.get("balance", 0), errors="coerce").fillna(0.0)
     loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", loans_df.get("amount", 0)), errors="coerce").fillna(0.0)
 
-    # Normalize structural times to absolute current local date tracking matrices
     today = pd.Timestamp.today().normalize()
 
     # ==========================================
     # 🔄 MULTI-CYCLE DEDUPLICATION & COMPILATION
     # ==========================================
-    # Trace through sequential changes to extract the latest single version of each loan account
     seq_col = "cycle" if "cycle" in loans_df.columns else "id"
     active_loans = (
         loans_df.sort_values(by=[seq_col])
@@ -3304,23 +3279,12 @@ def show_calendar():
         .tail(1)
     ).copy()
 
-    # Strip out any permanently closed asset structures or zero balances
     active_loans = active_loans[~active_loans["status"].astype(str).str.upper().isin(["PAID", "CLEARED", "CLOSED"])]
     active_loans = active_loans[active_loans["balance"].apply(lambda x: abs(x) > 5.0)]
 
     # Dynamic Frame Headers
-    st.markdown("<h1 class='main-title'>📅 Recovery Operations Control</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='subtitle'>Real-time tracking of maturity pipelines, workload distributions, and exposure schedules.</p>", unsafe_allow_html=True)
-
-    if active_loans.empty:
-        st.markdown("""
-            <div style="background-color: #F0FDF4; border: 1px solid #DCFCE7; padding: 24px; border-radius: 16px; text-align: center; margin-top:20px;">
-                <span class="status-pill-green">All Clear</span>
-                <h4 style="color:#166534; font-family:'Plus Jakarta Sans'; margin: 12px 0 4px 0; font-weight:700;">Portfolio Fully Settled</h4>
-                <p style="color:#1F663C; font-family:'Plus Jakarta Sans'; font-size:14px; margin:0;">No loans currently hold outstanding maturity metrics or past-due balances for this lifecycle period.</p>
-            </div>
-        """, unsafe_allow_html=True)
-        return
+    st.markdown("<h1 class='main-title'>📅 Daily Collection Control Center</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='subtitle'>Real-time tracking optimized for single-day operational workflows and action deadlines.</p>", unsafe_allow_html=True)
 
     # ==========================================
     # 📊 EXECUTIVE LEVEL KPI OVERVIEWS
@@ -3336,9 +3300,9 @@ def show_calendar():
     
     with kpi1:
         st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid {brand_color};">
+            <div class="kpi-container" style="border-top: 4px solid #10B981;">
                 <div class="kpi-label">Maturing Today</div>
-                <div class="kpi-value">{len(due_today_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
+                <div class="kpi-value" style="color: #10B981;">{len(due_today_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
             </div>
         """, unsafe_allow_html=True)
         
@@ -3351,27 +3315,56 @@ def show_calendar():
         """, unsafe_allow_html=True)
         
     with kpi3:
-        # Accent changes dynamically based on active system overdue risk exposure limits
-        accent = "#EF4444" if not overdue_df.empty else "#10B981"
         st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid {accent};">
-                <div class="kpi-label">Outstanding Overdue Backlog</div>
-                <div class="kpi-value" style="color: {accent};">{len(overdue_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
+            <div class="kpi-container" style="border-top: 4px solid #6B7280;">
+                <div class="kpi-label">Total Backlog Items</div>
+                <div class="kpi-value">{len(overdue_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
             </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("<br><hr style='border:0; border-top:1px solid #E5E7EB; margin:10px 0 25px 0;' />", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
 
     # ==========================================
-    # 🗓️ VISUAL CALENDAR COMPONENT TARGET LAYER
+    # 🎯 TARGET FOCUS PANEL: DUE TODAY ONLY
     # ==========================================
-    st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:12px;'>🗓️ Interactive Operations Timeline</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:15px;'>🎯 Action Items For Today</h3>", unsafe_allow_html=True)
+    
+    if due_today_df.empty:
+        st.markdown("""
+            <div style="background-color: #F9FAFB; border: 1px dashed #E5E7EB; padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 20px;">
+                <p style="color:#6B7280; font-family:'Plus Jakarta Sans'; font-size:14px; margin:0; font-weight: 500;">
+                    ✨ Clean Schedule! No collection deadlines or maturities slated for today.
+                </p>
+            </div>
+        """, unsafe_allow_html=True)
+    else:
+        display_today = due_today_df.copy()
+        display_today["Short ID"] = display_today.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
+        
+        st.dataframe(
+            display_today[["Short ID", "borrower", "balance", "status"]].rename(columns={
+                "Short ID": "Loan ID",
+                "borrower": "Client Identity Name",
+                "balance": "Outstanding Balance (UGX)",
+                "status": "System Status"
+            }),
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Outstanding Balance (UGX)": st.column_config.NumberColumn(format="%,.0f")
+            }
+        )
+
+    # ==========================================
+    # 🗓️ VISUAL CALENDAR TIMELINE
+    # ==========================================
+    st.markdown("<br><h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:12px;'>🗓️ Interactive Operations Timeline</h3>", unsafe_allow_html=True)
     
     events_list = []
     for _, item in active_loans.iterrows():
         if pd.notna(item[date_col]):
             is_past = item[date_col].date() < today.date()
-            color_code = "#EF4444" if is_past else "#2B3F87"
+            color_code = "#EF4444" if is_past else brand_color
             
             events_list.append({
                 "title": f"UGX {float(item['balance']):,.0f} - {item['borrower']}",
@@ -3384,108 +3377,41 @@ def show_calendar():
     options_config = {
         "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"},
         "initialView": "dayGridMonth",
-        "selectable": True,
-        "editable": False
+        "selectable": True
     }
 
     try:
         from streamlit_calendar import st_calendar
         st_calendar(events=events_list, options=options_config, key="modern_collection_calendar")
     except ImportError:
-        # Beautiful UI fallback element block if plugin execution environment variations appear
-        st.info("ℹ️ Advanced visual calendar package module not registered. Using data stream grids directly.")
-
-    st.markdown("<br>", unsafe_allow_html=True)
+        st.info("ℹ️ Interactive calendar rendering sequence complete.")
 
     # ==========================================
-    # ⚡ OPERATIONAL SUBDIVISIONS & SCHEDULERS
+    # 🔍 COLLAPSIBLE BACKLOG UTILITY
     # ==========================================
-    layout_left, layout_right = st.columns([4, 5])
+    if not overdue_df.empty:
+        st.markdown("<br>", unsafe_allow_html=True)
+        with st.expander(f"📁 View Historical Outstanding Backlog ({len(overdue_df)} Accounts)", expanded=False):
+            overdue_display = overdue_df.copy()
+            overdue_display["days_late"] = (today - overdue_display[date_col]).dt.days
+            overdue_display["Arrears Duration"] = overdue_display["days_late"].apply(lambda x: f"⚠️ {x} Days Late")
+            overdue_display["Short ID"] = overdue_display.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
 
-    with layout_left:
-        st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:15px;'>🎯 Due Action Plan (Today)</h3>", unsafe_allow_html=True)
-        
-        if due_today_df.empty:
-            st.markdown("""
-                <div style="background-color: #F9FAFB; border: 1px dashed #E5E7EB; padding: 20px; border-radius: 12px; text-align: center;">
-                    <p style="color:#6B7280; font-family:'Plus Jakarta Sans'; font-size:13px; margin:0;">✨ No collection deadlines slated for today's date context.</p>
-                </div>
-            """, unsafe_allow_html=True)
-        else:
-            display_today = due_today_df.copy()
-            display_today["Short ID"] = display_today.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
-            
             st.dataframe(
-                display_today[["Short ID", "borrower", "balance"]].rename(columns={
-                    "Short ID": "Loan ID",
-                    "borrower": "Client Name",
-                    "balance": "Balance Owed"
+                overdue_display.sort_values("days_late", ascending=False)[
+                    ["Short ID", "borrower", "Arrears Duration", "balance", "status"]
+                ].rename(columns={
+                    "Short ID": "Loan Account",
+                    "borrower": "Client Identity Name",
+                    "balance": "Outstanding Exposure (UGX)",
+                    "status": "System Base Status"
                 }),
                 use_container_width=True,
                 hide_index=True,
                 column_config={
-                    "Balance Owed": st.column_config.NumberColumn(format="UGX %,.0f")
+                    "Outstanding Exposure (UGX)": st.column_config.NumberColumn(format="%,.0f")
                 }
             )
-
-    with layout_right:
-        st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:15px;'>🔮 30-Day Workload Projection</h3>", unsafe_allow_html=True)
-        
-        current_month_df = active_loans[active_loans[date_col].dt.month == today.month]
-        month_total_expected = current_month_df["balance"].sum()
-        
-        col_m1, col_m2 = st.columns(2)
-        with col_m1:
-            st.metric(
-                label="Target Pipeline Exposure", 
-                value=f"UGX {month_total_expected:,.0f}", 
-                delta=f"{len(current_month_df)} Accounts Active",
-                delta_color="normal"
-            )
-        with col_m2:
-            avg_ticket = current_month_df["balance"].mean() if not current_month_df.empty else 0.0
-            st.metric(
-                label="Mean Account Exposure", 
-                value=f"UGX {avg_ticket:,.0f}",
-                delta="Rolling Month Average",
-                delta_color="off"
-            )
-
-    # ==========================================
-    # 🔴 AUDIT-READY RISK RECOVERY LEDGER
-    # ==========================================
-    st.markdown("<br><h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#EF4444; margin-bottom:15px;'>🔴 High Risk Past-Due Recoveries</h3>", unsafe_allow_html=True)
-    
-    if not overdue_df.empty:
-        overdue_display = overdue_df.copy()
-        overdue_display["days_late"] = (today - overdue_display[date_col]).dt.days
-        overdue_display["Arrears Duration"] = overdue_display["days_late"].apply(lambda x: f"⚠️ {x} Days Late")
-        overdue_display["Short ID"] = overdue_display.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
-
-        st.dataframe(
-            overdue_display.sort_values("days_late", ascending=False)[
-                ["Short ID", "borrower", "Arrears Duration", "balance", "status"]
-            ].rename(columns={
-                "Short ID": "Loan Account",
-                "borrower": "Client Identity Name",
-                "balance": "Outstanding Exposure (UGX)",
-                "status": "System Base Status"
-            }),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Outstanding Exposure (UGX)": st.column_config.NumberColumn(format="%,.0f"),
-                "System Base Status": st.column_config.TextColumn(help="Raw lifecycle phase flag recorded in system tables")
-            }
-        )
-    else:
-        st.markdown("""
-            <div style="background-color: #F0FDF4; border: 1px dashed #BBF7D0; padding: 16px; border-radius: 12px; margin-bottom: 20px;">
-                <p style="color:#15803D; font-family:'Plus Jakarta Sans'; font-size:13px; margin:0; font-weight:500;">
-                    ✨ Clean Portfolio Pipeline Status: No past-due accounts currently require active collection management workflows.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
 # ==========================================================
 # 🛡️ COLLATERAL MANAGEMENT ENGINE
 # ==========================================================
