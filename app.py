@@ -771,16 +771,16 @@ def show_dashboard_view():
     # 4. METRICS CALCULATION (Perfect alignment with your operational definition)
     # ============================================================
     
-    # Isolate original cycle 1 records
-    original_loans = df[df["cycle_no"] == 1]
+    # Original loans only
+    original_loans = df[df["cycle_no"] == 1].copy()
     
-    # 🧠 THE LOGIC BRIDGE:
-    # If a loan's final balance is 0, its active remaining principal is 0.
-    # Otherwise, we pull its historical original principal amount.
-    active_principal_series = original_loans.apply(
-        lambda r: r["principal"] if r["balance"] > 0 else 0, axis=1
-    )
-    total_issued = active_principal_series.sum() # 🎯 Evaluates to exactly 0 when fully cleared!
+    # Pending original loans only
+    pending_original_loans = original_loans[
+        original_loans["status"].astype(str).str.upper() == "PENDING"
+    ]
+    
+    # Sum of original principal amounts
+    total_issued = pending_original_loans["principal"].sum()
     
     # Expected Interest linked directly to unpaid cycle 1 loans
     total_interest_expected = original_loans.apply(
