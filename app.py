@@ -718,7 +718,7 @@ def show_dashboard_view():
     total_collected = df["amount_paid"].sum()
     
     # Logic for Overdue Count: Past due date and not yet cleared
-    overdue_mask = (active_df["end_date"] < today) & (active_df["Status"] != "Cleared")
+    overdue_mask = (active_df["end_date"] < today) & (active_df["status"] != "Cleared")
     overdue_count = active_df[overdue_mask].shape[0]
 
     # 5. METRICS ROW (Zoe Soft Blue Style)
@@ -743,7 +743,7 @@ def show_dashboard_view():
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 b_name = r.get('Borrower', 'Unknown')
                 p_amt = float(r.get('Principal', 0))
-                b_stat = r.get('Status', 'Active')
+                b_stat = r.get('status', 'Active')
                 e_date_raw = r.get('end_date')
                 e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
 
@@ -761,7 +761,7 @@ def show_dashboard_view():
                     <tr style="background:#4A90E2; color:white;">
                         <th style="padding:10px;">Borrower</th>
                         <th style="padding:10px; text-align:right;">Principal</th>
-                        <th style="padding:10px; text-align:center;">Status</th>
+                        <th style="padding:10px; text-align:center;">status</th>
                         <th style="padding:10px; text-align:center;">Due</th>
                     </tr>
                 </thead>
@@ -808,9 +808,9 @@ def show_dashboard_view():
     c_pie, c_bar = st.columns(2)
 
     with c_pie:
-        status_counts = df["Status"].value_counts().reset_index()
-        status_counts.columns = ["Status", "Count"]
-        fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
+        status_counts = df["status"].value_counts().reset_index()
+        status_counts.columns = ["status", "Count"]
+        fig_pie = px.pie(status_counts, names="status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
         fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -991,7 +991,7 @@ def show_borrowers():
                 r = risk_map.get(str(b_id), {})
                 return r.get("risk_label", "🟢 Healthy")
     
-            df["Risk Status"] = df["id"].apply(get_risk_label)
+            df["Risk status"] = df["id"].apply(get_risk_label)
     
             # Search logic
             df_filtered = df[
@@ -1006,11 +1006,11 @@ def show_borrowers():
                     elif "🟡" in val: return "color: #F59E0B; font-weight:700;"
                     else: return "color: #10B981; font-weight:700;"
     
-                display_df = df_filtered[["name", "phone", "national_id", "next_of_kin", "Risk Status", "status"]].copy()
-                display_df.columns = ["Borrower Name", "Phone", "National ID", "Next of Kin", "Risk Status", "Status"]
-                display_df["Status"] = display_df["Status"].str.upper()
+                display_df = df_filtered[["name", "phone", "national_id", "next_of_kin", "Risk status", "status"]].copy()
+                display_df.columns = ["Borrower Name", "Phone", "National ID", "Next of Kin", "Risk status", "status"]
+                display_df["status"] = display_df["status"].str.upper()
     
-                styled_df = display_df.style.map(style_risk, subset=["Risk Status"])
+                styled_df = display_df.style.map(style_risk, subset=["Risk status"])
     
                 st.dataframe(styled_df, use_container_width=True, hide_index=True)
     
@@ -1632,7 +1632,7 @@ def show_loans():
                 current_stat = str(loan_to_edit["status"]).upper()
                 idx = status_options.index(current_stat) if current_stat in status_options else 0
     
-                e_stat = st.selectbox("Status", status_options, index=idx)
+                e_stat = st.selectbox("status", status_options, index=idx)
     
                 if st.form_submit_button("💾 Save Changes"):
                     # 🎯 FIX 3: Recompute total_repayable dynamically on submit to keep DB accurate
@@ -2356,7 +2356,7 @@ def show_reports(tenant_id: str):
     st.subheader("🚨 Risk Assessment")
     
     val_col = "Principal" if "Principal" in loans.columns else "Amount"
-    overdue_mask = loans["Status"].isin(["Overdue", "Rolled/Overdue"])
+    overdue_mask = loans["status"].isin(["Overdue", "Rolled/Overdue"])
     overdue_val = pd.to_numeric(loans.loc[overdue_mask, val_col], errors="coerce").fillna(0).sum()
     
     risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
@@ -2430,7 +2430,7 @@ def show_overdue_tracker():
         temp_loans.columns = temp_loans.columns.str.strip().str.replace(" ", "_")
         temp_loans['end_date'] = pd.to_datetime(temp_loans['end_date'], errors='coerce')
         overdue_df = temp_loans[
-            (temp_loans['Status'].isin(["Active", "Overdue", "Rolled/Overdue"])) & 
+            (temp_loans['status'].isin(["Active", "Overdue", "Rolled/Overdue"])) & 
             (temp_loans['end_date'] < today)
         ].copy()
 
@@ -2466,7 +2466,7 @@ def show_overdue_tracker():
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
             # Targets: Find active 'Pending' rows or Fallback to Overdue
-            targets = updated_df[updated_df['Status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
+            targets = updated_df[updated_df['status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
             if targets.empty:
                 targets = overdue_df.copy()
 
@@ -2476,7 +2476,7 @@ def show_overdue_tracker():
                 for i, r in targets.iterrows():
                     if i in updated_df.index:
                         # 1. Archive the old row
-                        updated_df.at[i, 'Status'] = "BCF"
+                        updated_df.at[i, 'status'] = "BCF"
 
                         # 2. THE ULTIMATE MATH FIX
                         old_p = float(r.get('Principal', 0))
@@ -2503,7 +2503,7 @@ def show_overdue_tracker():
                         new_row['Balance'] = compounded_balance 
                         new_row['Total_Repayable'] = compounded_balance
                         new_row['Amount_Paid'] = 0
-                        new_row['Status'] = "Pending" 
+                        new_row['status'] = "Pending" 
                         new_row['Balance_B/F'] = new_basis 
                         
                         new_rows_list.append(new_row)
@@ -2542,9 +2542,9 @@ def show_overdue_tracker():
         display_df = st.session_state.get("loans", loans).copy()
         display_df.columns = display_df.columns.str.strip().str.replace(" ", "_")
 
-        # Push Status to the end for Luxe view
-        if 'Status' in display_df.columns:
-            cols = [c for c in display_df.columns if c != 'Status'] + ['Status']
+        # Push status to the end for Luxe view
+        if 'status' in display_df.columns:
+            cols = [c for c in display_df.columns if c != 'status'] + ['status']
             display_df = display_df[cols]
 
         fmt_dict = {
@@ -2553,7 +2553,7 @@ def show_overdue_tracker():
         }
         actual_fmt = {k: v for k, v in fmt_dict.items() if k in display_df.columns}
 
-        styled_df = display_df.style.map(style_status_colors, subset=['Status']).format(actual_fmt)
+        styled_df = display_df.style.map(style_status_colors, subset=['status']).format(actual_fmt)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
     except Exception as e:
         st.error(f"Display Error: {str(e)}")
@@ -2587,7 +2587,7 @@ def show_calendar(tenant_id: str):
 
     loans_df.columns = loans_df.columns.str.strip().str.replace(" ", "_")
 
-    required_keys = ["end_date", "Total_Repayable", "Status", "Borrower", "Loan_ID", "Principal", "Interest"]
+    required_keys = ["end_date", "Total_Repayable", "status", "Borrower", "Loan_ID", "Principal", "Interest"]
     for col in required_keys:
         if col not in loans_df.columns:
             loans_df[col] = 0 if col in ["Total_Repayable", "Principal", "Interest"] else "Unknown"
@@ -2600,7 +2600,7 @@ def show_calendar(tenant_id: str):
     today = pd.Timestamp.today().normalize()
     
     # Filter for loans that aren't closed
-    active_loans = loans_df[loans_df["Status"].astype(str).str.lower() != "closed"].copy()
+    active_loans = loans_df[loans_df["status"].astype(str).str.lower() != "closed"].copy()
 
     # --- VISUAL CALENDAR WIDGET ---
     calendar_events = []
@@ -2714,8 +2714,8 @@ def show_calendar(tenant_id: str):
         for i, r in overdue_df.iterrows():
             bg = "#FFF5F5"
             late_color = "#FF4B4B" if r['Days_Late'] > 7 else "#FFA500"
-            od_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #FFDADA;"><td style="padding:10px;"><b>#{r['Loan_ID']}</b></td><td style="padding:10px;">{r['Borrower']}</td><td style="padding:10px; text-align:center; font-weight:bold; color:{late_color};">{r['Days_Late']} Days</td><td style="padding:10px; text-align:center;"><span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['Status']}</span></td></tr>"""
-        st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+            od_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #FFDADA;"><td style="padding:10px;"><b>#{r['Loan_ID']}</b></td><td style="padding:10px;">{r['Borrower']}</td><td style="padding:10px; text-align:center; font-weight:bold; color:{late_color};">{r['Days_Late']} Days</td><td style="padding:10px; text-align:center;"><span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span></td></tr>"""
+        st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
 # ==========================================================
 # 🛡️ COLLATERAL MANAGEMENT ENGINE
 # ==========================================================
@@ -2787,7 +2787,7 @@ def show_collateral():
         available_loans = pd.DataFrame()
 
     # --- TABS CONTAINER ---
-    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & Status"])
+    tab_reg, tab_view = st.tabs(["➕ Register Asset", "📋 Inventory & status"])
 
     # ==============================
     # ➕ TAB 1: REGISTER ASSET
@@ -2887,7 +2887,7 @@ def show_collateral():
             # --- DYNAMIC FILTERS LAYER ---
             col1, col2 = st.columns(2)
             unique_statuses = sorted(collateral_df[stat_col].dropna().unique().tolist())
-            status_filter = col1.selectbox("Filter Inventory Status", ["All Asset Records"] + unique_statuses)
+            status_filter = col1.selectbox("Filter Inventory status", ["All Asset Records"] + unique_statuses)
             search_query = col2.text_input("🔍 Search Keyword / Borrower Reference").lower()
 
             df_filtered = collateral_df.copy()
@@ -2914,7 +2914,7 @@ def show_collateral():
                 "type": "Asset Type",
                 "description": "Asset Description",
                 "value": "Value (UGX)",
-                "status": "Tracking Status"
+                "status": "Tracking status"
             }
             # Handle minor schema variances gracefully
             display_ledger = display_ledger.rename(columns={k: v for k, v in col_renames.items() if k in display_ledger.columns})
@@ -2971,7 +2971,7 @@ def show_collateral():
                 default_idx = status_options.index(current_status_val) if current_status_val in status_options else 0
 
                 new_status = col_stat.selectbox(
-                    "Transition Status State",
+                    "Transition status State",
                     status_options,
                     index=default_idx,
                     label_visibility="collapsed"
@@ -3644,7 +3644,7 @@ def show_ledger():
                     )
                 ),
     
-            "Status":
+            "status":
                 row.get(
                     "status",
                     ""
