@@ -745,16 +745,52 @@ def show_dashboard_view():
     cycle_1_active_df = active_df[active_df["cycle"] == "1"]
 
     # ============================================================
-    # 4. METRICS CALCULATION (Guaranteed to equal 0 if database is cleared)
+    # 3. CLEAN DATA TYPES & STANDARDIZE STATUS MATRICES
     # ============================================================
-    # Calculated explicitly using the validated active cohort
-    total_principal = original_loans["principal"].sum() 
-    total_interest_expected = cycle_1_active_df["interest"].sum()
+    df["interest"] = pd.to_numeric(df.get("interest", 0), errors="coerce").fillna(0)
+    df["amount_paid"] = pd.to_numeric(df.get("amount_paid", 0), errors="coerce").fillna(0)
+    df["principal"] = pd.to_numeric(df.get("principal", 0), errors="coerce").fillna(0)
+    df["total_repayable"] = pd.to_numeric(df.get("total_repayable", 0), errors="coerce").fillna(0)
+    df["balance"] = pd.to_numeric(df.get("balance", 0), errors="coerce").fillna(0)
+    df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
     
-    # Total historical collections pulled across the entire tenant history
+    # Standardize schema names to match your precise management metrics engine keys
+    if "cycle_no" in df.columns:
+        df["cycle_no"] = pd.to_numeric(df["cycle_no"], errors="coerce").fillna(1)
+    else:
+        df["cycle_no"] = 1
+
+    today = pd.Timestamp.today().normalize()
+    
+    # Downstream compatibility dataframe (drops archived lines, keeps live tracks)
+    # This prevents 'active_df is not defined' application crashes downstream!
+    inactive_statuses = ["CLOSED", "CLEARED", "BCF"]
+    active_df = df[~df["status"].astype(str).str.upper().isin(inactive_statuses)].copy()
+
+    # ============================================================
+    # 4. METRICS CALCULATION (Perfect alignment with your operational definition)
+    # ============================================================
+    
+    # Isolate original cycle 1 records
+    original_loans = df[df["cycle_no"] == 1]
+    
+    # 🧠 THE LOGIC BRIDGE:
+    # If a loan's final balance is 0, its active remaining principal is 0.
+    # Otherwise, we pull its historical original principal amount.
+    active_principal_series = original_loans.apply(
+        lambda r: r["principal"] if r["balance"] > 0 else 0, axis=1
+    )
+    total_issued = active_principal_series.sum() # 🎯 Evaluates to exactly 0 when fully cleared!
+    
+    # Expected Interest linked directly to unpaid cycle 1 loans
+    total_interest_expected = original_loans.apply(
+        lambda r: r["interest"] if r["balance"] > 0 else 0, axis=1
+    ).sum()
+    
+    # Match the broad aggregates seen in your management view card
     total_collected = df["amount_paid"].sum()
     
-    # Logic for Overdue Count: Active accounts whose deadlines have passed today
+    # Overdue Count tracking matching remaining active pipelines
     overdue_mask = (active_df["end_date"] < today)
     overdue_count = active_df[overdue_mask].shape[0]
 
