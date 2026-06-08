@@ -675,406 +675,166 @@ def render_sidebar():
 # 1. CORE PAGE FUNCTIONS & LAYOUT
 # ==========================================
 
-st.set_page_config(layout="wide", page_title="Financial Control Center", page_icon="🏛️")
+def show_overview:
+    """
+    Main Multi-Tenant Dashboard view. 
+    Calculates portfolio metrics and renders visual analytics isolated by tenant_id.
+    """
+    # Safeguard: Ensure a valid tenant context exists before doing anything
+    if not tenant_id:
+        st.error("❌ Access Denied: No valid tenant context detected.")
+        return
 
-if "auto_refresh_tick" not in st.session_state:
-    st.session_state.auto_refresh_tick = 0
+    st.markdown("## 📊 Financial Dashboard")
+    
+    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant)
+    df = get_cached_data("Loans", tenant_id=tenant_id)
+    pay_df = get_cached_data("Payments", tenant_id=tenant_id)
+    exp_df = get_cached_data("Expenses", tenant_id=tenant_id) 
 
-def soft_refresh():
-    st.session_state.auto_refresh_tick += 1
+    if df is None or df.empty:
+        st.info("No loan records found.")
+        return
 
-def get_Active_color():
-    return st.session_state.get("theme_color", "#1E3A8A")
+    # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors)
+    df.columns = df.columns.str.strip().str.replace(" ", "_")
+    if pay_df is not None and not pay_df.empty:
+        pay_df.columns = pay_df.columns.str.strip().str.replace(" ", "_")
+    if exp_df is not None and not exp_df.empty:
+        exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
 
-@st.cache_data(ttl=60, show_spinner=False)
-def load_cached(name):
-    try:
-        # Mocking implementation layer for execution safety
-        return get_cached_data(name)
-    except:
-        return pd.DataFrame()
+    # 3. CLEAN DATA TYPES
+    df["Interest"] = pd.to_numeric(df.get("Interest", 0), errors="coerce").fillna(0)
+    df["Amount_Paid"] = pd.to_numeric(df.get("Amount_Paid", 0), errors="coerce").fillna(0)
+    df["Principal"] = pd.to_numeric(df.get("Principal", 0), errors="coerce").fillna(0)
+    df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
+    
+    today = pd.Timestamp.today().normalize()
+    
+    # RECOVERY FILTER: Include Rolled loans in Active count for accurate portfolio health
+    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
+    active_df = df[df["Status"].isin(active_statuses)].copy()
 
-# =========================================================
-# HELPERS
-# =========================================================
+    # 4. METRICS CALCULATION
+    total_issued = active_df["Principal"].sum() if "Principal" in active_df.columns else 0
+    total_interest_expected = active_df["Interest"].sum()
+    total_collected = df["Amount_Paid"].sum() 
+    
+    # Logic for Overdue Count: Past due date and not yet cleared
+    overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
+    overdue_count = active_df[overdue_mask].shape[0]
 
-def normalize(df):
-    try:
-        if df is None or not isinstance(df, pd.DataFrame) or df.empty:
-            return pd.DataFrame()
-        df = df.copy()
-        df.columns = (
-            df.columns.astype(str)
-            .str.strip()
-            .str.lower()
-            .str.replace(" ", "_")
-        )
-        return df
-    except:
-        return pd.DataFrame()
+    # 5. METRICS ROW (Zoe Soft Blue Style)
+    m1, m2, m3, m4 = st.columns(4)
+    
+    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
 
-def safe_numeric(df, cols):
-    try:
-        if df is None or df.empty:
-            return pd.Series(dtype="float64")
-        for c in cols:
-            if c in df.columns:
-                return pd.to_numeric(df[c], errors="coerce").fillna(0)
-        return pd.Series(0.0, index=df.index)
-    except:
-        return pd.Series(0.0)
+    # 6. RECENT ACTIVITY TABLES
+    st.write("---")
+    t1, t2 = st.columns(2)
 
-def safe_date(df, cols):
-    try:
-        if df is None or df.empty:
-            return pd.Series(dtype="datetime64[ns]")
-        for c in cols:
-            if c in df.columns:
-                return pd.to_datetime(df[c], errors="coerce")
-        return pd.Series(pd.NaT, index=df.index)
-    except:
-        return pd.Series(pd.NaT)
+    with t1:
+        st.markdown("<h4 style='color: #4A90E2;'>📝 Recent Portfolio Activity</h4>", unsafe_allow_html=True)
+        rows_html = ""
+        
+        if not active_df.empty:
+            recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
+            for i, (idx, r) in enumerate(recent_loans.iterrows()):
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                b_name = r.get('Borrower', 'Unknown')
+                p_amt = float(r.get('Principal', 0))
+                b_stat = r.get('Status', 'Active')
+                e_date_raw = r.get('End_Date')
+                e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
 
-def first_existing(df, cols):
-    try:
-        for c in cols:
-            if c in df.columns:
-                return c
-        return None
-    except:
-        return None
-
-# =========================================================
-# MAIN DASHBOARD VIEW
-# =========================================================
-def show_dashboard_view():
-    brand_color = get_Active_color()
-
-    try:
-        # --- GLOBAL MODERN INJECTED CSS ---
+                rows_html += f"""
+                <tr style="background-color: {bg}; border-bottom: 1px solid #ddd;">
+                    <td style="padding:10px;">{b_name}</td>
+                    <td style="padding:10px; text-align:right; font-weight:bold; color:#4A90E2;">{p_amt:,.0f}</td>
+                    <td style="padding:10px; text-align:center;"><span style="font-size:10px; background:#e1f5fe; padding:2px 5px; border-radius:5px;">{b_stat}</span></td>
+                    <td style="padding:10px; text-align:center; color:#666;">{e_date}</td>
+                </tr>"""
+        
         st.markdown(f"""
-        <style>
-        /* Modern Glassmorphic Dashboard Header */
-        .dashboard-header {{
-            background: linear-gradient(135deg, {brand_color}, #0F172A);
-            padding: 30px;
-            border-radius: 16px;
-            margin-bottom: 30px;
-            color: white;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
-        }}
-        
-        /* Unified Metric Boxes */
-        .metric-box {{
-            padding: 20px;
-            border-radius: 14px;
-            color: #FFFFFF;
-            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
-            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid rgba(255,255,255,0.05);
-        }}
-        .metric-box:hover {{
-            transform: translateY(-4px);
-            box-shadow: 0 12px 20px -3px rgba(0,0,0,0.12);
-        }}
-        .metric-title {{
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 1.2px;
-            opacity: 0.8;
-            margin-bottom: 8px;
-        }}
-        .metric-value {{
-            font-size: 28px;
-            font-weight: 700;
-            letter-spacing: -0.5px;
-            line-height: 1.2;
-        }}
-        .metric-sub {{
-            font-size: 12px;
-            opacity: 0.75;
-            margin-top: 6px;
-        }}
-        
-        /* Premium Gradient Assignments */
-        .card-blue {{ background: linear-gradient(135deg, #2563EB, #1D4ED8); }}
-        .card-green {{ background: linear-gradient(135deg, #10B981, #047857); }}
-        .card-red {{ background: linear-gradient(135deg, #EF4444, #B91C1C); }}
-        .card-slate {{ background: linear-gradient(135deg, #64748B, #475569); }}
-        
-        /* Glassmorphic mini cards for light/dark layout engine */
-        .mini-kpi {{
-            padding: 16px;
-            border-radius: 12px;
-            background: rgba(155, 155, 155, 0.08);
-            border: 1px solid rgba(155, 155, 155, 0.15);
-            text-align: center;
-        }}
-        </style>
+            <table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #4A90E2;">
+                <thead>
+                    <tr style="background:#4A90E2; color:white;">
+                        <th style="padding:10px;">Borrower</th>
+                        <th style="padding:10px; text-align:right;">Principal</th>
+                        <th style="padding:10px; text-align:center;">Status</th>
+                        <th style="padding:10px; text-align:center;">Due</th>
+                    </tr>
+                </thead>
+                <tbody>{rows_html if rows_html else "<tr><td colspan='4' style='text-align:center;padding:10px;'>No active loans</td></tr>"}</tbody>
+            </table>
         """, unsafe_allow_html=True)
 
-        # --- UI HEADER ---
-        st.markdown(f"""
-        <div class="dashboard-header">
-            <h1 style='margin:0; font-size:32px; font-weight:700; letter-spacing:-0.5px;'>🏛️ Financial Control Center</h1>
-            <p style='margin:6px 0 0 0; opacity:0.85; font-size:15px;'>Real-time tracking engine for loans, expenses, and asset portfolio performance.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        # --- DATA INGESTION ---
-        loans_df = normalize(load_cached("loans"))
-        payments_df = normalize(load_cached("payments"))
-        expenses_df = normalize(load_cached("expenses"))
-        borrowers_df = normalize(load_cached("borrowers"))
+    with t2:
+        st.markdown("<h4 style='color: #2E7D32;'>💸 Recent Cash Inflows</h4>", unsafe_allow_html=True)
+        pay_rows = ""
         
-        if loans_df.empty:
-            st.info("👋 Welcome! No active data layers found. Populate underlying tables to visualize tracking pipelines.")
-            return
-        
-        # --- CLEAN COLUMNS SAFELY ---
-        required_loan_cols = [
-            "status", "principal", "amount", "interest", "interest_amount",
-            "balance", "total_repayable", "amount_paid", "paid", "end_date", "due_date"
-        ]
-        for col in required_loan_cols:
-            if col not in loans_df.columns:
-                loans_df[col] = 0
+        if pay_df is not None and not pay_df.empty:
+            recent_pay = pay_df.sort_values(by="Date", ascending=False).head(5)
+            for i, (idx, r) in enumerate(recent_pay.iterrows()):
+                bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+                p_borr = r.get('Borrower', 'Unknown')
+                p_val = float(r.get('Amount', 0))
+                p_date_raw = r.get('Date')
+                p_date = pd.to_datetime(p_date_raw).strftime('%d %b') if pd.notna(p_date_raw) else "-"
                 
-        loans_df["status"] = loans_df["status"].astype(str).str.upper().str.strip()
-        loans_df.loc[loans_df["status"] == "0", "status"] = "ACTIVE"
+                pay_rows += f"""
+                <tr style="background-color: {bg}; border-bottom: 1px solid #ddd;">
+                    <td style="padding:10px;">{p_borr}</td>
+                    <td style="padding:10px; text-align:right; font-weight:bold; color:green;">{p_val:,.0f}</td>
+                    <td style="padding:10px; text-align:center; color:#666;">{p_date}</td>
+                </tr>"""
+        
+        st.markdown(f"""
+            <table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px; border: 1px solid #2E7D32;">
+                <thead>
+                    <tr style="background:#2E7D32; color:white;">
+                        <th style="padding:10px;">Borrower</th>
+                        <th style="padding:10px; text-align:right;">Amount</th>
+                        <th style="padding:10px; text-align:center;">Date</th>
+                    </tr>
+                </thead>
+                <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
+            </table>
+        """, unsafe_allow_html=True)
 
-        # --- ENGINE PIPELINE CONFIGURATION ---
-        loans_df["principal_n"] = safe_numeric(loans_df, ["principal", "amount"])
-        loans_df["interest_n"] = safe_numeric(loans_df, ["interest", "interest_amount"])
-        total_repayable = safe_numeric(loans_df, ["balance", "total_repayable"])
-        amount_paid = safe_numeric(loans_df, ["amount_paid", "paid"])
-        
-        loans_df["balance_n"] = (total_repayable - amount_paid).clip(lower=0)
-        
-        # --- EXPENSES CONFIGURATION ---
-        if expenses_df.empty:
-            total_expenses = 0.0
+    # 7. DASHBOARD VISUALS
+    st.markdown("---")
+    st.markdown("<h4 style='color: #4A90E2;'>📈 Portfolio Analytics</h4>", unsafe_allow_html=True)
+    c_pie, c_bar = st.columns(2)
+
+    with c_pie:
+        status_counts = df["Status"].value_counts().reset_index()
+        status_counts.columns = ["Status", "Count"]
+        fig_pie = px.pie(status_counts, names="Status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
+        fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with c_bar:
+        # Combined Cashflow Chart (Income vs Expenses)
+        if pay_df is not None and not pay_df.empty and exp_df is not None and not exp_df.empty:
+            pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
+            exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
+            
+            # Formatting for grouping by Month-Year
+            inc_m = pay_df.groupby(pay_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            
+            m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
+            m_cash.columns = ["Month", "Income", "Expenses"]
+            
+            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
+            st.plotly_chart(fig_bar, use_container_width=True)
         else:
-            expenses_df["amount"] = safe_numeric(expenses_df, ["amount"])
-            total_expenses = float(expenses_df["amount"].sum())
-        
-        # --- OVERDUE CALCULATIONS ---
-        today = pd.Timestamp.now().normalize()
-        loans_df["due_date_dt"] = safe_date(loans_df, ["end_date", "due_date"])
-        
-        overdue_mask = (
-            loans_df["due_date_dt"].notna() & 
-            (loans_df["due_date_dt"] < today) & 
-            (~loans_df["status"].isin(["CLEARED", "PAID"]))
-        )
-        overdue_count = int(overdue_mask.sum())
-        
-        # --- PORTFOLIO EXPOSURE LOGIC ---
-        if "cycle_no" not in loans_df.columns:
-            loans_df["cycle_no"] = 1
-        loans_df["cycle_no"] = pd.to_numeric(loans_df["cycle_no"], errors="coerce").fillna(1)
-        
-        original_loans = loans_df[loans_df["cycle_no"] == 1]
-        total_principal = float(original_loans["principal_n"].sum())
-        total_interest = float(loans_df["interest_n"].sum())
-        
-        # --- ACTION ALERTS ---
-        if overdue_count >= 5:
-            st.toast(f"⚠️ Action Required: {overdue_count} Overdue Loans Detected.", icon="⚠️")
-
-        # --- DISPLAY MAIN HIGH-TIER METRICS ---
-        def render_metric_card(container, title, value, subtitle, css_class):
-            container.markdown(f"""
-            <div class="metric-box {css_class}">
-                <div class="metric-title">{title}</div>
-                <div class="metric-value">{value}</div>
-                <div class="metric-sub">{subtitle}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        m1, m2, m3, m4 = st.columns(4)
-        render_metric_card(m1, "Active Principal", f"UGX {total_principal:,.0f}", "Portfolio Asset Value", "card-blue")
-        render_metric_card(m2, "Interest Income", f"UGX {total_interest:,.0f}", "Expected Yield Gross", "card-green")
-        render_metric_card(m3, "Operational Costs", f"UGX {total_expenses:,.0f}", "Total Outgoings Logged", "card-red")
-        render_metric_card(m4, "Critical Alerts", str(overdue_count), "Overdue Portfolio Loans", "card-slate")
-        
-        st.write("---")
-        
-        # ==========================================
-        # VISUALIZATION PIPELINES (ROW 1)
-        # ==========================================
-        col_l, col_r = st.columns([2, 1])
-        
-        with col_l:
-            st.markdown("### 📈 Revenue Margins vs Expenses")
-            if not payments_df.empty:
-                try:
-                    pay_date_col = first_existing(payments_df, ["date", "payment_date", "created_at"])
-                    pay_amt_col = first_existing(payments_df, ["amount", "paid", "payment"])
-                    
-                    if pay_date_col and pay_amt_col:
-                        rev_df = payments_df.copy()
-                        rev_df["date_dt"] = pd.to_datetime(rev_df[pay_date_col], errors="coerce")
-                        rev_df["amount_n"] = pd.to_numeric(rev_df[pay_amt_col], errors="coerce").fillna(0)
-                        rev_df = rev_df.dropna(subset=["date_dt"])
-                        rev_df["month"] = rev_df["date_dt"].dt.to_period("M").dt.to_timestamp()
-                        
-                        monthly_rev = rev_df.groupby("month", as_index=False)["amount_n"].sum().rename(columns={"amount_n": "Revenue"})
-                        
-                        if not expenses_df.empty:
-                            exp_df = expenses_df.copy()
-                            exp_date_col = first_existing(exp_df, ["payment_date", "date", "created_at"])
-                            exp_df["date_dt"] = pd.to_datetime(exp_df[exp_date_col], errors="coerce")
-                            exp_df["amount_n"] = pd.to_numeric(exp_df["amount"], errors="coerce").fillna(0)
-                            exp_df = exp_df.dropna(subset=["date_dt"])
-                            exp_df["month"] = exp_df["date_dt"].dt.to_period("M").dt.to_timestamp()
-                            monthly_exp = exp_df.groupby("month", as_index=False)["amount_n"].sum().rename(columns={"amount_n": "Expenses"})
-                        else:
-                            monthly_exp = pd.DataFrame(columns=["month", "Expenses"])
-                            
-                        trend_df = pd.merge(monthly_rev, monthly_exp, on="month", how="outer").fillna(0).sort_values("month")
-                        
-                        fig = px.line(
-                            trend_df, x="month", y=["Revenue", "Expenses"],
-                            template="plotly_white",
-                            color_discrete_map={"Revenue": "#10B981", "Expenses": "#EF4444"}
-                        )
-                        fig.update_traces(mode="lines+markers", line=dict(width=3), marker=dict(size=7))
-                        fig.update_layout(
-                            height=320, margin=dict(l=10, r=10, t=15, b=10),
-                            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-                            xaxis_title="", yaxis_title="UGX Denominated", hovermode="x unified"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.caption(f"Trend engine calculation bypass: {e}")
-            else:
-                st.info("Performance monitoring requires transaction inputs.")
-                
-        with col_r:
-            st.markdown("### 🎯 Portfolio Segmentation")
-            if not loans_df.empty:
-                try:
-                    clean_status = loans_df["status"].replace({
-                        "CURRENT": "ACTIVE", "ONGOING": "ACTIVE", 
-                        "COMPLETE": "PAID", "CLOSED": "PAID", 
-                        "LATE PAYMENT": "LATE", "DEFAULTED": "DEFAULT"
-                    })
-                    status_data = clean_status.value_counts().reset_index()
-                    status_data.columns = ["status", "count"]
-                    
-                    fig_pie = px.pie(
-                        status_data, names="status", values="count", hole=0.7,
-                        color="status", color_discrete_map={"ACTIVE": "#2563EB", "PAID": "#10B981", "LATE": "#F59E0B", "DEFAULT": "#EF4444"}
-                    )
-                    fig_pie.update_traces(textposition="outside", textinfo="percent")
-                    fig_pie.update_layout(
-                        height=320, margin=dict(l=10, r=10, t=15, b=10),
-                        showlegend=True, legend=dict(orientation="h", y=-0.1),
-                        annotations=[dict(text=f"<b>{len(loans_df)}</b><br>Loans", x=0.5, y=0.5, font_size=18, showarrow=False)]
-                    )
-                    st.plotly_chart(fig_pie, use_container_width=True)
-                except Exception as e:
-                    st.caption(f"Segmentation pipeline failure: {e}")
-            else:
-                st.info("No distribution values found.")
-
-        # ==========================================
-        # CHANNELS & HISTORICAL LOGIC (ROW 2)
-        # ==========================================
-        st.write("---")
-        t1, t2 = st.columns(2)
-        
-        with t1:
-            st.markdown("### 📊 Issuance Timeline Performance")
-            try:
-                graph_df = loans_df.copy()
-                graph_df["date_dt"] = safe_date(graph_df, ["start_date", "created_at"])
-                graph_df = graph_df.dropna(subset=["date_dt"])
-                
-                if not graph_df.empty:
-                    graph_df["month"] = graph_df["date_dt"].dt.to_period("M").dt.to_timestamp()
-                    timeline_df = graph_df.groupby("month")[["principal_n", "interest_n"]].sum().reset_index().sort_values("month")
-                    timeline_df.rename(columns={"principal_n": "Capital Deployed", "interest_n": "Expected Yield"}, inplace=True)
-                    
-                    fig_portfolio = px.bar(
-                        timeline_df, x="month", y=["Capital Deployed", "Expected Yield"],
-                        barmode="group", template="plotly_white",
-                        color_discrete_map={"Capital Deployed": brand_color, "Expected Yield": "#34D399"}
-                    )
-                    fig_portfolio.update_layout(
-                        height=350, hovermode="x unified", xaxis_title="",
-                        yaxis_title="UGX", legend=dict(orientation="h", y=1.05)
-                    )
-                    st.plotly_chart(fig_portfolio, use_container_width=True)
-                else:
-                    st.info("Insufficent asset tracking historical context.")
-            except Exception as e:
-                st.caption(f"Asset charting pipeline fallback: {e}")
-                
-        with t2:
-            st.markdown("### 💸 Live Outgoings Registry")
-            if not expenses_df.empty:
-                try:
-                    df = expenses_df.copy()
-                    df["amount"] = safe_numeric(df, ["amount"])
-                    df["date"] = safe_date(df, ["date", "payment_date"])
-                    df = df.sort_values("date", ascending=False)
-                    latest = df.head(5)
-                    
-                    # Mini Unified Transparent KPI Engine Block
-                    k1, k2, k3 = st.columns(3)
-                    k1.markdown(f'<div class="mini-kpi"><span style="font-size:12px;opacity:0.7;">Top 5 Total</span><br><b style="font-size:16px;color:#EF4444;">UGX {latest["amount"].sum():,.0f}</b></div>', unsafe_allow_html=True)
-                    k2.markdown(f'<div class="mini-kpi"><span style="font-size:12px;opacity:0.7;">Batch Mean</span><br><b style="font-size:16px;">UGX {latest["amount"].mean():,.0f}</b></div>', unsafe_allow_html=True)
-                    k3.markdown(f'<div class="mini-kpi"><span style="font-size:12px;opacity:0.7;">Entries Ledger</span><br><b style="font-size:16px;">{len(latest)}</b></div>', unsafe_allow_html=True)
-                    
-                    st.write("")
-                    
-                    # Safe Presentation Mapping Layer
-                    display_df = latest.copy()
-                    display_df["category"] = display_df.get("category", "General").fillna("General")
-                    if "date" in display_df.columns and not display_df["date"].isna().all():
-                        display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
-                    else:
-                        display_df["date"] = "N/A"
-                        
-                    final_df = display_df[["category", "amount", "date"]]
-                    
-                    # Safe formatting execution natively
-                    st.dataframe(
-                        final_df.style.format({"amount": "UGX {:,.0f}"}),
-                        use_container_width=True, hide_index=True
-                    )
-                except Exception as e:
-                    st.error(f"Render Registry Fault: {e}")
-            else:
-                st.info("System accounts are clear. No operational costs logged.")
-
-        # ==========================================
-        # SYSTEM FILE EXPORT PIPELINES
-        # ==========================================
-        st.write("---")
-        c1, c2 = st.columns(2)
-        
-        with c1:
-            st.download_button(
-                label="📥 Export Capital Ledger (CSV)",
-                data=loans_df.to_csv(index=False).encode("utf-8"),
-                file_name=f"capital_portfolio_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-                mime="text/csv", use_container_width=True
-            )
-        with c2:
-            st.download_button(
-                label="⬇️ Export Expense Ledger (CSV)",
-                data=expenses_df.to_csv(index=False).encode("utf-8"),
-                file_name=f"expense_portfolio_{pd.Timestamp.now().strftime('%Y-%m-%d')}.csv",
-                mime="text/csv", use_container_width=True
-            )
-
-    except Exception as e:
-        st.error(f"Critical Dashboard Core Recovery Engaged: {str(e)}")
-
+            st.info("💡 Tip: Record both payments and expenses to see the performance chart.")
 
 
 import streamlit as st
@@ -2251,700 +2011,373 @@ def show_payments(supabase):
                             st.session_state["edit_pay_mode"] = False
                             st.rerun()
 
-import streamlit as st
-import pandas as pd
-import uuid
-from datetime import datetime
-from io import BytesIO
+# ==============================
+# 20. PAYROLL MANAGEMENT PAGE
+# ==============================
 
-def format_with_commas(df):
-    if df.empty:
-        return df
-    df = df.copy()
-    numeric_cols = df.select_dtypes(include=["number"]).columns
-    for col in numeric_cols:
-        df[col] = df[col].apply(lambda x: f"{int(x):,}" if pd.notnull(x) else "")
-    return df
-
-def delete_data_saas(table_name, filters):
-    try:
-        response = supabase.table(table_name).delete().match(filters).execute()
-        return True
-    except Exception as e:
-        st.error(f"Database Error: {e}")
-        return False
-
-# =================================
-# 🏢 Enterprise Payroll Engine (Compliant Excel Export)
-# =================================
-def export_styled_excel(df, company="ZOE CONSULTS SMC LTD"):
-    from openpyxl import Workbook
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-    from openpyxl.utils import get_column_letter
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Payroll"
-
-    # Styles
-    blue = PatternFill("solid", fgColor="4A90E2")
-    white_font = Font(color="FFFFFF", bold=True)
-    bold = Font(bold=True)
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    right = Alignment(horizontal="right")
-
-    thin = Border(
-        left=Side(style='thin'), right=Side(style='thin'),
-        top=Side(style='thin'), bottom=Side(style='thin')
-    )
-
-    # Title
-    ws.merge_cells("A1:W1")
-    ws["A1"] = f"{datetime.now().strftime('%B %Y').upper()} PAYROLL ({company})"
-    ws["A1"].font = Font(bold=True, size=14)
-    ws["A1"].alignment = center
-
-    # Header Row 1
-    ws.append([
-        "S/NO","Employee Name","TIN","Designation","Mob No",
-        "Account No","NSSF No",
-        "Salary","Basic",
-        "NO PAY","",
-        "LST",
-        "Gross Salary",
-        "Deductions",
-        "If yes calculate","","",
-        "Other",
-        "Total Deductions",
-        "Nett Pay",
-        "Total Tax",
-        "10% NSSF",
-        "15% NSSF"
-    ])
-    ws.merge_cells("J2:K2")
-    ws.merge_cells("O2:Q2")
-
-    # Header Row 2
-    ws.append([
-        "No","","","","","","",
-        "ARREARS","Salary",
-        "DAYS","Absenteeism",
-        "Deductions",
-        "",
-        "P.A.Y.E","N.S.S.F","S.DRS/ADV",
-        "Deduction",
-        "", "", "", "", ""
-    ])
-
-    for row in ws.iter_rows(min_row=2, max_row=3, min_col=1, max_col=23):
-        for cell in row:
-            cell.fill = blue
-            cell.font = white_font
-            cell.alignment = center
-            cell.border = thin
-
-    # Data - FIXED COLUMN MAPPING CORRECTION
-    for idx, r in df.reset_index(drop=True).iterrows():
-        ws.append([
-            idx + 1,
-            r["employee"],
-            r["tin"],
-            r["designation"],
-            r["mob_no"],
-            r["account_no"],
-            r["nssf_no"],
-            r["arrears"],
-            r["basic_salary"],
-            0,
-            r["absent_deduction"],
-            r["lst"],
-            r["gross_salary"],
-            r["paye"],           # P.A.Y.E
-            r["nssf_5"],         # N.S.S.F (5% Employee contribution)
-            r["advance_drs"],    # S.DRS/ADV
-            r["other_deductions"],
-            r["paye"] + r["nssf_5"] + r["advance_drs"] + r["other_deductions"] + r["lst"], # Total Deductions
-            r["net_pay"],        # Nett Pay
-            r["paye"],           # Total Tax
-            r["nssf_10"],        # 10% Employer NSSF
-            r["nssf_15"]         # 15% Total NSSF
-        ])
-
-    # Number formatting
-    for row in ws.iter_rows(min_row=4, max_row=ws.max_row, min_col=8, max_col=23):
-        for cell in row:
-            cell.number_format = '#,##0'
-            cell.alignment = right
-            cell.border = thin
-
-    # Totals
-    total_row = ws.max_row + 1
-    ws[f"A{total_row}"] = "TOTAL"
-
-    for col in range(8, 24):
-        letter = get_column_letter(col)
-        ws[f"{letter}{total_row}"] = f"=SUM({letter}4:{letter}{total_row-1})"
-
-    for col in range(1, 24):
-        cell = ws[f"{get_column_letter(col)}{total_row}"]
-        cell.font = bold
-        cell.fill = blue
-        cell.border = thin
-
-    for col in range(8, 24):
-        cell = ws[f"{get_column_letter(col)}{total_row}"]
-        cell.number_format = '#,##0'
-        cell.alignment = right
-
-    widths = [6,22,15,25,15,20,20] + [12]*16
-    for i, w in enumerate(widths, start=1):
-        ws.column_dimensions[get_column_letter(i)].width = w
-
-    ws.freeze_panes = "A4"
-
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return buffer
-
-# ---------------------------------
-# Legal Ugandan Calculation Engine
-# ---------------------------------
-def compute_payroll(basic, arrears, absent, advance, other, apply_lst=True):
-    # Gross salary = Earnings minus structural absenteeism penalties
-    gross = round(float(basic) + float(arrears) - float(absent))
-
-    # NSSF Standard Uganda (Based cleanly on Gross)
-    nssf_5 = round(gross * 0.05)
-    nssf_10 = round(gross * 0.10)
-    nssf_15 = nssf_5 + nssf_10
-
-    # COMPLIANCE FIX: In Uganda, PAYE base is Gross Salary (Employee 5% NSSF is NOT deductible)
-    taxable_income = gross 
-
-    # COMPLIANCE FIX: Legal URA PAYE Brackets including the >10M Tier (Additional 10%)
-    paye = 0
-    if taxable_income <= 235000:
-        paye = 0
-    elif taxable_income <= 335000:
-        paye = (taxable_income - 235000) * 0.10
-    elif taxable_income <= 410000:
-        paye = 10000 + (taxable_income - 335000) * 0.20
-    elif taxable_income <= 10000000:
-        paye = 25000 + (taxable_income - 410000) * 0.30
-    else:
-        # Tier 4 Luxury Bracket: Standard Tier 3 baseline + 30% + 10% additional surtax
-        standard_tier3 = 25000 + (taxable_income - 410000) * 0.30
-        additional_surtax = (taxable_income - 10000000) * 0.10
-        paye = standard_tier3 + additional_surtax
-
-    paye = round(paye)
-
-    # Local Service Tax (LST Rules Uganda)
-    lst = 0
-    if apply_lst and (gross > 100000): # Statutory lower bound threshold
-        if gross <= 300000:
-            lst = round(5000 / 12)
-        elif gross <= 400000:
-            lst = round(10000 / 12)
-        elif gross <= 600000:
-            lst = round(20000 / 12)
-        elif gross <= 1000000:
-            lst = round(30000 / 12)
-        else:
-            lst = round(100000 / 12)
-
-    total_deductions = paye + nssf_5 + advance + other + lst
-    net = gross - total_deductions
-
-    return {
-        "gross": gross,
-        "lst": lst,
-        "n5": nssf_5,
-        "n10": nssf_10,
-        "n15": nssf_15,
-        "paye": paye,
-        "net": round(net)
-    }
-
-def format_payroll_display(df):
-    if df.empty:
-        return df
-
-    df = df.copy()
-    df["NO"] = range(1, len(df) + 1)
-    df["Salary"] = df["gross_salary"]
-    df["Basic"] = df["basic_salary"]
-    df["NO PAY DAYS"] = 0
-    df["Absenteeism"] = df["absent_deduction"]
-    df["Gross Salary"] = df["gross_salary"]
-    df["Deductions"] = df["paye"]
-    df["P.A.Y.E"] = df["paye"]
-    df["N.S.S.F"] = df["nssf_5"]
-    df["S.DRS/ADV"] = df["advance_drs"]
-    df["Other"] = df["other_deductions"]
-    df["Total Deductions"] = df["paye"] + df["nssf_5"] + df["advance_drs"] + df["other_deductions"] + df["lst"]
-    df["Nett Pay"] = df["net_pay"]
-    df["Total Tax on Salary"] = df["paye"]
-    df["10% NSSF"] = df["nssf_10"]
-    df["15% NSSF"] = df["nssf_15"]
-
-    return df[[
-        "NO", "employee", "tin", "designation", "mob_no", "account_no", "nssf_no",
-        "Salary", "Basic", "NO PAY DAYS", "Absenteeism", "Gross Salary", "Deductions",
-        "P.A.Y.E", "N.S.S.F", "S.DRS/ADV", "Other", "Total Deductions", "Nett Pay",
-        "Total Tax on Salary", "10% NSSF", "15% NSSF"
-    ]]
-
-def show_payroll():
-    tenant = st.session_state.get("tenant_id")
-    role = st.session_state.get("role")
-
-    if not tenant or role != "Admin":
-        st.error("🔒 Restricted: Access requires Administrator elevation.")
+def show_payroll:
+    """
+    Handles employee compensation, tax compliance (PAYE/LST), 
+    and NSSF contributions. Includes a professional printable report.
+    Isolated by tenant_id for SaaS architecture.
+    """
+    if st.session_state.get("role") != "Admin":
+        st.error("🔒 Restricted Access: Only Administrators can process payroll.")
         return
 
-    st.markdown("<h2 style='color:#4A90E2;'>🧾 Payroll</h2>", unsafe_allow_html=True)
+    # Safeguard: Ensure a valid tenant context exists before loading page resources
+    if not tenant_id:
+        st.error("❌ Access Denied: No valid tenant context detected.")
+        return
 
-    payroll_df = get_cached_data("payroll")
-    if payroll_df is not None and not payroll_df.empty:
-        payroll_df.columns = payroll_df.columns.astype(str).str.strip().str.replace(" ", "_")
-        payroll_df = payroll_df[payroll_df["tenant_id"].astype(str) == str(tenant)]
+    st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
+
+    # 1. SYNC COLUMNS (Scoped by tenant_id)
+    df = get_cached_data("Payroll", tenant_id=tenant_id)
+    required_columns = [
+        "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
+        "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
+        "PAYE", "NSSF_5", "Advance_DRS", "Other_Deductions", "Net_Pay", 
+        "NSSF_10", "NSSF_15", "Date"
+    ]
+    
+    if df.empty:
+        df = pd.DataFrame(columns=required_columns)
     else:
-        payroll_df = pd.DataFrame()
+        df.columns = df.columns.str.strip().str.replace(" ", "_")
+        for col in required_columns:
+            if col not in df.columns: df[col] = 0
+        df = df.fillna(0)
 
-    employee_list = []
-    if not payroll_df.empty and "employee" in payroll_df.columns:
-        employee_list = sorted(payroll_df["employee"].dropna().astype(str).unique())
+    def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
+        # 1. Gross Calculation
+        gross = (float(basic) + float(arrears)) - float(absent_deduct)
+        
+        # 2. Local Service Tax (LST) Logic
+        lst = 100000 / 12 if gross > 1000000 else 0
+        
+        # 3. NSSF Logic (Calculated but NOT subtracted from tax base)
+        n5 = gross * 0.05
+        n10 = gross * 0.10
+        n15 = n5 + n10
+        
+        # 4. --- THE EXCEL MATCHING PAYE LOGIC ---
+        # Based on your sheet: Tax = 25,000 + (30% * (Gross - 410,000))
+        paye = 0
+        if gross > 410000:
+            excess = gross - 410000
+            paye = 25000 + (0.30 * excess)
+        elif gross > 235000:
+            # Lower tier fallback
+            paye = (gross - 235000) * 0.10
+            
+        # 5. Final Deductions & Net Pay
+        # Deductions = PAYE + LST + NSSF(5%) + Advance + Other
+        total_deductions = paye + lst + n5 + float(advance) + float(other)
+        net = gross - total_deductions
+        
+        return {
+            "gross": round(gross), "lst": round(lst), "n5": round(n5), 
+            "n10": round(n10), "n15": round(n15), "paye": round(paye), "net": round(net)
+        }
 
-    tab_process, tab_history = st.tabs(["💳 Process Payroll", "📜 Payroll History"])
+    tab_process, tab_logs = st.tabs(["➕ Process Salary", "📜 Payroll History"])
 
     with tab_process:
-        # UI Safety Container to encapsulate errors without cutting off app framework execution
-        validation_failed = False
-        
-        with st.form("payroll_form", clear_on_submit=True):
-            st.subheader("👤 Employee Info")
-            selected_emp = st.selectbox("Select Employee", employee_list) if employee_list else None
-            new_emp = st.text_input("Or Enter New Employee")
-            employee_name = new_emp if new_emp else selected_emp
+        with st.form("new_payroll_form", clear_on_submit=True):
+            st.markdown("<h4 style='color: #2B3F87;'>👤 Employee Details</h4>", unsafe_allow_html=True)
+            name = st.text_input("Employee Name")
+            c1, c2, c3 = st.columns(3); f_tin = c1.text_input("TIN"); f_desig = c2.text_input("Designation"); f_mob = c3.text_input("Mob No.")
+            c4, c5 = st.columns(2); f_acc = c4.text_input("Account No."); f_nssf_no = c5.text_input("NSSF No.")
+            st.write("---"); st.markdown("<h4 style='color: #2B3F87;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
+            c6, c7, c8 = st.columns(3); f_arrears = c6.number_input("ARREARS", min_value=0.0); f_basic = c7.number_input("SALARY (Basic)", min_value=0.0); f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
+            c9, c10 = st.columns(2); f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0); f_other = c10.number_input("Other Deductions", min_value=0.0)
 
-            c1, c2, c3 = st.columns(3)
-            f_tin = c1.text_input("TIN")
-            f_desig = c2.text_input("Designation")
-            f_mob = c3.text_input("Mobile")
-
-            c4, c5 = st.columns(2)
-            f_acc = c4.text_input("Account No")
-            f_nssf = c5.text_input("NSSF No")
-
-            st.subheader("💰 Earnings & Deductions")
-            f_apply_lst = st.checkbox("Deduct Local Service Tax (LST)?", value=True)
-
-            c6, c7, c8 = st.columns(3)
-            f_arrears = c6.number_input("Arrears", min_value=0.0)
-            f_basic = c7.number_input("Basic Salary", min_value=0.0)
-            f_absent = c8.number_input("Absent Deduction", min_value=0.0)
-
-            c9, c10 = st.columns(2)
-            f_adv = c9.number_input("Advance", min_value=0.0)
-            f_other = c10.number_input("Other Deductions", min_value=0.0)
-
-            if st.form_submit_button("💳 Save Payroll"):
-                if not employee_name or f_basic <= 0:
-                    st.error("⚠️ Entry Blocked: Valid employee selection and non-zero baseline basic salary required.")
-                    validation_failed = True
-                
-                month_str = datetime.now().strftime("%Y-%m")
-                if not payroll_df.empty and not validation_failed:
-                    duplicate = payroll_df[(payroll_df["employee"] == employee_name) & (payroll_df["month"] == month_str)]
-                    if not duplicate.empty:
-                        st.warning("⚠️ Warning: Statement submission skipped. Payroll run already registered for this month.")
-                        validation_failed = True
-
-                if not validation_failed:
-                    calc = compute_payroll(f_basic, f_arrears, f_absent, f_adv, f_other, apply_lst=f_apply_lst)
-
+            if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
+                if name and f_basic > 0:
+                    calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
                     new_row = pd.DataFrame([{
-                        "payroll_id": str(uuid.uuid4()),
-                        "employee": employee_name,
-                        "tin": f_tin,
-                        "designation": f_desig,
-                        "mob_no": f_mob,
-                        "account_no": f_acc,
-                        "nssf_no": f_nssf,
-                        "arrears": f_arrears,
-                        "basic_salary": f_basic,
-                        "absent_deduction": f_absent,
-                        "gross_salary": calc["gross"],
-                        "lst": calc["lst"],
-                        "paye": calc["paye"],
-                        "nssf_5": calc["n5"],
-                        "nssf_10": calc["n10"],
-                        "nssf_15": calc["n15"],
-                        "advance_drs": f_adv,
-                        "other_deductions": f_other,
-                        "net_pay": calc["net"],
-                        "date": datetime.utcnow().isoformat(),
-                        "month": month_str,
-                        "tenant_id": str(tenant)
+                        "Payroll_ID": int(df["Payroll_ID"].max() + 1) if not df.empty else 1,
+                        "Employee": name, "TIN": f_tin, "Designation": f_desig, "Mob_No": f_mob,
+                        "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
+                        "Basic_Salary": f_basic, "Absent_Deduction": f_absent,
+                        "Gross_Salary": calc['gross'], "LST": calc['lst'], "PAYE": calc['paye'],
+                        "NSSF_5": calc['n5'], "NSSF_10": calc['n10'], "NSSF_15": calc['n15'],
+                        "Advance_DRS": f_adv, "Other_Deductions": f_other, "Net_Pay": calc['net'],
+                        "Date": datetime.now().strftime("%Y-%m-%d")
                     }])
-
-                    if save_data_saas("payroll", new_row):
-                        st.cache_data.clear()
-                        st.success(f"✅ Saved completely for {employee_name}")
+                    # --- THE CORRECTED SAVE LOGIC (Payroll Fix) ---
+                    # 1. Combine the old data with the new record
+                    final_save_df = pd.concat([df, new_row], ignore_index=True)
+                    
+                    # 2. CRITICAL: Replace all NaN/Blanks with 0 to stop the JSON error
+                    final_save_df = final_save_df.fillna(0)
+                    
+                    # 3. Restore spaces for Google Sheets headers
+                    final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
+                    
+                    # 4. Save to Google Sheets (Scoped by tenant_id)
+                    if save_data("Payroll", final_save_df, tenant_id=tenant_id):
+                        st.success(f"✅ Payroll for {name} saved successfully!")
                         st.rerun()
 
-    with tab_history:
-        if payroll_df.empty:
-            st.info("No current payroll entries found.")
-            return
-
-        st.markdown("### 📊 Payroll Sheet")
-        display_df = format_payroll_display(payroll_df)
-        
-        try:
-            formatted_df = format_with_commas(display_df)
-        except NameError:
-            formatted_df = display_df 
-
-        st.dataframe(formatted_df, use_container_width=True)
-
-        st.markdown("---")
-        st.subheader("🛠️ Manage Records")
-        
-        record_options = payroll_df.apply(lambda x: f"{x['employee']} ({x['month']}) | ID: {x['payroll_id'][:8]}", axis=1).tolist()
-        selected_record_str = st.selectbox("Select a record to Edit or Delete", options=record_options)
-
-        if selected_record_str:
-            sel_id = selected_record_str.split("| ID: ")[1].strip()
-            full_record = payroll_df[payroll_df['payroll_id'].str.contains(sel_id)].iloc[0]
-
-            col_edit, col_del = st.columns(2)
-            with col_edit:
-                if st.button("📝 Edit Selected Record"):
-                    st.warning("To override context: Re-submit entry on processing engine profile utilizing duplicate target month identifier parameters.")
+    with tab_logs:
+        if not df.empty:
+            p_col1, p_col2 = st.columns([4, 1])
+            p_col1.markdown(f"<h3 style='color: #4A90E2;'>{datetime.now().strftime('%B %Y')} Summary</h3>", unsafe_allow_html=True)
             
-            with col_del:
-                if st.button("🗑️ Delete Record", type="primary"):
-                    if delete_data_saas("payroll", {"payroll_id": full_record['payroll_id']}):
-                        st.cache_data.clear()
-                        st.success(f"Deleted payroll allocation for {full_record['employee']}")
-                        st.rerun()
+            def fm(x): 
+                try: return f"{int(float(x)):,}" 
+                except: return "0"
 
-        st.markdown("---")
-        c1, c2 = st.columns(2)
-        with c1:
-            csv = payroll_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                "📄 Download CSV",
-                data=csv,
-                file_name=f"Payroll_{datetime.now().strftime('%Y%m%d')}.csv",
-                use_container_width=True
-            )
-        with c2:
-            excel_file = export_styled_excel(payroll_df)
-            st.download_button(
-                "📥 Download Styled Excel",
-                data=excel_file,
-                file_name=f"Payroll_Styled_{datetime.now().strftime('%B_%Y')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True
-            )
-# ==========================================================
-# 🚀 BALLISTIC FINTECH REPORTS ENGINE (EXPENSE-OPTIMIZED)
-# ==========================================================
-import streamlit as st
-import pandas as pd
-import plotly.express as px 
-from datetime import datetime
+            # --- CALCULATE PAYROLL TOTALS ---
+            t_arrears = df['Arrears'].sum()
+            t_basic = df['Basic_Salary'].sum()
+            t_gross = df['Gross_Salary'].sum()
+            t_paye = df['PAYE'].sum()
+            t_n5 = df['NSSF_5'].sum()
+            t_net = df['Net_Pay'].sum()
+            t_n10 = df['NSSF_10'].sum()
+            t_n15 = df['NSSF_15'].sum()
 
-def show_reports():
+            rows_html = ""
+            for i, r in df.iterrows():
+                rows_html += f"""
+                    <tr>
+                        <td style='text-align:center; border:1px solid #ddd; padding: 10px;'>{i+1}</td>
+                        <td style='border:1px solid #ddd; padding: 10px;'>
+                            <div style="font-weight:bold; font-size:12px;">{r['Employee']}</div>
+                            <div style="font-size:10px; color:#555;">{r.get('Designation', '-')}</div>
+                        </td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Arrears'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['Basic_Salary'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; font-weight:bold;'>{fm(r['Gross_Salary'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['PAYE'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px;'>{fm(r['NSSF_5'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#E3F2FD; font-weight:bold;'>{fm(r['Net_Pay'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4;'>{fm(r['NSSF_10'])}</td>
+                        <td style='text-align:right; border:1px solid #ddd; padding: 10px; background:#FFF9C4; font-weight:bold;'>{fm(r['NSSF_15'])}</td>
+                    </tr>"""
+
+            # --- ADD THE TOTALS ROW TO THE HTML ---
+            rows_html += f"""
+                <tr style="background:#2B3F87; color:white; font-weight:bold;">
+                    <td colspan="2" style="text-align:center; padding:12px; border:1px solid #ddd;">GRAND TOTALS</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_arrears)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_basic)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_gross)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_paye)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n5)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_net)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n10)}</td>
+                    <td style='text-align:right; border:1px solid #ddd; padding: 12px;'>{fm(t_n15)}</td>
+                </tr>"""
+
+            printable_html = f"""
+            <html>
+            <head>
+                <style>
+                    body {{ font-family: sans-serif; padding: 20px; }}
+                    table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+                    th {{ background: #2B3F87; color: white; padding: 10px; border: 1px solid #ddd; }}
+                    @media print {{ @page {{ size: landscape; margin: 1cm; }} }}
+                </style>
+            </head>
+            <body>
+                <div style="text-align:center; border-bottom:3px solid #2B3F87; margin-bottom:20px;">
+                    <h1 style="color:#2B3F87;">ZOE CONSULTS SMC LTD</h1>
+                    <p><b>PAYROLL REPORT - {datetime.now().strftime('%B %Y')}</b></p>
+                </div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>S/N</th><th>Employee</th><th>Arrears</th><th>Basic</th><th>Gross</th>
+                            <th>P.A.Y.E</th><th>NSSF(5%)</th><th>Net Pay</th><th>NSSF(10%)</th><th>NSSF(15%)</th>
+                        </tr>
+                    </thead>
+                    <tbody>{rows_html}</tbody>
+                </table>
+                <div style="margin-top:50px; display:flex; justify-content:space-around;">
+                    <p>___________________<br>Prepared By</p>
+                    <p>___________________<br>Approved By</p>
+                </div>
+            </body>
+            </html>
+            """
+            if p_col2.button("📥 Print PDF", key=f"print_payroll_trigger_{tenant_id}"):
+                st.components.v1.html(printable_html + "<script>window.print();</script>", height=0)
+
+            st.components.v1.html(printable_html, height=600, scrolling=True)
+
+            csv_text = df.to_csv(index=False).encode('utf-8')
+            st.download_button("📄 Download CSV Backup", data=csv_text, file_name=f"Payroll_Zoe_{tenant_id}.csv", mime="text/csv", key=f"download_csv_{tenant_id}")
+            
+            st.write("---")
+            with st.expander("⚙️ Modify / Delete Record"):
+                pay_opts = [f"{r['Employee']} (ID: {r['Payroll_ID']})" for _, r in df.iterrows()]
+                if pay_opts:
+                    sel_opt = st.selectbox("Select Record to Manage", pay_opts, key=f"payroll_edit_selectbox_{tenant_id}")
+                    try:
+                        sid = str(sel_opt.split("(ID: ")[1].replace(")", ""))
+                        item = df[df['Payroll_ID'].astype(str) == sid].iloc[0]
+                        st.text_input("Edit Name (Preview)", value=str(item['Employee']), disabled=True, key=f"payroll_preview_name_{tenant_id}")
+                        st.info("Direct modification of payroll math is locked. Delete and re-process for errors.")
+                        if st.button("🗑️ Delete This Record", use_container_width=True, key=f"payroll_delete_btn_{tenant_id}"):
+                            df_new = df[df['Payroll_ID'].astype(str) != sid]
+                            df_new.columns = [c.replace("_", " ") for c in df_new.columns]
+                            if save_data("Payroll", df_new, tenant_id=tenant_id):
+                                st.warning("Payroll record deleted.")
+                                st.rerun()
+                    except Exception as e:
+                        st.error(f"Selection error: {e}")
+        else:
+            st.info("No payroll records found for this period.")
+# ==============================
+# 21. ADVANCED ANALYTICS & REPORTS
+# ==============================
+
+def show_reports(tenant_id: str):
     """
-    Advanced financial reporting with multi-tenant isolation 
-    and investor-grade intelligence metrics.
+    Consolidates data across all modules to provide high-level 
+    financial health metrics, cash flow trends, and risk assessment.
+    Isolated by tenant_id for SaaS architecture with all Petty Cash elements removed.
     """
-
-    # ==============================
-    # 🎨 HEADER (EXECUTIVE UI)
-    # ==============================
-    st.markdown("""
-    <div style='background: linear-gradient(90deg,#1E3A8A,#2B3F87); padding:20px; border-radius:15px; margin-bottom:25px;'>
-        <h2 style='margin:0; color:white; font-size:24px;'>📊 Financial Intelligence Dashboard</h2>
-        <p style='margin:0; color:#DBEAFE; font-size:13px;'>Real-time P&L, Balance Sheet, and Portfolio Yield Analysis</p>
-    </div>
-    """, unsafe_allow_html=True)
-
-    tenant = st.session_state.get("tenant_id")
-    if not tenant:
-        st.error("Session Expired.")
+    # Safeguard: Ensure a valid tenant context exists before loading page resources
+    if not tenant_id:
+        st.error("❌ Access Denied: No valid tenant context detected.")
         return
 
-    # ==============================
-    # 🛡️ DATA FETCH & TENANT SAFETY
-    # ==============================
-    def safe_tenant_filter(df_name):
-        try:
-            df = get_cached_data(df_name)
-            if df is None or df.empty:
-                return pd.DataFrame()
-            if "tenant_id" in df.columns:
-                return df[df["tenant_id"].astype(str) == str(tenant)].copy()
-            return df
-        except Exception:
-            return pd.DataFrame()
-
-    loans = safe_tenant_filter("loans")
-    payments = safe_tenant_filter("payments")
-    expenses = safe_tenant_filter("expenses")
-    borrowers = safe_tenant_filter("borrowers")
+    st.markdown("<h2 style='color: #4A90E2;'>📊 Advanced Analytics & Reports</h2>", unsafe_allow_html=True)
+    
+    # 1. FETCH DATA (Scoped by tenant_id)
+    loans = get_cached_data("Loans", tenant_id=tenant_id)
+    payments = get_cached_data("Payments", tenant_id=tenant_id)
+    expenses = get_cached_data("Expenses", tenant_id=tenant_id)
+    payroll = get_cached_data("Payroll", tenant_id=tenant_id)
 
     if loans.empty:
-        st.info("💡 No loan data found. Financial reports will populate once loans are issued.")
+        st.info("📈 Record more loans to see your financial analytics.")
         return
 
-    # ==============================
-    # 🧰 REUSABLE HELPERS
-    # ==============================
-    def col_sum(df, col):
-        if df.empty or col not in df.columns: return 0.0
-        return pd.to_numeric(df[col], errors="coerce").fillna(0).sum()
+    # 2. THE ULTIMATE PAYROLL SAFETY CHECK
+    if not isinstance(payroll, pd.DataFrame):
+        payroll = pd.DataFrame()
 
-    def attach_borrower_names(loans_df, borrowers_df):
-        if borrowers_df.empty or "id" not in borrowers_df.columns or "name" not in borrowers_df.columns:
-            loans_df["borrower"] = loans_df.get("borrower", "Unknown")
-            return loans_df
-        borrowers_df["id"] = borrowers_df["id"].astype(str)
-        bor_map = dict(zip(borrowers_df["id"], borrowers_df["name"]))
-        mapped = loans_df["borrower_id"].map(bor_map)
-        loans_df["borrower"] = mapped.fillna(loans_df.get("borrower")).fillna("Unknown")
-        return loans_df
+    # Initializing tax/deduction totals to 0 to prevent local variable errors
+    nssf_total, paye_total = 0, 0
+    
+    if not payroll.empty:
+        # Standardize payroll headers for logic
+        payroll.columns = payroll.columns.str.strip().str.replace(" ", "_")
+        # Use a super-safe way to pull column totals
+        n5 = pd.to_numeric(payroll.get("NSSF_5", 0), errors="coerce").fillna(0).sum()
+        n10 = pd.to_numeric(payroll.get("NSSF_10", 0), errors="coerce").fillna(0).sum()
+        nssf_total = n5 + n10
+        paye_total = pd.to_numeric(payroll.get("PAYE", 0), errors="coerce").fillna(0).sum()
 
-    loans = attach_borrower_names(loans, borrowers)
+    # 3. OTHER DATA SUMS
+    # Standardize column headers for math logic
+    loans.columns = loans.columns.str.strip().str.replace(" ", "_")
+    
+    # Safe Principal Lookup
+    l_amt_col = "Principal" if "Principal" in loans.columns else "Amount"
+    l_amt = pd.to_numeric(loans.get(l_amt_col, 0), errors="coerce").fillna(0).sum()
+    
+    # Other Metric Totals
+    l_int = pd.to_numeric(loans.get("Interest", 0), errors="coerce").fillna(0).sum()
+    p_amt = pd.to_numeric(payments.get("Amount", 0), errors="coerce").fillna(0).sum() if not payments.empty else 0
+    exp_amt = pd.to_numeric(expenses.get("Amount", 0), errors="coerce").fillna(0).sum() if not expenses.empty else 0
+    
+    # 💰 FINANCIAL LOGIC:
+    # Total Outflow = Direct Expenses + Taxes (PAYE/NSSF) | Petty Cash explicitly removed
+    total_outflow = exp_amt + nssf_total + paye_total
+    
+    # Net Profit = Inflows (Payments) - Outflows (Expenses)
+    net_profit = p_amt - total_outflow
 
-    # Ensure numeric safety
-    for col in ["principal", "interest", "cycle_no", "balance"]:
-        if col in loans.columns:
-            loans[col] = pd.to_numeric(loans[col], errors="coerce").fillna(0)
-    
-    loans["status"] = loans["status"].astype(str).str.upper()
-    
-    # ==============================
-    # 🧠 ACTIVE CAPITAL (Cycle 1 ONLY)
-    # ==============================
-    active_capital_loans = loans[
-        (loans["cycle_no"] == 1) &
-        (loans["status"].isin(["ACTIVE", "PENDING"]))
-    ]
-    total_capital_out = active_capital_loans["principal"].sum()
-    
-    # ==============================
-    # 💰 INT. REVENUE (ONLY CLEARED LOANS)
-    # ==============================
-    cleared_loans = loans[loans["status"] == "CLEARED"]
-    projected_interest = cleared_loans["interest"].sum()
-    
-    # ==============================
-    # 💸 GLOBAL OPEX BREAKDOWN (FIXED ONE-SOURCE)
-    # ==============================
-    actual_collected = col_sum(payments, "amount")
-    
-    # All operational tracking (Salaries, NSSF, PAYE, Rent, etc.) are already bundled here
-    total_direct_expenses = col_sum(expenses, "amount")
-    
-    # Single source operational expense tracking
-    global_opex = total_direct_expenses
-    cash_profit = actual_collected - global_opex
-    
-    # ==============================
-    # 💎 KPI TILES
-    # ==============================
-    def render_kpi(title, value, color, icon="💰"):
-        st.markdown(f"""
-            <div style="padding:16px; border-radius:12px; background:white; border:1px solid #E5E7EB; box-shadow:0 2px 4px rgba(0,0,0,0.02); margin-bottom:10px;">
-                <p style="font-size:11px; color:#6B7280; margin:0; font-weight:600;">{icon} {title}</p>
-                <h3 style="margin:0; color:{color}; font-size:20px;">UGX {value:,.0f}</h3>
-            </div>
-        """, unsafe_allow_html=True)
-
+    # 4. KPI DASHBOARD (Soft Blue Branded)
+    st.subheader("🚀 Financial Performance")
     k1, k2, k3, k4 = st.columns(4)
-    with k1: render_kpi("ACTIVE CAPITAL", total_capital_out, "#1E3A8A")
-    with k2: render_kpi("INT. REVENUE", projected_interest, "#059669")
-    with k3: render_kpi("COLLECTIONS", actual_collected, "#7C3AED")
-    with k4: render_kpi("NET CASHFLOW", cash_profit, "#059669" if cash_profit >= 0 else "#DC2626")
-
-    # ==============================
-    # 📈 TREND ANALYSIS
-    # ==============================
-    st.markdown("### 📈 Monthly Profit & Loss Trend", unsafe_allow_html=True)
-
-    payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
-    expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
-
-    if not payments.empty:
-        inc_m = payments.set_index("date").resample("ME")["amount"].sum()
-        inc_m.name = "Income"
-    else:
-        inc_m = pd.Series(dtype=float, name="Income")
-
-    if not expenses.empty:
-        exp_m = expenses.set_index("date").resample("ME")["amount"].sum()
-        exp_m.name = "Expenses"
-    else:
-        exp_m = pd.Series(dtype=float, name="Expenses")
-        
-    pl_combined = pd.concat([inc_m, exp_m], axis=1).fillna(0)
-    pl_combined["Net"] = pl_combined["Income"] - pl_combined["Expenses"]
-
-    if not pl_combined.empty and pl_combined.index.notnull().any():
-        fig_trend = px.area(
-            pl_combined,
-            color_discrete_map={"Income": "#059669", "Expenses": "#EF4444", "Net": "#1E3A8A"},
-            line_shape="spline",
-            labels={"index":"Month", "value":"UGX"}
-        )
-        fig_trend.update_layout(
-            hovermode="x unified",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        st.plotly_chart(fig_trend, use_container_width=True)
-    else:
-        st.info("📉 No trend data available yet.")
-
-    # ==============================
-    # 🧠 INVESTOR INTELLIGENCE METRICS
-    # ==============================
-    overdue_loans = loans[loans["status"].str.contains("OVERDUE", na=False)]
-    par_value = col_sum(overdue_loans, "balance")
-    par_ratio = (par_value / total_capital_out * 100) if total_capital_out > 0 else 0
-    yield_pct = (projected_interest / total_capital_out * 100) if total_capital_out > 0 else 0
-    coll_eff = (actual_collected / (total_capital_out + projected_interest) * 100) if (total_capital_out + projected_interest) > 0 else 0
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Portfolio Yield", f"{yield_pct:.1f}%")
-    m2.metric("Collection Eff.", f"{coll_eff:.1f}%")
-    m3.metric("PAR Ratio", f"{par_ratio:.1f}%", delta=f"{par_ratio:.1f}%", delta_color="inverse")
-    m4.metric("OpEx Ratio", f"{(global_opex/actual_collected*100 if actual_collected > 0 else 0):.1f}%")
-
-    # ==============================
-    # 🧾 FINANCIAL STATEMENTS (CYCLE-AWARE)
-    # ==============================
-    def fiscal_year(dt):
-        if pd.isna(dt): return "Unknown"
-        return f"{dt.year}-{dt.year+1}" if dt.month >= 7 else f"{dt.year-1}-{dt.year}"
     
-    loans["start_date"] = pd.to_datetime(loans.get("start_date"), errors="coerce")
-    payments["date"] = pd.to_datetime(payments.get("date"), errors="coerce")
-    expenses["date"] = pd.to_datetime(expenses.get("date"), errors="coerce")
+    k1.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">CAPITAL ISSUED</p><h4 style="margin:0;color:#4A90E2;">{l_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
+    k2.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">INTEREST ACCRUED</p><h4 style="margin:0;color:#4A90E2;">{l_int:,.0f}</h4></div>""", unsafe_allow_html=True)
+    k3.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">COLLECTIONS</p><h4 style="margin:0;color:#2E7D32;">{p_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
     
-    loans["fiscal_year"] = loans["start_date"].apply(fiscal_year)
-    payments["fiscal_year"] = payments["date"].apply(fiscal_year)
-    expenses["fiscal_year"] = expenses["date"].apply(fiscal_year)
-    
-    fiscal_years = sorted([fy for fy in loans["fiscal_year"].dropna().unique() if fy != "Unknown"])
-    
-    if not fiscal_years:
-        st.info("⏳ Waiting for structured historical records to compile statement tabs.")
-        return
+    p_color = "#2E7D32" if net_profit >= 0 else "#FF4B4B"
+    k4.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid {p_color};box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">NET PROFIT</p><h4 style="margin:0;color:{p_color};">{net_profit:,.0f}</h4></div>""", unsafe_allow_html=True)
 
-    selected_fy = st.selectbox("Select Financial Year", fiscal_years)
-    
-    fy_loans = loans[loans["fiscal_year"] == selected_fy]
-    fy_expenses = expenses[expenses["fiscal_year"] == selected_fy]
-    fy_payments = payments[payments["fiscal_year"] == selected_fy]
-    
-    # ------------------------------
-    # 💰 INCOME STATEMENT (P&L)
-    # ------------------------------
-    s1, s2 = st.columns(2)
-    with s1:
-        st.subheader(f"💰 Profit & Loss — FY {selected_fy}")
-        
-        fy_active_capital = fy_loans[
-            (fy_loans["cycle_no"] == 1) & 
-            (fy_loans["status"].isin(["ACTIVE", "PENDING"]))
-        ]["principal"].sum()
-        
-        int_revenue = fy_loans[fy_loans["status"] == "CLEARED"]["interest"].sum()
-        
-        # Pulling unified calculations from expenses (Salaries + Tax already covered inside)
-        fy_direct_exp = col_sum(fy_expenses, "amount")
-        
-        fy_total_opex = fy_direct_exp
-        net_profit = int_revenue - fy_total_opex
-        
-        st.dataframe(pd.DataFrame({
-            "Description": [
-                "Active Capital (Cycle 1 ACTIVE/PENDING)",
-                "Interest Revenue (CLEARED Loans)",
-                "Total Operating Expenses (OPEX)",
-                "Net Profit"
-            ],
-            "amount (UGX)": [
-                f"{fy_active_capital:,.0f}",
-                f"{int_revenue:,.0f}",
-                f"{fy_total_opex:,.0f}",
-                f"{net_profit:,.0f}"
-            ]
-        }), use_container_width=True)
-    
-    # ------------------------------
-    # 🏦 BALANCE SHEET SNAPSHOT
-    # ------------------------------
-    with s2:
-        st.subheader(f"🏦 Balance Sheet — FY {selected_fy}")
-        
-        # Outstanding Loan portfolio current asset valuation
-        loan_book_value = fy_loans["balance"].sum()
-        
-        # Cash on Hand = Inflow collections minus outflow expenses
-        cash_position = col_sum(fy_payments, "amount") - fy_total_opex
-        
-        # Total Asset valuation metric
-        total_assets = loan_book_value + cash_position
-        
-        st.dataframe(pd.DataFrame({
-            "Description": [
-                "Loan Book Portfolio Value (Outstanding Principal + Accrued)",
-                "Cash & Cash Equivalents",
-                "Total Assets"
-            ],
-            "amount (UGX)": [
-                f"{loan_book_value:,.0f}",
-                f"{cash_position:,.0f}",
-                f"{total_assets:,.0f}"
-            ]
-        }), use_container_width=True)
-    
-    # ==============================
-    # 📤 EXPORT
-    # ==============================
-    with st.expander(f"📥 Export Executive Report — FY {selected_fy}"):
-        export_rows = [{
-            "Fiscal Year": selected_fy,
-            "Active Capital": fy_active_capital,
-            "Interest Revenue": int_revenue,
-            "Total OPEX": fy_total_opex,
-            "Net Profit": net_profit,
-            "Cash Position": cash_position,
-            "Loan Book Value": loan_book_value,
-            "Total Assets": total_assets
-        }]
-        
-        export_df = pd.DataFrame(export_rows)
-        st.dataframe(export_df)
-        
-        csv = export_df.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="⬇️ Download Full Executive Report (CSV)",
-            data=csv,
-            file_name=f"FinReport_{selected_fy}_{datetime.now().strftime('%Y%m%d')}.csv",
-            mime="text/csv",
-            use_container_width=True
-        )
+    st.markdown("<br>", unsafe_allow_html=True)
 
+    # 5. VISUAL ANALYTICS
+    st.markdown("---")
+    col_left, col_right = st.columns(2)
+
+    with col_left:
+        st.write("**💰 Income vs. Expenses (Monthly)**")
+        if not payments.empty:
+            pay_copy = payments.copy()
+            pay_copy.columns = pay_copy.columns.str.strip().str.replace(" ", "_")
+            pay_copy["Date"] = pd.to_datetime(pay_copy.get("Date"), errors='coerce')
+            inc_trend = pay_copy.groupby(pay_copy["Date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
+            
+            exp_copy = expenses.copy() if not expenses.empty else pd.DataFrame(columns=["Amount", "Date"])
+            if not exp_copy.empty:
+                exp_copy.columns = exp_copy.columns.str.strip().str.replace(" ", "_")
+                exp_copy["Date"] = pd.to_datetime(exp_copy.get("Date"), errors='coerce')
+                exp_trend = exp_copy.groupby(exp_copy["Date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
+            else:
+                exp_trend = pd.DataFrame(columns=["Date", "Amount"])
+
+            # Merge trends for comparison bar chart
+            merged = pd.merge(inc_trend, exp_trend, on="Date", how="outer").fillna(0)
+            merged.columns = ["Month", "Income", "Expenses"]
+            
+            fig_bar = px.bar(merged, x="Month", y=["Income", "Expenses"], barmode="group",
+                             color_discrete_map={"Income": "#00ffcc", "Expenses": "#FF4B4B"})
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_bar, use_container_width=True, key=f"income_vs_expense_{tenant_id}")
+        else:
+            st.info("No payment data to chart.")
+
+    with col_right:
+        st.write("**🛡️ Portfolio Weight (Top 5)**")
+        if not loans.empty:
+            # Safe Principal/Amount lookup based on normalized column names
+            val_col = "Principal" if "Principal" in loans.columns else "Amount"
+            top_borrowers = loans.groupby("Borrower")[val_col].sum().sort_values(ascending=False).head(5).reset_index()
+            top_borrowers.columns = ["Borrower", "Total_Loaned"]
+            
+            fig_pie = px.pie(top_borrowers, names="Borrower", values="Total_Loaned", hole=0.5,
+                             color_discrete_sequence=px.colors.sequential.GnBu_r)
+            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)')
+            st.plotly_chart(fig_pie, use_container_width=True, key=f"portfolio_weight_{tenant_id}")
+        else:
+            st.info("No loan data for portfolio analysis.")
+
+    # 6. RISK INDICATOR
+    st.markdown("---")
+    st.subheader("🚨 Risk Assessment")
+    
+    val_col = "Principal" if "Principal" in loans.columns else "Amount"
+    overdue_mask = loans["Status"].isin(["Overdue", "Rolled/Overdue"])
+    overdue_val = pd.to_numeric(loans.loc[overdue_mask, val_col], errors="coerce").fillna(0).sum()
+    
+    risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
+    
+    r1, r2 = st.columns([2, 1])
+    
+    with r1:
+        st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
+        st.progress(min(float(risk_percent) / 100, 1.0), key=f"risk_progress_{tenant_id}")
+        st.write(f"Total Overdue: **{overdue_val:,.0f} UGX**")
+        
+    with r2:
+        if risk_percent < 10: 
+            st.success("✅ Healthy Portfolio")
+        elif risk_percent < 25: 
+            st.warning("⚠️ Moderate Risk")
+        else: 
+            st.error("🆘 Critical Risk Level")
             
 # ==========================================================
 # 🚨 OVERDUE TRACKER & ACTIVITY CALENDAR ENGINE (WITH NAMES)
@@ -2953,493 +2386,339 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-try:
-    from streamlit_calendar import calendar as st_calendar
-except ImportError:
-    def st_calendar(*args, **kwargs):
-        st.warning("⚠️ 'streamlit-calendar' library missing. Please install it.")
-
-def show_overdue_tracker():
+def show_overdue_tracker:
     """
-    Tracks overdue loans with AI-style risk scoring, tenant isolation,
-    and clear borrower naming context.
+    Collections & Overdue Tracker (The Master Engine)
+    Multi-tenant version ensuring isolated data fetching, processing, and persistence.
     """
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    current_tenant = st.session_state.get('tenant_id')
-
-    # ==============================
-    # 🎨 UI SYSTEM
-    # ==============================
-    st.markdown("""
-    <style>
-    .glass-card {
-        backdrop-filter: blur(10px);
-        background: linear-gradient(145deg, rgba(255,255,255,0.9), rgba(245,247,255,0.8));
-        border-radius: 16px;
-        padding: 20px;
-        border: 1px solid rgba(239, 68, 68, 0.1);
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    }
-    .metric-title { font-size: 11px; color: #6b7280; font-weight: 600; text-transform: uppercase; }
-    .metric-value { font-size: 24px; font-weight: 700; margin-top: 4px; }
-    .ai-badge {
-        background: #F0F4FF;
-        color: #2B3F87;
-        padding: 2px 8px;
-        border-radius: 8px;
-        font-size: 10px;
-        font-weight: bold;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown(f"<h2 style='color:{brand_color};'>🚨 AI Overdue Intelligence</h2>", unsafe_allow_html=True)
-
-    # ==============================
-    # 📥 FETCH & UNIFY DATA
-    # ==============================
-    loans_df = get_cached_data("loans")
-    borrowers_df = get_cached_data("borrowers")
-    
-    if loans_df is None or loans_df.empty:
-        st.info("📅 No loan records found in the system.")
+    # Safeguard: Ensure a valid tenant context exists before execution
+    if not tenant_id:
+        st.error("❌ Access Denied: No valid tenant context detected.")
         return
 
-    # 🛡️ Tenant Isolation
-    loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
-    
-    if "due_date" not in loans_df.columns and "end_date" in loans_df.columns:
-        loans_df["due_date"] = loans_df["end_date"]
+    st.markdown("### 🚨 Loan Overdue & Rollover Tracker")
 
-    required_cols = ["id", "amount", "due_date", "borrower_id", "status"]
-    for col in required_cols:
-        if col not in loans_df.columns: loans_df[col] = None
+    # 1. --- THE AUTO-REFILL GATEKEEPER ---
+    if st.button("🔄 Refresh Data from Sheets", use_container_width=True):
+        with st.spinner("🧹 Clearing cache and re-syncing..."):
+            st.cache_data.clear() 
+            st.session_state.loans = get_cached_data("Loans", tenant_id=tenant_id)
+            st.session_state.ledger = get_cached_data("Ledger", tenant_id=tenant_id)
+            st.rerun()
 
-    loans_df["amount"] = pd.to_numeric(loans_df["amount"], errors="coerce").fillna(0)
-    loans_df["due_date"] = pd.to_datetime(loans_df["due_date"], errors="coerce")
-    
-    # 👤 MAPPED NAMES INTELLIGENCE
-    if borrowers_df is not None and not borrowers_df.empty:
-        borrowers_df['id'] = borrowers_df['id'].astype(str)
-        loans_df['borrower_id'] = loans_df['borrower_id'].astype(str)
-        bor_map = dict(zip(borrowers_df['id'], borrowers_df['name']))
-        loans_df['borrower'] = loans_df['borrower_id'].map(bor_map).fillna("Unknown Borrower")
-    else:
-        loans_df['borrower'] = "Unknown Borrower"
-
-    # Filter out finalized accounts
-    active_df = loans_df[~loans_df["status"].astype(str).str.upper().isin(["PAID", "CLOSED", "CLEARED"])].copy()
-
-    if active_df.empty:
-        st.success("✅ Great job! All loans are currently up to date or cleared.")
-        return
-
-    # ==============================
-    # 🧠 AI RISK SCORING ENGINE
-    # ==============================
-    today = pd.Timestamp.today().normalize()
-    active_df["days_overdue"] = (today - active_df["due_date"]).dt.days
-    overdue_df = active_df[active_df["days_overdue"] > 0].copy()
-
-    if overdue_df.empty:
-        st.success("🎉 No overdue payments detected today.")
-        return
-
-    def compute_risk_score(row):
-        score = 0
-        score += min(row["days_overdue"] * 1.5, 50) 
-        if row["amount"] > 1000000: score += 30      
-        elif row["amount"] > 500000: score += 20
-        elif row["amount"] > 100000: score += 10
-        if row["days_overdue"] > 30: score += 20    
-        return min(score, 100)
-
-    overdue_df["risk_score"] = overdue_df.apply(compute_risk_score, axis=1)
-
-    def classify_risk(score):
-        if score >= 75: return "🔴 High Risk"
-        elif score >= 40: return "🟠 Watch"
-        return "🟢 Stable"
-
-    overdue_df["risk_level"] = overdue_df["risk_score"].apply(classify_risk)
-
-    # ==============================
-    # 💎 KPI DASHBOARD
-    # ==============================
-    total_count = len(overdue_df)
-    critical_count = len(overdue_df[overdue_df["risk_score"] >= 75])
-    total_exposure = overdue_df["amount"].sum()
-
-    c1, c2, c3 = st.columns(3)
-    c1.markdown(f"""<div class="glass-card"><div class="metric-title">Overdue Cases</div><div class="metric-value">{total_count}</div></div>""", unsafe_allow_html=True)
-    c2.markdown(f"""<div class="glass-card"><div class="metric-title">Critical Attention</div><div class="metric-value" style="color:#EF4444;">{critical_count}</div></div>""", unsafe_allow_html=True)
-    c3.markdown(f"""<div class="glass-card"><div class="metric-title">Total Exposure</div><div class="metric-value">UGX {total_exposure:,.0f}</div></div>""", unsafe_allow_html=True)
-
-    # ==============================
-    # 🔍 FILTER & SEARCH
-    # ==============================
-    st.markdown("<br>", unsafe_allow_html=True)
-    f1, f2 = st.columns([1, 2])
-    risk_filter = f1.selectbox("Filter Risk", ["All Levels", "🔴 High Risk", "🟠 Watch", "🟢 Stable"])
-    search = f2.text_input("🔍 Search borrower or Loan ID", key="overdue_search_input")
-
-    display_df = overdue_df.copy()
-    if risk_filter != "All Levels":
-        display_df = display_df[display_df["risk_level"] == risk_filter]
-    if search:
-        display_df = display_df[display_df.astype(str).apply(lambda row: row.str.lower().str.contains(search.lower()).any(), axis=1)]
-
-    # ==============================
-    # 🎨 AI RANKED TABLE (NOW WITH NAMES)
-    # ==============================
-    st.markdown("### 🔥 Collection Priority List")
-    
-    if not display_df.empty:
-        st.dataframe(
-            display_df.sort_values("risk_score", ascending=False)[
-                ["borrower", "days_overdue", "amount", "risk_level", "risk_score", "id"]
-            ].rename(columns={
-                "borrower": "Borrower Name",  # Added Context
-                "days_overdue": "Days Late",
-                "amount": "Balance (UGX)",
-                "risk_level": "Risk Level",
-                "risk_score": "Score/100",
-                "id": "Loan ID"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-    else:
-        st.info("No records match the current filters.")
-
-    # ==============================
-    # 🧠 SMART INSIGHT PANEL (NOW WITH NAMES)
-    # ==============================
-    st.markdown("<br>", unsafe_allow_html=True)
-    try:
-        worst_case = overdue_df.loc[overdue_df["risk_score"].idxmax()]
-        st.markdown(f"""
-        <div class="glass-card" style="border-left: 5px solid #EF4444;">
-            <span class="ai-badge">AI ANALYTICS</span><br><br>
-            <b>Priority Alert:</b> Account <b>{worst_case['borrower']}</b> (Loan #{worst_case['id']}) requires immediate field intervention.<br>
-            It is <b>{int(worst_case['days_overdue'])} days</b> overdue with a risk score of <b>{worst_case['risk_score']:.0f}/100</b>.<br>
-            <p style="font-size:12px; color:#666; margin-top:10px;"><i>Strategy: Debt has entered the critical recovery phase. Check collateral status immediately.</i></p>
-        </div>
-        """, unsafe_allow_html=True)
-    except Exception:
-        pass
-
-    # ==============================
-    # ⚙️ QUICK ACTIONS (NOW WITH NAMES)
-    # ==============================
-    with st.expander("⚙️ Recovery Actions"):
-        # Format the selection row to instantly communicate who the human borrower is
-        action_options = overdue_df.apply(lambda x: f"Name: {x['borrower']} | ID: {x['id']} | Late: {x['days_overdue']} days", axis=1).tolist()
-        
-        if action_options:
-            target_loan = st.selectbox("Select Loan to Action", action_options)
-            
-            # Extract out the ID correctly by capturing everything between "ID: " and the following break pipeline
-            sel_id = target_loan.split(" | ID: ")[1].split(" | ")[0]
-            sel_name = target_loan.split("Name: ")[1].split(" | ")[0]
-            
-            act1, act2 = st.columns(2)
-            if act1.button("📞 Log Contact Made", use_container_width=True):
-                st.toast(f"Contact log updated for {sel_name} (Loan #{sel_id})")
-                
-            if act2.button("✅ Mark Fully Recovered", use_container_width=True):
-                update_data = pd.DataFrame([{"id": sel_id, "status": "Paid", "tenant_id": str(current_tenant)}])
-                if save_data_saas("loans", update_data):
-                    st.success(f"Loan #{sel_id} for {sel_name} moved to Paid status.")
-                    st.cache_data.clear()
-                    st.rerun()
+    # --- STEP 1: LOAD ALL NECESSARY DATA UPFRONT (INDENTED) ---
+    # Attempt to pull from session state; if empty or missing, explicitly fetch using tenant context
+    loans = st.session_state.get("loans", pd.DataFrame())
+    if loans.empty:
+        loans = get_cached_data("Loans", tenant_id=tenant_id)
+        if loans is not None and not loans.empty:
+            st.session_state.loans = loans
         else:
-            st.info("No overdue loans to process.")
+            loans = pd.DataFrame()
 
+    ledger = st.session_state.get("ledger", pd.DataFrame())
+    if ledger.empty:
+        ledger = get_cached_data("Ledger", tenant_id=tenant_id)
+        if ledger is not None and not ledger.empty:
+            st.session_state.ledger = ledger
+        else:
+            ledger = pd.DataFrame()
+
+    today = datetime.now()
+
+    # We pre-calculate overdue_df so it's ready for the button click
+    overdue_df = pd.DataFrame()
+    if not loans.empty:
+        temp_loans = loans.copy()
+        temp_loans.columns = temp_loans.columns.str.strip().str.replace(" ", "_")
+        temp_loans['End_Date'] = pd.to_datetime(temp_loans['End_Date'], errors='coerce')
+        overdue_df = temp_loans[
+            (temp_loans['Status'].isin(["Active", "Overdue", "Rolled/Overdue"])) & 
+            (temp_loans['End_Date'] < today)
+        ].copy()
+
+    # 2. --- PREP WORKING DATA ---
+    if loans.empty:
+        st.info("💡 No active loan records found. The system is currently clear!")
+        return
+
+    loans_work = loans.copy()
+    loans_work.columns = loans_work.columns.str.strip().str.replace(" ", "_")
+
+    # 7. --- PREP LEDGER BALANCES ---
+    latest_ledger = pd.DataFrame()
+    if not ledger.empty:
+        ledger_work = ledger.copy()
+        ledger_work.columns = ledger_work.columns.str.strip().str.replace(" ", "_")
+        if "Loan_ID" in ledger_work.columns:
+            ledger_work['Date'] = pd.to_datetime(ledger_work.get('Date'), errors='coerce')
+            latest_ledger = ledger_work.sort_values('Date').groupby("Loan_ID").tail(1)
+
+    # 8. --- ROLLOVER BUTTON (The History-Building Engine) ---
+    st.markdown("---") 
+    if st.button("🔄 Execute Monthly Rollover (Compound All)", use_container_width=True):
+        updated_df = loans_work.copy() 
+        new_rows_list = []
+        count = 0
+        
+        try: 
+            # FORCE NUMERIC: This kills the "stubborn balance" issue
+            money_cols = ['Principal', 'Interest', 'Balance', 'Total_Repayable', 'Amount_Paid']
+            for col in money_cols:
+                if col in updated_df.columns:
+                    updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
+
+            # Targets: Find active 'Pending' rows or Fallback to Overdue
+            targets = updated_df[updated_df['Status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
+            if targets.empty:
+                targets = overdue_df.copy()
+
+            if targets.empty:
+                st.info("No loans currently require a rollover cycle.")
+            else:
+                for i, r in targets.iterrows():
+                    if i in updated_df.index:
+                        # 1. Archive the old row
+                        updated_df.at[i, 'Status'] = "BCF"
+
+                        # 2. THE ULTIMATE MATH FIX
+                        old_p = float(r.get('Principal', 0))
+                        old_i = float(r.get('Interest', 0))
+                        
+                        # New Basis = 514,000 (Old P + Old I)
+                        new_basis = old_p + old_i
+                        # New Interest = 15,420 (3% of 514k)
+                        new_month_interest = new_basis * 0.03
+                        # Final Balance = 529,420
+                        compounded_balance = new_basis + new_month_interest
+                        
+                        # Date Math
+                        orig_end = pd.to_datetime(r['End_Date'], errors='coerce')
+                        new_start = orig_end if pd.notna(orig_end) else datetime.now()
+                        new_end = new_start + pd.DateOffset(months=1)
+
+                        # 3. Create New Cycle Row
+                        new_row = r.copy()
+                        new_row['Start_Date'] = new_start.strftime('%Y-%m-%d')
+                        new_row['End_Date'] = new_end.strftime('%Y-%m-%d')
+                        new_row['Principal'] = new_basis
+                        new_row['Interest'] = new_month_interest
+                        new_row['Balance'] = compounded_balance 
+                        new_row['Total_Repayable'] = compounded_balance
+                        new_row['Amount_Paid'] = 0
+                        new_row['Status'] = "Pending" 
+                        new_row['Balance_B/F'] = new_basis 
+                        
+                        new_rows_list.append(new_row)
+                        count += 1
+
+                if new_rows_list:
+                    new_entries_df = pd.DataFrame(new_rows_list)
+                    combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
+                    id_col = 'Loan_ID' if 'Loan_ID' in combined_df.columns else 'Loan ID'
+                    updated_df = combined_df.sort_values(by=[id_col, 'Start_Date'], ascending=[True, True])
+
+                # 6. --- THE CORRECTED SAVE BLOCK ---
+                # We use .fillna(0) to ensure Google Sheets doesn't crash on empty numbers
+                save_ready_df = updated_df.fillna(0).copy()
+                save_ready_df.columns = [col.replace("_", " ") for col in save_ready_df.columns]
+                
+                # Critical: Save back using the isolated tenant context
+                if save_data("Loans", save_ready_df, tenant_id=tenant_id):
+                    st.success(f"✅ Compounding Successful! Added {count} rows.")
+                    st.cache_data.clear() 
+                    st.session_state.loans = get_cached_data("Loans", tenant_id=tenant_id)
+                    st.rerun()
+        except Exception as e:
+            st.error(f"🚨 Rollover Error: {str(e)}")
+
+    # 9. --- TABLE DISPLAY (Branded & Formatted) ---
+    def style_status_colors(s):
+        if s == "BCF": return "background-color: #FFA500; color: white;" # Orange
+        if s == "Pending": return "background-color: #D32F2F; color: white;" # Red
+        if s == "Closed": return "background-color: #2E7D32; color: white;" # Green
+        return ""
+
+    st.markdown("### 🏦 All Loan Records")
+    
+    try:
+        display_df = st.session_state.get("loans", loans).copy()
+        display_df.columns = display_df.columns.str.strip().str.replace(" ", "_")
+
+        # Push Status to the end for Luxe view
+        if 'Status' in display_df.columns:
+            cols = [c for c in display_df.columns if c != 'Status'] + ['Status']
+            display_df = display_df[cols]
+
+        fmt_dict = {
+            "Principal": "{:,.0f}", "Balance": "{:,.0f}", "Interest": "{:,.0f}",
+            "Total_Repayable": "{:,.0f}", "Amount_Paid": "{:,.0f}", "Balance_B/F": "{:,.0f}"
+        }
+        actual_fmt = {k: v for k, v in fmt_dict.items() if k in display_df.columns}
+
+        styled_df = display_df.style.map(style_status_colors, subset=['Status']).format(actual_fmt)
+        st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    except Exception as e:
+        st.error(f"Display Error: {str(e)}")
+        st.dataframe(loans, use_container_width=True, hide_index=True)
 
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def show_calendar():
+# ==============================
+# 17. ACTIVITY CALENDAR PAGE
+# ==============================
+def show_calendar(tenant_id: str):
     """
-    Displays the modern collection control page showing ONLY active 
-    loans with a PENDING status that are due today.
+    Activity Calendar View.
+    Calculates operational workloads and shows visual metrics isolated by tenant_id.
     """
-    brand_color = st.session_state.get("theme_color", "#2B3F87")
-    current_tenant = st.session_state.get('tenant_id')
+    # Safeguard: Ensure a valid tenant context exists before loading page resources
+    if not tenant_id:
+        st.error("❌ Access Denied: No valid tenant context detected.")
+        return
+    
+    st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
-    if not current_tenant:
-        st.error("🔐 Session expired. Please log in.")
-        st.stop()
+    # 1. LOAD DATA SPECIFIC TO ACTIVE TENANT
+    loans_df = get_cached_data("Loans", tenant_id=tenant_id)
 
-    # ==========================================
-    # UI STYLING ENGINE (ENTERPRISE GRADE)
-    # ==========================================
-    st.markdown(f"""
-        <style>
-            @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+    if loans_df is None or loans_df.empty:
+        st.info("📅 Calendar is clear! No active loans to track.")
+        return
+
+    loans_df.columns = loans_df.columns.str.strip().str.replace(" ", "_")
+
+    required_keys = ["End_Date", "Total_Repayable", "Status", "Borrower", "Loan_ID", "Principal", "Interest"]
+    for col in required_keys:
+        if col not in loans_df.columns:
+            loans_df[col] = 0 if col in ["Total_Repayable", "Principal", "Interest"] else "Unknown"
             
-            .main-title {{
-                font-family: 'Plus Jakarta Sans', sans-serif;
-                font-weight: 700;
-                color: #111827;
-                font-size: 28px;
-                letter-spacing: -0.02em;
-                margin-bottom: 4px;
-            }}
-            .subtitle {{
-                font-family: 'Plus Jakarta Sans', sans-serif;
-                color: #4B5563;
-                font-size: 14px;
-                margin-bottom: 24px;
-            }}
-            .kpi-container {{
-                background: #FFFFFF;
-                border: 1px solid #E5E7EB;
-                border-radius: 16px;
-                padding: 20px;
-                box-shadow: 0px 1px 3px rgba(16, 24, 40, 0.1), 0px 1px 2px rgba(16, 24, 40, 0.06);
-            }}
-            .kpi-label {{
-                font-family: 'Plus Jakarta Sans', sans-serif;
-                font-size: 12px;
-                font-weight: 600;
-                color: #6B7280;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                margin-bottom: 8px;
-            }}
-            .kpi-value {{
-                font-family: 'Plus Jakarta Sans', sans-serif;
-                font-size: 26px;
-                font-weight: 700;
-                color: #111827;
-                line-height: 1;
-            }}
-        </style>
-    """, unsafe_allow_html=True)
-
-    # ==========================================
-    # 📥 CORE DATA ADAPTER & CLEANING LAYER
-    # ==========================================
-    raw_loans = get_cached_data("loans")
-    raw_borrowers = get_cached_data("borrowers")
-
-    if raw_loans is None or raw_loans.empty:
-        st.info("📅 Workspace clean. There are currently no loan records present on your corporate network.")
-        return
-
-    # Standardize column naming
-    loans_df = raw_loans.copy()
-    loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    # Convert to proper types for logic
+    loans_df["End_Date"] = pd.to_datetime(loans_df["End_Date"], errors="coerce")
+    loans_df["Total_Repayable"] = pd.to_numeric(loans_df["Total_Repayable"], errors="coerce").fillna(0)
     
-    # Filter tenant data partition boundary
-    if "tenant_id" in loans_df.columns:
-        loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
-
-    if loans_df.empty:
-        st.info("💡 No loans linked to this workspace registration profile yet.")
-        return
-
-    # Dynamic Borrower Identity Mapping
-    if raw_borrowers is not None and not raw_borrowers.empty:
-        borrowers_df = raw_borrowers.copy()
-        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
-        if "tenant_id" in borrowers_df.columns:
-            borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(current_tenant)]
-        bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
-    else:
-        bor_map = {}
-
-    if "borrower" not in loans_df.columns:
-        loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown Profile") if "borrower_id" in loans_df.columns else "Unknown Profile"
-
-    # ID Formatter
-    def clean_id_str(val):
-        if pd.isna(val): return ""
-        s = str(val).strip()
-        if s.endswith(".0"): return s[:-2]
-        return s
-
-    loans_df["id_clean"] = loans_df["id"].apply(clean_id_str)
-    if "loan_id_label" not in loans_df.columns:
-        loans_df["loan_id_label"] = loans_df["id_clean"]
-    loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id_clean"]).astype(str)
-
-    # Coerce Dates and Financial Values
-    date_col = "end_date" if "end_date" in loans_df.columns else "due_date"
-    loans_df[date_col] = pd.to_datetime(loans_df[date_col], errors="coerce")
-    loans_df["balance"] = pd.to_numeric(loans_df.get("balance", 0), errors="coerce").fillna(0.0)
-    
+    # Reference date (June 2026)
     today = pd.Timestamp.today().normalize()
-
-    # ==========================================
-    # 🔄 PENDING + DUE TODAY ONLY
-    # ==========================================
-    loans_df["status_clean"] = (
-        loans_df["status"]
-        .astype(str)
-        .str.strip()
-        .str.upper()
-    )
     
-    # keep latest record per loan first
-    seq_col = "cycle_no" if "cycle_no" in loans_df.columns else "id"
-    
-    latest_loans = (
-        loans_df.sort_values(by=[seq_col])
-        .groupby("loan_id_label", as_index=False)
-        .tail(1)
-        .copy()
-    )
-    
-    # ONLY PENDING LOANS DUE TODAY
-    active_pending = latest_loans[
-        (latest_loans["status_clean"] == "PENDING") &
-        (latest_loans[date_col].dt.normalize() == today)
-    ].copy()
-    # Dynamic Frame Headers
-    st.markdown("<h1 class='main-title'>📅 Daily Operational Dispatch</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='subtitle'>Live interface displaying pending accounts with active balances due today.</p>", unsafe_allow_html=True)
+    # Filter for loans that aren't closed
+    active_loans = loans_df[loans_df["Status"].astype(str).str.lower() != "closed"].copy()
 
-    # ==========================================
-    # 📊 EXECUTIVE LEVEL KPIS
-    # ==========================================
-    due_today_df = active_pending
-    upcoming_7_days = pd.DataFrame()
-    historical_backlog = pd.DataFrame()
-
-    kpi1, kpi2, kpi3 = st.columns(3)
-    
-    kpi1, = st.columns(1)
-
-    with kpi1:
-        st.markdown(f"""
-            <div class="kpi-container"
-                 style="border-top:4px solid #10B981;">
-                <div class="kpi-label">
-                    Pending Due Today
-                </div>
-                <div class="kpi-value"
-                     style="color:#10B981;">
-                     {len(active_pending)}
-                     <span style="font-size:14px;
-                                  font-weight:500;
-                                  color:#6B7280;">
-                         Loans
-                     </span>
-                </div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    with kpi2:
-        st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid {brand_color};">
-                <div class="kpi-label">Pending Due Next 7 Days</div>
-                <div class="kpi-value">{len(upcoming_7_days)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Loans</span></div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-    with kpi3:
-        st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid #EF4444;">
-                <div class="kpi-label">Pending Overdue Backlog</div>
-                <div class="kpi-value" style="color:#EF4444;">{len(historical_backlog)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Loans</span></div>
-            </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("<br>", unsafe_allow_html=True)
-
-    # ==========================================
-    # 🎯 ACTION INTERFACE - DUE TODAY ONLY
-    # ==========================================
-    st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:15px;'>🎯 Accounts Requiring Settlement Action Today</h3>", unsafe_allow_html=True)
-    
-    if due_today_df.empty:
-        st.markdown("""
-            <div style="background-color: #F9FAFB; border: 1px dashed #E5E7EB; padding: 32px; border-radius: 12px; text-align: center; margin-bottom: 20px;">
-                <p style="color:#6B7280; font-family:'Plus Jakarta Sans'; font-size:14px; margin:0; font-weight: 500;">
-                    ✨ Portfolio All Clear! There are no pending loan maturities hitting schedule limits today.
-                </p>
-            </div>
-        """, unsafe_allow_html=True)
-    else:
-        display_today = active_pending.copy()
-        display_today["Short ID"] = display_today.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
-        
-        st.dataframe(
-            display_today[["Short ID", "borrower", "cycle_no", "balance", "status"]].rename(columns={
-                "Short ID": "Loan ID",
-                "borrower": "Client Identity Name",
-                "cycle_no": "Cycle",
-                "balance": "Outstanding Balance (UGX)",
-                "status": "Current Status"
-            }),
-            use_container_width=True,
-            hide_index=True,
-            column_config={
-                "Outstanding Balance (UGX)": st.column_config.NumberColumn(format="%,.0f")
-            }
-        )
-
-    # ==========================================
-    # 🗓️ VISUAL CALENDAR TIMELINE
-    # ==========================================
-    st.markdown("<br><h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:12px;'>🗓️ Pipeline View Map</h3>", unsafe_allow_html=True)
-    
-    events_list = []
-    for _, item in active_pending.iterrows():
-        if pd.notna(item[date_col]):
-            is_past = item[date_col].date() < today.date()
-            color_code = "#EF4444" if is_past else brand_color
+    # --- VISUAL CALENDAR WIDGET ---
+    calendar_events = []
+    for _, r in active_loans.iterrows():
+        if pd.notna(r['End_Date']):
+            # Color logic: Red for overdue, Blue for upcoming
+            is_overdue = r['End_Date'].date() < today.date()
+            ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
             
-            events_list.append({
-                "title": f"UGX {float(item['balance']):,.0f} - {item['borrower']}",
-                "start": item[date_col].strftime("%Y-%m-%d"),
-                "end": item[date_col].strftime("%Y-%m-%d"),
-                "color": color_code,
+            # Auto-Recovery for display amount if Total_Repayable is zero
+            disp_amt = float(r['Total_Repayable']) if r['Total_Repayable'] > 0 else (float(r['Principal']) + float(r['Interest']))
+            
+            calendar_events.append({
+                "title": f"UGX {disp_amt:,.0f} - {r['Borrower']}",
+                "start": r['End_Date'].strftime("%Y-%m-%d"),
+                "end": r['End_Date'].strftime("%Y-%m-%d"),
+                "color": ev_color,
                 "allDay": True,
             })
 
-    options_config = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
+    calendar_options = {
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"},
         "initialView": "dayGridMonth",
-        "selectable": True
+        "selectable": True,
     }
 
-    try:
-        from streamlit_calendar import st_calendar
-        st_calendar(events=events_list, options=options_config, key="modern_collection_calendar")
-    except ImportError:
-        st.info("ℹ️ Structural calendar component loaded.")
+    # Render the interactive calendar using the current tenant's distinct tracking state key
+    calendar(events=calendar_events, options=calendar_options, key=f"collection_cal_{tenant_id}")
+    
+    st.markdown("---")
 
-    # ==========================================
-    # 🔍 COLLAPSIBLE OVERDUE BACKLOG
-    # ==========================================
-    if not historical_backlog.empty:
-        st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander(f"📂 Historical Overdue Pending Ledger ({len(historical_backlog)} Accounts)", expanded=False):
-            overdue_display = historical_backlog.copy()
-            overdue_display["days_late"] = (today - overdue_display[date_col]).dt.days
-            overdue_display["Arrears Duration"] = overdue_display["days_late"].apply(lambda x: f"⚠️ {x} Days Overdue")
-            overdue_display["Short ID"] = overdue_display.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
+    # 3. DAILY WORKLOAD METRICS (Zoe Branded Cards)
+    due_today_df = active_loans[active_loans["End_Date"].dt.date == today.date()]
+    upcoming_df = active_loans[
+        (active_loans["End_Date"] > today) & 
+        (active_loans["End_Date"] <= today + pd.Timedelta(days=7))
+    ]
+    overdue_count = active_loans[active_loans["End_Date"] < today].shape[0]
 
-            st.dataframe(
-                overdue_display.sort_values("days_late", ascending=False)[
-                    ["Short ID", "borrower", "Arrears Duration", "balance", "status"]
-                ].rename(columns={
-                    "Short ID": "Loan Account",
-                    "borrower": "Client Identity Name",
-                    "balance": "Outstanding Exposure (UGX)",
-                    "status": "Current Status"
-                }),
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Outstanding Exposure (UGX)": st.column_config.NumberColumn(format="%,.0f")
-                }
-            )
+    # Create the columns
+    m1, m2, m3 = st.columns(3)
+    
+    m1.markdown(f"""
+    <div style="background-color: #ffffff; padding: 20px; border-radius: 15px; border-left: 5px solid #2B3F87; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);">
+        <p style="margin:0; font-size:12px; color:#666; font-weight:bold;">DUE TODAY |</p>
+        <p style="margin:0; font-size:18px; color:#2B3F87; font-weight:bold;">{len(due_today_df)} Accounts</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    m2.markdown(f"""
+    <div style="background-color: #F0F8FF; padding: 20px; border-radius: 15px; border-left: 5px solid #2B3F87; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);">
+        <p style="margin:0; font-size:12px; color:#666; font-weight:bold;">UPCOMING (7 DAYS) |</p>
+        <p style="margin:0; font-size:18px; color:#2B3F87; font-weight:bold;">{len(upcoming_df)} Accounts</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    m3.markdown(f"""
+    <div style="background-color: #FFF5F5; padding: 20px; border-radius: 15px; border-left: 5px solid #D32F2F; box-shadow: 2px 2px 10px rgba(0,0,0,0.05);">
+        <p style="margin:0; font-size:12px; color:#D32F2F; font-weight:bold;">TOTAL OVERDUE |</p>
+        <p style="margin:0; font-size:18px; color:#D32F2F; font-weight:bold;">{overdue_count} Accounts</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # --- CALENDAR FOOTER: REVENUE PREVIEW ---
+    st.markdown("---")
+    st.markdown("<h4 style='color: #2B3F87;'>📊 Revenue Forecast (This Month)</h4>", unsafe_allow_html=True)
+    
+    current_month = today.month
+    this_month_df = active_loans[active_loans["End_Date"].dt.month == current_month]
+    total_expected = this_month_df["Total_Repayable"].sum()
+    
+    f1, f2 = st.columns(2)
+    f1.metric("Expected Collections", f"{total_expected:,.0f} UGX")
+    f2.metric("Remaining Appointments", len(this_month_df))
+    
+    st.write("💡 *Tip: Click any blue/red bar on the calendar above to see the specific borrower details.*")
+
+    # --- SECTION: DUE TODAY ---
+    st.markdown("<h4 style='color: #2B3F87;'>📌 Action Items for Today</h4>", unsafe_allow_html=True)
+    if due_today_df.empty:
+        st.success("✨ No deadlines for today. Focus on follow-ups!")
+    else:
+        today_rows = ""
+        for i, r in due_today_df.iterrows():
+            bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+            today_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;"><b>#{r['Loan_ID']}</b></td><td style="padding:10px;">{r['Borrower']}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#2B3F87;">{r['Total_Repayable']:,.0f}</td><td style="padding:10px; text-align:center;"><span style="background:#2B3F87; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">💰 COLLECT NOW</span></td></tr>"""
+        st.markdown(f"""<div style="border:2px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount Due</th><th style="padding:10px; text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
+
+    # --- SECTION: UPCOMING ---
+    st.markdown("<br><h4 style='color: #2B3F87;'>⏳ Upcoming Deadlines (Next 7 Days)</h4>", unsafe_allow_html=True)
+    if upcoming_df.empty:
+        st.info("The next few days look quiet.")
+    else:
+        upcoming_display = upcoming_df.sort_values("End_Date").copy()
+        up_rows = ""
+        for i, r in upcoming_display.iterrows():
+            bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
+            display_amt = float(r.get('Total_Repayable', 0)) or (float(r.get('Principal', 0)) + float(r.get('Interest', 0)))
+            up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['End_Date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('Loan_ID', 'N/A')}</td></tr>"""
+        st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due Date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
+
+    # --- SECTION: IMMEDIATE FOLLOW-UP ---
+    st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
+    overdue_df = active_loans[active_loans["End_Date"] < today].copy()
+    if overdue_df.empty:
+        st.success("Clean Sheet! No overdue loans found. 🎉")
+    else:
+        overdue_df["Days_Late"] = (today - overdue_df["End_Date"]).dt.days
+        overdue_df = overdue_df.sort_values("Days_Late", ascending=False)
+        od_rows = ""
+        for i, r in overdue_df.iterrows():
+            bg = "#FFF5F5"
+            late_color = "#FF4B4B" if r['Days_Late'] > 7 else "#FFA500"
+            od_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #FFDADA;"><td style="padding:10px;"><b>#{r['Loan_ID']}</b></td><td style="padding:10px;">{r['Borrower']}</td><td style="padding:10px; text-align:center; font-weight:bold; color:{late_color};">{r['Days_Late']} Days</td><td style="padding:10px; text-align:center;"><span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['Status']}</span></td></tr>"""
+        st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
 # ==========================================================
 # 🛡️ COLLATERAL MANAGEMENT ENGINE
 # ==========================================================
