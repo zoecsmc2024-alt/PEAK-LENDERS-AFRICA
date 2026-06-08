@@ -713,7 +713,9 @@ def show_dashboard_view():
     if exp_df is not None and not exp_df.empty:
         exp_df.columns = exp_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # 3. CLEAN DATA TYPES & STANDARDIZE METRIC COLUMNS
+    # ============================================================
+    # 3. CLEAN DATA TYPES & STANDARDIZE STATUS MATRICES
+    # ============================================================
     df["interest"] = pd.to_numeric(df.get("interest", 0), errors="coerce").fillna(0)
     df["amount_paid"] = pd.to_numeric(df.get("amount_paid", 0), errors="coerce").fillna(0)
     df["principal"] = pd.to_numeric(df.get("principal", 0), errors="coerce").fillna(0)
@@ -721,31 +723,40 @@ def show_dashboard_view():
     df["balance"] = pd.to_numeric(df.get("balance", 0), errors="coerce").fillna(0)
     df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
     
-    # Ensure cycle column exists and is treated uniformly (string or numeric)
-    # If your column is named 'cycle_number', adjust this key accordingly
+    # Handle implicit or explicit loan cycle parsing
     if "cycle" in df.columns:
         df["cycle"] = df["cycle"].astype(str).str.strip()
     else:
-        df["cycle"] = "1"  # Fallback fallback if unassigned
-        
+        # If your database doesn't have a dedicated cycle column, 
+        # let's assume everything is cycle 1 unless marked as a rollover/BCF
+        df["cycle"] = "1"
+
     today = pd.Timestamp.today().normalize()
     
-    # 🎯 TARGETED MASK: Cycle 1 loans that still carry a remaining balance
-    # This prevents rollovers, BCFs, and cycle 2+ sequences from inflating the metric.
-    cycle_1_active_mask = (df["cycle"] == "1") & (df["balance"] > 0)
-    cycle_1_active_df = df[cycle_1_active_mask]
-
-    # 4. METRICS CALCULATION
-    # Sums the original loan principal of Cycle 1 accounts with a balance
-    total_issued = cycle_1_active_df["principal"].sum() 
+    # 🧼 STRICT FILTER: Isolate entries that are truly UNPAID / ACTIVE
+    # Must have a real outstanding balance and cannot be closed/cleared/archived.
+    inactive_statuses = ["CLOSED", "CLEARED", "BCF"]
+    is_active_loan = (df["balance"] > 0) & (~df["status"].astype(str).str.upper().isin(inactive_statuses))
     
-    # Match the expected interest to the same cohort if needed, or keep it broad
+    # Create the unified 'active_df' so downstream components don't crash!
+    active_df = df[is_active_loan].copy()
+    
+    # Create a sub-segment for Cycle 1 specifically to run your precise metric calculation
+    cycle_1_active_df = active_df[active_df["cycle"] == "1"]
+
+    # ============================================================
+    # 4. METRICS CALCULATION (Guaranteed to equal 0 if database is cleared)
+    # ============================================================
+    # Calculated explicitly using the validated active cohort
+    total_issued = cycle_1_active_df["principal"].sum() 
     total_interest_expected = cycle_1_active_df["interest"].sum()
+    
+    # Total historical collections pulled across the entire tenant history
     total_collected = df["amount_paid"].sum()
     
-    # Logic for Overdue Count using the active cohort tracking timeline
-    overdue_mask = (cycle_1_active_df["end_date"] < today)
-    overdue_count = cycle_1_active_df[overdue_mask].shape[0]
+    # Logic for Overdue Count: Active accounts whose deadlines have passed today
+    overdue_mask = (active_df["end_date"] < today)
+    overdue_count = active_df[overdue_mask].shape[0]
 
     # 5. METRICS ROW (Zoe Soft Blue Style)
     m1, m2, m3, m4 = st.columns(4)
