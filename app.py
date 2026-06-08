@@ -3290,14 +3290,20 @@ def show_calendar():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==============================
-    # 📊 WORKLOAD COUNTER TILES
+    # 📊 WORKLOAD COUNTER TILES (UPDATED FOR EXACT MATURITY MATCHING)
     # ==============================
+    # Filter active tracking records where the rolling cycle milestone matches today exactly
     due_today_df = active_loans[active_loans[date_col].dt.date == today.date()]
+    
+    # Upcoming window inside the next 7 operational calendar days
     upcoming_df = active_loans[
-        (active_loans[date_col] > today) & 
-        (active_loans[date_col] <= today + pd.Timedelta(days=7))
+        (active_loans[date_col].dt.date > today.date()) & 
+        (active_loans[date_col].dt.date <= (today + pd.Timedelta(days=7)).date())
     ]
-    overdue_count = active_loans[active_loans[date_col] < today].shape[0]
+    
+    # Historical fallback backlog (Maturity passed, but balance remains)
+    overdue_df_historical = active_loans[active_loans[date_col].dt.date < today.date()]
+    overdue_count = overdue_df_historical.shape[0]
 
     c1, c2, c3 = st.columns(3)
     with c1:
