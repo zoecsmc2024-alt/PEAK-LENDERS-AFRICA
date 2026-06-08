@@ -674,20 +674,18 @@ def render_sidebar():
 # ==========================================
 # 1. CORE PAGE FUNCTIONS & LAYOUT
 # ==========================================
-
+def get_current_tenant():
+    return st.session_state.get("tenant_id")
 def show_dashboard_view():
-    """
-    Main Multi-Tenant Dashboard view. 
-    Calculates portfolio metrics and renders visual analytics isolated by tenant_id.
-    """
-    # Safeguard: Ensure a valid tenant context exists before doing anything
+
+    tenant_id = get_current_tenant()
+
     if not tenant_id:
         st.error("❌ Access Denied: No valid tenant context detected.")
         return
 
     st.markdown("## 📊 Financial Dashboard")
-    
-    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant)
+
     df = get_cached_data("Loans", tenant_id=tenant_id)
     pay_df = get_cached_data("Payments", tenant_id=tenant_id)
     exp_df = get_cached_data("Expenses", tenant_id=tenant_id) 
