@@ -3207,30 +3207,39 @@ def show_calendar():
         errors="coerce"
     )
     
+    # Keep only the latest record for each loan
     active_loans = (
         active_loans
         .sort_values(date_col)
         .groupby("loan_id_label", as_index=False)
         .tail(1)
     )
+    
+    # Convert balance safely
     if "balance" in active_loans.columns:
-
-    active_loans["balance"] = pd.to_numeric(
-        active_loans["balance"],
-        errors="coerce"
-    ).fillna(0)
-
-    active_loans = active_loans[
-        active_loans["balance"] > 1
-    ]
-    active_loans["effective_status"] = active_loans["balance"].apply(
-    lambda x: "CLEARED" if abs(x) <= 1 else "ACTIVE"
-    )
-    active_loans = active_loans[
-    active_loans["effective_status"] != "CLEARED"
-    ]
+    
+        active_loans["balance"] = pd.to_numeric(
+            active_loans["balance"],
+            errors="coerce"
+        ).fillna(0)
+    
+        # Create status from balance, not stored status
+        active_loans["effective_status"] = active_loans["balance"].apply(
+            lambda x: "CLEARED" if abs(x) <= 1 else "ACTIVE"
+        )
+    
+        # Remove cleared loans
+        active_loans = active_loans[
+            active_loans["effective_status"] == "ACTIVE"
+        ]
+    
+        # Remove loans with no outstanding balance
+        active_loans = active_loans[
+            active_loans["balance"] > 1
+        ]
+    
     if active_loans.empty:
-        st.info("📅 No active milestones scheduled for tracking this month.")
+        st.success("✅ All loans have been cleared. No overdue accounts remain.")
         return
 
     # ==============================
