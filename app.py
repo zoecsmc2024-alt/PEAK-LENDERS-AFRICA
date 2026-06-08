@@ -2656,6 +2656,14 @@ def show_calendar():
 
     # Translate column headers immediately to clean lower snake case
     loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    st.write("Status Counts")
+    st.write(loans_df["status"].value_counts(dropna=False))
+    
+    st.dataframe(
+        loans_df[
+            ["loan_id", "borrower", "status"]
+        ].sort_values("loan_id")
+    )
 
     required_keys = ["end_date", "total_repayable", "status", "borrower", "loan_id", "principal", "interest"]
     for col in required_keys:
