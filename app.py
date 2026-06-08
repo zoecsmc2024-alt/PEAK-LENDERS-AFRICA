@@ -689,9 +689,9 @@ def show_dashboard_view():
     df = get_cached_data("Loans")
     pay_df = get_cached_data("Payments")
     exp_df = get_cached_data("Expenses")
-        if df is None or df.empty:
-            st.info("No loan records found.")
-            return
+    if df is None or df.empty:
+        st.info("No loan records found.")
+        return
 
     # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors)
     df.columns = df.columns.str.strip().str.replace(" ", "_")
