@@ -686,13 +686,12 @@ def show_dashboard_view():
 
     st.markdown("## 📊 Financial Dashboard")
 
-    df = get_cached_data("Loans", tenant_id=tenant_id)
-    pay_df = get_cached_data("Payments", tenant_id=tenant_id)
-    exp_df = get_cached_data("Expenses", tenant_id=tenant_id) 
-
-    if df is None or df.empty:
-        st.info("No loan records found.")
-        return
+    df = get_cached_data("Loans")
+    pay_df = get_cached_data("Payments")
+    exp_df = get_cached_data("Expenses")
+        if df is None or df.empty:
+            st.info("No loan records found.")
+            return
 
     # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors)
     df.columns = df.columns.str.strip().str.replace(" ", "_")
@@ -702,21 +701,21 @@ def show_dashboard_view():
         exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
 
     # 3. CLEAN DATA TYPES
-    df["Interest"] = pd.to_numeric(df.get("Interest", 0), errors="coerce").fillna(0)
-    df["Amount_Paid"] = pd.to_numeric(df.get("Amount_Paid", 0), errors="coerce").fillna(0)
-    df["Principal"] = pd.to_numeric(df.get("Principal", 0), errors="coerce").fillna(0)
-    df["End_Date"] = pd.to_datetime(df.get("End_Date"), errors="coerce")
+    df["interest"] = pd.to_numeric(df.get("interest", 0), errors="coerce").fillna(0)
+    df["amount_paid"] = pd.to_numeric(df.get("amount_paid", 0), errors="coerce").fillna(0)
+    df["principal"] = pd.to_numeric(df.get("principal", 0), errors="coerce").fillna(0)
+    df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
     
     today = pd.Timestamp.today().normalize()
     
     # RECOVERY FILTER: Include Rolled loans in Active count for accurate portfolio health
     active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    active_df = df[df["Status"].isin(active_statuses)].copy()
+    active_df = df[df["status"].isin(active_statuses)].copy()
 
     # 4. METRICS CALCULATION
-    total_issued = active_df["Principal"].sum() if "Principal" in active_df.columns else 0
-    total_interest_expected = active_df["Interest"].sum()
-    total_collected = df["Amount_Paid"].sum() 
+    total_issued = active_df["principal"].sum()
+    total_interest_expected = active_df["interest"].sum()
+    total_collected = df["amount_paid"].sum()
     
     # Logic for Overdue Count: Past due date and not yet cleared
     overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
