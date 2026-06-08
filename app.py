@@ -744,28 +744,6 @@ def show_dashboard_view():
     # Create a sub-segment for Cycle 1 specifically to run your precise metric calculation
     cycle_1_active_df = active_df[active_df["cycle"] == "1"]
 
-    # ============================================================
-    # 3. CLEAN DATA TYPES & STANDARDIZE STATUS MATRICES
-    # ============================================================
-    df["interest"] = pd.to_numeric(df.get("interest", 0), errors="coerce").fillna(0)
-    df["amount_paid"] = pd.to_numeric(df.get("amount_paid", 0), errors="coerce").fillna(0)
-    df["principal"] = pd.to_numeric(df.get("principal", 0), errors="coerce").fillna(0)
-    df["total_repayable"] = pd.to_numeric(df.get("total_repayable", 0), errors="coerce").fillna(0)
-    df["balance"] = pd.to_numeric(df.get("balance", 0), errors="coerce").fillna(0)
-    df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
-    
-    # Standardize schema names to match your precise management metrics engine keys
-    if "cycle_no" in df.columns:
-        df["cycle_no"] = pd.to_numeric(df["cycle_no"], errors="coerce").fillna(1)
-    else:
-        df["cycle_no"] = 1
-
-    today = pd.Timestamp.today().normalize()
-    
-    # Downstream compatibility dataframe (drops archived lines, keeps live tracks)
-    # This prevents 'active_df is not defined' application crashes downstream!
-    inactive_statuses = ["CLOSED", "CLEARED", "BCF"]
-    active_df = df[~df["status"].astype(str).str.upper().isin(inactive_statuses)].copy()
 
     # ============================================================
     # 4. METRICS CALCULATION (Perfect alignment with your operational definition)
@@ -782,10 +760,8 @@ def show_dashboard_view():
     # Sum of original principal amounts
     total_issued = pending_original_loans["principal"].sum()
     
-    # Expected Interest linked directly to unpaid cycle 1 loans
-    total_interest_expected = original_loans.apply(
-        lambda r: r["interest"] if r["balance"] > 0 else 0, axis=1
-    ).sum()
+    # Expected Interest
+    total_interest_expected = pending_original_loans["interest"].sum()
     
     # Match the broad aggregates seen in your management view card
     total_collected = df["amount_paid"].sum()
