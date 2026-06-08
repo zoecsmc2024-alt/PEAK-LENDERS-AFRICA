@@ -3196,7 +3196,39 @@ def show_calendar():
     
     today = pd.Timestamp.today().normalize()
     active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["PAID", "CLEARED", "CLOSED"])].copy()
+    # ==================================
+    # KEEP ONLY CURRENT LOAN POSITION
+    # ==================================
+    
+    active_loans = active_loans.copy()
+    
+    active_loans[date_col] = pd.to_datetime(
+        active_loans[date_col],
+        errors="coerce"
+    )
+    
+    active_loans = (
+        active_loans
+        .sort_values(date_col)
+        .groupby("loan_id_label", as_index=False)
+        .tail(1)
+    )
+    if "balance" in active_loans.columns:
 
+    active_loans["balance"] = pd.to_numeric(
+        active_loans["balance"],
+        errors="coerce"
+    ).fillna(0)
+
+    active_loans = active_loans[
+        active_loans["balance"] > 1
+    ]
+    active_loans["effective_status"] = active_loans["balance"].apply(
+    lambda x: "CLEARED" if abs(x) <= 1 else "ACTIVE"
+    )
+    active_loans = active_loans[
+    active_loans["effective_status"] != "CLEARED"
+    ]
     if active_loans.empty:
         st.info("📅 No active milestones scheduled for tracking this month.")
         return
@@ -3313,7 +3345,9 @@ def show_calendar():
             overdue_df["days_late"] = (today - overdue_df[date_col]).dt.days
             overdue_df["Late By"] = overdue_df["days_late"].apply(lambda x: f"⚠️ {x} Days Late")
             overdue_df["Short ID"] = overdue_df.apply(lambda r: f"#{r.get('loan_id_label', str(r['id'])[:8])}", axis=1)
-            overdue_df["Balance"] = overdue_df["total_repayable"].apply(lambda val: f"{val:,.0f}")
+            overdue_df["Balance"] = overdue_df["balance"].apply(
+                lambda val: f"{float(val):,.0f}"
+            )
 
             st.dataframe(
                 overdue_df.sort_values("days_late", ascending=False)[
