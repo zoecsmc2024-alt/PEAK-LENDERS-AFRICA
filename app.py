@@ -678,7 +678,7 @@ def render_sidebar():
 def show_dashboard_view():
     """
     Main Multi-Tenant Dashboard view.
-    Calculates portfolio metrics and renders visual analytics isolated by tenant_id.
+    Calculations portfolio metrics and renders visual analytics isolated by tenant_id.
     """
     # Pull the active tenant context using the exact same logic as the loans page
     tenant_id = get_current_tenant()
@@ -690,47 +690,49 @@ def show_dashboard_view():
 
     st.markdown("## 📊 Financial Dashboard")
 
-    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant)
-    df = get_cached_data("loans")
-    pay_df = get_cached_data("payments")
-    exp_df = get_cached_data("expenses")
+    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant via centralized schema context)
+    df = get_data("loans")
+    pay_df = get_data("payments")
+    exp_df = get_data("expenses")
 
     if df is None or df.empty:
         st.info("No loan records found.")
         return
 
-    # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors)
-    df.columns = df.columns.str.strip().str.replace(" ", "_")
+    # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors - matching get_data structure)
+    df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
     if pay_df is not None and not pay_df.empty:
-        pay_df.columns = pay_df.columns.str.strip().str.replace(" ", "_")
+        pay_df.columns = pay_df.columns.str.strip().str.lower().str.replace(" ", "_")
     if exp_df is not None and not exp_df.empty:
-        exp_df.columns = exp_df.columns.str.strip().str.replace(" ", "_")
+        exp_df.columns = exp_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # 3. CLEAN DATA TYPES
+    # 3. CLEAN DATA TYPES & STANDARDIZE STATUS MATRICES
     df["interest"] = pd.to_numeric(df.get("interest", 0), errors="coerce").fillna(0)
     df["amount_paid"] = pd.to_numeric(df.get("amount_paid", 0), errors="coerce").fillna(0)
     df["principal"] = pd.to_numeric(df.get("principal", 0), errors="coerce").fillna(0)
+    df["total_repayable"] = pd.to_numeric(df.get("total_repayable", 0), errors="coerce").fillna(0)
+    df["balance"] = pd.to_numeric(df.get("balance", 0), errors="coerce").fillna(0)
     df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
     
     today = pd.Timestamp.today().normalize()
     
-    # RECOVERY FILTER: Include Rolled loans in Active count for accurate portfolio health
-    active_statuses = ["Active", "Overdue", "Rolled/Overdue"]
-    active_df = df[df["status"].isin(active_statuses)].copy()
+    # RECOVERY FILTER: Include Active statuses defined by the serial number generation pipeline
+    active_statuses = ["ACTIVE", "PENDING", "BCF"]
+    active_df = df[df["status"].astype(str).str.upper().isin(active_statuses)].copy()
 
     # 4. METRICS CALCULATION
     total_issued = active_df["principal"].sum()
     total_interest_expected = active_df["interest"].sum()
     total_collected = df["amount_paid"].sum()
     
-    # Logic for Overdue Count: Past due date and not yet cleared
-    overdue_mask = (active_df["end_date"] < today) & (active_df["status"] != "Cleared")
+    # Logic for Overdue Count: Past due date and status is not marked as CLEARED or CLOSED
+    overdue_mask = (active_df["end_date"] < today) & (~active_df["status"].astype(str).str.upper().isin(["CLEARED", "CLOSED"]))
     overdue_count = active_df[overdue_mask].shape[0]
 
     # 5. METRICS ROW (Zoe Soft Blue Style)
     m1, m2, m3, m4 = st.columns(4)
     
-    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE principal</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
+    m1.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">💰 ACTIVE PRINCIPAL</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_issued:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m2.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #4A90E2;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">📈 EXPECTED INTEREST</p><h3 style="margin:0;color:#4A90E2;font-size:18px;">{total_interest_expected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m3.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #2E7D32;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">✅ TOTAL COLLECTED</p><h3 style="margin:0;color:#2E7D32;font-size:18px;">{total_collected:,.0f} <span style="font-size:10px;">UGX</span></h3></div>""", unsafe_allow_html=True)
     m4.markdown(f"""<div style="background-color:#fff;padding:20px;border-radius:15px;border-left:5px solid #FF4B4B;box-shadow:2px 2px 10px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">🚨 OVERDUE FILES</p><h3 style="margin:0;color:#FF4B4B;font-size:18px;">{overdue_count}</h3></div>""", unsafe_allow_html=True)
@@ -747,9 +749,9 @@ def show_dashboard_view():
             recent_loans = active_df.sort_values(by="end_date", ascending=False).head(5)
             for i, (idx, r) in enumerate(recent_loans.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                b_name = r.get('Borrower', 'Unknown')
+                b_name = r.get('borrower', 'Unknown')
                 p_amt = float(r.get('principal', 0))
-                b_stat = r.get('status', 'Active')
+                b_stat = r.get('status', 'ACTIVE')
                 e_date_raw = r.get('end_date')
                 e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
 
@@ -766,8 +768,8 @@ def show_dashboard_view():
                 <thead>
                     <tr style="background:#4A90E2; color:white;">
                         <th style="padding:10px;">Borrower</th>
-                        <th style="padding:10px; text-align:right;">principal</th>
-                        <th style="padding:10px; text-align:center;">status</th>
+                        <th style="padding:10px; text-align:right;">Principal</th>
+                        <th style="padding:10px; text-align:center;">Status</th>
                         <th style="padding:10px; text-align:center;">Due</th>
                     </tr>
                 </thead>
@@ -783,8 +785,8 @@ def show_dashboard_view():
             recent_pay = pay_df.sort_values(by="date", ascending=False).head(5)
             for i, (idx, r) in enumerate(recent_pay.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-                p_borr = r.get('Borrower', 'Unknown')
-                p_val = float(r.get('Amount', 0))
+                p_borr = r.get('borrower', 'Unknown')
+                p_val = float(r.get('amount', 0))
                 p_date_raw = r.get('date')
                 p_date = pd.to_datetime(p_date_raw).strftime('%d %b') if pd.notna(p_date_raw) else "-"
                 
@@ -801,7 +803,7 @@ def show_dashboard_view():
                     <tr style="background:#2E7D32; color:white;">
                         <th style="padding:10px;">Borrower</th>
                         <th style="padding:10px; text-align:right;">Amount</th>
-                        <th style="padding:10px; text-align:center;">date</th>
+                        <th style="padding:10px; text-align:center;">Date</th>
                     </tr>
                 </thead>
                 <tbody>{pay_rows if pay_rows else "<tr><td colspan='3' style='text-align:center;padding:10px;'>No recent payments</td></tr>"}</tbody>
@@ -814,11 +816,11 @@ def show_dashboard_view():
     c_pie, c_bar = st.columns(2)
 
     with c_pie:
-        status_counts = df["status"].value_counts().reset_index()
+        status_counts = df["status"].astype(str).str.upper().value_counts().reset_index()
         status_counts.columns = ["status", "Count"]
         fig_pie = px.pie(status_counts, names="status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
         fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
-        st.plotly_chart(fig_pie, use_container_width=True, key="overview_pie_chart")
+        st.plotly_chart(fig_pie, use_container_width=True, key=f"overview_pie_chart_{tenant_id}")
 
     with c_bar:
         # Combined Cashflow Chart (Income vs expenses)
@@ -827,15 +829,15 @@ def show_dashboard_view():
             exp_df["date"] = pd.to_datetime(exp_df["date"], errors='coerce')
             
             # Formatting for grouping by Month-Year
-            inc_m = pay_df.groupby(pay_df["date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
-            exp_m = exp_df.groupby(exp_df["date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
+            inc_m = pay_df.groupby(pay_df["date"].dt.strftime('%b %Y'))["amount"].sum().reset_index()
+            exp_m = exp_df.groupby(exp_df["date"].dt.strftime('%b %Y'))["amount"].sum().reset_index()
             
             m_cash = pd.merge(inc_m, exp_m, on="date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
-            m_cash.columns = ["Month", "Income", "expenses"]
+            m_cash.columns = ["Month", "Income", "Expenses"]
             
-            fig_bar = px.bar(m_cash, x="Month", y=["Income", "expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "expenses": "#FF4B4B"})
+            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
-            st.plotly_chart(fig_bar, use_container_width=True, key="overview_bar_chart")
+            st.plotly_chart(fig_bar, use_container_width=True, key=f"overview_bar_chart_{tenant_id}")
         else:
             st.info("💡 Tip: Record both payments and expenses to see the performance chart.")
 
@@ -859,7 +861,8 @@ def show_borrowers():
     # ==============================
     # 🔐 TENANT SESSION CHECK
     # ==============================
-    tenant_id = st.session_state.get("tenant_id")
+    # Unified with core page functions to ensure seamless talking between files
+    tenant_id = get_current_tenant()
     if not tenant_id:
         st.error("Session expired. Please log in again.")
         st.stop()
@@ -957,15 +960,15 @@ def show_borrowers():
     tab_view, tab_add = st.tabs(["📋 View Borrowers", "➕ Add Borrower"])
 
     with tab_add:
-        with st.form("add_borrower_form", clear_on_submit=True):
+        with st.form(f"add_borrower_form_{tenant_id}", clear_on_submit=True):
             st.markdown(f"<h4 style='color: {brand_color};'>📝 Register New Borrower</h4>", unsafe_allow_html=True)
             c1, c2 = st.columns(2)
-            name = c1.text_input("Full Name*")
-            phone = c2.text_input("Phone Number*")
-            email = c1.text_input("Email Address")
-            nid = c2.text_input("National ID / NIN")
-            addr = c1.text_input("Physical Address")
-            nok = c2.text_input("Next of Kin (Name & Contact)")
+            name = c1.text_input("Full Name*", key=f"br_add_name_{tenant_id}")
+            phone = c2.text_input("Phone Number*", key=f"br_add_phone_{tenant_id}")
+            email = c1.text_input("Email Address", key=f"br_add_email_{tenant_id}")
+            nid = c2.text_input("National ID / NIN", key=f"br_add_nid_{tenant_id}")
+            addr = c1.text_input("Physical Address", key=f"br_add_addr_{tenant_id}")
+            nok = c2.text_input("Next of Kin (Name & Contact)", key=f"br_add_nok_{tenant_id}")
             
             if st.form_submit_button("🚀 Save Borrower Profile", use_container_width=True):
                 if name and phone:
@@ -985,7 +988,7 @@ def show_borrowers():
 
     with tab_view:
         st.markdown("### 👥 Borrowers Registry")
-        search = st.text_input("🔍 Search by name or phone...").lower()
+        search = st.text_input("🔍 Search by name or phone...", key=f"borrower_search_field_{tenant_id}").lower()
     
         if not borrowers_df.empty:
             df = borrowers_df.copy()
@@ -1036,7 +1039,8 @@ def show_borrowers():
                 selected_name = st.selectbox(
                     "Select borrower:",
                     ["-- Choose borrower --"] + borrower_list,
-                    index=default_index
+                    index=default_index,
+                    key=f"borrower_action_select_{tenant_id}"
                 )
     
                 if selected_name != "-- Choose borrower --":
@@ -1065,21 +1069,21 @@ def show_borrowers():
 
             with st.container(border=True):
                 c1, c2 = st.columns(2)
-                upd_name = c1.text_input("Name", borrower["name"])
-                upd_phone = c2.text_input("Phone", borrower["phone"])
-                upd_email = c1.text_input("Email", borrower["email"])
-                upd_nid = c2.text_input("National ID", borrower["national_id"])
+                upd_name = c1.text_input("Name", borrower["name"], key=f"prof_upd_name_{selected_id}")
+                upd_phone = c2.text_input("Phone", borrower["phone"], key=f"prof_upd_phone_{selected_id}")
+                upd_email = c1.text_input("Email", borrower["email"], key=f"prof_upd_email_{selected_id}")
+                upd_nid = c2.text_input("National ID", borrower["national_id"], key=f"prof_upd_nid_{selected_id}")
                 
                 c3, c4 = st.columns(2)
-                upd_nok = c3.text_input("Next of Kin", borrower["next_of_kin"])
-                upd_addr = c4.text_input("Address", borrower["address"])
+                upd_nok = c3.text_input("Next of Kin", borrower["next_of_kin"], key=f"prof_upd_nok_{selected_id}")
+                upd_addr = c4.text_input("Address", borrower["address"], key=f"prof_upd_addr_{selected_id}")
 
                 # 📊 NESTED LOAN HISTORY
                 st.markdown("#### 💳 Loan Statement")
                 user_loans = loans_df[loans_df["borrower_id"].astype(str) == str(selected_id)].copy()
 
                 if not user_loans.empty:
-                    # Fix applied: capital 'D' on dateColumn
+                    # Fix applied: Corrected case-sensitivity error from dateColumn -> date_column
                     st.dataframe(
                         user_loans, 
                         use_container_width=True,
@@ -1090,8 +1094,8 @@ def show_borrowers():
                             "interest": st.column_config.NumberColumn("Interest", format="%d UGX"),
                             "balance": st.column_config.NumberColumn("Balance", format="%d UGX"),
                             "total_repayable": st.column_config.NumberColumn("Total Due", format="%d UGX"),
-                            "start_date": st.column_config.dateColumn("date Issued"),
-                            "end_date": st.column_config.dateColumn("Due date"),
+                            "start_date": st.column_config.date_column("date Issued"),
+                            "end_date": st.column_config.date_column("Due date"),
                         }
                     )
                     
@@ -1101,6 +1105,7 @@ def show_borrowers():
                         data=csv,
                         file_name=f"Statement_{upd_name.replace(' ', '_')}.csv",
                         mime="text/csv",
+                        key=f"dl_statement_btn_{selected_id}"
                     )
                 else:
                     st.info("This borrower has no loan history.")
@@ -1109,7 +1114,7 @@ def show_borrowers():
                 st.write("---")
                 act_c1, act_c2, act_c3 = st.columns([1, 1, 2])
 
-                if act_c1.button("💾 Save Changes", use_container_width=True):
+                if act_c1.button("💾 Save Changes", use_container_width=True, key=f"save_changes_btn_{selected_id}"):
                     # Explicit row modification updates safely
                     idx = borrowers_df.index[borrowers_df["id"].astype(str) == str(selected_id)].tolist()[0]
                     borrowers_df.at[idx, "name"] = upd_name
@@ -1124,7 +1129,7 @@ def show_borrowers():
                         st.cache_data.clear()
                         st.rerun()
 
-                if act_c2.button("🗑️ Delete", use_container_width=True):
+                if act_c2.button("🗑️ Delete", use_container_width=True, key=f"delete_borrower_btn_{selected_id}"):
                     updated_df = borrowers_df[borrowers_df["id"].astype(str) != str(selected_id)]
                     if save_data_saas("borrowers", updated_df):
                         st.warning("Profile Removed")
@@ -1132,7 +1137,7 @@ def show_borrowers():
                         st.session_state.pop("selected_borrower", None)
                         st.rerun()
                 
-                if act_c3.button("❌ Close Profile", use_container_width=True):
+                if act_c3.button("❌ Close Profile", use_container_width=True, key=f"close_profile_btn_{selected_id}"):
                     st.session_state.pop("selected_borrower", None)
                     st.rerun()
 
@@ -1184,6 +1189,12 @@ def save_data_saas(table_name, df):
 # 13. loans MANAGEMENT PAGE
 # ==============================
 def show_loans():
+    # Fetch active tenant scope directly at engine entry point
+    tenant_id = get_current_tenant()
+    if not tenant_id:
+        st.error("Session expired. Please log in again.")
+        st.stop()
+
     st.markdown(
         "<h2 style='color: #0A192F;'>💵 loans Management</h2>",
         unsafe_allow_html=True
@@ -1402,7 +1413,7 @@ def show_loans():
     # TAB VIEW
     # ==============================
     with tab_view:
-        search_query = st.text_input("🔍 Search Loan / borrower", key="loan_search_main")
+        search_query = st.text_input("🔍 Search Loan / borrower", key=f"loan_search_main_{tenant_id}")
 
         # Create a local copy for filtering
         filtered_loans = loans_df.copy() if not loans_df.empty else pd.DataFrame()
@@ -1423,7 +1434,7 @@ def show_loans():
                 filtered_loans["fiscal_year"] = fiscal_years_list
             
             fy_unique = sorted(filtered_loans["fiscal_year"].dropna().unique().tolist())
-            fy_selected = st.selectbox("Filter by Fiscal Year", ["All"] + fy_unique)
+            fy_selected = st.selectbox("Filter by Fiscal Year", ["All"] + fy_unique, key=f"loans_fy_select_{tenant_id}")
             
             if fy_selected != "All":
                 filtered_loans = filtered_loans[filtered_loans["fiscal_year"] == fy_selected]
@@ -1481,27 +1492,27 @@ def show_loans():
         
             st.dataframe(styled_df, column_order=show_cols, use_container_width=True, hide_index=True)
             
-    # ==============================       
+    # ==============================        
     # TAB ADD LOAN
     # ==============================
     with tab_add:
         if Active_borrowers.empty:
             st.info("💡 Tip: Activate borrower first.")
         else:
-            with st.form("loan_issue_form_v2"):
+            with st.form(f"loan_issue_form_v2_{tenant_id}"):
                 st.markdown("<h4 style='color:#0A192F;'>📝 Create New Loan Agreement</h4>", unsafe_allow_html=True)
                 col1, col2 = st.columns(2)
 
                 borrower_map = dict(zip(Active_borrowers["name"], Active_borrowers["id"]))
-                selected_name = col1.selectbox("Select borrower", list(borrower_map.keys()))
+                selected_name = col1.selectbox("Select borrower", list(borrower_map.keys()), key=f"loan_add_bor_select_{tenant_id}")
                 selected_id = str(borrower_map[selected_name]).strip()
 
-                amount = col1.number_input("principal amount (UGX)", min_value=0, step=50000)
-                date_issued = col1.date_input("Start date", value=datetime.now())
+                amount = col1.number_input("principal amount (UGX)", min_value=0, step=50000, key=f"loan_add_amount_{tenant_id}")
+                date_issued = col1.date_input("Start date", value=datetime.now(), key=f"loan_add_start_{tenant_id}")
 
-                loan_type = col2.selectbox("Loan type", ["Business", "Personal", "Emergency", "Other"])
-                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5)
-                date_due = col2.date_input("Due date", value=date_issued + timedelta(days=30))
+                loan_type = col2.selectbox("Loan type", ["Business", "Personal", "Emergency", "Other"], key=f"loan_add_type_{tenant_id}")
+                interest_rate = col2.number_input("Monthly Interest Rate (%)", min_value=0.0, step=0.5, key=f"loan_add_rate_{tenant_id}")
+                date_due = col2.date_input("Due date", value=date_issued + timedelta(days=30), key=f"loan_add_due_{tenant_id}")
 
                 total_due = amount + (amount * interest_rate / 100)
                 st.info(f"Preview: Total Repayable {total_due:,.0f} UGX")
@@ -1509,7 +1520,6 @@ def show_loans():
                 submit = st.form_submit_button("🚀 Confirm & Issue Loan")
 
                 if submit:
-                    tenant_id = get_current_tenant()
                     if not tenant_id:
                         st.error("Tenant session missing.")
                         st.stop()
@@ -1555,13 +1565,13 @@ def show_loans():
             st.success("All loans brought up to date! ✨")
         else:
             roll_map = {f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']} • Bal {row['balance']:,.0f}": row["id"] for _, row in eligible_loans.iterrows()}
-            roll_sel = st.selectbox("Select Loan to Roll Forward", list(roll_map.keys()))
+            roll_sel = st.selectbox("Select Loan to Roll Forward", list(roll_map.keys()), key=f"loan_roll_select_{tenant_id}")
             parent_id = roll_map[roll_sel]
     
             loan_to_roll = eligible_loans[eligible_loans["id"] == parent_id].iloc[0]
-            new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5)
+            new_interest_rate = st.number_input("New Monthly Interest (%)", value=3.0, step=0.5, key=f"loan_roll_rate_{tenant_id}")
     
-            if st.button("🔥 Execute Next Rollover", use_container_width=True):
+            if st.button("🔥 Execute Next Rollover", use_container_width=True, key=f"loan_roll_exec_btn_{tenant_id}"):
                 old_due = pd.to_datetime(loan_to_roll["end_date"], errors="coerce")
                 if pd.isna(old_due):
                     old_due = datetime.now()
@@ -1607,7 +1617,7 @@ def show_loans():
     with tab_manage:
         if not loans_df.empty:
             edit_map = {f"{row['borrower']} • {row['loan_id_label']} • Cycle {row['cycle_no']}": row["id"] for _, row in loans_df.iterrows()}
-            selected = st.selectbox("Select Loan to Edit", list(edit_map.keys()))
+            selected = st.selectbox("Select Loan to Edit", list(edit_map.keys()), key=f"loan_edit_target_select_{tenant_id}")
             target_id = edit_map[selected]
     
             loan_match = loans_df[loans_df["id"] == target_id]
@@ -1620,25 +1630,25 @@ def show_loans():
             with st.form(f"edit_form_{target_id}"):
                 col1, col2 = st.columns(2)
                 with col1:
-                    e_princ = st.number_input("principal", value=float(loan_to_edit["principal"]))
+                    e_princ = st.number_input("principal", value=float(loan_to_edit["principal"]), key=f"edit_princ_{target_id}")
                 with col2:
                     current_interest = float(loan_to_edit["interest"]) if pd.notna(loan_to_edit["interest"]) else 0.0
-                    e_interest = st.number_input("Interest amount", value=current_interest)
+                    e_interest = st.number_input("Interest amount", value=current_interest, key=f"edit_interest_{target_id}")
     
                 col3, col4 = st.columns(2)
                 with col3:
                     current_start_date = pd.to_datetime(loan_to_edit["start_date"]).date() if pd.notna(loan_to_edit["start_date"]) else pd.Timestamp.now().date()
-                    e_start_date = st.date_input("Start date", value=current_start_date)
+                    e_start_date = st.date_input("Start date", value=current_start_date, key=f"edit_start_{target_id}")
     
                 with col4:
                     current_end_date = pd.to_datetime(loan_to_edit["end_date"]).date() if pd.notna(loan_to_edit["end_date"]) else pd.Timestamp.now().date()
-                    e_end_date = st.date_input("End date", value=current_end_date)
+                    e_end_date = st.date_input("End date", value=current_end_date, key=f"edit_end_{target_id}")
     
                 status_options = ["ACTIVE", "PENDING", "CLEARED", "BCF", "CLOSED"]
                 current_stat = str(loan_to_edit["status"]).upper()
                 idx = status_options.index(current_stat) if current_stat in status_options else 0
     
-                e_stat = st.selectbox("status", status_options, index=idx)
+                e_stat = st.selectbox("status", status_options, index=idx, key=f"edit_status_dropdown_{target_id}")
     
                 if st.form_submit_button("💾 Save Changes"):
                     # 🎯 FIX 3: Recompute total_repayable dynamically on submit to keep DB accurate
@@ -1659,12 +1669,11 @@ def show_loans():
                     st.cache_data.clear()
                     st.rerun()
     
-            if st.button("🗑️ Delete Loan Permanently", use_container_width=True):
+            if st.button("🗑️ Delete Loan Permanently", use_container_width=True, key=f"delete_perm_btn_{target_id}"):
                 supabase.table("loans").delete().eq("id", target_id).execute()
                 st.warning("Loan Deleted.")
                 st.cache_data.clear()
                 st.rerun()
-
 # ==============================
 # 🧾 RECEIPT GENERATION & UTILS
 # ==============================
@@ -2258,7 +2267,7 @@ def show_reports(tenant_id: str):
     expenses = get_cached_data("expenses", tenant_id=tenant_id)
     payroll = get_cached_data("Payroll", tenant_id=tenant_id)
 
-    if loans.empty:
+    if loans is None or loans.empty:
         st.info("📈 Record more loans to see your financial analytics.")
         return
 
@@ -2271,31 +2280,34 @@ def show_reports(tenant_id: str):
     
     if not payroll.empty:
         # Standardize payroll headers for logic
-        payroll.columns = payroll.columns.str.strip().str.replace(" ", "_")
+        payroll.columns = payroll.columns.str.strip().str.lower().str.replace(" ", "_")
         # Use a super-safe way to pull column totals
-        n5 = pd.to_numeric(payroll.get("NSSF_5", 0), errors="coerce").fillna(0).sum()
-        n10 = pd.to_numeric(payroll.get("NSSF_10", 0), errors="coerce").fillna(0).sum()
+        n5 = pd.to_numeric(payroll.get("nssf_5", 0), errors="coerce").fillna(0).sum()
+        n10 = pd.to_numeric(payroll.get("nssf_10", 0), errors="coerce").fillna(0).sum()
         nssf_total = n5 + n10
-        paye_total = pd.to_numeric(payroll.get("PAYE", 0), errors="coerce").fillna(0).sum()
+        paye_total = pd.to_numeric(payroll.get("paye", 0), errors="coerce").fillna(0).sum()
 
     # 3. OTHER DATA SUMS
-    # Standardize column headers for math logic
-    loans.columns = loans.columns.str.strip().str.replace(" ", "_")
+    # Standardize column headers for math logic to match loans module storage structure
+    loans.columns = loans.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # Safe principal Lookup
-    l_amt_col = "principal" if "principal" in loans.columns else "Amount"
-    l_amt = pd.to_numeric(loans.get(l_amt_col, 0), errors="coerce").fillna(0).sum()
+    if payments is not None and not payments.empty:
+        payments.columns = payments.columns.str.strip().str.lower().str.replace(" ", "_")
+    if expenses is not None and not expenses.empty:
+        expenses.columns = expenses.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # Other Metric Totals
-    l_int = pd.to_numeric(loans.get("Interest", 0), errors="coerce").fillna(0).sum()
-    p_amt = pd.to_numeric(payments.get("Amount", 0), errors="coerce").fillna(0).sum() if not payments.empty else 0
-    exp_amt = pd.to_numeric(expenses.get("Amount", 0), errors="coerce").fillna(0).sum() if not expenses.empty else 0
+    # Safe principal and interest Lookup
+    l_amt = pd.to_numeric(loans.get("principal", 0), errors="coerce").fillna(0).sum()
+    l_int = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0).sum()
+    
+    p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if (payments is not None and not payments.empty) else 0
+    exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if (expenses is not None and not expenses.empty) else 0
     
     # 💰 FINANCIAL LOGIC:
     # Total Outflow = Direct expenses + Taxes (PAYE/NSSF) | Petty Cash explicitly removed
     total_outflow = exp_amt + nssf_total + paye_total
     
-    # Net Profit = Inflows (payments) - Outflows (expenses)
+    # Net Profit = Inflows (payments) - Outflows (expenses/taxes)
     net_profit = p_amt - total_outflow
 
     # 4. KPI DASHBOARD (Soft Blue Branded)
@@ -2316,54 +2328,51 @@ def show_reports(tenant_id: str):
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.write("**💰 Income vs. expenses (Monthly)**")
-        if not payments.empty:
+        st.write("**💰 Income vs. Expenses (Monthly)**")
+        if payments is not None and not payments.empty:
             pay_copy = payments.copy()
-            pay_copy.columns = pay_copy.columns.str.strip().str.replace(" ", "_")
             pay_copy["date"] = pd.to_datetime(pay_copy.get("date"), errors='coerce')
-            inc_trend = pay_copy.groupby(pay_copy["date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
+            inc_trend = pay_copy.groupby(pay_copy["date"].dt.strftime('%Y-%m'))["amount"].sum().reset_index()
             
-            exp_copy = expenses.copy() if not expenses.empty else pd.DataFrame(columns=["Amount", "date"])
-            if not exp_copy.empty:
-                exp_copy.columns = exp_copy.columns.str.strip().str.replace(" ", "_")
+            if expenses is not None and not expenses.empty:
+                exp_copy = expenses.copy()
                 exp_copy["date"] = pd.to_datetime(exp_copy.get("date"), errors='coerce')
-                exp_trend = exp_copy.groupby(exp_copy["date"].dt.strftime('%Y-%m'))["Amount"].sum().reset_index()
+                exp_trend = exp_copy.groupby(exp_copy["date"].dt.strftime('%Y-%m'))["amount"].sum().reset_index()
             else:
-                exp_trend = pd.DataFrame(columns=["date", "Amount"])
+                exp_trend = pd.DataFrame(columns=["date", "amount"])
 
             # Merge trends for comparison bar chart
             merged = pd.merge(inc_trend, exp_trend, on="date", how="outer").fillna(0)
-            merged.columns = ["Month", "Income", "expenses"]
+            merged.columns = ["Month", "Income", "Expenses"]
             
-            fig_bar = px.bar(merged, x="Month", y=["Income", "expenses"], barmode="group",
-                             color_discrete_map={"Income": "#00ffcc", "expenses": "#FF4B4B"})
-            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+            fig_bar = px.bar(merged, x="Month", y=["Income", "Expenses"], barmode="group",
+                             color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
+            fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
             st.plotly_chart(fig_bar, use_container_width=True, key=f"income_vs_expense_{tenant_id}")
         else:
             st.info("No payment data to chart.")
 
     with col_right:
         st.write("**🛡️ Portfolio Weight (Top 5)**")
-        if not loans.empty:
-            # Safe principal/Amount lookup based on normalized column names
-            val_col = "principal" if "principal" in loans.columns else "Amount"
-            top_borrowers = loans.groupby("Borrower")[val_col].sum().sort_values(ascending=False).head(5).reset_index()
+        # Ensure we can isolate borrower groups correctly using standardized keys
+        if "borrower" in loans.columns and not loans.empty:
+            top_borrowers = loans.groupby("borrower")["principal"].sum().sort_values(ascending=False).head(5).reset_index()
             top_borrowers.columns = ["Borrower", "Total_Loaned"]
             
             fig_pie = px.pie(top_borrowers, names="Borrower", values="Total_Loaned", hole=0.5,
                              color_discrete_sequence=px.colors.sequential.GnBu_r)
-            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)')
+            fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
             st.plotly_chart(fig_pie, use_container_width=True, key=f"portfolio_weight_{tenant_id}")
         else:
             st.info("No loan data for portfolio analysis.")
 
-    # 6. RISK INDICATOR
+    # 6. RISK INDICATOR (PAR % Calculation matching the normalized status schema)
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
     
-    val_col = "principal" if "principal" in loans.columns else "Amount"
-    overdue_mask = loans["status"].isin(["Overdue", "Rolled/Overdue"])
-    overdue_val = pd.to_numeric(loans.loc[overdue_mask, val_col], errors="coerce").fillna(0).sum()
+    # Check against upper-case strings to protect against mixed input variations
+    overdue_mask = loans["status"].astype(str).str.upper().isin(["OVERDUE", "ROLLED/OVERDUE"])
+    overdue_val = pd.to_numeric(loans.loc[overdue_mask, "principal"], errors="coerce").fillna(0).sum()
     
     risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
     
@@ -2389,7 +2398,7 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def show_overdue_tracker():
+def show_overdue_tracker(tenant_id: str):
     """
     Collections & Overdue Tracker (The Master Engine)
     Multi-tenant version ensuring isolated data fetching, processing, and persistence.
@@ -2433,10 +2442,13 @@ def show_overdue_tracker():
     overdue_df = pd.DataFrame()
     if not loans.empty:
         temp_loans = loans.copy()
-        temp_loans.columns = temp_loans.columns.str.strip().str.replace(" ", "_")
+        temp_loans.columns = temp_loans.columns.str.strip().str.lower().str.replace(" ", "_")
         temp_loans['end_date'] = pd.to_datetime(temp_loans['end_date'], errors='coerce')
+        
+        # Checking against uppercase status constants to ensure pipeline sync
+        active_overdue_statuses = ["ACTIVE", "OVERDUE", "ROLLED/OVERDUE"]
         overdue_df = temp_loans[
-            (temp_loans['status'].isin(["Active", "Overdue", "Rolled/Overdue"])) & 
+            (temp_loans['status'].astype(str).str.upper().isin(active_overdue_statuses)) & 
             (temp_loans['end_date'] < today)
         ].copy()
 
@@ -2446,16 +2458,16 @@ def show_overdue_tracker():
         return
 
     loans_work = loans.copy()
-    loans_work.columns = loans_work.columns.str.strip().str.replace(" ", "_")
+    loans_work.columns = loans_work.columns.str.strip().str.lower().str.replace(" ", "_")
 
     # 7. --- PREP LEDGER BALANCES ---
     latest_ledger = pd.DataFrame()
     if not ledger.empty:
         ledger_work = ledger.copy()
-        ledger_work.columns = ledger_work.columns.str.strip().str.replace(" ", "_")
-        if "Loan_ID" in ledger_work.columns:
+        ledger_work.columns = ledger_work.columns.str.strip().str.lower().str.replace(" ", "_")
+        if "loan_id" in ledger_work.columns:
             ledger_work['date'] = pd.to_datetime(ledger_work.get('date'), errors='coerce')
-            latest_ledger = ledger_work.sort_values('date').groupby("Loan_ID").tail(1)
+            latest_ledger = ledger_work.sort_values('date').groupby("loan_id").tail(1)
 
     # 8. --- ROLLOVER BUTTON (The History-Building Engine) ---
     st.markdown("---") 
@@ -2466,13 +2478,13 @@ def show_overdue_tracker():
         
         try: 
             # FORCE NUMERIC: This kills the "stubborn balance" issue
-            money_cols = ['principal', 'Interest', 'Balance', 'Total_Repayable', 'Amount_Paid']
+            money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
             for col in money_cols:
                 if col in updated_df.columns:
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-            # Targets: Find active 'Pending' rows or Fallback to Overdue
-            targets = updated_df[updated_df['status'] == "Pending"].copy() if not updated_df.empty else pd.DataFrame()
+            # Targets: Find active 'PENDING' rows or Fallback to Overdue Dataframe
+            targets = updated_df[updated_df['status'].astype(str).str.upper() == "PENDING"].copy() if not updated_df.empty else pd.DataFrame()
             if targets.empty:
                 targets = overdue_df.copy()
 
@@ -2486,31 +2498,31 @@ def show_overdue_tracker():
 
                         # 2. THE ULTIMATE MATH FIX
                         old_p = float(r.get('principal', 0))
-                        old_i = float(r.get('Interest', 0))
+                        old_i = float(r.get('interest', 0))
                         
-                        # New Basis = 514,000 (Old P + Old I)
+                        # New Basis = (Old P + Old I)
                         new_basis = old_p + old_i
-                        # New Interest = 15,420 (3% of 514k)
+                        # New Interest = 3% of new basis
                         new_month_interest = new_basis * 0.03
-                        # Final Balance = 529,420
+                        # Final Balance
                         compounded_balance = new_basis + new_month_interest
                         
-                        # date Math
+                        # Date Math
                         orig_end = pd.to_datetime(r['end_date'], errors='coerce')
                         new_start = orig_end if pd.notna(orig_end) else datetime.now()
-                        new_end = new_start + pd.dateOffset(months=1)
+                        new_end = new_start + pd.offsets.DateOffset(months=1)
 
                         # 3. Create New Cycle Row
                         new_row = r.copy()
-                        new_row['Start_date'] = new_start.strftime('%Y-%m-%d')
+                        new_row['start_date'] = new_start.strftime('%Y-%m-%d')
                         new_row['end_date'] = new_end.strftime('%Y-%m-%d')
                         new_row['principal'] = new_basis
-                        new_row['Interest'] = new_month_interest
-                        new_row['Balance'] = compounded_balance 
-                        new_row['Total_Repayable'] = compounded_balance
-                        new_row['Amount_Paid'] = 0
-                        new_row['status'] = "Pending" 
-                        new_row['Balance_B/F'] = new_basis 
+                        new_row['interest'] = new_month_interest
+                        new_row['balance'] = compounded_balance 
+                        new_row['total_repayable'] = compounded_balance
+                        new_row['amount_paid'] = 0
+                        new_row['status'] = "PENDING" 
+                        new_row['balance_b/f'] = new_basis 
                         
                         new_rows_list.append(new_row)
                         count += 1
@@ -2518,13 +2530,16 @@ def show_overdue_tracker():
                 if new_rows_list:
                     new_entries_df = pd.DataFrame(new_rows_list)
                     combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
-                    id_col = 'Loan_ID' if 'Loan_ID' in combined_df.columns else 'Loan ID'
-                    updated_df = combined_df.sort_values(by=[id_col, 'Start_date'], ascending=[True, True])
+                    id_col = 'loan_id'
+                    updated_df = combined_df.sort_values(by=[id_col, 'start_date'], ascending=[True, True])
 
                 # 6. --- THE CORRECTED SAVE BLOCK ---
-                # We use .fillna(0) to ensure Google Sheets doesn't crash on empty numbers
+                # Re-space column headers to match the physical schema before save executions
                 save_ready_df = updated_df.fillna(0).copy()
-                save_ready_df.columns = [col.replace("_", " ") for col in save_ready_df.columns]
+                save_ready_df.columns = [col.replace("_", " ").title() for col in save_ready_df.columns]
+                
+                # Dynamic adjustment check to make sure Loan ID column keeps absolute precision naming
+                save_ready_df.columns = [col if col != "Loan Id" else "Loan ID" for col in save_ready_df.columns]
                 
                 # Critical: Save back using the isolated tenant context
                 if save_data("loans", save_ready_df, tenant_id=tenant_id):
@@ -2537,16 +2552,17 @@ def show_overdue_tracker():
 
     # 9. --- TABLE DISPLAY (Branded & Formatted) ---
     def style_status_colors(s):
-        if s == "BCF": return "background-color: #FFA500; color: white;" # Orange
-        if s == "Pending": return "background-color: #D32F2F; color: white;" # Red
-        if s == "Closed": return "background-color: #2E7D32; color: white;" # Green
+        val = str(s).upper()
+        if val == "BCF": return "background-color: #FFA500; color: white;"      # Orange
+        if val == "PENDING": return "background-color: #D32F2F; color: white;"  # Red
+        if val in ["CLOSED", "CLEARED"]: return "background-color: #2E7D32; color: white;" # Green
         return ""
 
     st.markdown("### 🏦 All Loan Records")
     
     try:
         display_df = st.session_state.get("loans", loans).copy()
-        display_df.columns = display_df.columns.str.strip().str.replace(" ", "_")
+        display_df.columns = display_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
         # Push status to the end for Luxe view
         if 'status' in display_df.columns:
@@ -2554,8 +2570,8 @@ def show_overdue_tracker():
             display_df = display_df[cols]
 
         fmt_dict = {
-            "principal": "{:,.0f}", "Balance": "{:,.0f}", "Interest": "{:,.0f}",
-            "Total_Repayable": "{:,.0f}", "Amount_Paid": "{:,.0f}", "Balance_B/F": "{:,.0f}"
+            "principal": "{:,.0f}", "balance": "{:,.0f}", "interest": "{:,.0f}",
+            "total_repayable": "{:,.0f}", "amount_paid": "{:,.0f}", "balance_b/f": "{:,.0f}"
         }
         actual_fmt = {k: v for k, v in fmt_dict.items() if k in display_df.columns}
 
@@ -2591,22 +2607,23 @@ def show_calendar(tenant_id: str):
         st.info("📅 Calendar is clear! No active loans to track.")
         return
 
-    loans_df.columns = loans_df.columns.str.strip().str.replace(" ", "_")
+    # Translate column headers immediately to clean lower snake case
+    loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    required_keys = ["end_date", "Total_Repayable", "status", "Borrower", "Loan_ID", "principal", "Interest"]
+    required_keys = ["end_date", "total_repayable", "status", "borrower", "loan_id", "principal", "interest"]
     for col in required_keys:
         if col not in loans_df.columns:
-            loans_df[col] = 0 if col in ["Total_Repayable", "principal", "Interest"] else "Unknown"
+            loans_df[col] = 0 if col in ["total_repayable", "principal", "interest"] else "Unknown"
             
     # Convert to proper types for logic
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
-    loans_df["Total_Repayable"] = pd.to_numeric(loans_df["Total_Repayable"], errors="coerce").fillna(0)
+    loans_df["total_repayable"] = pd.to_numeric(loans_df["total_repayable"], errors="coerce").fillna(0)
     
-    # Reference date (June 2026)
+    # Reference date context
     today = pd.Timestamp.today().normalize()
     
-    # Filter for loans that aren't closed
-    active_loans = loans_df[loans_df["status"].astype(str).str.lower() != "closed"].copy()
+    # Filter for loans that aren't closed or cleared matching core status patterns
+    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["CLOSED", "CLEARED"])].copy()
 
     # --- VISUAL CALENDAR WIDGET ---
     calendar_events = []
@@ -2616,11 +2633,11 @@ def show_calendar(tenant_id: str):
             is_overdue = r['end_date'].date() < today.date()
             ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
             
-            # Auto-Recovery for display amount if Total_Repayable is zero
-            disp_amt = float(r['Total_Repayable']) if r['Total_Repayable'] > 0 else (float(r['principal']) + float(r['Interest']))
+            # Auto-Recovery for display amount if total_repayable is zero
+            disp_amt = float(r['total_repayable']) if r['total_repayable'] > 0 else (float(r['principal']) + float(r['interest']))
             
             calendar_events.append({
-                "title": f"UGX {disp_amt:,.0f} - {r['Borrower']}",
+                "title": f"UGX {disp_amt:,.0f} - {r['borrower']}",
                 "start": r['end_date'].strftime("%Y-%m-%d"),
                 "end": r['end_date'].strftime("%Y-%m-%d"),
                 "color": ev_color,
@@ -2676,7 +2693,7 @@ def show_calendar(tenant_id: str):
     
     current_month = today.month
     this_month_df = active_loans[active_loans["end_date"].dt.month == current_month]
-    total_expected = this_month_df["Total_Repayable"].sum()
+    total_expected = this_month_df["total_repayable"].sum()
     
     f1, f2 = st.columns(2)
     f1.metric("Expected Collections", f"{total_expected:,.0f} UGX")
@@ -2692,7 +2709,7 @@ def show_calendar(tenant_id: str):
         today_rows = ""
         for i, r in due_today_df.iterrows():
             bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-            today_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;"><b>#{r['Loan_ID']}</b></td><td style="padding:10px;">{r['Borrower']}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#2B3F87;">{r['Total_Repayable']:,.0f}</td><td style="padding:10px; text-align:center;"><span style="background:#2B3F87; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">💰 COLLECT NOW</span></td></tr>"""
+            today_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #ddd;"><td style="padding:10px;"><b>#{r['loan_id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px; text-align:right; font-weight:bold; color:#2B3F87;">{r['total_repayable']:,.0f}</td><td style="padding:10px; text-align:center;"><span style="background:#2B3F87; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">💰 COLLECT NOW</span></td></tr>"""
         st.markdown(f"""<div style="border:2px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount Due</th><th style="padding:10px; text-align:center;">Action</th></tr>{today_rows}</table></div>""", unsafe_allow_html=True)
 
     # --- SECTION: UPCOMING ---
@@ -2704,9 +2721,9 @@ def show_calendar(tenant_id: str):
         up_rows = ""
         for i, r in upcoming_display.iterrows():
             bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
-            display_amt = float(r.get('Total_Repayable', 0)) or (float(r.get('principal', 0)) + float(r.get('Interest', 0)))
-            up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['end_date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('Loan_ID', 'N/A')}</td></tr>"""
-        st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
+            display_amt = float(r.get('total_repayable', 0)) or (float(r.get('principal', 0)) + float(r.get('interest', 0)))
+            up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['end_date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('loan_id', 'N/A')}</td></tr>"""
+        st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due Date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
 
     # --- SECTION: IMMEDIATE FOLLOW-UP ---
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
@@ -2714,14 +2731,14 @@ def show_calendar(tenant_id: str):
     if overdue_df.empty:
         st.success("Clean Sheet! No overdue loans found. 🎉")
     else:
-        overdue_df["Days_Late"] = (today - overdue_df["end_date"]).dt.days
-        overdue_df = overdue_df.sort_values("Days_Late", ascending=False)
+        overdue_df["days_late"] = (today - overdue_df["end_date"]).dt.days
+        overdue_df = overdue_df.sort_values("days_late", ascending=False)
         od_rows = ""
         for i, r in overdue_df.iterrows():
             bg = "#FFF5F5"
-            late_color = "#FF4B4B" if r['Days_Late'] > 7 else "#FFA500"
-            od_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #FFDADA;"><td style="padding:10px;"><b>#{r['Loan_ID']}</b></td><td style="padding:10px;">{r['Borrower']}</td><td style="padding:10px; text-align:center; font-weight:bold; color:{late_color};">{r['Days_Late']} Days</td><td style="padding:10px; text-align:center;"><span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span></td></tr>"""
-        st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+            late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
+            od_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #FFDADA;"><td style="padding:10px;"><b>#{r['loan_id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px; text-align:center; font-weight:bold; color:{late_color};">{r['days_late']} Days</td><td style="padding:10px; text-align:center;"><span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span></td></tr>"""
+        st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
 # ==========================================================
 # 🛡️ COLLATERAL MANAGEMENT ENGINE
 # ==========================================================
