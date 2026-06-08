@@ -2725,7 +2725,13 @@ def show_calendar():
         (active_loans["end_date"] <= today + pd.Timedelta(days=7))
     ]
 
-    overdue = active_loans[active_loans["end_date"] < today]
+    # Overdue Count tracking matching remaining active pipelines
+    overdue_mask = (active_df["end_date"] < today)
+    overdue_count = (
+        (df["status"].astype(str).str.upper() == "PENDING")
+        & (df["balance"] > 0)
+        & (df["end_date"] < today)
+    ).sum()
 
     m1, m2, m3 = st.columns(3)
 
