@@ -3977,10 +3977,10 @@ if __name__ == "__main__":
             elif page == "Ledger":
                 show_ledger()
                 
-            elif page == "payments":
+            elif page == "Payments":
                 show_payments(supabase)
                 
-            elif page == "expenses":
+            elif page == "Expenses":
                 show_expenses()
                 
             elif page == "Overdue Tracker":
