@@ -3163,8 +3163,8 @@ from datetime import datetime
 
 def show_calendar():
     """
-    Displays the modern enterprise operation activity center, workload forecasts,
-    and precise execution deadlines due today.
+    Displays the modern collection control page showing ONLY active 
+    loans with a PENDING status that are due today.
     """
     brand_color = st.session_state.get("theme_color", "#2B3F87")
     current_tenant = st.session_state.get('tenant_id')
@@ -3230,20 +3230,24 @@ def show_calendar():
         st.info("📅 Workspace clean. There are currently no loan records present on your corporate network.")
         return
 
-    raw_loans.columns = raw_loans.columns.str.strip().str.lower().str.replace(" ", "_")
+    # Standardize column naming
+    loans_df = raw_loans.copy()
+    loans_df.columns = loans_df.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    if "tenant_id" in raw_loans.columns:
-        loans_df = raw_loans[raw_loans["tenant_id"].astype(str) == str(current_tenant)].copy()
-    else:
-        loans_df = raw_loans.copy()
+    # Filter tenant data partition boundary
+    if "tenant_id" in loans_df.columns:
+        loans_df = loans_df[loans_df["tenant_id"].astype(str) == str(current_tenant)].copy()
 
     if loans_df.empty:
-        st.info("💡 No loans linked to this workspace registration profiles yet.")
+        st.info("💡 No loans linked to this workspace registration profile yet.")
         return
 
+    # Dynamic Borrower Identity Mapping
     if raw_borrowers is not None and not raw_borrowers.empty:
-        raw_borrowers.columns = raw_borrowers.columns.str.strip().str.lower().str.replace(" ", "_")
-        borrowers_df = raw_borrowers if "tenant_id" not in raw_borrowers.columns else raw_borrowers[raw_borrowers["tenant_id"].astype(str) == str(current_tenant)]
+        borrowers_df = raw_borrowers.copy()
+        borrowers_df.columns = borrowers_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        if "tenant_id" in borrowers_df.columns:
+            borrowers_df = borrowers_df[borrowers_df["tenant_id"].astype(str) == str(current_tenant)]
         bor_map = dict(zip(borrowers_df["id"].astype(str), borrowers_df["name"]))
     else:
         bor_map = {}
@@ -3251,6 +3255,7 @@ def show_calendar():
     if "borrower" not in loans_df.columns:
         loans_df["borrower"] = loans_df["borrower_id"].astype(str).map(bor_map).fillna("Unknown Profile") if "borrower_id" in loans_df.columns else "Unknown Profile"
 
+    # ID Formatter
     def clean_id_str(val):
         if pd.isna(val): return ""
         s = str(val).strip()
@@ -3262,78 +3267,81 @@ def show_calendar():
         loans_df["loan_id_label"] = loans_df["id_clean"]
     loans_df["loan_id_label"] = loans_df["loan_id_label"].fillna(loans_df["id_clean"]).astype(str)
 
-    date_col = "due_date" if "due_date" in loans_df.columns else "end_date"
+    # Coerce Dates and Financial Values
+    date_col = "end_date" if "end_date" in loans_df.columns else "due_date"
     loans_df[date_col] = pd.to_datetime(loans_df[date_col], errors="coerce")
     loans_df["balance"] = pd.to_numeric(loans_df.get("balance", 0), errors="coerce").fillna(0.0)
-    loans_df["total_repayable"] = pd.to_numeric(loans_df.get("total_repayable", loans_df.get("amount", 0)), errors="coerce").fillna(0.0)
-
+    
     today = pd.Timestamp.today().normalize()
 
     # ==========================================
-    # 🔄 MULTI-CYCLE DEDUPLICATION & COMPILATION
+    # 🔄 EXCLUSIVE PENDING FILTERING
     # ==========================================
-    seq_col = "cycle" if "cycle" in loans_df.columns else "id"
-    active_loans = (
-        loans_df.sort_values(by=[seq_col])
+    loans_df["status_clean"] = loans_df["status"].astype(str).str.strip().str.upper()
+    
+    # Filter strictly for open PENDING records (excluding history milestones like BCF)
+    pending_loans = loans_df[loans_df["status_clean"] == "PENDING"].copy()
+
+    # De-duplicate to focus strictly on the latest cycle record per loan ID
+    seq_col = "cycle_no" if "cycle_no" in pending_loans.columns else "id"
+    active_pending = (
+        pending_loans.sort_values(by=[seq_col])
         .groupby("loan_id_label", as_index=False)
         .tail(1)
     ).copy()
 
-    active_loans = active_loans[~active_loans["status"].astype(str).str.upper().isin(["PAID", "CLEARED", "CLOSED"])]
-    active_loans = active_loans[active_loans["balance"].apply(lambda x: abs(x) > 5.0)]
-
     # Dynamic Frame Headers
-    st.markdown("<h1 class='main-title'>📅 Daily Collection Control Center</h1>", unsafe_allow_html=True)
-    st.markdown("<p class='subtitle'>Real-time tracking optimized for single-day operational workflows and action deadlines.</p>", unsafe_allow_html=True)
+    st.markdown("<h1 class='main-title'>📅 Daily Operational Dispatch</h1>", unsafe_allow_html=True)
+    st.markdown("<p class='subtitle'>Live interface displaying pending accounts with active balances due today.</p>", unsafe_allow_html=True)
 
     # ==========================================
-    # 📊 EXECUTIVE LEVEL KPI OVERVIEWS
+    # 📊 EXECUTIVE LEVEL KPIS
     # ==========================================
-    due_today_df = active_loans[active_loans[date_col].dt.date == today.date()]
-    upcoming_df = active_loans[
-        (active_loans[date_col].dt.date > today.date()) & 
-        (active_loans[date_col].dt.date <= (today + pd.Timedelta(days=7)).date())
+    due_today_df = active_pending[active_pending[date_col].dt.date == today.date()]
+    upcoming_7_days = active_pending[
+        (active_pending[date_col].dt.date > today.date()) & 
+        (active_pending[date_col].dt.date <= (today + pd.Timedelta(days=7)).date())
     ]
-    overdue_df = active_loans[active_loans[date_col].dt.date < today.date()]
+    historical_backlog = active_pending[active_pending[date_col].dt.date < today.date()]
 
     kpi1, kpi2, kpi3 = st.columns(3)
     
     with kpi1:
         st.markdown(f"""
             <div class="kpi-container" style="border-top: 4px solid #10B981;">
-                <div class="kpi-label">Maturing Today</div>
-                <div class="kpi-value" style="color: #10B981;">{len(due_today_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
+                <div class="kpi-label">Pending Due Today</div>
+                <div class="kpi-value" style="color: #10B981;">{len(due_today_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Loans</span></div>
             </div>
         """, unsafe_allow_html=True)
         
     with kpi2:
         st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid #3B82F6;">
-                <div class="kpi-label">Upcoming Window (7 Days)</div>
-                <div class="kpi-value">{len(upcoming_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
+            <div class="kpi-container" style="border-top: 4px solid {brand_color};">
+                <div class="kpi-label">Pending Due Next 7 Days</div>
+                <div class="kpi-value">{len(upcoming_7_days)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Loans</span></div>
             </div>
         """, unsafe_allow_html=True)
         
     with kpi3:
         st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid #6B7280;">
-                <div class="kpi-label">Total Backlog Items</div>
-                <div class="kpi-value">{len(overdue_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Accounts</span></div>
+            <div class="kpi-container" style="border-top: 4px solid #EF4444;">
+                <div class="kpi-label">Pending Overdue Backlog</div>
+                <div class="kpi-value" style="color:#EF4444;">{len(historical_backlog)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Loans</span></div>
             </div>
         """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ==========================================
-    # 🎯 TARGET FOCUS PANEL: DUE TODAY ONLY
+    # 🎯 ACTION INTERFACE - DUE TODAY ONLY
     # ==========================================
-    st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:15px;'>🎯 Action Items For Today</h3>", unsafe_allow_html=True)
+    st.markdown("<h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:15px;'>🎯 Accounts Requiring Settlement Action Today</h3>", unsafe_allow_html=True)
     
     if due_today_df.empty:
         st.markdown("""
-            <div style="background-color: #F9FAFB; border: 1px dashed #E5E7EB; padding: 30px; border-radius: 12px; text-align: center; margin-bottom: 20px;">
+            <div style="background-color: #F9FAFB; border: 1px dashed #E5E7EB; padding: 32px; border-radius: 12px; text-align: center; margin-bottom: 20px;">
                 <p style="color:#6B7280; font-family:'Plus Jakarta Sans'; font-size:14px; margin:0; font-weight: 500;">
-                    ✨ Clean Schedule! No collection deadlines or maturities slated for today.
+                    ✨ Portfolio All Clear! There are no pending loan maturities hitting schedule limits today.
                 </p>
             </div>
         """, unsafe_allow_html=True)
@@ -3342,11 +3350,12 @@ def show_calendar():
         display_today["Short ID"] = display_today.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
         
         st.dataframe(
-            display_today[["Short ID", "borrower", "balance", "status"]].rename(columns={
+            display_today[["Short ID", "borrower", "cycle_no", "balance", "status"]].rename(columns={
                 "Short ID": "Loan ID",
                 "borrower": "Client Identity Name",
+                "cycle_no": "Cycle",
                 "balance": "Outstanding Balance (UGX)",
-                "status": "System Status"
+                "status": "Current Status"
             }),
             use_container_width=True,
             hide_index=True,
@@ -3358,10 +3367,10 @@ def show_calendar():
     # ==========================================
     # 🗓️ VISUAL CALENDAR TIMELINE
     # ==========================================
-    st.markdown("<br><h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:12px;'>🗓️ Interactive Operations Timeline</h3>", unsafe_allow_html=True)
+    st.markdown("<br><h3 style='font-family:\"Plus Jakarta Sans\"; font-weight:700; font-size:18px; color:#111827; margin-bottom:12px;'>🗓️ Pipeline View Map</h3>", unsafe_allow_html=True)
     
     events_list = []
-    for _, item in active_loans.iterrows():
+    for _, item in active_pending.iterrows():
         if pd.notna(item[date_col]):
             is_past = item[date_col].date() < today.date()
             color_code = "#EF4444" if is_past else brand_color
@@ -3375,7 +3384,7 @@ def show_calendar():
             })
 
     options_config = {
-        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth,timeGridWeek"},
+        "headerToolbar": {"left": "prev,next today", "center": "title", "right": "dayGridMonth"},
         "initialView": "dayGridMonth",
         "selectable": True
     }
@@ -3384,17 +3393,17 @@ def show_calendar():
         from streamlit_calendar import st_calendar
         st_calendar(events=events_list, options=options_config, key="modern_collection_calendar")
     except ImportError:
-        st.info("ℹ️ Interactive calendar rendering sequence complete.")
+        st.info("ℹ️ Structural calendar component loaded.")
 
     # ==========================================
-    # 🔍 COLLAPSIBLE BACKLOG UTILITY
+    # 🔍 COLLAPSIBLE OVERDUE BACKLOG
     # ==========================================
-    if not overdue_df.empty:
+    if not historical_backlog.empty:
         st.markdown("<br>", unsafe_allow_html=True)
-        with st.expander(f"📁 View Historical Outstanding Backlog ({len(overdue_df)} Accounts)", expanded=False):
-            overdue_display = overdue_df.copy()
+        with st.expander(f"📂 Historical Overdue Pending Ledger ({len(historical_backlog)} Accounts)", expanded=False):
+            overdue_display = historical_backlog.copy()
             overdue_display["days_late"] = (today - overdue_display[date_col]).dt.days
-            overdue_display["Arrears Duration"] = overdue_display["days_late"].apply(lambda x: f"⚠️ {x} Days Late")
+            overdue_display["Arrears Duration"] = overdue_display["days_late"].apply(lambda x: f"⚠️ {x} Days Overdue")
             overdue_display["Short ID"] = overdue_display.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
 
             st.dataframe(
@@ -3404,7 +3413,7 @@ def show_calendar():
                     "Short ID": "Loan Account",
                     "borrower": "Client Identity Name",
                     "balance": "Outstanding Exposure (UGX)",
-                    "status": "System Base Status"
+                    "status": "Current Status"
                 }),
                 use_container_width=True,
                 hide_index=True,
