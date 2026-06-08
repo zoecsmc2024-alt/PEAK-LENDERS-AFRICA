@@ -1617,7 +1617,7 @@ def show_loans():
                     e_princ = st.number_input("Principal", value=float(loan_to_edit["principal"]))
                 with col2:
                     current_interest = float(loan_to_edit["interest"]) if pd.notna(loan_to_edit["interest"]) else 0.0
-                    e_interest = st.number_input("Interest Amount", value=current_interest)
+                    e_interest = st.number_input("Interest amount", value=current_interest)
     
                 col3, col4 = st.columns(2)
                 with col3:
@@ -1830,7 +1830,7 @@ def show_payments(supabase):
         st.metric("Verified Balance Position", f"UGX {current_bal:,.0f}")
 
         with st.form("payment_form"):
-            amount = st.number_input("Transaction Amount Received (UGX)", min_value=0.0, step=10000.0) # Matched floating signatures
+            amount = st.number_input("Transaction amount Received (UGX)", min_value=0.0, step=10000.0) # Matched floating signatures
             method = st.selectbox("Collection Channel / Method", ["Cash", "Mobile Money", "Bank"])
             date = st.date_input("Processing Settlement date", datetime.now())
             submit = st.form_submit_button("🚀 Post Repayment Entry", use_container_width=True)
@@ -1867,7 +1867,7 @@ def show_payments(supabase):
                     pdf_buffer = generate_receipt_pdf({
                         "Receipt Number": receipt_no,
                         "Borrower Entity": active_loan["borrower"],
-                        "Settlement Amount": f"UGX {amount:,.0f}",
+                        "Settlement amount": f"UGX {amount:,.0f}",
                         "Payment Framework": method,
                         "Execution date": date.strftime("%Y-%m-%d"),
                     })
@@ -1965,7 +1965,7 @@ def show_payments(supabase):
                         st.info(f"Modifying Entry Core Attributes: {target_pay['receipt_no']}")
                         
                         # Float value types calibrated with explicit steps to bypass number input crash risks
-                        new_amt = st.number_input("Revised Amount Allocation (UGX)", value=float(target_pay['amount']), step=5000.0)
+                        new_amt = st.number_input("Revised amount Allocation (UGX)", value=float(target_pay['amount']), step=5000.0)
                         
                         current_method = target_pay['method']
                         method_options = ["Cash", "Mobile Money", "Bank"]
