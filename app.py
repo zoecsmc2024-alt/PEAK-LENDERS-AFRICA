@@ -748,7 +748,7 @@ def show_dashboard_view():
     # 4. METRICS CALCULATION (Guaranteed to equal 0 if database is cleared)
     # ============================================================
     # Calculated explicitly using the validated active cohort
-    total_issued = cycle_1_active_df["principal"].sum() 
+    total_principal = original_loans["principal"].sum() 
     total_interest_expected = cycle_1_active_df["interest"].sum()
     
     # Total historical collections pulled across the entire tenant history
