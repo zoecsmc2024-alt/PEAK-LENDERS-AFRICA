@@ -672,23 +672,29 @@ def render_sidebar():
     return selected_page
 
 # ==========================================
-# 1. CORE PAGE FUNCTIONS & LAYOUT
+# 1. CORE PAGE FUNCTIONS & LAYOUT (Overview)
 # ==========================================
-def get_current_tenant():
-    return st.session_state.get("tenant_id")
-def show_dashboard_view():
 
+def show_overview():
+    """
+    Main Multi-Tenant Dashboard view.
+    Calculates portfolio metrics and renders visual analytics isolated by tenant_id.
+    """
+    # Pull the active tenant context using the exact same logic as the loans page
     tenant_id = get_current_tenant()
 
+    # Safeguard: Ensure a valid tenant context exists before doing anything
     if not tenant_id:
         st.error("❌ Access Denied: No valid tenant context detected.")
         return
 
     st.markdown("## 📊 Financial Dashboard")
 
+    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant)
     df = get_cached_data("loans")
     pay_df = get_cached_data("payments")
     exp_df = get_cached_data("expenses")
+
     if df is None or df.empty:
         st.info("No loan records found.")
         return
@@ -812,7 +818,7 @@ def show_dashboard_view():
         status_counts.columns = ["status", "Count"]
         fig_pie = px.pie(status_counts, names="status", values="Count", hole=0.5, title="Loan Distribution", color_discrete_sequence=["#4A90E2", "#FF4B4B", "#FFA500"])
         fig_pie.update_layout(paper_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87", margin=dict(t=40, b=0, l=0, r=0))
-        st.plotly_chart(fig_pie, use_container_width=True)
+        st.plotly_chart(fig_pie, use_container_width=True, key="overview_pie_chart")
 
     with c_bar:
         # Combined Cashflow Chart (Income vs expenses)
@@ -829,7 +835,7 @@ def show_dashboard_view():
             
             fig_bar = px.bar(m_cash, x="Month", y=["Income", "expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "expenses": "#FF4B4B"})
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
-            st.plotly_chart(fig_bar, use_container_width=True)
+            st.plotly_chart(fig_bar, use_container_width=True, key="overview_bar_chart")
         else:
             st.info("💡 Tip: Record both payments and expenses to see the performance chart.")
 
