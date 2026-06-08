@@ -768,8 +768,11 @@ def show_dashboard_view():
     
     # Overdue Count tracking matching remaining active pipelines
     overdue_mask = (active_df["end_date"] < today)
-    overdue_count = active_df[overdue_mask].shape[0]
-
+    overdue_count = (
+        (df["status"].astype(str).str.upper() == "PENDING")
+        & (df["balance"] > 0)
+        & (df["end_date"] < today)
+    ).sum()
     # 5. METRICS ROW (Zoe Soft Blue Style)
     m1, m2, m3, m4 = st.columns(4)
     
