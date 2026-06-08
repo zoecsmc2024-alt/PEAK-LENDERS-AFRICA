@@ -3275,21 +3275,30 @@ def show_calendar():
     today = pd.Timestamp.today().normalize()
 
     # ==========================================
-    # 🔄 EXCLUSIVE PENDING FILTERING
+    # 🔄 PENDING + DUE TODAY ONLY
     # ==========================================
-    loans_df["status_clean"] = loans_df["status"].astype(str).str.strip().str.upper()
+    loans_df["status_clean"] = (
+        loans_df["status"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
     
-    # Filter strictly for open PENDING records (excluding history milestones like BCF)
-    pending_loans = loans_df[loans_df["status_clean"] == "PENDING"].copy()
-
-    # De-duplicate to focus strictly on the latest cycle record per loan ID
-    seq_col = "cycle_no" if "cycle_no" in pending_loans.columns else "id"
-    active_pending = (
-        pending_loans.sort_values(by=[seq_col])
+    # keep latest record per loan first
+    seq_col = "cycle_no" if "cycle_no" in loans_df.columns else "id"
+    
+    latest_loans = (
+        loans_df.sort_values(by=[seq_col])
         .groupby("loan_id_label", as_index=False)
         .tail(1)
-    ).copy()
-
+        .copy()
+    )
+    
+    # ONLY PENDING LOANS DUE TODAY
+    active_pending = latest_loans[
+        (latest_loans["status_clean"] == "PENDING") &
+        (latest_loans[date_col].dt.normalize() == today)
+    ].copy()
     # Dynamic Frame Headers
     st.markdown("<h1 class='main-title'>📅 Daily Operational Dispatch</h1>", unsafe_allow_html=True)
     st.markdown("<p class='subtitle'>Live interface displaying pending accounts with active balances due today.</p>", unsafe_allow_html=True)
@@ -3297,20 +3306,30 @@ def show_calendar():
     # ==========================================
     # 📊 EXECUTIVE LEVEL KPIS
     # ==========================================
-    due_today_df = active_pending[active_pending[date_col].dt.date == today.date()]
-    upcoming_7_days = active_pending[
-        (active_pending[date_col].dt.date > today.date()) & 
-        (active_pending[date_col].dt.date <= (today + pd.Timedelta(days=7)).date())
-    ]
-    historical_backlog = active_pending[active_pending[date_col].dt.date < today.date()]
+    due_today_df = active_pending
+    upcoming_7_days = pd.DataFrame()
+    historical_backlog = pd.DataFrame()
 
     kpi1, kpi2, kpi3 = st.columns(3)
     
+    kpi1, = st.columns(1)
+
     with kpi1:
         st.markdown(f"""
-            <div class="kpi-container" style="border-top: 4px solid #10B981;">
-                <div class="kpi-label">Pending Due Today</div>
-                <div class="kpi-value" style="color: #10B981;">{len(due_today_df)} <span style="font-size:14px; font-weight:500; color:#6B7280;">Loans</span></div>
+            <div class="kpi-container"
+                 style="border-top:4px solid #10B981;">
+                <div class="kpi-label">
+                    Pending Due Today
+                </div>
+                <div class="kpi-value"
+                     style="color:#10B981;">
+                     {len(active_pending)}
+                     <span style="font-size:14px;
+                                  font-weight:500;
+                                  color:#6B7280;">
+                         Loans
+                     </span>
+                </div>
             </div>
         """, unsafe_allow_html=True)
         
@@ -3346,7 +3365,7 @@ def show_calendar():
             </div>
         """, unsafe_allow_html=True)
     else:
-        display_today = due_today_df.copy()
+        display_today = active_pending.copy()
         display_today["Short ID"] = display_today.apply(lambda r: f"#{r['loan_id_label']}", axis=1)
         
         st.dataframe(
