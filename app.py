@@ -688,7 +688,7 @@ def show_dashboard_view():
 
     df = get_cached_data("loans")
     pay_df = get_cached_data("payments")
-    exp_df = get_cached_data("Expenses")
+    exp_df = get_cached_data("expenses")
     if df is None or df.empty:
         st.info("No loan records found.")
         return
@@ -815,7 +815,7 @@ def show_dashboard_view():
         st.plotly_chart(fig_pie, use_container_width=True)
 
     with c_bar:
-        # Combined Cashflow Chart (Income vs Expenses)
+        # Combined Cashflow Chart (Income vs expenses)
         if pay_df is not None and not pay_df.empty and exp_df is not None and not exp_df.empty:
             pay_df["Date"] = pd.to_datetime(pay_df["Date"], errors='coerce')
             exp_df["Date"] = pd.to_datetime(exp_df["Date"], errors='coerce')
@@ -825,9 +825,9 @@ def show_dashboard_view():
             exp_m = exp_df.groupby(exp_df["Date"].dt.strftime('%b %Y'))["Amount"].sum().reset_index()
             
             m_cash = pd.merge(inc_m, exp_m, on="Date", how="outer", suffixes=('_Inc', '_Exp')).fillna(0)
-            m_cash.columns = ["Month", "Income", "Expenses"]
+            m_cash.columns = ["Month", "Income", "expenses"]
             
-            fig_bar = px.bar(m_cash, x="Month", y=["Income", "Expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "Expenses": "#FF4B4B"})
+            fig_bar = px.bar(m_cash, x="Month", y=["Income", "expenses"], barmode="group", title="Performance", color_discrete_map={"Income": "#2E7D32", "expenses": "#FF4B4B"})
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color="#2B3F87")
             st.plotly_chart(fig_bar, use_container_width=True)
         else:
@@ -2249,7 +2249,7 @@ def show_reports(tenant_id: str):
     # 1. FETCH DATA (Scoped by tenant_id)
     loans = get_cached_data("loans", tenant_id=tenant_id)
     payments = get_cached_data("payments", tenant_id=tenant_id)
-    expenses = get_cached_data("Expenses", tenant_id=tenant_id)
+    expenses = get_cached_data("expenses", tenant_id=tenant_id)
     payroll = get_cached_data("Payroll", tenant_id=tenant_id)
 
     if loans.empty:
@@ -2286,10 +2286,10 @@ def show_reports(tenant_id: str):
     exp_amt = pd.to_numeric(expenses.get("Amount", 0), errors="coerce").fillna(0).sum() if not expenses.empty else 0
     
     # 💰 FINANCIAL LOGIC:
-    # Total Outflow = Direct Expenses + Taxes (PAYE/NSSF) | Petty Cash explicitly removed
+    # Total Outflow = Direct expenses + Taxes (PAYE/NSSF) | Petty Cash explicitly removed
     total_outflow = exp_amt + nssf_total + paye_total
     
-    # Net Profit = Inflows (payments) - Outflows (Expenses)
+    # Net Profit = Inflows (payments) - Outflows (expenses)
     net_profit = p_amt - total_outflow
 
     # 4. KPI DASHBOARD (Soft Blue Branded)
@@ -2310,7 +2310,7 @@ def show_reports(tenant_id: str):
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.write("**💰 Income vs. Expenses (Monthly)**")
+        st.write("**💰 Income vs. expenses (Monthly)**")
         if not payments.empty:
             pay_copy = payments.copy()
             pay_copy.columns = pay_copy.columns.str.strip().str.replace(" ", "_")
@@ -2327,10 +2327,10 @@ def show_reports(tenant_id: str):
 
             # Merge trends for comparison bar chart
             merged = pd.merge(inc_trend, exp_trend, on="Date", how="outer").fillna(0)
-            merged.columns = ["Month", "Income", "Expenses"]
+            merged.columns = ["Month", "Income", "expenses"]
             
-            fig_bar = px.bar(merged, x="Month", y=["Income", "Expenses"], barmode="group",
-                             color_discrete_map={"Income": "#00ffcc", "Expenses": "#FF4B4B"})
+            fig_bar = px.bar(merged, x="Month", y=["Income", "expenses"], barmode="group",
+                             color_discrete_map={"Income": "#00ffcc", "expenses": "#FF4B4B"})
             fig_bar.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
             st.plotly_chart(fig_bar, use_container_width=True, key=f"income_vs_expense_{tenant_id}")
         else:
@@ -3043,7 +3043,7 @@ def show_expenses():
         df = pd.DataFrame(columns=["id","category","amount","date","description","payment_date","receipt_no","tenant_id","financial_year"])
         raw_all_df = df.copy()
 
-    EXPENSE_CATS = ["Rent","Insurance","Utilities","Salaries","Licence Expenses","Marketing","Office Expenses","Operating Expenses","Fuel and Motor Vehicle","Taxes","Corporate Social Responsibilities","Other"]
+    EXPENSE_CATS = ["Rent","Insurance","Utilities","Salaries","Licence expenses","Marketing","Office expenses","Operating expenses","Fuel and Motor Vehicle","Taxes","Corporate Social Responsibilities","Other"]
 
     tab_add, tab_view, tab_manage = st.tabs([
         "➕ Record Expense", "📊 Spending Analysis", "⚙️ Manage Records"
@@ -3919,7 +3919,7 @@ if __name__ == "__main__":
             elif page == "payments":
                 show_payments(supabase)
                 
-            elif page == "Expenses":
+            elif page == "expenses":
                 show_expenses()
                 
             elif page == "Overdue Tracker":
