@@ -111,14 +111,22 @@ def check_session_timeout():
 # 📊 4. CACHED DATA LAYER ENGINE
 # ============================================================
 @st.cache_data(ttl=600, show_spinner=False)
-def get_cached_data(table_name):
+def get_cached_data(table_name: str, tenant_id: str = None):
+    """
+    Centralized cached data retriever for Supabase tables.
+    Explicitly includes tenant_id in the signature to resolve unexpected keyword 
+    argument errors and force dynamic multi-tenant cache isolation.
+    """
     try:
         if supabase is None:
             return pd.DataFrame()
 
-        require_tenant()
-        tenant_id = get_tenant_id()
+        # Fallback to centralized state context if tenant_id wasn't passed explicitly
+        if not tenant_id:
+            require_tenant()
+            tenant_id = get_tenant_id()
 
+        # Query isolated data within the active tenant boundary
         res = supabase.table(table_name).select("*").eq("tenant_id", tenant_id).execute()
 
         if res.data:
@@ -129,7 +137,6 @@ def get_cached_data(table_name):
     except Exception as e:
         st.error(f"Database Fetch Error [{table_name}]: {e}")
         return pd.DataFrame()
-
 def save_data(table_name, dataframe):
     try:
         if supabase is None:
