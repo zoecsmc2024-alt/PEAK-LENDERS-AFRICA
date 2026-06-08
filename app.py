@@ -718,7 +718,7 @@ def show_dashboard_view():
     total_collected = df["amount_paid"].sum()
     
     # Logic for Overdue Count: Past due date and not yet cleared
-    overdue_mask = (active_df["End_Date"] < today) & (active_df["Status"] != "Cleared")
+    overdue_mask = (active_df["end_date"] < today) & (active_df["Status"] != "Cleared")
     overdue_count = active_df[overdue_mask].shape[0]
 
     # 5. METRICS ROW (Zoe Soft Blue Style)
@@ -738,13 +738,13 @@ def show_dashboard_view():
         rows_html = ""
         
         if not active_df.empty:
-            recent_loans = active_df.sort_values(by="End_Date", ascending=False).head(5)
+            recent_loans = active_df.sort_values(by="end_date", ascending=False).head(5)
             for i, (idx, r) in enumerate(recent_loans.iterrows()):
                 bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
                 b_name = r.get('Borrower', 'Unknown')
                 p_amt = float(r.get('Principal', 0))
                 b_stat = r.get('Status', 'Active')
-                e_date_raw = r.get('End_Date')
+                e_date_raw = r.get('end_date')
                 e_date = pd.to_datetime(e_date_raw).strftime('%d %b') if pd.notna(e_date_raw) else "-"
 
                 rows_html += f"""
@@ -2428,10 +2428,10 @@ def show_overdue_tracker():
     if not loans.empty:
         temp_loans = loans.copy()
         temp_loans.columns = temp_loans.columns.str.strip().str.replace(" ", "_")
-        temp_loans['End_Date'] = pd.to_datetime(temp_loans['End_Date'], errors='coerce')
+        temp_loans['end_date'] = pd.to_datetime(temp_loans['end_date'], errors='coerce')
         overdue_df = temp_loans[
             (temp_loans['Status'].isin(["Active", "Overdue", "Rolled/Overdue"])) & 
-            (temp_loans['End_Date'] < today)
+            (temp_loans['end_date'] < today)
         ].copy()
 
     # 2. --- PREP WORKING DATA ---
@@ -2490,14 +2490,14 @@ def show_overdue_tracker():
                         compounded_balance = new_basis + new_month_interest
                         
                         # Date Math
-                        orig_end = pd.to_datetime(r['End_Date'], errors='coerce')
+                        orig_end = pd.to_datetime(r['end_date'], errors='coerce')
                         new_start = orig_end if pd.notna(orig_end) else datetime.now()
                         new_end = new_start + pd.DateOffset(months=1)
 
                         # 3. Create New Cycle Row
                         new_row = r.copy()
                         new_row['Start_Date'] = new_start.strftime('%Y-%m-%d')
-                        new_row['End_Date'] = new_end.strftime('%Y-%m-%d')
+                        new_row['end_date'] = new_end.strftime('%Y-%m-%d')
                         new_row['Principal'] = new_basis
                         new_row['Interest'] = new_month_interest
                         new_row['Balance'] = compounded_balance 
@@ -2587,13 +2587,13 @@ def show_calendar(tenant_id: str):
 
     loans_df.columns = loans_df.columns.str.strip().str.replace(" ", "_")
 
-    required_keys = ["End_Date", "Total_Repayable", "Status", "Borrower", "Loan_ID", "Principal", "Interest"]
+    required_keys = ["end_date", "Total_Repayable", "Status", "Borrower", "Loan_ID", "Principal", "Interest"]
     for col in required_keys:
         if col not in loans_df.columns:
             loans_df[col] = 0 if col in ["Total_Repayable", "Principal", "Interest"] else "Unknown"
             
     # Convert to proper types for logic
-    loans_df["End_Date"] = pd.to_datetime(loans_df["End_Date"], errors="coerce")
+    loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
     loans_df["Total_Repayable"] = pd.to_numeric(loans_df["Total_Repayable"], errors="coerce").fillna(0)
     
     # Reference date (June 2026)
@@ -2605,9 +2605,9 @@ def show_calendar(tenant_id: str):
     # --- VISUAL CALENDAR WIDGET ---
     calendar_events = []
     for _, r in active_loans.iterrows():
-        if pd.notna(r['End_Date']):
+        if pd.notna(r['end_date']):
             # Color logic: Red for overdue, Blue for upcoming
-            is_overdue = r['End_Date'].date() < today.date()
+            is_overdue = r['end_date'].date() < today.date()
             ev_color = "#FF4B4B" if is_overdue else "#4A90E2"
             
             # Auto-Recovery for display amount if Total_Repayable is zero
@@ -2615,8 +2615,8 @@ def show_calendar(tenant_id: str):
             
             calendar_events.append({
                 "title": f"UGX {disp_amt:,.0f} - {r['Borrower']}",
-                "start": r['End_Date'].strftime("%Y-%m-%d"),
-                "end": r['End_Date'].strftime("%Y-%m-%d"),
+                "start": r['end_date'].strftime("%Y-%m-%d"),
+                "end": r['end_date'].strftime("%Y-%m-%d"),
                 "color": ev_color,
                 "allDay": True,
             })
@@ -2633,12 +2633,12 @@ def show_calendar(tenant_id: str):
     st.markdown("---")
 
     # 3. DAILY WORKLOAD METRICS (Zoe Branded Cards)
-    due_today_df = active_loans[active_loans["End_Date"].dt.date == today.date()]
+    due_today_df = active_loans[active_loans["end_date"].dt.date == today.date()]
     upcoming_df = active_loans[
-        (active_loans["End_Date"] > today) & 
-        (active_loans["End_Date"] <= today + pd.Timedelta(days=7))
+        (active_loans["end_date"] > today) & 
+        (active_loans["end_date"] <= today + pd.Timedelta(days=7))
     ]
-    overdue_count = active_loans[active_loans["End_Date"] < today].shape[0]
+    overdue_count = active_loans[active_loans["end_date"] < today].shape[0]
 
     # Create the columns
     m1, m2, m3 = st.columns(3)
@@ -2669,7 +2669,7 @@ def show_calendar(tenant_id: str):
     st.markdown("<h4 style='color: #2B3F87;'>📊 Revenue Forecast (This Month)</h4>", unsafe_allow_html=True)
     
     current_month = today.month
-    this_month_df = active_loans[active_loans["End_Date"].dt.month == current_month]
+    this_month_df = active_loans[active_loans["end_date"].dt.month == current_month]
     total_expected = this_month_df["Total_Repayable"].sum()
     
     f1, f2 = st.columns(2)
@@ -2694,21 +2694,21 @@ def show_calendar(tenant_id: str):
     if upcoming_df.empty:
         st.info("The next few days look quiet.")
     else:
-        upcoming_display = upcoming_df.sort_values("End_Date").copy()
+        upcoming_display = upcoming_df.sort_values("end_date").copy()
         up_rows = ""
         for i, r in upcoming_display.iterrows():
             bg = "#F0F8FF" if i % 2 == 0 else "#FFFFFF"
             display_amt = float(r.get('Total_Repayable', 0)) or (float(r.get('Principal', 0)) + float(r.get('Interest', 0)))
-            up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['End_Date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('Loan_ID', 'N/A')}</td></tr>"""
+            up_rows += f"""<tr style="background-color: {bg};"><td style="padding:10px; color:#2B3F87; font-weight:bold;">{r['end_date'].strftime('%d %b (%a)')}</td><td style="padding:10px;">{r.get('Borrower', 'Unknown')}</td><td style="padding:10px; text-align:right; font-weight:bold;">{display_amt:,.0f} UGX</td><td style="padding:10px; text-align:right; color:#666;">ID: #{r.get('Loan_ID', 'N/A')}</td></tr>"""
         st.markdown(f"""<div style="border:1px solid #2B3F87; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#2B3F87; color:white;"><th style="padding:10px;">Due Date</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:right;">Amount</th><th style="padding:10px; text-align:right;">Ref</th></tr>{up_rows}</table></div>""", unsafe_allow_html=True)
 
     # --- SECTION: IMMEDIATE FOLLOW-UP ---
     st.markdown("<br><h4 style='color: #FF4B4B;'>🔴 Past Due (Immediate Attention)</h4>", unsafe_allow_html=True)
-    overdue_df = active_loans[active_loans["End_Date"] < today].copy()
+    overdue_df = active_loans[active_loans["end_date"] < today].copy()
     if overdue_df.empty:
         st.success("Clean Sheet! No overdue loans found. 🎉")
     else:
-        overdue_df["Days_Late"] = (today - overdue_df["End_Date"]).dt.days
+        overdue_df["Days_Late"] = (today - overdue_df["end_date"]).dt.days
         overdue_df = overdue_df.sort_values("Days_Late", ascending=False)
         od_rows = ""
         for i, r in overdue_df.iterrows():
