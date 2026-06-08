@@ -687,7 +687,7 @@ def show_dashboard_view():
     st.markdown("## 📊 Financial Dashboard")
 
     df = get_cached_data("loans")
-    pay_df = get_cached_data("Payments")
+    pay_df = get_cached_data("payments")
     exp_df = get_cached_data("Expenses")
     if df is None or df.empty:
         st.info("No loan records found.")
@@ -1703,7 +1703,7 @@ def generate_receipt_no(supabase, tenant_id):
         return f"RCPT-{datetime.now().strftime('%Y%m%d%H%M%S')}"
 
 # ==============================
-# 💵 PAYMENTS MODULE (CYCLE-AWARE)
+# 💵 payments MODULE (CYCLE-AWARE)
 # ==============================
 def show_payments(supabase):
     brand_color = st.session_state.get("theme_color", "#2B3F87")
@@ -1713,7 +1713,7 @@ def show_payments(supabase):
         st.error("🔐 Session expired. Please log in.")
         st.stop()
 
-    st.markdown(f"<h2 style='color: {brand_color}; margin-bottom: 20px;'>💵 Payments Management</h2>", unsafe_allow_html=True)
+    st.markdown(f"<h2 style='color: {brand_color}; margin-bottom: 20px;'>💵 payments Management</h2>", unsafe_allow_html=True)
 
     try:
         loans_raw = get_cached_data("loans")
@@ -2248,7 +2248,7 @@ def show_reports(tenant_id: str):
     
     # 1. FETCH DATA (Scoped by tenant_id)
     loans = get_cached_data("loans", tenant_id=tenant_id)
-    payments = get_cached_data("Payments", tenant_id=tenant_id)
+    payments = get_cached_data("payments", tenant_id=tenant_id)
     expenses = get_cached_data("Expenses", tenant_id=tenant_id)
     payroll = get_cached_data("Payroll", tenant_id=tenant_id)
 
@@ -2289,7 +2289,7 @@ def show_reports(tenant_id: str):
     # Total Outflow = Direct Expenses + Taxes (PAYE/NSSF) | Petty Cash explicitly removed
     total_outflow = exp_amt + nssf_total + paye_total
     
-    # Net Profit = Inflows (Payments) - Outflows (Expenses)
+    # Net Profit = Inflows (payments) - Outflows (Expenses)
     net_profit = p_amt - total_outflow
 
     # 4. KPI DASHBOARD (Soft Blue Branded)
@@ -3916,7 +3916,7 @@ if __name__ == "__main__":
             elif page == "Ledger":
                 show_ledger()
                 
-            elif page == "Payments":
+            elif page == "payments":
                 show_payments(supabase)
                 
             elif page == "Expenses":
