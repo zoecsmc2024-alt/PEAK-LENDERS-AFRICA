@@ -2627,6 +2627,7 @@ def show_overdue_tracker(tenant_id: str):
 
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
 # ==============================
 # 17. ACTIVITY CALENDAR PAGE (FIXED)
@@ -2641,8 +2642,8 @@ def show_calendar():
 
     st.markdown("<h2 style='color: #2B3F87;'>📅 Activity Calendar</h2>", unsafe_allow_html=True)
 
-    # 1. LOAD DATA
-    loans_df = get_cached_data("loans")
+    # 1. LOAD DATA (Explicitly pass tenant_id to use your updated caching layer)
+    loans_df = get_cached_data("loans", tenant_id=tenant_id)
 
     if loans_df is None or loans_df.empty:
         st.info("📅 Calendar is clear! No active loans to track.")
@@ -2716,7 +2717,7 @@ def show_calendar():
     st.markdown("---")
 
     # ==========================================================
-    # 7. DAILY METRICS
+    # 7. DAILY METRICS (SYNCHRONIZED METRIC REFERENCES)
     # ==========================================================
     due_today = active_loans[active_loans["end_date"].dt.date == today.date()]
 
@@ -2725,19 +2726,14 @@ def show_calendar():
         (active_loans["end_date"] <= today + pd.Timedelta(days=7))
     ]
 
-    # Overdue Count tracking matching remaining active pipelines
-    overdue_mask = (active_df["end_date"] < today)
-    overdue_count = (
-        (df["status"].astype(str).str.upper() == "PENDING")
-        & (df["balance"] > 0)
-        & (df["end_date"] < today)
-    ).sum()
+    # ✅ Fix: Pull overdue directly out of your active_loans balance matrix
+    overdue_loans = active_loans[active_loans["end_date"] < today]
 
     m1, m2, m3 = st.columns(3)
 
     m1.metric("Due Today", len(due_today))
     m2.metric("Upcoming (7 days)", len(upcoming))
-    m3.metric("Overdue", len(overdue))
+    m3.metric("Overdue", len(overdue_loans))  # ✅ Fixed NameError: 'overdue' to 'overdue_loans'
 
     # ==========================================================
     # 8. REVENUE FORECAST
