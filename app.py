@@ -2632,11 +2632,14 @@ from datetime import datetime
 # ==============================
 # 17. ACTIVITY CALENDAR PAGE
 # ==============================
-def show_calendar(tenant_id: str):
+def show_calendar():
     """
     Activity Calendar View.
     Calculates operational workloads and shows visual metrics isolated by tenant_id.
     """
+    # Pull the active tenant context directly inside the view function body to satisfy the router
+    tenant_id = get_current_tenant() if 'get_current_tenant' in globals() else get_tenant_id()
+
     # Safeguard: Ensure a valid tenant context exists before loading page resources
     if not tenant_id:
         st.error("❌ Access Denied: No valid tenant context detected.")
@@ -2662,12 +2665,15 @@ def show_calendar(tenant_id: str):
     # Convert to proper types for logic
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
     loans_df["total_repayable"] = pd.to_numeric(loans_df["total_repayable"], errors="coerce").fillna(0)
+    loans_df["principal"] = pd.to_numeric(loans_df["principal"], errors="coerce").fillna(0)
+    loans_df["interest"] = pd.to_numeric(loans_df["interest"], errors="coerce").fillna(0)
     
     # Reference date context
     today = pd.Timestamp.today().normalize()
     
-    # Filter for loans that aren't closed or cleared matching core status patterns
-    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(["CLOSED", "CLEARED"])].copy()
+    # Filter for loans that aren't closed, cleared, or archived (BCF) matching core status patterns
+    inactive_statuses = ["CLOSED", "CLEARED", "BCF"]
+    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(inactive_statuses)].copy()
 
     # --- VISUAL CALENDAR WIDGET ---
     calendar_events = []
@@ -2783,6 +2789,7 @@ def show_calendar(tenant_id: str):
             late_color = "#FF4B4B" if r['days_late'] > 7 else "#FFA500"
             od_rows += f"""<tr style="background-color: {bg}; border-bottom: 1px solid #FFDADA;"><td style="padding:10px;"><b>#{r['loan_id']}</b></td><td style="padding:10px;">{r['borrower']}</td><td style="padding:10px; text-align:center; font-weight:bold; color:{late_color};">{r['days_late']} Days</td><td style="padding:10px; text-align:center;"><span style="background:{late_color}; color:white; padding:2px 8px; border-radius:10px; font-size:10px;">{r['status']}</span></td></tr>"""
         st.markdown(f"""<div style="border:2px solid #FF4B4B; border-radius:10px; overflow:hidden;"><table style="width:100%; border-collapse:collapse; font-family:sans-serif; font-size:12px;"><tr style="background:#FF4B4B; color:white;"><th style="padding:10px;">Loan ID</th><th style="padding:10px;">Borrower</th><th style="padding:10px; text-align:center;">Late By</th><th style="padding:10px; text-align:center;">Status</th></tr>{od_rows}</table></div>""", unsafe_allow_html=True)
+
 # ==========================================================
 # 🛡️ COLLATERAL MANAGEMENT ENGINE
 # ==========================================================
