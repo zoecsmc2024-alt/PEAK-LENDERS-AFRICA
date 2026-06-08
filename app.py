@@ -2673,8 +2673,16 @@ def show_calendar():
     
     # Filter for loans that aren't closed, cleared, or archived (BCF) matching core status patterns
     inactive_statuses = ["CLOSED", "CLEARED", "BCF"]
-    active_loans = loans_df[~loans_df["status"].astype(str).str.upper().isin(inactive_statuses)].copy()
-
+    active_loans = loans_df[
+        (loans_df["balance"] > 0)
+        & (
+            loans_df["status"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .eq("PENDING")
+        )
+    ].copy()
     # --- VISUAL CALENDAR WIDGET ---
     calendar_events = []
     for _, r in active_loans.iterrows():
