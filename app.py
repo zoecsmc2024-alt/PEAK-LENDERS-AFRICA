@@ -678,7 +678,7 @@ def render_sidebar():
 def show_dashboard_view():
     """
     Main Multi-Tenant Dashboard view.
-    Calculations portfolio metrics and renders visual analytics isolated by tenant_id.
+    Calculates portfolio metrics and renders visual analytics isolated by tenant_id.
     """
     # Pull the active tenant context using the exact same logic as the loans page
     tenant_id = get_current_tenant()
@@ -690,16 +690,16 @@ def show_dashboard_view():
 
     st.markdown("## 📊 Financial Dashboard")
 
-    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant via centralized schema context)
-    df = get_data("loans")
-    pay_df = get_data("payments")
-    exp_df = get_data("expenses")
+    # 1. LOAD ALL DATA AT THE VERY START (Isolated by Tenant via cached infrastructure hooks)
+    df = get_cached_data("loans", tenant_id=tenant_id)
+    pay_df = get_cached_data("payments", tenant_id=tenant_id)
+    exp_df = get_cached_data("expenses", tenant_id=tenant_id)
 
     if df is None or df.empty:
         st.info("No loan records found.")
         return
 
-    # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors - matching get_data structure)
+    # 2. TRANSLATE HEADERS IMMEDIATELY (The Fix for KeyErrors - matching snake_case conventions)
     df.columns = df.columns.str.strip().str.lower().str.replace(" ", "_")
     if pay_df is not None and not pay_df.empty:
         pay_df.columns = pay_df.columns.str.strip().str.lower().str.replace(" ", "_")
@@ -716,17 +716,18 @@ def show_dashboard_view():
     
     today = pd.Timestamp.today().normalize()
     
-    # RECOVERY FILTER: Include Active statuses defined by the serial number generation pipeline
-    active_statuses = ["ACTIVE", "PENDING", "BCF"]
+    # 🧼 THE ULTIMATE ALIGNMENT MASK: Exclude BCF from active metrics to fix the inflation error!
+    # "BCF" holds dead archived historical row balances. Dropping it keeps your live views identical.
+    active_statuses = ["ACTIVE", "PENDING", "OVERDUE", "ROLLED/OVERDUE"]
     active_df = df[df["status"].astype(str).str.upper().isin(active_statuses)].copy()
 
-    # 4. METRICS CALCULATION
+    # 4. METRICS CALCULATION (Now completely synchronized with Loans Management)
     total_issued = active_df["principal"].sum()
     total_interest_expected = active_df["interest"].sum()
     total_collected = df["amount_paid"].sum()
     
-    # Logic for Overdue Count: Past due date and status is not marked as CLEARED or CLOSED
-    overdue_mask = (active_df["end_date"] < today) & (~active_df["status"].astype(str).str.upper().isin(["CLEARED", "CLOSED"]))
+    # Logic for Overdue Count: Past deadline date and strictly inside your active portfolio track
+    overdue_mask = (active_df["end_date"] < today)
     overdue_count = active_df[overdue_mask].shape[0]
 
     # 5. METRICS ROW (Zoe Soft Blue Style)
