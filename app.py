@@ -2732,7 +2732,7 @@ import pandas as pd
 from datetime import datetime
 
 # ==============================
-# 17. ACTIVITY CALENDAR PAGE (FIXED)
+# 17. ACTIVITY CALENDAR PAGE
 # ==============================
 def show_calendar():
 
@@ -2775,13 +2775,17 @@ def show_calendar():
     loans_df["interest"] = pd.to_numeric(loans_df["interest"], errors="coerce").fillna(0)
     loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
     loans_df["total_repayable"] = pd.to_numeric(loans_df["total_repayable"], errors="coerce").fillna(0)
+    loans_df["status_clean"] = loans_df["status"].astype(str).str.strip().str.upper()
 
     today = pd.Timestamp.today().normalize()
 
     # ==========================================================
-    # 5. CORE FIX: BALANCE IS TRUTH (NOT STATUS)
+    # 5. CORE RULE: BALANCE IS TRUTH (Exclude explicit clears)
     # ==========================================================
-    active_loans = loans_df[loans_df["balance"] > 0].copy()
+    active_loans = loans_df[
+        (loans_df["balance"] > 0) & 
+        (~loans_df["status_clean"].isin(["CLEARED", "CLOSED"]))
+    ].copy()
 
     # ==========================================================
     # 6. CALENDAR EVENTS
@@ -2827,18 +2831,16 @@ def show_calendar():
         (active_loans["end_date"] > today) &
         (active_loans["end_date"] <= today + pd.Timedelta(days=7))
     ]
-
-    # 🎯 Balance is truth! If the balance is 0, it CANNOT be overdue.
-    active_loans = loans_df[loans_df["balance"] > 0].copy()
     
-    # ⏱️ Now we look for overdue files strictly inside loans that STILL owe money
-    overdue_loans = active_loans[active_loans["active_loans"]["end_date"] < today]
+    # 🎯 FIX: Corrected dataframe indexing lookup to remove the duplicate string expression bracket
+    overdue_loans = active_loans[active_loans["end_date"] < today]
     overdue_count = len(overdue_loans)
+
     m1, m2, m3 = st.columns(3)
 
     m1.metric("Due Today", len(due_today))
     m2.metric("Upcoming (7 days)", len(upcoming))
-    m3.metric("Overdue", len(overdue_loans))  # ✅ Fixed NameError: 'overdue' to 'overdue_loans'
+    m3.metric("Overdue", overdue_count)
 
     # ==========================================================
     # 8. REVENUE FORECAST
@@ -2862,7 +2864,8 @@ def show_calendar():
         st.success("No loans due today 🎉")
     else:
         st.dataframe(
-            due_today[["loan_id_label", "borrower", "total_repayable", "end_date"]]
+            due_today[["loan_id_label", "borrower", "total_repayable", "end_date"]],
+            use_container_width=True
         )
 
     # ==========================================================
@@ -2875,7 +2878,8 @@ def show_calendar():
     else:
         st.dataframe(
             upcoming[["loan_id_label", "borrower", "total_repayable", "end_date"]]
-            .sort_values("end_date")
+            .sort_values("end_date"),
+            use_container_width=True
         )
 
     
