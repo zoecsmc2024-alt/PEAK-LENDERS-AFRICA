@@ -2288,16 +2288,24 @@ def show_payroll():
                         st.error(f"Selection error: {e}")
         else:
             st.info("No payroll records found for this period.")
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+from datetime import datetime
+
 # ==============================
 # 21. ADVANCED ANALYTICS & REPORTS
 # ==============================
 
-def show_reports(tenant_id: str):
+def show_reports():  # 🎯 Fixed: Removed positional argument to eliminate router crash
     """
     Consolidates data across all modules to provide high-level 
     financial health metrics, cash flow trends, and risk assessment.
     Isolated by tenant_id for SaaS architecture with all Petty Cash elements removed.
     """
+    # Fetch active tenant organization context safely within the function wrapper
+    tenant_id = get_current_tenant() if 'get_current_tenant' in globals() else get_tenant_id()
+
     # Safeguard: Ensure a valid tenant context exists before loading page resources
     if not tenant_id:
         st.error("❌ Access Denied: No valid tenant context detected.")
@@ -2335,14 +2343,20 @@ def show_reports(tenant_id: str):
     # Standardize column headers for math logic to match loans module storage structure
     loans.columns = loans.columns.str.strip().str.lower().str.replace(" ", "_")
     
+    # Clean numeric parameters on loans table
+    loans["balance"] = pd.to_numeric(loans.get("balance", 0), errors="coerce").fillna(0)
+    loans["principal"] = pd.to_numeric(loans.get("principal", 0), errors="coerce").fillna(0)
+    loans["interest"] = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0)
+    loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
+    
     if payments is not None and not payments.empty:
         payments.columns = payments.columns.str.strip().str.lower().str.replace(" ", "_")
     if expenses is not None and not expenses.empty:
         expenses.columns = expenses.columns.str.strip().str.lower().str.replace(" ", "_")
     
     # Safe principal and interest Lookup
-    l_amt = pd.to_numeric(loans.get("principal", 0), errors="coerce").fillna(0).sum()
-    l_int = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0).sum()
+    l_amt = loans["principal"].sum()
+    l_int = loans["interest"].sum()
     
     p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if (payments is not None and not payments.empty) else 0
     exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if (expenses is not None and not expenses.empty) else 0
@@ -2398,7 +2412,6 @@ def show_reports(tenant_id: str):
 
     with col_right:
         st.write("**🛡️ Portfolio Weight (Top 5)**")
-        # Ensure we can isolate borrower groups correctly using standardized keys
         if "borrower" in loans.columns and not loans.empty:
             top_borrowers = loans.groupby("borrower")["principal"].sum().sort_values(ascending=False).head(5).reset_index()
             top_borrowers.columns = ["Borrower", "Total_Loaned"]
@@ -2410,13 +2423,18 @@ def show_reports(tenant_id: str):
         else:
             st.info("No loan data for portfolio analysis.")
 
-    # 6. RISK INDICATOR (PAR % Calculation matching the normalized status schema)
+    # ============================================================
+    # 6. RISK INDICATOR (PAR % Calculation - FIXED FOR ACCURACY)
+    # ============================================================
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
     
-    # Check against upper-case strings to protect against mixed input variations
-    overdue_mask = loans["status"].astype(str).str.upper().isin(["OVERDUE", "ROLLED/OVERDUE"])
-    overdue_val = pd.to_numeric(loans.loc[overdue_mask, "principal"], errors="coerce").fillna(0).sum()
+    today = pd.Timestamp.today().normalize()
+    
+    # 🎯 CORRECTION: An overdue asset MUST have a remaining balance. 
+    # If a loan has a balance of 0, it can never be considered at risk.
+    overdue_mask = (loans["balance"] > 0) & (loans["end_date"] < today)
+    overdue_val = loans.loc[overdue_mask, "balance"].sum() # Track remaining risk exposure value, not historical capital
     
     risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
     
@@ -2425,10 +2443,12 @@ def show_reports(tenant_id: str):
     with r1:
         st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
         st.progress(min(float(risk_percent) / 100, 1.0), key=f"risk_progress_{tenant_id}")
-        st.write(f"Total Overdue: **{overdue_val:,.0f} UGX**")
+        st.write(f"Total Outstanding Overdue: **{overdue_val:,.0f} UGX**")
         
     with r2:
-        if risk_percent < 10: 
+        if overdue_val == 0:
+            st.success("🎉 Perfect Record! No active risk.")
+        elif risk_percent < 10: 
             st.success("✅ Healthy Portfolio")
         elif risk_percent < 25: 
             st.warning("⚠️ Moderate Risk")
