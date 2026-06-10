@@ -801,24 +801,35 @@ def show_dashboard_view():
 
 
     # ============================================================
-    # 4. METRICS CALCULATION (Perfect alignment with your operational definition)
+    # 4. METRICS CALCULATION
     # ============================================================
     
-    # 🎯 FIX: Isolate original Cycle 1 loans
-    original_loans = loans[loans["cycle_no"] == 1]
+    # Ensure cycle_no is numeric
+    df["cycle_no"] = pd.to_numeric(
+        df.get("cycle_no", 1),
+        errors="coerce"
+    ).fillna(1)
     
-    # ✅ True Sum: Calculate issued capital and baseline interest for ALL original loans (even cleared ones)
-    df_loans = original_loans["principal"].sum()
-    df_loans= original_loans["interest"].sum()
+    # Original cycle 1 loans only
+    original_loans = df[
+        df["cycle_no"] == 1
+    ].copy()
     
-    # Expected Interest
+    # Active cycle 1 loans only
+    active_original_loans = active_df[
+        active_df["cycle_no"] == 1
+    ].copy()
+    
+    # Active principal still outstanding
+    total_issued = active_original_loans["principal"].sum()
+    
+    # Expected interest still outstanding
     total_interest_expected = active_original_loans["interest"].sum()
     
-    # Match the broad aggregates seen in your management view card
+    # Total collections received
     total_collected = df["amount_paid"].sum()
     
-    # Overdue Count tracking matching remaining active pipelines
-    overdue_mask = (active_df["end_date"] < today)
+    # Overdue loans
     overdue_count = active_df[
         active_df["end_date"] < today
     ].shape[0]
