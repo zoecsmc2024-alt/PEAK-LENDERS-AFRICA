@@ -2341,7 +2341,9 @@ def show_reports():
         nssf_total = n5 + n10
         paye_total = pd.to_numeric(payroll.get("paye", 0), errors="coerce").fillna(0).sum()
 
-    # 3. OTHER DATA SUMS
+    # ==========================================================
+    # 3. OTHER DATA SUMS & METRIC ALIGNMENT
+    # ==========================================================
     # Standardize column headers for math logic to match loans module storage structure
     loans.columns = loans.columns.str.strip().str.lower().str.replace(" ", "_")
     
@@ -2351,7 +2353,7 @@ def show_reports():
     loans["interest"] = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0)
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
     
-    # Safely match your exact metrics schema tracking key ('cycle_no')
+    # Safely handle cycle tracking numbers
     if "cycle_no" in loans.columns:
         loans["cycle_no"] = pd.to_numeric(loans["cycle_no"], errors="coerce").fillna(1)
     else:
@@ -2362,18 +2364,17 @@ def show_reports():
     if expenses is not None and not expenses.empty:
         expenses.columns = expenses.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # 🧼 THE METRIC ALIGNMENT: 
-    # Calculate issued/accrued capital strictly from original Cycle 1 loans that have a balance!
+    # 🎯 FIX: Isolate original Cycle 1 loans
     original_loans = loans[loans["cycle_no"] == 1]
     
-    l_amt = original_loans.apply(lambda r: r["principal"] if r["balance"] > 0 else 0, axis=1).sum()
-    l_int = original_loans.apply(lambda r: r["interest"] if r["balance"] > 0 else 0, axis=1).sum()
+    # ✅ True Sum: Calculate issued capital and baseline interest for ALL original loans (even cleared ones)
+    l_amt = original_loans["principal"].sum()
+    l_int = original_loans["interest"].sum()
     
     p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if (payments is not None and not payments.empty) else 0
     exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if (expenses is not None and not expenses.empty) else 0
     
-    # 💰 FINANCIAL LOGIC:
-    # Total Outflow = Direct expenses + Taxes (PAYE/NSSF) | Petty Cash explicitly removed
+    # Total Outflow = Direct expenses + Taxes (PAYE/NSSF)
     total_outflow = exp_amt + nssf_total + paye_total
     
     # Net Profit = Inflows (payments) - Outflows (expenses/taxes)
