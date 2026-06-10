@@ -2449,9 +2449,9 @@ def show_reports():
     # 🎯 PER-LOAN SYSTEM SANITY CHECK:
     # A loan CANNOT be overdue if its status is CLEARED/CLOSED or if its remaining balance is 0.
     overdue_mask = (
-        (loans["balance"] > 0) & 
-        (loans["end_date"] < today) & 
-        (~loans["status_clean"].isin(["CLEARED", "CLOSED"]))
+        loans["balance"].fillna(0) > 0
+    ) & (
+        loans["end_date"] < today
     )
     
     overdue_val = loans.loc[overdue_mask, "balance"].sum()
