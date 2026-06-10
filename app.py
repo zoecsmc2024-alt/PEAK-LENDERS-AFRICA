@@ -890,43 +890,74 @@ def show_dashboard_view():
     c_pie, c_bar = st.columns(2)
 
     with c_pie:
-
+        
+        pie_df = df.copy()
+        
+        # Ensure cycle exists
+        if "cycle_no" in pie_df.columns:
+            pie_df["cycle_no"] = pd.to_numeric(
+                pie_df["cycle_no"],
+                errors="coerce"
+            ).fillna(1)
+        else:
+            pie_df["cycle_no"] = 1
+        
+        # Ensure balance numeric
+        pie_df["balance"] = pd.to_numeric(
+            pie_df["balance"],
+            errors="coerce"
+        ).fillna(0)
+        
+        # Remove negative zero issues
+        pie_df["balance"] = pie_df["balance"].round(2)
+        
+        # Keep ONLY latest cycle per loan
+        pie_df = (
+            pie_df
+            .sort_values("cycle_no")
+            .groupby("loan_id_label", as_index=False)
+            .tail(1)
+        )
+        
+        # Determine REAL current status
+        pie_df["current_status"] = pie_df["balance"].apply(
+            lambda x: "Cleared" if abs(x) < 1 else "Active"
+        )
+        
+        # Count loans
         status_counts = (
-            latest_df["status"]
-            .astype(str)
-            .str.upper()
+            pie_df["current_status"]
             .value_counts()
             .reset_index()
         )
-    
+        
         status_counts.columns = ["status", "Count"]
-    
+        
+        # Plot
         fig_pie = px.pie(
             status_counts,
             names="status",
             values="Count",
             hole=0.5,
             title="Current Loan Distribution",
-            color_discrete_sequence=[
-                "#4A90E2",
-                "#FF4B4B",
-                "#FFA500",
-                "#2E7D32"
-            ]
+            color="status",
+            color_discrete_map={
+                "Cleared": "#2E7D32",
+                "Active": "#FF4B4B"
+            }
         )
-    
+        
         fig_pie.update_layout(
             paper_bgcolor="rgba(0,0,0,0)",
             font_color="#2B3F87",
             margin=dict(t=40, b=0, l=0, r=0)
         )
-    
+        
         st.plotly_chart(
             fig_pie,
             use_container_width=True,
             key=f"overview_pie_chart_{tenant_id}"
         )
-
     with c_bar:
         # Combined Cashflow Chart (Income vs expenses)
         if pay_df is not None and not pay_df.empty and exp_df is not None and not exp_df.empty:
