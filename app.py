@@ -2436,7 +2436,7 @@ def show_reports():
             st.info("No loan data for portfolio analysis.")
 
     # ============================================================
-    # 6. RISK INDICATOR (PAR % Calculation)
+    # 6. RISK INDICATOR (LATEST CYCLE ONLY)
     # ============================================================
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
@@ -2457,11 +2457,32 @@ def show_reports():
     )
     
     # ------------------------------------------------------------
-    # ACTIVE LOANS = BALANCE > 0
+    # DETERMINE CYCLE COLUMN
     # ------------------------------------------------------------
-    active_loans = loans[
-        (loans["balance"] > 0)
-        & (loans["end_date"].notna())
+    if "cycle_no" in loans.columns:
+        loans["cycle_no"] = pd.to_numeric(
+            loans["cycle_no"],
+            errors="coerce"
+        ).fillna(1)
+    else:
+        loans["cycle_no"] = 1
+    
+    # ------------------------------------------------------------
+    # KEEP ONLY THE LATEST CYCLE PER LOAN
+    # ------------------------------------------------------------
+    latest_loans = (
+        loans
+        .sort_values("cycle_no")
+        .groupby("loan_id_label", as_index=False)
+        .tail(1)
+        .copy()
+    )
+    
+    # ------------------------------------------------------------
+    # ACTIVE LOANS
+    # ------------------------------------------------------------
+    active_loans = latest_loans[
+        latest_loans["balance"] > 0
     ].copy()
     
     # ------------------------------------------------------------
@@ -2472,7 +2493,7 @@ def show_reports():
     ].copy()
     
     # ------------------------------------------------------------
-    # PAR VALUE
+    # TOTAL OUTSTANDING OVERDUE
     # ------------------------------------------------------------
     overdue_val = overdue_loans["balance"].sum()
     
@@ -2495,7 +2516,7 @@ def show_reports():
         )
     
         st.progress(
-            min(max(float(risk_percent) / 100, 0), 1)
+            min(max(risk_percent / 100, 0), 1)
         )
     
         st.write(
