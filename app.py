@@ -2657,75 +2657,75 @@ def show_reports():
             st.error("🆘 Critical Risk Level")
             
 # ==========================================================
-# 🚨 OVERDUE TRACKER & ACTIVITY CALENDAR ENGINE (WITH NAMES)
+# 🚨 OVERDUE TRACKER & ACTIVITY CALENDAR ENGINE (PRODUCTION-READY)
 # ==========================================================
 import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-def show_overdue_tracker(tenant_id: str):
+def show_overdue_tracker(tenant_id: str = None):
     """
     Collections & Overdue Tracker (The Master Engine)
     Multi-tenant version ensuring isolated data fetching, processing, and persistence.
     """
-    # Safeguard: Ensure a valid tenant context exists before execution
+    # 1. --- TENANT CONTEXT SAFEGUARD ---
+    # Fallback to session state if the router fails to pass it explicitly
+    if not tenant_id:
+        tenant_id = st.session_state.get("tenant_id")
+        
     if not tenant_id:
         st.error("❌ Access Denied: No valid tenant context detected.")
         return
 
     st.markdown("### 🚨 Loan Overdue & Rollover Tracker")
 
-    # 1. --- THE AUTO-REFILL GATEKEEPER ---
+    # --- THE AUTO-REFILL GATEKEEPER ---
     if st.button("🔄 Refresh Data from Sheets", use_container_width=True):
         with st.spinner("🧹 Clearing cache and re-syncing..."):
             st.cache_data.clear() 
             st.session_state.loans = get_cached_data("loans", tenant_id=tenant_id)
-            st.session_state.ledger = get_cached_data("Ledger", tenant_id=tenant_id)
+            st.session_state.ledger = get_cached_data("ledger", tenant_id=tenant_id) # Case-synchronized
             st.rerun()
 
-    # --- STEP 1: LOAD ALL NECESSARY DATA UPFRONT (INDENTED) ---
-    # Attempt to pull from session state; if empty or missing, explicitly fetch using tenant context
+    # --- DATA LOADING & INITIALIZATION ---
     loans = st.session_state.get("loans", pd.DataFrame())
     if loans.empty:
         loans = get_cached_data("loans", tenant_id=tenant_id)
-        if loans is not None and not loans.empty:
-            st.session_state.loans = loans
-        else:
-            loans = pd.DataFrame()
+        st.session_state.loans = loans if loans is not None else pd.DataFrame()
 
     ledger = st.session_state.get("ledger", pd.DataFrame())
     if ledger.empty:
-        ledger = get_cached_data("Ledger", tenant_id=tenant_id)
-        if ledger is not None and not ledger.empty:
-            st.session_state.ledger = ledger
-        else:
-            ledger = pd.DataFrame()
+        # Case sync: Query lowercase 'ledger' to avoid schema cache hit-miss mismatches
+        ledger = get_cached_data("ledger", tenant_id=tenant_id)
+        st.session_state.ledger = ledger if ledger is not None else pd.DataFrame()
 
     today = datetime.now()
 
-    # We pre-calculate overdue_df so it's ready for the button click
-    overdue_df = pd.DataFrame()
-    if not loans.empty:
-        temp_loans = loans.copy()
-        temp_loans.columns = temp_loans.columns.str.strip().str.lower().str.replace(" ", "_")
-        temp_loans['end_date'] = pd.to_datetime(temp_loans['end_date'], errors='coerce')
-        
-        # Checking against uppercase status constants to ensure pipeline sync
-        active_overdue_statuses = ["ACTIVE", "OVERDUE", "ROLLED/OVERDUE"]
-        overdue_df = temp_loans[
-            (temp_loans['status'].astype(str).str.upper().isin(active_overdue_statuses)) & 
-            (temp_loans['end_date'] < today)
-        ].copy()
-
-    # 2. --- PREP WORKING DATA ---
+    # Early exit gracefully if data layer returns dry
     if loans.empty:
-        st.info("💡 No active loan records found. The system is currently clear!")
+        st.info("💡 No active loan records found. The system portfolio is currently clear!")
         return
 
+    # Normalize column structures globally to avoid downstream KeyErrors
     loans_work = loans.copy()
     loans_work.columns = loans_work.columns.str.strip().str.lower().str.replace(" ", "_")
 
-    # 7. --- PREP LEDGER BALANCES ---
+    # Define globally recognized active/cleared states explicitly to avoid metric bloating
+    active_overdue_statuses = ["ACTIVE", "OVERDUE", "ROLLED/OVERDUE", "PENDING"]
+    cleared_statuses = ["CLOSED", "CLEARED", "BCF"]
+
+    # Calculate active_loans / active_df inside function scope to prevent global NameErrors
+    active_loans = loans_work[loans_work['status'].astype(str).str.upper().isin(active_overdue_statuses)].copy()
+    st.session_state["active_df"] = active_loans  # Seed state globally for other sub-dashboards
+
+    # Define accurate overdue dataframes
+    if 'end_date' in active_loans.columns:
+        active_loans['end_date'] = pd.to_datetime(active_loans['end_date'], errors='coerce')
+        overdue_df = active_loans[(active_loans['end_date'] < today)].copy()
+    else:
+        overdue_df = pd.DataFrame()
+
+    # --- PREP LEDGER BALANCES ---
     latest_ledger = pd.DataFrame()
     if not ledger.empty:
         ledger_work = ledger.copy()
@@ -2734,7 +2734,7 @@ def show_overdue_tracker(tenant_id: str):
             ledger_work['date'] = pd.to_datetime(ledger_work.get('date'), errors='coerce')
             latest_ledger = ledger_work.sort_values('date').groupby("loan_id").tail(1)
 
-    # 8. --- ROLLOVER BUTTON (The History-Building Engine) ---
+    # --- ROLLOVER ENGINE ---
     st.markdown("---") 
     if st.button("🔄 Execute Monthly Rollover (Compound All)", use_container_width=True):
         updated_df = loans_work.copy() 
@@ -2742,42 +2742,37 @@ def show_overdue_tracker(tenant_id: str):
         count = 0
         
         try: 
-            # FORCE NUMERIC: This kills the "stubborn balance" issue
             money_cols = ['principal', 'interest', 'balance', 'total_repayable', 'amount_paid']
             for col in money_cols:
                 if col in updated_df.columns:
                     updated_df[col] = pd.to_numeric(updated_df[col], errors='coerce').fillna(0)
 
-            # Targets: Find active 'PENDING' rows or Fallback to Overdue Dataframe
-            targets = updated_df[updated_df['status'].astype(str).str.upper() == "PENDING"].copy() if not updated_df.empty else pd.DataFrame()
+            # Targets matching exact outstanding parameters
+            targets = updated_df[updated_df['status'].astype(str).str.upper() == "PENDING"].copy()
             if targets.empty:
                 targets = overdue_df.copy()
 
             if targets.empty:
-                st.info("No loans currently require a rollover cycle.")
+                st.info("No loans currently meet criteria for a rollover cycle.")
             else:
                 for i, r in targets.iterrows():
                     if i in updated_df.index:
-                        # 1. Archive the old row
+                        # 1. Archive previous tracking record state to Balance Carried Forward
                         updated_df.at[i, 'status'] = "BCF"
 
-                        # 2. THE ULTIMATE MATH FIX
+                        # 2. Complete Compound Math Logic
                         old_p = float(r.get('principal', 0))
                         old_i = float(r.get('interest', 0))
                         
-                        # New Basis = (Old P + Old I)
                         new_basis = old_p + old_i
-                        # New Interest = 3% of new basis
                         new_month_interest = new_basis * 0.03
-                        # Final Balance
                         compounded_balance = new_basis + new_month_interest
                         
-                        # Date Math
                         orig_end = pd.to_datetime(r['end_date'], errors='coerce')
                         new_start = orig_end if pd.notna(orig_end) else datetime.now()
                         new_end = new_start + pd.offsets.DateOffset(months=1)
 
-                        # 3. Create New Cycle Row
+                        # 3. Structural mapping for next cycle line-item
                         new_row = r.copy()
                         new_row['start_date'] = new_start.strftime('%Y-%m-%d')
                         new_row['end_date'] = new_end.strftime('%Y-%m-%d')
@@ -2795,27 +2790,23 @@ def show_overdue_tracker(tenant_id: str):
                 if new_rows_list:
                     new_entries_df = pd.DataFrame(new_rows_list)
                     combined_df = pd.concat([updated_df, new_entries_df], ignore_index=True)
-                    id_col = 'loan_id'
+                    id_col = 'loan_id' if 'loan_id' in combined_df.columns else combined_df.columns[0]
                     updated_df = combined_df.sort_values(by=[id_col, 'start_date'], ascending=[True, True])
 
-                # 6. --- THE CORRECTED SAVE BLOCK ---
-                # Re-space column headers to match the physical schema before save executions
+                # --- WRITING OUT STRUCTURAL CORRECTIONS ---
                 save_ready_df = updated_df.fillna(0).copy()
                 save_ready_df.columns = [col.replace("_", " ").title() for col in save_ready_df.columns]
-                
-                # Dynamic adjustment check to make sure Loan ID column keeps absolute precision naming
                 save_ready_df.columns = [col if col != "Loan Id" else "Loan ID" for col in save_ready_df.columns]
                 
-                # Critical: Save back using the isolated tenant context
                 if save_data("loans", save_ready_df, tenant_id=tenant_id):
-                    st.success(f"✅ Compounding Successful! Added {count} rows.")
+                    st.success(f"✅ Compounding Successful! Processed {count} cycles.")
                     st.cache_data.clear() 
                     st.session_state.loans = get_cached_data("loans", tenant_id=tenant_id)
                     st.rerun()
         except Exception as e:
             st.error(f"🚨 Rollover Error: {str(e)}")
 
-    # 9. --- TABLE DISPLAY (Branded & Formatted) ---
+    # --- LIQUID DATA DISPLAY ---
     def style_status_colors(s):
         val = str(s).upper()
         if val == "BCF": return "background-color: #FFA500; color: white;"      # Orange
@@ -2823,13 +2814,11 @@ def show_overdue_tracker(tenant_id: str):
         if val in ["CLOSED", "CLEARED"]: return "background-color: #2E7D32; color: white;" # Green
         return ""
 
-    st.markdown("### 🏦 All Loan Records")
+    st.markdown("### 🏦 All Loan Portfolio Registry")
     
     try:
-        display_df = st.session_state.get("loans", loans).copy()
-        display_df.columns = display_df.columns.str.strip().str.lower().str.replace(" ", "_")
+        display_df = loans_work.copy()
 
-        # Push status to the end for Luxe view
         if 'status' in display_df.columns:
             cols = [c for c in display_df.columns if c != 'status'] + ['status']
             display_df = display_df[cols]
@@ -2843,8 +2832,10 @@ def show_overdue_tracker(tenant_id: str):
         styled_df = display_df.style.map(style_status_colors, subset=['status']).format(actual_fmt)
         st.dataframe(styled_df, use_container_width=True, hide_index=True)
     except Exception as e:
-        st.error(f"Display Error: {str(e)}")
+        st.error(f"Display Formatting Notice: {str(e)}")
         st.dataframe(loans, use_container_width=True, hide_index=True)
+
+
 
 import streamlit as st
 import pandas as pd
