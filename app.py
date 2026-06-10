@@ -759,12 +759,12 @@ def show_dashboard_view():
     df["end_date"] = pd.to_datetime(df.get("end_date"), errors="coerce")
     
     # Handle implicit or explicit loan cycle parsing
-    if "cycle" in df.columns:
-        df["cycle"] = df["cycle"].astype(str).str.strip()
+    if "cycle_no" in df.columns:
+        df["cycle_no"] = df["cycle_no"].astype(str).str.strip()
     else:
         # If your database doesn't have a dedicated cycle column, 
         # let's assume everything is cycle 1 unless marked as a rollover/BCF
-        df["cycle"] = "1"
+        df["cycle_no"] = "1"
 
     today = pd.Timestamp.today().normalize()
     
@@ -775,7 +775,7 @@ def show_dashboard_view():
     ].copy()
     
     # Create a sub-segment for Cycle 1 specifically to run your precise metric calculation
-    cycle_1_active_df = active_df[active_df["cycle"] == "1"]
+    cycle_1_active_df = active_df[active_df["cycle_no"] == "1"]
 
 
     # ============================================================
