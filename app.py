@@ -808,8 +808,8 @@ def show_dashboard_view():
     original_loans = loans[loans["cycle_no"] == 1]
     
     # ✅ True Sum: Calculate issued capital and baseline interest for ALL original loans (even cleared ones)
-    l_amt = original_loans["principal"].sum()
-    l_int = original_loans["interest"].sum()
+    df_loans = original_loans["principal"].sum()
+    df_loans= original_loans["interest"].sum()
     
     # Expected Interest
     total_interest_expected = active_original_loans["interest"].sum()
