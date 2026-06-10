@@ -2159,6 +2159,10 @@ def show_payments(supabase):
                             st.session_state["edit_pay_mode"] = False
                             st.rerun()
 
+import streamlit as st
+import pandas as pd
+from datetime import datetime
+
 # ==============================
 # 20. PAYROLL MANAGEMENT PAGE
 # ==============================
@@ -2173,6 +2177,9 @@ def show_payroll():
         st.error("🔒 Restricted Access: Only Administrators can process payroll.")
         return
 
+    # 🎯 FIX 1: Fetch active tenant layout scope BEFORE running checking constraints
+    tenant_id = get_current_tenant() if 'get_current_tenant' in globals() else get_tenant_id()
+
     # Safeguard: Ensure a valid tenant context exists before loading page resources
     if not tenant_id:
         st.error("❌ Access Denied: No valid tenant context detected.")
@@ -2180,8 +2187,8 @@ def show_payroll():
 
     st.markdown("<h2 style='color: #4A90E2;'>🧾 Payroll Management</h2>", unsafe_allow_html=True)
 
-    # 1. SYNC COLUMNS (Scoped by tenant_id)
-    df = get_cached_data("Payroll", tenant_id=tenant_id)
+    # 1. SYNC COLUMNS (Scoped by lowercase table identification helper)
+    df = get_cached_data("payroll", tenant_id=tenant_id)
     required_columns = [
         "Payroll_ID", "Employee", "TIN", "Designation", "Mob_No", "Account_No", "NSSF_No",
         "Arrears", "Basic_Salary", "Absent_Deduction", "LST", "Gross_Salary", 
@@ -2189,12 +2196,13 @@ def show_payroll():
         "NSSF_10", "NSSF_15", "date"
     ]
     
-    if df.empty:
+    if df is None or df.empty:
         df = pd.DataFrame(columns=required_columns)
     else:
         df.columns = df.columns.str.strip().str.replace(" ", "_")
         for col in required_columns:
-            if col not in df.columns: df[col] = 0
+            if col not in df.columns: 
+                df[col] = 0
         df = df.fillna(0)
 
     def run_manual_sync_calculations(basic, arrears, absent_deduct, advance, other):
@@ -2210,17 +2218,14 @@ def show_payroll():
         n15 = n5 + n10
         
         # 4. --- THE EXCEL MATCHING PAYE LOGIC ---
-        # Based on your sheet: Tax = 25,000 + (30% * (Gross - 410,000))
         paye = 0
         if gross > 410000:
             excess = gross - 410000
             paye = 25000 + (0.30 * excess)
         elif gross > 235000:
-            # Lower tier fallback
             paye = (gross - 235000) * 0.10
             
         # 5. Final Deductions & Net Pay
-        # Deductions = PAYE + LST + NSSF(5%) + Advance + Other
         total_deductions = paye + lst + n5 + float(advance) + float(other)
         net = gross - total_deductions
         
@@ -2235,17 +2240,37 @@ def show_payroll():
         with st.form("new_payroll_form", clear_on_submit=True):
             st.markdown("<h4 style='color: #2B3F87;'>👤 Employee Details</h4>", unsafe_allow_html=True)
             name = st.text_input("Employee Name")
-            c1, c2, c3 = st.columns(3); f_tin = c1.text_input("TIN"); f_desig = c2.text_input("Designation"); f_mob = c3.text_input("Mob No.")
-            c4, c5 = st.columns(2); f_acc = c4.text_input("Account No."); f_nssf_no = c5.text_input("NSSF No.")
-            st.write("---"); st.markdown("<h4 style='color: #2B3F87;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
-            c6, c7, c8 = st.columns(3); f_arrears = c6.number_input("ARREARS", min_value=0.0); f_basic = c7.number_input("SALARY (Basic)", min_value=0.0); f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
-            c9, c10 = st.columns(2); f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0); f_other = c10.number_input("Other Deductions", min_value=0.0)
+            c1, c2, c3 = st.columns(3)
+            f_tin = c1.text_input("TIN")
+            f_desig = c2.text_input("Designation")
+            f_mob = c3.text_input("Mob No.")
+            c4, c5 = st.columns(2)
+            f_acc = c4.text_input("Account No.")
+            f_nssf_no = c5.text_input("NSSF No.")
+            st.write("---")
+            st.markdown("<h4 style='color: #2B3F87;'>💰 Earnings & Deductions</h4>", unsafe_allow_html=True)
+            c6, c7, c8 = st.columns(3)
+            f_arrears = c6.number_input("ARREARS", min_value=0.0)
+            f_basic = c7.number_input("SALARY (Basic)", min_value=0.0)
+            f_absent = c8.number_input("Absenteeism Deduction", min_value=0.0)
+            c9, c10 = st.columns(2)
+            f_adv = c9.number_input("S.DRS / ADVANCE", min_value=0.0)
+            f_other = c10.number_input("Other Deductions", min_value=0.0)
 
             if st.form_submit_button("💳 Confirm & Release Payment", use_container_width=True):
                 if name and f_basic > 0:
                     calc = run_manual_sync_calculations(f_basic, f_arrears, f_absent, f_adv, f_other)
+                    
+                    # Safe validation to find current auto-increment indexing value
+                    try:
+                        next_id = int(pd.to_numeric(df["Payroll_ID"], errors='coerce').max() + 1)
+                    except:
+                        next_id = 1
+                    if pd.isna(next_id):
+                        next_id = 1
+
                     new_row = pd.DataFrame([{
-                        "Payroll_ID": int(df["Payroll_ID"].max() + 1) if not df.empty else 1,
+                        "Payroll_ID": next_id,
                         "Employee": name, "TIN": f_tin, "Designation": f_desig, "Mob_No": f_mob,
                         "Account_No": f_acc, "NSSF_No": f_nssf_no, "Arrears": f_arrears,
                         "Basic_Salary": f_basic, "Absent_Deduction": f_absent,
@@ -2254,18 +2279,19 @@ def show_payroll():
                         "Advance_DRS": f_adv, "Other_Deductions": f_other, "Net_Pay": calc['net'],
                         "date": datetime.now().strftime("%Y-%m-%d")
                     }])
-                    # --- THE CORRECTED SAVE LOGIC (Payroll Fix) ---
-                    # 1. Combine the old data with the new record
-                    final_save_df = pd.concat([df, new_row], ignore_index=True)
                     
-                    # 2. CRITICAL: Replace all NaN/Blanks with 0 to stop the JSON error
+                    # --- THE CORRECTED SAVE LOGIC ---
+                    final_save_df = pd.concat([df, new_row], ignore_index=True)
                     final_save_df = final_save_df.fillna(0)
                     
-                    # 3. Restore spaces for Google Sheets headers
+                    # Clean internal helper columns before file serialization
+                    if "status_clean" in final_save_df.columns:
+                        final_save_df = final_save_df.drop(columns=["status_clean"])
+                    
                     final_save_df.columns = [c.replace("_", " ") for c in final_save_df.columns]
                     
-                    # 4. Save to Google Sheets (Scoped by tenant_id)
-                    if save_data("Payroll", final_save_df, tenant_id=tenant_id):
+                    # 🎯 FIX 2: Target lowercase "payroll" table reference down to database layer
+                    if save_data("payroll", final_save_df, tenant_id=tenant_id):
                         st.success(f"✅ Payroll for {name} saved successfully!")
                         st.rerun()
 
@@ -2373,7 +2399,8 @@ def show_payroll():
                         if st.button("🗑️ Delete This Record", use_container_width=True, key=f"payroll_delete_btn_{tenant_id}"):
                             df_new = df[df['Payroll_ID'].astype(str) != sid]
                             df_new.columns = [c.replace("_", " ") for c in df_new.columns]
-                            if save_data("Payroll", df_new, tenant_id=tenant_id):
+                            
+                            if save_data("payroll", df_new, tenant_id=tenant_id):
                                 st.warning("Payroll record deleted.")
                                 st.rerun()
                     except Exception as e:
