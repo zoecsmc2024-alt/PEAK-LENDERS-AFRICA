@@ -804,15 +804,12 @@ def show_dashboard_view():
     # 4. METRICS CALCULATION (Perfect alignment with your operational definition)
     # ============================================================
     
-    # Original loans only
-    original_loans = df[df["cycle_no"] == 1].copy()
+    # 🎯 FIX: Isolate original Cycle 1 loans
+    original_loans = loans[loans["cycle_no"] == 1]
     
-    # Pending original loans only
-    active_original_loans = active_df[
-        active_df["cycle_no"] == 1
-    ]
-    
-    total_issued = active_original_loans["principal"].sum()
+    # ✅ True Sum: Calculate issued capital and baseline interest for ALL original loans (even cleared ones)
+    l_amt = original_loans["principal"].sum()
+    l_int = original_loans["interest"].sum()
     
     # Expected Interest
     total_interest_expected = active_original_loans["interest"].sum()
