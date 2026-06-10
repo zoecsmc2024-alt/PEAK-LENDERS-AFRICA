@@ -747,6 +747,26 @@ def show_dashboard_view():
         "balance"
     ] = 0
 
+
+    latest_df["end_date"] = pd.to_datetime(
+        latest_df["end_date"],
+        errors="coerce"
+    )
+    
+    latest_df["principal"] = pd.to_numeric(
+        latest_df["principal"],
+        errors="coerce"
+    ).fillna(0)
+    
+    latest_df["interest"] = pd.to_numeric(
+        latest_df["interest"],
+        errors="coerce"
+    ).fillna(0)
+    
+    latest_df["balance"] = pd.to_numeric(
+        latest_df["balance"],
+        errors="coerce"
+    ).fillna(0)
     # ============================================================
     # 3. CLEAN DATA TYPES & STANDARDIZE STATUS MATRICES
     # ============================================================
@@ -759,7 +779,10 @@ def show_dashboard_view():
     
     # Handle implicit or explicit loan cycle parsing
     if "cycle_no" in df.columns:
-        df["cycle_no"] = df["cycle_no"].astype(str).str.strip()
+        df["cycle_no"] = pd.to_numeric(
+            df["cycle_no"],
+            errors="coerce"
+        ).fillna(1)
     else:
         # If your database doesn't have a dedicated cycle column, 
         # let's assume everything is cycle 1 unless marked as a rollover/BCF
