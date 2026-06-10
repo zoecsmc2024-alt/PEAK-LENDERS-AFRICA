@@ -2436,29 +2436,38 @@ def show_reports():
             st.info("No loan data for portfolio analysis.")
 
     # ============================================================
-    # 6. RISK INDICATOR (PAR % Calculation)
+    # 6. RISK INDICATOR (PAR % Calculation - Multi-Generation Fix)
     # ============================================================
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
     
     today = pd.Timestamp.today().normalize()
     
-    # An overdue asset must have a remaining balance and be past its due date
-    overdue_mask = (loans["balance"] > 0) & (loans["end_date"] < today)
+    # Clean status strings for stable comparison
+    loans["status_clean"] = loans["status"].astype(str).str.strip().str.upper()
+    
+    # 🎯 PER-LOAN SYSTEM SANITY CHECK:
+    # A loan CANNOT be overdue if its status is CLEARED/CLOSED or if its remaining balance is 0.
+    overdue_mask = (
+        (loans["balance"] > 0) & 
+        (loans["end_date"] < today) & 
+        (~loans["status_clean"].isin(["CLEARED", "CLOSED"]))
+    )
+    
     overdue_val = loans.loc[overdue_mask, "balance"].sum()
     
+    # Calculate PAR against the baseline issued capital pool
     risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
     
     r1, r2 = st.columns([2, 1])
     
     with r1:
         st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
-        # 🎯 FIX 2: Removed the unsupported 'key' keyword argument to resolve the ProgressMixin crash
         st.progress(min(float(risk_percent) / 100, 1.0))
         st.write(f"Total Outstanding Overdue: **{overdue_val:,.0f} UGX**")
         
     with r2:
-        if overdue_val == 0:
+        if overdue_val == 0 or risk_percent == 0:
             st.success("🎉 Perfect Record! No active risk.")
         elif risk_percent < 10: 
             st.success("✅ Healthy Portfolio")
