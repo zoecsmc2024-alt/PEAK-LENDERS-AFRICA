@@ -712,6 +712,41 @@ def show_dashboard_view():
         pay_df.columns = pay_df.columns.str.strip().str.lower().str.replace(" ", "_")
     if exp_df is not None and not exp_df.empty:
         exp_df.columns = exp_df.columns.str.strip().str.lower().str.replace(" ", "_")
+    # ============================================================
+    # KEEP ONLY CURRENT LOAN POSITION
+    # ============================================================
+    
+    if "cycle_no" in df.columns:
+    
+        df["cycle_no"] = pd.to_numeric(
+            df["cycle_no"],
+            errors="coerce"
+        ).fillna(1)
+    
+        latest_df = (
+            df
+            .sort_values("cycle_no")
+            .groupby("loan_id_label", as_index=False)
+            .tail(1)
+            .copy()
+        )
+    
+    else:
+        latest_df = df.copy()
+    
+    # Normalize tiny balances
+    latest_df["balance"] = (
+        pd.to_numeric(
+            latest_df["balance"],
+            errors="coerce"
+        )
+        .fillna(0)
+    )
+    
+    latest_df.loc[
+        latest_df["balance"].abs() < 1,
+        "balance"
+    ] = 0
 
     # ============================================================
     # 3. CLEAN DATA TYPES & STANDARDIZE STATUS MATRICES
@@ -735,11 +770,9 @@ def show_dashboard_view():
     
     # 🧼 STRICT FILTER: Isolate entries that are truly UNPAID / ACTIVE
     # Must have a real outstanding balance and cannot be closed/cleared/archived.
-    inactive_statuses = ["CLOSED", "CLEARED", "BCF"]
-    is_active_loan = (df["balance"] > 0) & (~df["status"].astype(str).str.upper().isin(inactive_statuses))
-    
-    # Create the unified 'active_df' so downstream components don't crash!
-    active_df = df[is_active_loan].copy()
+    active_df = latest_df[
+        latest_df["balance"] > 0
+    ].copy()
     
     # Create a sub-segment for Cycle 1 specifically to run your precise metric calculation
     cycle_1_active_df = active_df[active_df["cycle"] == "1"]
@@ -753,26 +786,23 @@ def show_dashboard_view():
     original_loans = df[df["cycle_no"] == 1].copy()
     
     # Pending original loans only
-    pending_original_loans = original_loans[
-        original_loans["status"].astype(str).str.upper() == "PENDING"
+    active_original_loans = active_df[
+        active_df["cycle_no"] == 1
     ]
     
-    # Sum of original principal amounts
-    total_issued = pending_original_loans["principal"].sum()
+    total_issued = active_original_loans["principal"].sum()
     
     # Expected Interest
-    total_interest_expected = pending_original_loans["interest"].sum()
+    total_interest_expected = active_original_loans["interest"].sum()
     
     # Match the broad aggregates seen in your management view card
     total_collected = df["amount_paid"].sum()
     
     # Overdue Count tracking matching remaining active pipelines
     overdue_mask = (active_df["end_date"] < today)
-    overdue_count = (
-        (df["status"].astype(str).str.upper() == "PENDING")
-        & (df["balance"] > 0)
-        & (df["end_date"] < today)
-    ).sum()
+    overdue_count = active_df[
+        active_df["end_date"] < today
+    ].shape[0]
     # 5. METRICS ROW (Zoe Soft Blue Style)
     m1, m2, m3, m4 = st.columns(4)
     
