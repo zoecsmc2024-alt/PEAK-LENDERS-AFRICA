@@ -2780,11 +2780,29 @@ def show_calendar():
     today = pd.Timestamp.today().normalize()
 
     # ==========================================================
-    # 5. CORE RULE: BALANCE IS TRUTH (Exclude explicit clears)
+    # 5. KEEP ONLY CURRENT LOAN POSITION
     # ==========================================================
-    active_loans = loans_df[
-        (loans_df["balance"] > 0) & 
-        (~loans_df["status_clean"].isin(["CLEARED", "CLOSED"]))
+    
+    if "cycle_no" in loans_df.columns:
+        loans_df["cycle_no"] = pd.to_numeric(
+            loans_df["cycle_no"],
+            errors="coerce"
+        ).fillna(1)
+    else:
+        loans_df["cycle_no"] = 1
+    
+    # Latest cycle per loan
+    active_loans = (
+        loans_df
+        .sort_values("cycle_no")
+        .groupby("loan_id_label", as_index=False)
+        .tail(1)
+        .copy()
+    )
+    
+    # Only loans that still have money outstanding
+    active_loans = active_loans[
+        active_loans["balance"] > 0
     ].copy()
 
     # ==========================================================
@@ -2838,9 +2856,44 @@ def show_calendar():
 
     m1, m2, m3 = st.columns(3)
 
-    m1.metric("Due Today", len(due_today))
-    m2.metric("Upcoming (7 days)", len(upcoming))
-    m3.metric("Overdue", overdue_count)
+    m1.markdown(f"""
+    <div style="
+    background:#E8F1FF;
+    padding:20px;
+    border-radius:15px;
+    border-left:6px solid #2B3F87;
+    text-align:center;
+    ">
+    <p style="margin:0;font-size:12px;color:#666;">📅 DUE TODAY</p>
+    <h2 style="margin:0;color:#2B3F87;">{len(due_today)}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    m2.markdown(f"""
+    <div style="
+    background:#F0FFF4;
+    padding:20px;
+    border-radius:15px;
+    border-left:6px solid #2E7D32;
+    text-align:center;
+    ">
+    <p style="margin:0;font-size:12px;color:#666;">⏳ UPCOMING (7 DAYS)</p>
+    <h2 style="margin:0;color:#2E7D32;">{len(upcoming)}</h2>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    m3.markdown(f"""
+    <div style="
+    background:#FFF5F5;
+    padding:20px;
+    border-radius:15px;
+    border-left:6px solid #D32F2F;
+    text-align:center;
+    ">
+    <p style="margin:0;font-size:12px;color:#666;">🚨 OVERDUE</p>
+    <h2 style="margin:0;color:#D32F2F;">{overdue_count}</h2>
+    </div>
+    """, unsafe_allow_html=True)
 
     # ==========================================================
     # 8. REVENUE FORECAST
