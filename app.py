@@ -2436,44 +2436,84 @@ def show_reports():
             st.info("No loan data for portfolio analysis.")
 
     # ============================================================
-    # 6. RISK INDICATOR (PAR % Calculation - Multi-Generation Fix)
+    # 6. RISK INDICATOR (PAR % Calculation)
     # ============================================================
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
     
     today = pd.Timestamp.today().normalize()
     
-    # Clean status strings for stable comparison
-    loans["status_clean"] = loans["status"].astype(str).str.strip().str.upper()
+    # ------------------------------------------------------------
+    # CLEAN DATA
+    # ------------------------------------------------------------
+    loans["balance"] = pd.to_numeric(
+        loans.get("balance", 0),
+        errors="coerce"
+    ).fillna(0)
     
-    # 🎯 PER-LOAN SYSTEM SANITY CHECK:
-    # A loan CANNOT be overdue if its status is CLEARED/CLOSED or if its remaining balance is 0.
-    overdue_mask = (
-        loans["balance"].fillna(0) > 0
-    ) & (
-        loans["end_date"] < today
+    loans["end_date"] = pd.to_datetime(
+        loans.get("end_date"),
+        errors="coerce"
     )
     
-    overdue_val = loans.loc[overdue_mask, "balance"].sum()
+    # ------------------------------------------------------------
+    # ACTIVE LOANS = BALANCE > 0
+    # ------------------------------------------------------------
+    active_loans = loans[
+        (loans["balance"] > 0)
+        & (loans["end_date"].notna())
+    ].copy()
     
-    # Calculate PAR against the baseline issued capital pool
-    risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
+    # ------------------------------------------------------------
+    # OVERDUE ACTIVE LOANS
+    # ------------------------------------------------------------
+    overdue_loans = active_loans[
+        active_loans["end_date"] < today
+    ].copy()
     
+    # ------------------------------------------------------------
+    # PAR VALUE
+    # ------------------------------------------------------------
+    overdue_val = overdue_loans["balance"].sum()
+    
+    # ------------------------------------------------------------
+    # PAR %
+    # ------------------------------------------------------------
+    risk_percent = (
+        (overdue_val / l_amt) * 100
+        if l_amt > 0 else 0
+    )
+    
+    # ------------------------------------------------------------
+    # DISPLAY
+    # ------------------------------------------------------------
     r1, r2 = st.columns([2, 1])
     
     with r1:
-        st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
-        st.progress(min(float(risk_percent) / 100, 1.0))
-        st.write(f"Total Outstanding Overdue: **{overdue_val:,.0f} UGX**")
-        
+        st.write(
+            f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**."
+        )
+    
+        st.progress(
+            min(max(float(risk_percent) / 100, 0), 1)
+        )
+    
+        st.write(
+            f"Total Outstanding Overdue: **{overdue_val:,.0f} UGX**"
+        )
+    
     with r2:
-        if overdue_val == 0 or risk_percent == 0:
+    
+        if overdue_val <= 0:
             st.success("🎉 Perfect Record! No active risk.")
-        elif risk_percent < 10: 
+    
+        elif risk_percent < 10:
             st.success("✅ Healthy Portfolio")
-        elif risk_percent < 25: 
+    
+        elif risk_percent < 25:
             st.warning("⚠️ Moderate Risk")
-        else: 
+    
+        else:
             st.error("🆘 Critical Risk Level")
             
 # ==========================================================
