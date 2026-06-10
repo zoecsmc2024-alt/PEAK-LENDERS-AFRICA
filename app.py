@@ -2773,7 +2773,9 @@ def show_calendar():
     loans_df["end_date"] = pd.to_datetime(loans_df["end_date"], errors="coerce")
     loans_df["principal"] = pd.to_numeric(loans_df["principal"], errors="coerce").fillna(0)
     loans_df["interest"] = pd.to_numeric(loans_df["interest"], errors="coerce").fillna(0)
-    loans_df["balance"] = pd.to_numeric(loans_df["balance"], errors="coerce").fillna(0)
+    loans_df["balance"] = loans_df["balance"].apply(
+        lambda x: 0 if abs(x) < 1 else x
+    )
     loans_df["total_repayable"] = pd.to_numeric(loans_df["total_repayable"], errors="coerce").fillna(0)
     loans_df["status_clean"] = loans_df["status"].astype(str).str.strip().str.upper()
 
@@ -2803,7 +2805,7 @@ def show_calendar():
     # Only loans that still have money outstanding
     active_loans = active_loans[
         active_loans["balance"] > 0
-    ].copy()
+    ]
 
     # ==========================================================
     # 6. CALENDAR EVENTS
