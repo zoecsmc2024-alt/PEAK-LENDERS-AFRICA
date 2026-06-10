@@ -2297,7 +2297,7 @@ from datetime import datetime
 # 21. ADVANCED ANALYTICS & REPORTS
 # ==============================
 
-def show_reports():  # 🎯 Fixed: Removed positional argument to eliminate router crash
+def show_reports():
     """
     Consolidates data across all modules to provide high-level 
     financial health metrics, cash flow trends, and risk assessment.
@@ -2317,7 +2317,9 @@ def show_reports():  # 🎯 Fixed: Removed positional argument to eliminate rout
     loans = get_cached_data("loans", tenant_id=tenant_id)
     payments = get_cached_data("payments", tenant_id=tenant_id)
     expenses = get_cached_data("expenses", tenant_id=tenant_id)
-    payroll = get_cached_data("Payroll", tenant_id=tenant_id)
+    
+    # 🎯 FIX 1: Change "Payroll" to lowercase "payroll" to fix the Database Fetch Error
+    payroll = get_cached_data("payroll", tenant_id=tenant_id)
 
     if loans is None or loans.empty:
         st.info("📈 Record more loans to see your financial analytics.")
@@ -2349,14 +2351,23 @@ def show_reports():  # 🎯 Fixed: Removed positional argument to eliminate rout
     loans["interest"] = pd.to_numeric(loans.get("interest", 0), errors="coerce").fillna(0)
     loans["end_date"] = pd.to_datetime(loans.get("end_date"), errors="coerce")
     
+    # Safely match your exact metrics schema tracking key ('cycle_no')
+    if "cycle_no" in loans.columns:
+        loans["cycle_no"] = pd.to_numeric(loans["cycle_no"], errors="coerce").fillna(1)
+    else:
+        loans["cycle_no"] = 1
+    
     if payments is not None and not payments.empty:
         payments.columns = payments.columns.str.strip().str.lower().str.replace(" ", "_")
     if expenses is not None and not expenses.empty:
         expenses.columns = expenses.columns.str.strip().str.lower().str.replace(" ", "_")
     
-    # Safe principal and interest Lookup
-    l_amt = loans["principal"].sum()
-    l_int = loans["interest"].sum()
+    # 🧼 THE METRIC ALIGNMENT: 
+    # Calculate issued/accrued capital strictly from original Cycle 1 loans that have a balance!
+    original_loans = loans[loans["cycle_no"] == 1]
+    
+    l_amt = original_loans.apply(lambda r: r["principal"] if r["balance"] > 0 else 0, axis=1).sum()
+    l_int = original_loans.apply(lambda r: r["interest"] if r["balance"] > 0 else 0, axis=1).sum()
     
     p_amt = pd.to_numeric(payments.get("amount", 0), errors="coerce").fillna(0).sum() if (payments is not None and not payments.empty) else 0
     exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if (expenses is not None and not expenses.empty) else 0
@@ -2424,17 +2435,16 @@ def show_reports():  # 🎯 Fixed: Removed positional argument to eliminate rout
             st.info("No loan data for portfolio analysis.")
 
     # ============================================================
-    # 6. RISK INDICATOR (PAR % Calculation - FIXED FOR ACCURACY)
+    # 6. RISK INDICATOR (PAR % Calculation)
     # ============================================================
     st.markdown("---")
     st.subheader("🚨 Risk Assessment")
     
     today = pd.Timestamp.today().normalize()
     
-    # 🎯 CORRECTION: An overdue asset MUST have a remaining balance. 
-    # If a loan has a balance of 0, it can never be considered at risk.
+    # An overdue asset must have a remaining balance and be past its due date
     overdue_mask = (loans["balance"] > 0) & (loans["end_date"] < today)
-    overdue_val = loans.loc[overdue_mask, "balance"].sum() # Track remaining risk exposure value, not historical capital
+    overdue_val = loans.loc[overdue_mask, "balance"].sum()
     
     risk_percent = (overdue_val / l_amt * 100) if l_amt > 0 else 0
     
@@ -2442,7 +2452,8 @@ def show_reports():  # 🎯 Fixed: Removed positional argument to eliminate rout
     
     with r1:
         st.write(f"Your Portfolio at Risk (PAR) is **{risk_percent:.1f}%**.")
-        st.progress(min(float(risk_percent) / 100, 1.0), key=f"risk_progress_{tenant_id}")
+        # 🎯 FIX 2: Removed the unsupported 'key' keyword argument to resolve the ProgressMixin crash
+        st.progress(min(float(risk_percent) / 100, 1.0))
         st.write(f"Total Outstanding Overdue: **{overdue_val:,.0f} UGX**")
         
     with r2:
