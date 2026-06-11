@@ -2525,21 +2525,15 @@ def show_reports():
     
     # Total Outflow = Direct expenses + Taxes (PAYE/NSSF)
     total_outflow = exp_amt + nssf_total + paye_total
-    
-    # Net Profit = Inflows (payments) - Outflows (expenses/taxes)
-    net_profit = p_amt - total_outflow
 
     # 4. KPI DASHBOARD (Soft Blue Branded)
     st.subheader("🚀 Financial Performance")
-    k1, k2, k3, k4 = st.columns(4)
+    k1, k2, k3, = st.columns(4)
     
     k1.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">CAPITAL ISSUED</p><h4 style="margin:0;color:#4A90E2;">{l_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
     k2.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">INTEREST ACCRUED</p><h4 style="margin:0;color:#4A90E2;">{l_int:,.0f}</h4></div>""", unsafe_allow_html=True)
     k3.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #2E7D32;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">COLLECTIONS</p><h4 style="margin:0;color:#2E7D32;">{p_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
     
-    p_color = "#2E7D32" if net_profit >= 0 else "#FF4B4B"
-    k4.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid {p_color};box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">NET PROFIT</p><h4 style="margin:0;color:{p_color};">{net_profit:,.0f}</h4></div>""", unsafe_allow_html=True)
-
     st.markdown("<br>", unsafe_allow_html=True)
 
     # 5. VISUAL ANALYTICS
