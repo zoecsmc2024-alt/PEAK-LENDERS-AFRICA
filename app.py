@@ -2524,11 +2524,11 @@ def show_reports():
     exp_amt = pd.to_numeric(expenses.get("amount", 0), errors="coerce").fillna(0).sum() if (expenses is not None and not expenses.empty) else 0
     
     # Total Outflow = Direct expenses + Taxes (PAYE/NSSF)
-    total_outflow = exp_amt + nssf_total + paye_total
+    total_outflow = exp_amt
 
     # 4. KPI DASHBOARD (Soft Blue Branded)
     st.subheader("🚀 Financial Performance")
-    k1, k2, k3, = st.columns(4)
+    k1, k2, k3, = st.columns(3)
     
     k1.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">CAPITAL ISSUED</p><h4 style="margin:0;color:#4A90E2;">{l_amt:,.0f}</h4></div>""", unsafe_allow_html=True)
     k2.markdown(f"""<div style="background-color:#fff;padding:15px;border-radius:10px;border-left:5px solid #4A90E2;box-shadow:2px 2px 8px rgba(0,0,0,0.05);"><p style="margin:0;font-size:11px;color:#666;font-weight:bold;">INTEREST ACCRUED</p><h4 style="margin:0;color:#4A90E2;">{l_int:,.0f}</h4></div>""", unsafe_allow_html=True)
